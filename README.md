@@ -1,3 +1,6 @@
-# obra-feable — ambiente FEABLE (pruebas/avances) de la app de obra
+# Floculantes — parte diario de obra
 
-<!-- redeploy v20260704a 2026-07-04T10:40:20Z -->
+App del proyecto **Floculantes**. Base Supabase: COLUMBITO (mytrrdjiqtznkiizqehh).
+Publicada en https://luisfc-collab.github.io/Floculantes/
+
+Proyecto independiente: no comparte codigo ni datos con WaterTransition.
