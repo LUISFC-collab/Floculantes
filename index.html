@@ -2683,7 +2683,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260811b9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -5139,6 +5139,104 @@ if($('bitaBack'))$('bitaBack').onclick=closeBita;
 function bakedPartesAll(){var out=[];if(!DATA._byId)return out;for(var k in DATA._byId){var b=bakedParteOf(k);if(b)out.push(b)}return out}
 function repAllParts(){return state.partes.concat(bakedPartesAll()).filter(function(p){return _visVeId(p.id,p.sistema)&&!esCuadre(p)})}
 function reporteDias(){var s=new Set();state.partes.forEach(function(p){if(p.fecha)s.add(p.fecha)});bakedPartesAll().forEach(function(p){s.add(p.fecha)});s.add(todayISO());return Array.from(s).sort(function(a,b){return a<b?1:-1})}
+/* === DOCUMENTOS ===
+   Carpetas y archivos del proyecto. Leer y descargar: todos.
+   Crear carpeta, subir y borrar: solo quien creo la carpeta (y el admin).
+   Borrar no destruye: marca eliminado y queda en la papelera del admin. */
+var T_DC='doc_carpetas_create_120826', T_DA='doc_archivos_create_120826';
+function _docNuevoId(p){return (p||'C')+Date.now().toString(36)+Math.floor(Math.random()*1679616).toString(36)}
+function _docSup(){return (state.user&&state.user.supervisor)||''}
+function _docAdmin(){try{return !!(typeof esAdmin==='function'&&esAdmin())}catch(e){return false}}
+function _docMio(c){return !!c&&(c.creado_por===_docSup()||_docAdmin())}
+function _docCarp(){if(!state.docCarp){try{state.docCarp=JSON.parse(localStorage.getItem('obf4_doccarp')||'[]')||[]}catch(e){state.docCarp=[]}}return state.docCarp}
+function _docArch(){if(!state.docArch){try{state.docArch=JSON.parse(localStorage.getItem('obf4_docarch')||'[]')||[]}catch(e){state.docArch=[]}}return state.docArch}
+function _docSave(){try{localStorage.setItem('obf4_doccarp',JSON.stringify(_docCarp()));localStorage.setItem('obf4_docarch',JSON.stringify(_docArch()))}catch(e){}}
+function _docFecha(v){try{var d=v?new Date(v):null;if(!d||isNaN(d))return '';
+var p=function(n){return (n<10?'0':'')+n};
+return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes())}catch(e){return ''}}
+function _docNArch(cid){return _docArch().filter(function(a){return a.carpeta_id===cid&&!a.eliminado}).length}
+async function _docPull(){
+  if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
+  var pf='proyecto=eq.'+encodeURIComponent(DATA.proyecto);
+  try{
+    var C=await sbSelect(T_DC,'select=*&'+pf+'&order=created_at.asc&limit=2000');
+    var A=await sbSelect(T_DA,'select=*&'+pf+'&order=created_at.asc&limit=5000');
+    if(C)state.docCarp=C; if(A)state.docArch=A;
+    _docSave();
+    try{if(document.getElementById('_docOv'))_docRender()}catch(e){}
+  }catch(e){}
+}
+async function _docGuardarCarpeta(c){
+  c.proyecto=DATA.proyecto;c.ts=(typeof nowSrv==='function'?nowSrv():Date.now());c.cell_at=Date.now();c.quien=_docSup();
+  var arr=_docCarp();var i=-1;arr.forEach(function(x,ix){if(x.id===c.id)i=ix});
+  if(i<0)arr.push(c);else arr[i]=c;
+  _docSave();
+  try{if(typeof sbReady==='function'&&sbReady()&&navigator.onLine)await sbUpsert(T_DC,[c],'proyecto,id')}catch(e){}
+  _docRender();
+}
+function _docCrear(){
+  var nom=prompt('Nombre de la carpeta:');if(nom==null)return;nom=nom.trim();
+  if(!nom){if(typeof toast==='function')toast('Ponle un nombre');return}
+  if(_docCarp().some(function(c){return !c.eliminado&&String(c.nombre).toLowerCase()===nom.toLowerCase()})){
+    if(typeof toast==='function')toast('Ya existe una carpeta con ese nombre');return}
+  _docGuardarCarpeta({id:_docNuevoId('C'),nombre:nom,creado_por:_docSup(),
+    disciplina:(state.user&&state.user.disc)||'',color:'',eliminado:false,elim_por:'',elim_ts:0});
+  if(typeof toast==='function')toast('📁 Carpeta creada');
+}
+function _docBorrar(c){
+  if(!_docMio(c)){if(typeof toast==='function')toast('Solo '+(c.creado_por||'quien la creó')+' puede borrar esta carpeta');return}
+  var n=_docNArch(c.id);
+  if(!confirm('¿Borrar la carpeta "'+c.nombre+'"'+(n?(' y sus '+n+' archivo(s)'):'')+'?\n\nVa a la papelera del administrador; no se pierde.'))return;
+  var t=(typeof nowSrv==='function'?nowSrv():Date.now());
+  c.eliminado=true;c.elim_por=_docSup();c.elim_ts=t;
+  _docGuardarCarpeta(c);
+  if(typeof toast==='function')toast('🗑 Movida a la papelera del administrador');
+}
+function _docRender(){
+  var w=document.getElementById('_docBody');if(!w)return;
+  var vivas=_docCarp().filter(function(c){return !c.eliminado});
+  vivas.sort(function(a,b){return String(a.nombre||'').localeCompare(String(b.nombre||''))});
+  var H='';
+  H+='<button id="_docNueva" type="button" style="width:100%;background:#0C5132;color:#fff;border:0;border-radius:11px;padding:13px;font-weight:800;font-size:14px;margin-bottom:12px;cursor:pointer">+ Nueva carpeta</button>';
+  if(!vivas.length){H+='<div style="text-align:center;color:var(--muted);font-size:13px;padding:26px 10px">Todavía no hay carpetas.<br>Crea la primera con el botón de arriba.</div>'}
+  vivas.forEach(function(c){
+    var mio=_docMio(c);var n=_docNArch(c.id);
+    H+='<div class="_docCard" data-cid="'+esc(c.id)+'" style="background:#fff;border:1.5px solid var(--line);border-radius:13px;padding:12px 13px;margin-bottom:10px;cursor:pointer">';
+    H+='<div style="display:flex;align-items:center;gap:10px">';
+    H+='<span style="font-size:22px;line-height:1">📁</span>';
+    H+='<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px;color:#1F3864;overflow-wrap:anywhere">'+esc(c.nombre)+'</div>';
+    H+='<div style="font-size:11.5px;color:var(--muted);margin-top:1px">'+n+' archivo'+(n===1?'':'s')+'</div></div>';
+    if(mio)H+='<button class="_docDel" data-cid="'+esc(c.id)+'" title="Borrar carpeta" style="flex:none;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:8px;width:30px;height:30px;font-weight:900;cursor:pointer">🗑</button>';
+    H+='</div>';
+    H+='<div style="margin-top:8px;padding-top:7px;border-top:1px dashed var(--line);font-size:10.5px;color:var(--muted);line-height:1.45">';
+    H+='Creada por <b style="color:#0C5132">'+esc(c.creado_por||'—')+'</b>';
+    if(c.updated_at)H+='<br>Última modificación: '+esc(_docFecha(c.updated_at));
+    if(!mio)H+='<br><span style="color:#8a6d1f">Puedes ver y descargar; subir solo '+esc(c.creado_por||'su dueño')+'</span>';
+    H+='</div></div>';
+  });
+  w.innerHTML=H;
+  var b=document.getElementById('_docNueva');if(b)b.onclick=_docCrear;
+  Array.prototype.forEach.call(w.querySelectorAll('._docDel'),function(x){x.onclick=function(e){
+    e.stopPropagation();var c=_docCarp().filter(function(z){return z.id===x.getAttribute('data-cid')})[0];if(c)_docBorrar(c)}});
+  Array.prototype.forEach.call(w.querySelectorAll('._docCard'),function(x){x.onclick=function(){
+    if(typeof toast==='function')toast('Los archivos llegan en el siguiente paso')}});
+}
+function _docAbrir(){
+  var ov=document.getElementById('_docOv');if(ov)ov.remove();
+  ov=document.createElement('div');ov.id='_docOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483000;background:var(--bg);display:flex;flex-direction:column';
+  ov.innerHTML='<div style="background:#0C5132;color:#fff;padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));display:flex;align-items:center;gap:10px;flex:none">'+
+    '<button id="_docX" style="background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.22);border-radius:12px;width:42px;height:42px;font-size:19px;cursor:pointer">‹</button>'+
+    '<div><div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#A9DDBC">Proyecto</div>'+
+    '<div style="font-size:16px;font-weight:700">📄 Documentos</div></div></div>'+
+    '<div id="_docBody" style="flex:1;overflow:auto;padding:14px 13px 30px"></div>';
+  document.body.appendChild(ov);
+  document.getElementById('_docX').onclick=function(){ov.remove()};
+  _docRender();
+  try{_docPull()}catch(e){}
+}
+try{var _docPullBase=syncPull;syncPull=async function(){var r=await _docPullBase.apply(this,arguments);try{await _docPull()}catch(e){}return r};}catch(_dw){}
+
 function openReporte(){$('scrDiario').classList.add('hidden');$('scrReporte').classList.remove('hidden');renderRepDias();$('repPrev').innerHTML='<div style="font-size:12px;color:var(--muted)">Marca días y toca Generar vista previa.</div>';$('repPrint').innerHTML=''}
 function closeReporte(){$('scrReporte').classList.add('hidden');$('scrDiario').classList.remove('hidden');renderDiario()}
 function renderRepDias(){var w=$('repDias');if(!w)return;var days=reporteDias();var yst=ystISO();w.innerHTML='<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Días con reportes — marca los que incluir:</div>'+days.map(function(f){var n=repAllParts().filter(function(p){return p.fecha===f}).length;var ck=(f===todayISO()||f===yst)?'checked':'';return '<label class="rep-day-ck"><input type="checkbox" value="'+f+'" '+ck+'><span><b>'+fmtF(f)+'</b> · '+n+' registros</span></label>'}).join('')}
@@ -5149,7 +5247,7 @@ function buildReportHTML(days){var _ds=days.slice().sort();var _dr=_ds.length>1?
 function repGenerar(){var days=repSelectedDays();if(!days.length){toast('Marca al menos un día');return ''}var html=buildReportHTML(days);try{html+=buildAlbumHTML(days,false)}catch(e){}$('repPrev').innerHTML=html;$('repPrint').innerHTML=html;return html}
 if($('repBack'))$('repBack').onclick=closeReporte;
 if($('btnReporte'))$('btnReporte').onclick=openReporte;
-if($('repBtnAll'))$('repBtnAll').onclick=openReporte;
+if($('repBtnAll')){var _rb=$('repBtnAll');_rb.textContent='📄 Documentos';_rb.title='Carpetas y archivos del proyecto';_rb.onclick=_docAbrir}
 if($('btnMiProg'))$('btnMiProg').onclick=function(){if(typeof _showMiProg==='function')_showMiProg()};
 var KPEN='obf4_pend';
 if(!state.pend){try{state.pend=JSON.parse(localStorage.getItem(KPEN)||'[]')}catch(e){state.pend=[]}}
