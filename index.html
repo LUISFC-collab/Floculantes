@@ -2779,7 +2779,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812d1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812d2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -4538,6 +4538,7 @@ function _undOculto(){try{return !!window._cfgOcultarUnd && !(typeof esAdmin==='
 function _undInject(){try{var w=$('list');if(!w)return;
 Array.prototype.forEach.call(w.querySelectorAll('.leaf ._lfDato'),function(b){b.style.display=_undOculto()?'none':''});
 try{_cbInject()}catch(e){}
+try{_pesoInject()}catch(e){}
 Array.prototype.forEach.call(w.querySelectorAll('.leaf ._lfDato'),function(b){if(b.parentElement)_lfFit(b.parentElement)})}catch(e){}}
 async function _undPull(){try{
 if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
@@ -4612,6 +4613,7 @@ async function _hhSetBase(v){try{
   await _ajSet('hh_base',v,'Base del peso por HH: esp = por especialidad · proy = todo el proyecto');
   window._hhCache=null;
   try{if(typeof renderList==='function')renderList()}catch(e){}
+  try{_pesoInject()}catch(e){}
   if(typeof toast==='function')toast(v==='proy'?'⚖ Los pesos se calculan sobre TODO el proyecto':'⚖ Los pesos vuelven a calcularse por especialidad');
 }catch(e){}}
 function _hhTotDisc(d){d=d||(state.user&&state.user.disc)||'';
@@ -4622,6 +4624,49 @@ var t=0;(DATA.partidas||[]).forEach(function(p){if(base==='proy'||p.esp===d)t+=_
 window._hhCache[k]=t;return t}
 function _hhPeso(p){var t=_hhTotDisc(p&&p.esp);if(!t)return 0;return _hhDe(p)/t*100}
 function _hhPct(n){if(!isFinite(n)||n<=0)return '0%';return (n<0.1?n.toFixed(2):(n<10?n.toFixed(1):Math.round(n)))+'%'}
+/* === TODO SE MIDE CON LA MISMA VARA ===
+   El área, el sistema y el encabezado dejan de promediar porcentajes sueltos y
+   pasan a pesarse por horas-hombre, con la base que eligió el admin (por
+   especialidad o por todo el proyecto). Se lee "0 de 35%": lo que lleva y lo
+   que representa ese grupo del total. */
+function _grupoHH(ids){
+  var peso=0,pts=0,vistos={};
+  (ids||[]).forEach(function(id){
+    if(!id||vistos[id])return;vistos[id]=1;
+    var p=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0]);
+    if(!p)return;
+    try{if(typeof esNA==='function'&&esNA(p))return}catch(e){}
+    try{if(typeof _visMetricas==='function'&&!_visMetricas(p))return}catch(e){}
+    var w=_hhPeso(p);if(!w)return;
+    var v=0;try{v=Number(pctOf(p))||0}catch(e){}
+    if(v<0)v=0;if(v>100)v=100;
+    peso+=w;pts+=w*v/100});
+  return {peso:peso,pts:pts}}
+function _pesoTxt(g){return _hhPct(g.pts)+' de '+_hhPct(g.peso)}
+function _pesoBaseTxt(){return (_hhBase()==='proy')?'todo el proyecto':('la especialidad '+((state.user&&state.user.disc)||''))}
+function _pesoInject(){try{
+  var w=$('list');if(!w)return;
+  Array.prototype.forEach.call(w.querySelectorAll('.wbsA'),function(a){
+    var sp=a.querySelector('.wbsA-h .tnum');if(!sp)return;
+    var ids=Array.prototype.map.call(a.querySelectorAll('.leaf[data-id]'),function(x){return x.getAttribute('data-id')});
+    var g=_grupoHH(ids);if(!g.peso)return;
+    sp.textContent='('+_pesoTxt(g)+')';
+    sp.title='Esta área vale '+_hhPct(g.peso)+' de '+_pesoBaseTxt()+'. Lleva '+_hhPct(g.pts)+' ganado.'});
+  Array.prototype.forEach.call(w.querySelectorAll('.wbs-sys'),function(sy){
+    var tag=sy.querySelector('.wbs-head .wbs-roll ._hhTag');if(!tag)return;
+    var ids=Array.prototype.map.call(sy.querySelectorAll('.leaf[data-id]'),function(x){return x.getAttribute('data-id')});
+    var g=_grupoHH(ids);if(!g.peso)return;
+    tag.textContent=_pesoTxt(g)+(_hhBase()==='proy'?' del proy.':'');
+    tag.title='Este sistema vale '+_hhPct(g.peso)+' de '+_pesoBaseTxt()+'. Lleva '+_hhPct(g.pts)+' ganado.'});
+  var el=document.getElementById('sAv');
+  if(el){
+    var ids2=[];try{ids2=(acts((state.user&&state.user.disc)||'')||[]).map(function(p){return p.id})}catch(e){}
+    var g2=_grupoHH(ids2);
+    if(g2.peso){el.textContent=_pesoTxt(g2);el.style.fontSize='15px';
+      el.title='Avance por horas-hombre. '+((state.user&&state.user.disc)||'')+' vale '+_hhPct(g2.peso)+' de '+_pesoBaseTxt()+'.';
+      var k=el.parentElement&&el.parentElement.querySelector('.k');
+      if(k)k.textContent='avance real (HH)'}}
+}catch(e){}}
 function _hhInject(){try{
 var w=$('list');if(!w)return;
 Array.prototype.forEach.call(w.querySelectorAll('._hhTag'),function(x){x.remove()});
