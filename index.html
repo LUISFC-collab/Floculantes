@@ -2679,7 +2679,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260811b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260811b4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -5332,6 +5332,30 @@ function _interfChips(nA,nD,nF,nR){var h=$('resumenHead');if(!h)return;var tot=n
  h.querySelectorAll('._icch').forEach(function(b){b.onclick=function(e){e.stopPropagation();var k=b.getAttribute('data-k');window._icOpen=(window._icOpen===k)?null:k;_interfChips(nA,nD,nF,nR);};});
  h.onclick=function(){window._icOpen=window._icOpen?null:(nD?'dia':(nA?'ant':(nF?'fut':(nR?'res':'dia'))));_interfChips(nA,nD,nF,nR);};
  apply();}
+/* === El chip "hoy" se pinta segun la mezcla: AZUL lo nuestro, ROJO lo de mina ===
+   Con 2 internas y 2 de mina sale mitad y mitad. */
+function _diaPorCat(){var out={int:0,mina:0};try{
+var ref=((typeof activeDate!=='undefined'&&activeDate)?activeDate:((typeof todayISO==='function')?todayISO():''));
+(_interfAll()||[]).forEach(function(it){
+  var fl=it.flev||'';if(fl&&fl>ref)return;
+  if(!(it.fecha&&it.fecha===ref))return;
+  var c=(it.x&&it.x.cat)||'int';
+  if(c==='mina')out.mina++;else out.int++;});
+}catch(e){}return out}
+function _pintaChipDia(){try{
+var b=document.querySelector('#resumenHead ._icch[data-k="dia"]');if(!b)return;
+var c=_diaPorCat();var t=c.int+c.mina;if(!t)return;
+var pi=Math.round(c.int/t*100);
+var AZ='#1F6FE0',RO='#D8442F';
+if(pi>=100){b.style.background=AZ}
+else if(pi<=0){b.style.background=RO}
+else{b.style.background='linear-gradient(90deg,'+AZ+' 0%,'+AZ+' '+pi+'%,'+RO+' '+pi+'%,'+RO+' 100%)'}
+b.style.color='#fff';b.style.borderColor='rgba(0,0,0,.25)';b.style.textShadow='0 1px 2px rgba(0,0,0,.35)';
+b.title=c.int+' interna(s) de la contratista ('+pi+'%) · '+c.mina+' de mina ('+(100-pi)+'%)';
+}catch(e){}}
+try{var _ribBase=renderInterfBars;renderInterfBars=function(){var r=_ribBase.apply(this,arguments);try{_pintaChipDia()}catch(e){}return r}}catch(_cb1){}
+try{var _icBase=_interfChips;_interfChips=function(){var r=_icBase.apply(this,arguments);try{setTimeout(_pintaChipDia,0)}catch(e){}return r}}catch(_cb2){}
+
 function _ganttExcel(ini,fin,scope){try{
   var disc=scope||(state.user&&state.user.disc)||'';
   var days=[];var d=new Date(ini+'T00:00:00');var dEnd=new Date(fin+'T00:00:00');
