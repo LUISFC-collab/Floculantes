@@ -2683,7 +2683,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -5240,6 +5240,57 @@ async function _docDescargar(a){
     setTimeout(function(){try{URL.revokeObjectURL(u);el.remove()}catch(e){}},4000);
   }catch(e){if(typeof toast==='function')toast('No se pudo abrir el archivo')}
 }
+/* === Al tocar un archivo: preguntar si se ve aquí o con otra aplicación === */
+function _docExt(n){return String(n||'').split('.').pop().toLowerCase()}
+var _DOC_IMG=['png','jpg','jpeg','gif','webp','bmp','svg'],_DOC_TXT=['txt','csv','log','json','md','xml'];
+function _docVerAqui(a,url){
+  var ext=_docExt(a.nombre);
+  var ov=document.createElement('div');ov.id='_docVerOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483020;background:#0b1220;display:flex;flex-direction:column';
+  var cuerpo='';
+  if(ext==='pdf'||_DOC_TXT.indexOf(ext)>=0)cuerpo='<iframe src="'+url+'" style="width:100%;height:100%;border:0;background:#fff"></iframe>';
+  else if(_DOC_IMG.indexOf(ext)>=0)cuerpo='<div style="width:100%;height:100%;overflow:auto;display:flex;align-items:center;justify-content:center"><img src="'+url+'" style="max-width:100%;height:auto"></div>';
+  else cuerpo='<div style="color:#cfe3ff;padding:26px;text-align:center;font-size:14px;line-height:1.6">Este tipo de archivo todavía no se ve dentro de la app.<br><br>Usa <b>Abrir con otra aplicación</b>.</div>';
+  ov.innerHTML='<div style="background:#0C5132;color:#fff;padding:12px 14px;padding-top:max(12px,env(safe-area-inset-top));display:flex;align-items:center;gap:10px;flex:none">'+
+    '<button id="_docVerX" style="background:rgba(255,255,255,.16);color:#fff;border:0;border-radius:10px;width:38px;height:38px;font-size:18px;cursor:pointer">‹</button>'+
+    '<div style="flex:1;min-width:0;font-weight:700;font-size:14px;overflow-wrap:anywhere">'+esc(a.nombre)+'</div>'+
+    '<button id="_docVerDl" style="background:rgba(255,255,255,.16);color:#fff;border:0;border-radius:10px;padding:0 12px;height:38px;font-weight:800;font-size:12px;cursor:pointer">Guardar</button></div>'+
+    '<div style="flex:1;min-height:0">'+cuerpo+'</div>';
+  document.body.appendChild(ov);
+  document.getElementById('_docVerX').onclick=function(){try{URL.revokeObjectURL(url)}catch(e){}ov.remove()};
+  document.getElementById('_docVerDl').onclick=function(){_docBajarBlob(a,url)};
+}
+function _docBajarBlob(a,url){
+  var el=document.createElement('a');el.href=url;el.download=a.nombre||'archivo';
+  document.body.appendChild(el);el.click();setTimeout(function(){try{el.remove()}catch(e){}},2500);
+}
+function _docAbrirArchivo(a){
+  var ext=_docExt(a.nombre);
+  var puede=(ext==='pdf')||(_DOC_IMG.indexOf(ext)>=0)||(_DOC_TXT.indexOf(ext)>=0);
+  var ov=document.createElement('div');ov.id='_docPreOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483010;background:rgba(15,25,45,.55);display:flex;align-items:flex-end;justify-content:center';
+  var h='<div style="background:#fff;width:100%;max-width:440px;border-radius:16px 16px 0 0;padding:16px 15px 18px">';
+  h+='<div style="font-weight:900;font-size:15px;color:#1F3864">'+_docIcono(a.nombre)+' ¿Cómo quieres abrirlo?</div>';
+  h+='<div style="font-size:12px;color:#5C6779;margin:3px 0 14px;overflow-wrap:anywhere">'+esc(a.nombre)+' · '+_docTam(a.tamano)+'</div>';
+  h+='<button id="_docPreAqui" '+(puede?'':'disabled ')+'style="width:100%;background:'+(puede?'#0C5132':'#C7D2E0')+';color:#fff;border:0;border-radius:11px;padding:14px;font-weight:800;font-size:14px;margin-bottom:9px;cursor:'+(puede?'pointer':'default')+'">👁 Verlo aquí'+(puede?'':' (este tipo aún no)')+'</button>';
+  h+='<button id="_docPreOtra" style="width:100%;background:#1F3864;color:#fff;border:0;border-radius:11px;padding:14px;font-weight:800;font-size:14px;margin-bottom:12px;cursor:pointer">📂 Abrir con otra aplicación</button>';
+  h+='<button id="_docPreX" style="width:100%;background:#eef2f7;border:0;border-radius:10px;padding:12px;font-weight:700">Cancelar</button></div>';
+  ov.innerHTML=h;document.body.appendChild(ov);
+  ov.onclick=function(e){if(e.target===ov)ov.remove()};
+  document.getElementById('_docPreX').onclick=function(){ov.remove()};
+  var traer=async function(){
+    var r=await fetch(sbBase()+'/storage/v1/object/documentos/'+encodeURI(a.ruta),{headers:sbHead()});
+    if(!r.ok)throw new Error('no');
+    return URL.createObjectURL(await r.blob())};
+  document.getElementById('_docPreAqui').onclick=async function(){
+    if(!puede)return;ov.remove();
+    if(typeof toast==='function')toast('Abriendo…');
+    try{_docVerAqui(a,await traer())}catch(e){if(typeof toast==='function')toast('No se pudo abrir el archivo')}};
+  document.getElementById('_docPreOtra').onclick=async function(){
+    ov.remove();
+    if(typeof toast==='function')toast('Descargando…');
+    try{_docBajarBlob(a,await traer())}catch(e){if(typeof toast==='function')toast('No se pudo abrir el archivo')}};
+}
 function _docCrear(){
   var pid=_docActual();
   var nom=prompt(pid?'Nombre de la subcarpeta:':'Nombre de la carpeta:');if(nom==null)return;nom=nom.trim();
@@ -5286,27 +5337,55 @@ async function _docSoltar(dt){
     Array.prototype.slice.call((dt&&dt.files)||[]).forEach(function(f){_docColaAdd(f,'')});
   }
   _docRender();
-  if(typeof toast==='function')toast('📥 '+window._docCola.length+' archivo(s) en espera — revisa y toca Subir');
+  try{var _g=_docColaGrupos();var _n=_g.carpetas.length+_g.sueltos.length;
+    if(typeof toast==='function')toast('📥 '+_n+(_g.carpetas.length?(' en espera ('+_g.carpetas.length+' carpeta'+(_g.carpetas.length===1?'':'s')+')'):' archivo(s) en espera')+' — revisa y toca Subir')}catch(e){}
 }
 function _docColaQuitar(clave){
   window._docCola=window._docCola.filter(function(x){return x.clave!==clave});_docRender();
 }
+/* una carpeta arrastrada se ve como CARPETA, no desglosada en sus archivos */
+function _docColaGrupos(){
+  var sueltos=[],carp={},orden=[];
+  window._docCola.forEach(function(x){
+    var raiz=(x.rel||'').split('/').filter(Boolean)[0]||'';
+    if(!raiz){sueltos.push(x);return}
+    if(!carp[raiz]){carp[raiz]={nombre:raiz,items:[],size:0,subs:{}};orden.push(raiz)}
+    carp[raiz].items.push(x);carp[raiz].size+=(x.size||0);
+    var sub=(x.rel||'').split('/').filter(Boolean).slice(1).join('/');
+    if(sub)carp[raiz].subs[sub]=1;
+  });
+  return {sueltos:sueltos,carpetas:orden.map(function(k){return carp[k]})};
+}
+function _docColaQuitarCarp(nom){
+  window._docCola=window._docCola.filter(function(x){return ((x.rel||'').split('/').filter(Boolean)[0]||'')!==nom});
+  _docRender();
+}
 function _docColaHTML(){
   if(!window._docCola.length)return '';
+  var g=_docColaGrupos();
   var total=window._docCola.reduce(function(t,x){return t+(x.size||0)},0);
+  var nItems=g.carpetas.length+g.sueltos.length;
   var H='<div style="background:#FFF8E8;border:1.5px solid #EFC98A;border-radius:13px;padding:12px 12px 10px;margin-bottom:12px">';
-  H+='<div style="font-weight:900;font-size:13px;color:#7A4B00;margin-bottom:2px">📥 En espera de subir ('+window._docCola.length+')</div>';
+  H+='<div style="font-weight:900;font-size:13px;color:#7A4B00;margin-bottom:2px">📥 En espera de subir ('+nItems+')</div>';
   H+='<div style="font-size:11px;color:#8a6d1f;margin-bottom:9px">'+_docTam(total)+' en total · quita con ✕ lo que no quieras subir</div>';
-  window._docCola.forEach(function(x){
+  g.carpetas.forEach(function(c){
+    var nsub=Object.keys(c.subs).length;
+    H+='<div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #EFC98A;border-radius:9px;padding:8px 9px;margin-bottom:6px">';
+    H+='<span style="font-size:19px">📁</span>';
+    H+='<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:800;color:#1F3864;overflow-wrap:anywhere">'+esc(c.nombre)+'</div>';
+    H+='<div style="font-size:10.5px;color:var(--muted)">carpeta completa · '+c.items.length+' archivo'+(c.items.length===1?'':'s')+(nsub?(' · '+nsub+' subcarpeta'+(nsub===1?'':'s')):'')+' · '+_docTam(c.size)+'</div></div>';
+    H+='<button class="_docColaXC" data-n="'+esc(c.nombre)+'" title="No subir esta carpeta" style="flex:none;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:8px;width:27px;height:27px;font-weight:900;cursor:pointer">✕</button></div>';
+  });
+  g.sueltos.forEach(function(x){
     H+='<div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #EFC98A;border-radius:9px;padding:8px 9px;margin-bottom:6px">';
     H+='<span style="font-size:17px">'+_docIcono(x.nombre)+'</span>';
     H+='<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:700;color:#1B2433;overflow-wrap:anywhere">'+esc(x.nombre)+'</div>';
-    H+='<div style="font-size:10.5px;color:var(--muted)">'+_docTam(x.size)+(x.rel?(' · 📁 '+esc(x.rel)):'')+'</div></div>';
+    H+='<div style="font-size:10.5px;color:var(--muted)">'+_docTam(x.size)+'</div></div>';
     H+='<button class="_docColaX" data-k="'+esc(x.clave)+'" title="No subir este" style="flex:none;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:8px;width:27px;height:27px;font-weight:900;cursor:pointer">✕</button></div>';
   });
   H+='<div style="display:flex;gap:8px;margin-top:8px">';
   H+='<button id="_docColaClr" style="flex:none;background:#eef2f7;border:0;border-radius:10px;padding:11px 13px;font-weight:800;font-size:12.5px;cursor:pointer">Descartar todo</button>';
-  H+='<button id="_docColaGo" style="flex:1;background:#0C5132;color:#fff;border:0;border-radius:10px;padding:11px;font-weight:800;font-size:13px;cursor:pointer">⬆ Subir '+window._docCola.length+' archivo(s)</button>';
+  H+='<button id="_docColaGo" style="flex:1;background:#0C5132;color:#fff;border:0;border-radius:10px;padding:11px;font-weight:800;font-size:13px;cursor:pointer">⬆ Subir '+nItems+' elemento'+(nItems===1?'':'s')+'</button>';
   H+='</div></div>';
   return H;
 }
@@ -5392,6 +5471,7 @@ function _docRender(){
   w.innerHTML=H;
   var b=document.getElementById('_docNueva');if(b)b.onclick=_docCrear;
   Array.prototype.forEach.call(w.querySelectorAll('._docColaX'),function(x){x.onclick=function(e){e.stopPropagation();_docColaQuitar(x.getAttribute('data-k'))}});
+  Array.prototype.forEach.call(w.querySelectorAll('._docColaXC'),function(x){x.onclick=function(e){e.stopPropagation();_docColaQuitarCarp(x.getAttribute('data-n'))}});
   var _cg=document.getElementById('_docColaGo');if(_cg)_cg.onclick=_docColaSubir;
   var _cc=document.getElementById('_docColaClr');if(_cc)_cc.onclick=function(){window._docCola=[];_docRender()};
   var up=document.getElementById('_docUp');if(up&&subir)up.onclick=function(){
@@ -5404,7 +5484,7 @@ function _docRender(){
   Array.prototype.forEach.call(w.querySelectorAll('._docDel'),function(x){x.onclick=function(e){e.stopPropagation();
     var c=_docCarpDe(x.getAttribute('data-cid'));if(c)_docBorrar(c)}});
   Array.prototype.forEach.call(w.querySelectorAll('._docFile'),function(x){x.onclick=function(){
-    var a=_docArch().filter(function(z){return z.id===x.getAttribute('data-aid')})[0];if(a)_docDescargar(a)}});
+    var a=_docArch().filter(function(z){return z.id===x.getAttribute('data-aid')})[0];if(a)_docAbrirArchivo(a)}});
   Array.prototype.forEach.call(w.querySelectorAll('._docDelA'),function(x){x.onclick=function(e){e.stopPropagation();
     var a=_docArch().filter(function(z){return z.id===x.getAttribute('data-aid')})[0];if(a)_docBorrarArchivo(a)}});
 }
