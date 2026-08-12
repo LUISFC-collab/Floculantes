@@ -2679,7 +2679,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260811a8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260811a9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -4182,6 +4182,47 @@ var _CC_COLORS=['#1F6FEB','#E8821A','#1E7A46','#8A3FA0','#B42318','#0C8577','#B0
    base: se cargan del cache local al arrancar y se refrescan con la nube.
    Las de "Retirada del alcance" (eliminado=true) y los titulos de grupo
    (es_titulo=true) no entran: los titulos son los SISTEMAS. */
+/* === PESO POR HH: cuanto aporta cada actividad ===
+   El peso sale de las horas-hombre del contrato: hh de la actividad sobre
+   el total de HH de su especialidad. Todas las actividades de una
+   especialidad suman 100%. Cada sistema muestra la suma de las suyas. */
+function _hhDe(p){var h=p&&p.hh;h=Number(h);return isFinite(h)&&h>0?h:0}
+function _hhTotDisc(d){d=d||(state.user&&state.user.disc)||'';
+if(!window._hhCache)window._hhCache={};
+if(window._hhCache[d]!=null)return window._hhCache[d];
+var t=0;(DATA.partidas||[]).forEach(function(p){if(p.esp===d)t+=_hhDe(p)});
+window._hhCache[d]=t;return t}
+function _hhPeso(p){var t=_hhTotDisc(p&&p.esp);if(!t)return 0;return _hhDe(p)/t*100}
+function _hhPct(n){if(!isFinite(n)||n<=0)return '0%';return (n<0.1?n.toFixed(2):(n<10?n.toFixed(1):Math.round(n)))+'%'}
+function _hhInject(){try{
+var w=$('list');if(!w)return;
+Array.prototype.forEach.call(w.querySelectorAll('._hhTag'),function(x){x.remove()});
+var disc=(state.user&&state.user.disc)||'';
+if(!_hhTotDisc(disc))return;
+/* cada actividad: cuanto aporta al total si llega al 100% */
+Array.prototype.forEach.call(w.querySelectorAll('.leaf[data-id]'),function(el){
+  var id=el.getAttribute('data-id');var p=DATA._byId&&DATA._byId[id];if(!p)return;
+  var pe=_hhPeso(p);if(!pe)return;
+  var nm=el.querySelector('.cname');if(!nm)return;
+  var b=document.createElement('span');b.className='_hhTag';
+  b.title='Horas-hombre del contrato: '+_hhDe(p)+' hh. Terminada al 100%, aporta este porcentaje al avance de '+esc(p.esp)+'.';
+  b.style.cssText='display:inline-block;margin-left:6px;font-size:9.5px;font-weight:800;color:#0C5132;background:#EAF3EC;border:1px solid #BFD8C6;border-radius:5px;padding:1px 5px;white-space:nowrap;vertical-align:middle';
+  b.textContent='Al 100% vale '+_hhPct(pe);
+  nm.appendChild(b)});
+/* cada sistema: la suma de sus actividades */
+Array.prototype.forEach.call(w.querySelectorAll('.wbs-sys'),function(sy){
+  var nmEl=sy.querySelector('.wbs-head .wbs-tt .nm');var roll=sy.querySelector('.wbs-head .wbs-roll');
+  if(!nmEl||!roll)return;
+  var nom=nmEl.textContent.trim();var suma=0;
+  (DATA.partidas||[]).forEach(function(p){if(p.esp===disc&&(p.sistema||'')===nom)suma+=_hhPeso(p)});
+  if(!suma)return;
+  var d=document.createElement('div');d.className='_hhTag';
+  d.title='Suma del peso por HH de las actividades de este sistema';
+  d.style.cssText='font-size:9.5px;font-weight:800;color:#0C5132;margin-top:2px;white-space:nowrap';
+  d.textContent='vale '+_hhPct(suma);
+  roll.appendChild(d)})}catch(e){}}
+try{var _hhRlBase=renderList;renderList=function(){var r=_hhRlBase.apply(this,arguments);try{window._hhCache=null;_hhInject()}catch(e){}return r}}catch(_hw){}
+
 var KCAT='obf4_catalogo';
 function _catAplica(rows){
   if(!rows||!rows.length)return false;
