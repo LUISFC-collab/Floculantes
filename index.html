@@ -2779,7 +2779,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812c5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812c6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -4539,6 +4539,9 @@ Array.prototype.forEach.call(w.querySelectorAll('.leaf ._lfDato'),function(b){if
 async function _undPull(){try{
 if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
 await _ajPull();
+try{var vb=_ajGet('hh_base','esp');
+ if(vb!==window._hhBaseUlt){window._hhBaseUlt=vb;window._hhCache=null;
+  try{var sl3=$('scrList');if(sl3&&!sl3.classList.contains('hidden')&&typeof renderList==='function')renderList()}catch(e){}}}catch(e){}
 try{var vc=!!_ajGet('ocultar_cambios',false);
  if(vc!==window._cfgOcultarCamb){window._cfgOcultarCamb=vc;try{localStorage.setItem('obf4_ocultarcamb',vc?'1':'')}catch(e){}
   try{var sl2=$('scrList');if(sl2&&!sl2.classList.contains('hidden')&&typeof renderList==='function')renderList()}catch(e){}}}catch(e){}
@@ -4596,11 +4599,24 @@ box.appendChild(b);cuerpo.insertBefore(box,cuerpo.firstChild)}catch(e){}}
 try{if(!window._undAdmWired){window._undAdmWired=1;setInterval(function(){var ov=document.getElementById('_cfgOv');if(ov)_undBotonAdmin(ov)},700)}}catch(_ua){}
 
 function _hhDe(p){if(p&&p.id&&typeof _hhOff==='function'&&_hhOff(p.id))return 0;var h=p&&p.hh;h=Number(h);return isFinite(h)&&h>0?h:0}
+/* La base del porcentaje: contra las HH de la especialidad o contra las de
+   TODO el proyecto. Lo decide el admin desde su panel; el ajuste vive en
+   ajustes_create_110826 (lápida, ts, trigger de updated_at y tiempo real). */
+function _hhBase(){try{return (_ajGet('hh_base','esp')==='proy')?'proy':'esp'}catch(e){return 'esp'}}
+function _hhBaseTxt(d){return (_hhBase()==='proy')?'todo el proyecto':('la especialidad '+(d||''))}
+async function _hhSetBase(v){try{
+  v=(v==='proy')?'proy':'esp';
+  await _ajSet('hh_base',v,'Base del peso por HH: esp = por especialidad · proy = todo el proyecto');
+  window._hhCache=null;
+  try{if(typeof renderList==='function')renderList()}catch(e){}
+  if(typeof toast==='function')toast(v==='proy'?'⚖ Los pesos se calculan sobre TODO el proyecto':'⚖ Los pesos vuelven a calcularse por especialidad');
+}catch(e){}}
 function _hhTotDisc(d){d=d||(state.user&&state.user.disc)||'';
+var base=_hhBase();var k=(base==='proy')?'__PROYECTO__':d;
 if(!window._hhCache)window._hhCache={};
-if(window._hhCache[d]!=null)return window._hhCache[d];
-var t=0;(DATA.partidas||[]).forEach(function(p){if(p.esp===d)t+=_hhDe(p)});
-window._hhCache[d]=t;return t}
+if(window._hhCache[k]!=null)return window._hhCache[k];
+var t=0;(DATA.partidas||[]).forEach(function(p){if(base==='proy'||p.esp===d)t+=_hhDe(p)});
+window._hhCache[k]=t;return t}
 function _hhPeso(p){var t=_hhTotDisc(p&&p.esp);if(!t)return 0;return _hhDe(p)/t*100}
 function _hhPct(n){if(!isFinite(n)||n<=0)return '0%';return (n<0.1?n.toFixed(2):(n<10?n.toFixed(1):Math.round(n)))+'%'}
 function _hhInject(){try{
@@ -4619,9 +4635,9 @@ Array.prototype.forEach.call(w.querySelectorAll('.leaf[data-id]'),function(el){
     g.textContent='HH no cuentan';nm.appendChild(g);return}
   var pe=_hhPeso(p);if(!pe)return;
   var b=document.createElement('span');b.className='_hhTag';
-  b.title='Horas-hombre del contrato: '+_hhDe(p)+' hh. Terminada al 100%, aporta este porcentaje al avance de '+esc(p.esp)+'.';
+  b.title='Horas-hombre del contrato: '+_hhDe(p)+' hh. Terminada al 100%, aporta este porcentaje al avance de '+esc(_hhBase()==='proy'?'TODO el proyecto':p.esp)+' ('+_nNum(_hhTotDisc(p.esp),0)+' hh en total).';
   b.style.cssText='display:inline-block;margin-left:6px;font-size:9.5px;font-weight:800;color:#0C5132;background:#EAF3EC;border:1px solid #BFD8C6;border-radius:5px;padding:1px 5px;white-space:nowrap;vertical-align:middle';
-  b.textContent='Al 100% vale '+_hhPct(pe);
+  b.textContent='Al 100% vale '+_hhPct(pe)+(_hhBase()==='proy'?' del proyecto':'');
   nm.appendChild(b)});
 /* cada sistema: la suma de sus actividades */
 Array.prototype.forEach.call(w.querySelectorAll('.wbs-sys'),function(sy){
@@ -4631,9 +4647,9 @@ Array.prototype.forEach.call(w.querySelectorAll('.wbs-sys'),function(sy){
   (DATA.partidas||[]).forEach(function(p){if(p.esp===disc&&(p.sistema||'')===nom)suma+=_hhPeso(p)});
   if(!suma)return;
   var d=document.createElement('div');d.className='_hhTag';
-  d.title='Suma del peso por HH de las actividades de este sistema';
+  d.title='Suma del peso por HH de las actividades de este sistema, sobre '+(_hhBase()==='proy'?'todo el proyecto':'la especialidad');
   d.style.cssText='font-size:9.5px;font-weight:800;color:#0C5132;margin-top:2px;white-space:nowrap';
-  d.textContent='vale '+_hhPct(suma);
+  d.textContent='vale '+_hhPct(suma)+(_hhBase()==='proy'?' del proy.':'');
   roll.appendChild(d)})}catch(e){}}
 /* === FICHA DE LA ACTIVIDAD (solo administrador) ===
    Toda la información que venía en el Excel del contrato: metrado, rendimiento,
@@ -6628,6 +6644,27 @@ function _cbInject(){try{
     _lfFit(tira);
   })}catch(e){}}
 /* el interruptor en el panel de ⚙, igual que el de UND */
+function _hhSwPanel(ov){try{
+  if(!ov||ov.querySelector('#_hhSw'))return;
+  var cuerpo=ov.querySelector('#_cfgBody');if(!cuerpo)return;
+  var box=document.createElement('div');
+  box.style.cssText='background:#101a30;border:1px solid #243a5e;border-radius:12px;padding:12px;margin-bottom:12px';
+  box.innerHTML='<b style="color:#fff;font-size:14px">⚖ Base del peso por HH</b>'+
+    '<div id="_hhSwTxt" style="color:#9fb6d8;font-size:12px;margin:4px 0 10px"></div>';
+  var b=document.createElement('button');b.id='_hhSw';
+  var pinta=function(){
+    var proy=(_hhBase()==='proy');
+    var tt=box.querySelector('#_hhSwTxt');
+    var tp=0,te=0,d=(state.user&&state.user.disc)||'';
+    try{(DATA.partidas||[]).forEach(function(p){var h=_hhDe(p);tp+=h;if(p.esp===d)te+=h})}catch(e){}
+    if(tt)tt.innerHTML='Decide contra qué se mide el "Al 100% vale X%". Por especialidad, cada disciplina reparte su propio 100%; por proyecto, las tres reparten un solo 100% y se ve cuánto pesa cada actividad en la obra completa.'+
+      '<div style="margin-top:6px;color:#7fd7a5">Proyecto: '+Math.round(tp)+' hh · '+esc(d)+': '+Math.round(te)+' hh</div>';
+    b.textContent=proy?'🌐 Sobre TODO el proyecto — tocar para volver a especialidad':'🔧 Por especialidad — tocar para usar todo el proyecto';
+    b.style.cssText='width:100%;border:0;border-radius:9px;padding:11px;font-weight:800;cursor:pointer;color:#fff;background:'+(proy?'#1F3864':'#1E7A46')};
+  pinta();
+  b.onclick=async function(){await _hhSetBase(_hhBase()==='proy'?'esp':'proy');pinta()};
+  box.appendChild(b);cuerpo.insertBefore(box,cuerpo.firstChild)}catch(e){}}
+try{if(!window._hhSwWired){window._hhSwWired=1;setInterval(function(){var ov=document.getElementById('_cfgOv');if(ov)_hhSwPanel(ov)},700)}}catch(_hsw){}
 function _cbSwPanel(ov){try{
   if(!ov||ov.querySelector('#_cbSw'))return;
   var cuerpo=ov.querySelector('#_cfgBody');if(!cuerpo)return;
