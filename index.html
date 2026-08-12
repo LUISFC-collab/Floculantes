@@ -2684,7 +2684,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812a7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -4299,7 +4299,7 @@ b.onclick=async function(){await _undSet(!window._cfgOcultarUnd);pinta()};
 box.appendChild(b);cuerpo.insertBefore(box,cuerpo.firstChild)}catch(e){}}
 try{if(!window._undAdmWired){window._undAdmWired=1;setInterval(function(){var ov=document.getElementById('_cfgOv');if(ov)_undBotonAdmin(ov)},700)}}catch(_ua){}
 
-function _hhDe(p){var h=p&&p.hh;h=Number(h);return isFinite(h)&&h>0?h:0}
+function _hhDe(p){if(p&&p.id&&typeof _hhOff==='function'&&_hhOff(p.id))return 0;var h=p&&p.hh;h=Number(h);return isFinite(h)&&h>0?h:0}
 function _hhTotDisc(d){d=d||(state.user&&state.user.disc)||'';
 if(!window._hhCache)window._hhCache={};
 if(window._hhCache[d]!=null)return window._hhCache[d];
@@ -4315,8 +4315,13 @@ if(!_hhTotDisc(disc))return;
 /* cada actividad: cuanto aporta al total si llega al 100% */
 Array.prototype.forEach.call(w.querySelectorAll('.leaf[data-id]'),function(el){
   var id=el.getAttribute('data-id');var p=DATA._byId&&DATA._byId[id];if(!p)return;
-  var pe=_hhPeso(p);if(!pe)return;
   var nm=el.querySelector('.cname');if(!nm)return;
+  if(typeof _hhOff==='function'&&_hhOff(id)){
+    var g=document.createElement('span');g.className='_hhTag';
+    g.title='El administrador apago sus HH: no cuentan para el avance.';
+    g.style.cssText='display:inline-block;margin-left:6px;font-size:9.5px;font-weight:800;color:#5C6779;background:#EEF2F7;border:1px solid #D6DEE9;border-radius:5px;padding:1px 5px;white-space:nowrap;vertical-align:middle';
+    g.textContent='HH no cuentan';nm.appendChild(g);return}
+  var pe=_hhPeso(p);if(!pe)return;
   var b=document.createElement('span');b.className='_hhTag';
   b.title='Horas-hombre del contrato: '+_hhDe(p)+' hh. Terminada al 100%, aporta este porcentaje al avance de '+esc(p.esp)+'.';
   b.style.cssText='display:inline-block;margin-left:6px;font-size:9.5px;font-weight:800;color:#0C5132;background:#EAF3EC;border:1px solid #BFD8C6;border-radius:5px;padding:1px 5px;white-space:nowrap;vertical-align:middle';
@@ -4334,7 +4339,98 @@ Array.prototype.forEach.call(w.querySelectorAll('.wbs-sys'),function(sy){
   d.style.cssText='font-size:9.5px;font-weight:800;color:#0C5132;margin-top:2px;white-space:nowrap';
   d.textContent='vale '+_hhPct(suma);
   roll.appendChild(d)})}catch(e){}}
-try{var _hhRlBase=renderList;renderList=function(){var r=_hhRlBase.apply(this,arguments);try{window._hhCache=null;_hhInject()}catch(e){}return r}}catch(_hw){}
+/* === FICHA DE LA ACTIVIDAD (solo administrador) ===
+   Toda la información que venía en el Excel del contrato: metrado, rendimiento,
+   horas-hombre, precio unitario y costo total. Desde aquí el admin decide si esas
+   HH cuentan o no para los pesos del avance — las que se apagan salen del total y
+   el resto se reparte solo. La lista de apagadas vive en la tabla de ajustes
+   (ajustes_create_110826), que ya tiene lápida, trigger de updated_at y tiempo real. */
+function _hhApagadas(){try{var v=_ajGet('hh_inactivas',[]);return (v&&v.length)?v:[]}catch(e){return []}}
+function _hhOff(id){if(!id)return false;var L=_hhApagadas();for(var i=0;i<L.length;i++){if(String(L[i])===String(id))return true}return false}
+async function _hhToggle(id){
+  if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return}
+  var L=_hhApagadas().slice(),i=-1;
+  L.forEach(function(x,ix){if(String(x)===String(id))i=ix});
+  var apago=(i<0);
+  if(apago)L.push(String(id));else L.splice(i,1);
+  await _ajSet('hh_inactivas',L,'Actividades cuyas HH no cuentan para los pesos del avance');
+  window._hhCache=null;
+  try{if(typeof renderList==='function')renderList()}catch(e){}
+  if(typeof toast==='function')toast(apago?'⏸ Sus HH ya no cuentan para los pesos':'▶ Sus HH vuelven a contar');
+  return apago;
+}
+function _nMon(n){n=Number(n);if(!isFinite(n))return '—';
+  var s=Math.abs(n).toFixed(2).split('.');
+  return (n<0?'-':'')+s[0].replace(/\B(?=(\d{3})+(?!\d))/g,',')+'.'+s[1]}
+function _nNum(n,d){n=Number(n);if(!isFinite(n))return '—';return (d?n.toFixed(d):String(n))}
+function _actDetalle(id){
+  var p=(DATA._byId&&DATA._byId[id]);if(!p){if(typeof toast==='function')toast('No encuentro esa actividad');return}
+  var off=_hhOff(id);
+  var hh=Number(p.hh),pu=Number(p.pu),cant=Number(p.metrado);
+  var tot=isFinite(Number(p.total))?Number(p.total):((isFinite(pu)&&isFinite(cant))?pu*cant:NaN);
+  var peso=_hhPeso(p);
+  var ov=document.getElementById('_actOv');if(ov)ov.remove();
+  ov=document.createElement('div');ov.id='_actOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483410;background:rgba(15,25,45,.55);display:flex;align-items:flex-end;justify-content:center';
+  function fila(l,v,col){return '<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid #F1F5F9">'+
+    '<div style="flex:1;font-size:12px;color:#5C6779">'+l+'</div>'+
+    '<div style="flex:none;font-size:12.5px;font-weight:800;color:'+(col||'#1B2433')+'">'+v+'</div></div>'}
+  function caja(l,v,c){return '<div style="flex:1;background:'+c+';color:#fff;border-radius:11px;padding:10px 6px;text-align:center">'+
+    '<div style="font-size:17px;font-weight:900;line-height:1.1">'+v+'</div><div style="font-size:9.5px;opacity:.93;margin-top:3px">'+l+'</div></div>'}
+  var H='<div style="background:#fff;width:100%;max-width:520px;border-radius:16px 16px 0 0;max-height:92vh;display:flex;flex-direction:column">';
+  H+='<div style="display:flex;align-items:center;gap:8px;padding:13px 14px 8px;border-bottom:1px solid #eef2f7">'+
+     '<b style="font-size:15px;color:#1F3864">ⓘ Ficha de la actividad</b>'+
+     '<button id="_actX" style="margin-left:auto;background:#eef2f7;border:0;border-radius:8px;padding:8px 12px;font-weight:700">✕</button></div>';
+  H+='<div style="overflow:auto;flex:1;padding:12px 14px 16px">';
+  H+='<div style="font-size:11px;font-weight:800;color:#0C5132;letter-spacing:.03em">ÍTEM '+esc(p.item||p.id)+(p.articulo?(' · ART. PAGO '+esc(p.articulo)):'')+'</div>';
+  H+='<div style="font-size:13px;font-weight:700;color:#1B2433;margin:4px 0 10px;line-height:1.45">'+esc(p.nombre||'')+'</div>';
+  var chips=[['#1F3864',p.esp],['#0E7490',p.sistema],['#5B3A8A',p.subsistema],['#8A4B00',p.tag]];
+  H+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px">';
+  chips.forEach(function(c){if(c[1])H+='<span style="font-size:10.5px;font-weight:800;color:#fff;background:'+c[0]+';border-radius:20px;padding:2px 9px">'+esc(c[1])+'</span>'});
+  H+='</div>';
+  H+='<div style="display:flex;gap:7px;margin-bottom:14px">'+
+     caja('METRADO',_nNum(cant)+' '+esc(p.unidad||''),'#1E7A46')+
+     caja('HH CONTRATO',(isFinite(hh)?_nNum(hh,1):'—'),'#8A4B00')+
+     caja('REND./DÍA',(isFinite(Number(p.rend))&&Number(p.rend)>0?_nNum(p.rend,2):'—'),'#1F3864')+
+     caja('DURACIÓN',(p.dias!=null&&isFinite(Number(p.dias))?_nNum(p.dias,0)+'d':'—'),'#0E7490')+'</div>';
+  H+='<div style="font-weight:800;color:#1F3864;font-size:13px;margin-bottom:4px">💰 Costos del contrato</div>';
+  H+=fila('Precio unitario',(isFinite(pu)?_nMon(pu):'—')+(p.unidad?(' <span style="font-weight:600;color:#8A94A6">/ '+esc(p.unidad)+'</span>'):''));
+  H+=fila('Metrado contratado',_nNum(cant)+' '+esc(p.unidad||''));
+  H+=fila('Costo total',(isFinite(tot)?_nMon(tot):'—'),'#0C5132');
+  if(isFinite(hh)&&hh>0&&isFinite(tot))H+=fila('Costo por hora-hombre',_nMon(tot/hh));
+  if(isFinite(hh)&&hh>0&&isFinite(cant)&&cant>0)H+=fila('HH por '+esc(p.unidad||'unidad'),_nNum(hh/cant,2)+' hh');
+  H+='<div style="font-weight:800;color:#1F3864;font-size:13px;margin:16px 0 4px">⚖ Peso en el avance</div>';
+  H+='<div style="background:'+(off?'#F4F6F9':'#EAF3EC')+';border:1.5px solid '+(off?'#D6DEE9':'#BFD8C6')+';border-radius:12px;padding:11px 12px">';
+  if(off){
+    H+='<div style="font-size:12.5px;color:#5C6779;line-height:1.5">Sus <b>'+(isFinite(hh)?_nNum(hh,1):'—')+' hh</b> están <b>apagadas</b>: no entran al total de '+esc(p.esp||'')+', así que esta actividad <b>no aporta nada</b> al avance y su peso se reparte entre las demás.</div>';
+  }else{
+    H+='<div style="font-size:12.5px;color:#0C5132;line-height:1.5">Terminada al 100% aporta <b>'+_hhPct(peso)+'</b> del avance de <b>'+esc(p.esp||'')+'</b>, según sus '+(isFinite(hh)?_nNum(hh,1):'—')+' hh sobre el total de la especialidad.</div>';
+  }
+  H+='<button id="_actHH" style="width:100%;margin-top:10px;border:0;border-radius:10px;padding:12px;font-weight:800;font-size:13px;cursor:pointer;color:#fff;background:'+(off?'#1E7A46':'#8A4B00')+'">'+
+     (off?'▶ Volver a contar sus HH para los pesos':'⏸ No usar sus HH para los pesos')+'</button>';
+  H+='</div>';
+  if(p.alcance)H+='<div style="margin-top:12px;font-size:11.5px;color:#5C6779">Estado en el contrato: <b>'+esc(p.alcance)+'</b></div>';
+  H+='<div style="margin-top:10px;font-size:10.5px;color:#8A94A6">Los datos vienen del Excel de contrato cargado en el catálogo. Apagar las HH no borra nada: la actividad sigue ahí y se puede volver a encender cuando quieras.</div>';
+  H+='</div></div>';
+  ov.innerHTML=H;document.body.appendChild(ov);
+  ov.onclick=function(e){if(e.target===ov)ov.remove()};
+  document.getElementById('_actX').onclick=function(){ov.remove()};
+  var bt=document.getElementById('_actHH');
+  if(bt)bt.onclick=async function(){bt.disabled=true;bt.textContent='Guardando…';await _hhToggle(id);ov.remove();_actDetalle(id)};
+}
+/* el admin toca el texto de la actividad y se abre su ficha */
+function _actInject(){try{
+  if(!(typeof esAdmin==='function'&&esAdmin()))return;
+  var w=$('list');if(!w)return;
+  Array.prototype.forEach.call(w.querySelectorAll('.leaf[data-id]'),function(el){
+    var id=el.getAttribute('data-id');if(!id)return;
+    var nm=el.querySelector('.cname');if(!nm||nm._actOk)return;nm._actOk=1;
+    nm.style.cursor='pointer';nm.title='Toca para ver la ficha: HH, precio unitario y costo total (admin)';
+    nm.addEventListener('click',function(e){
+      if(e.target&&e.target.closest&&e.target.closest('button,.res-badge,.alc-badge'))return;
+      e.stopPropagation();_actDetalle(id)})})}catch(e){}}
+
+try{var _hhRlBase=renderList;renderList=function(){var r=_hhRlBase.apply(this,arguments);try{window._hhCache=null;_hhInject();_actInject()}catch(e){}return r}}catch(_hw){}
 
 var KCAT='obf4_catalogo';
 function _catAplica(rows){
@@ -4349,7 +4445,8 @@ function _catAplica(rows){
       rend:(r.rendimiento_dia==null?0:Number(r.rendimiento_dia)),
       item:r.item||'',articulo:r.articulo_pago||'',tag:r.tag||'',
       subsistema:r.subsistema||'',dias:(r.duracion_dias==null?null:Number(r.duracion_dias)),
-      hh:(r.hh_t==null?null:Number(r.hh_t)),pu:(r.precio_unitario==null?null:Number(r.precio_unitario))};
+      hh:(r.hh_t==null?null:Number(r.hh_t)),pu:(r.precio_unitario==null?null:Number(r.precio_unitario)),
+      total:(r.oferta_total==null?null:Number(r.oferta_total)),alcance:r.estado_alcance||''};
   });
   DATA._byId={};DATA.partidas.forEach(function(p){DATA._byId[p.id]=p});
   return true;
