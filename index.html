@@ -2779,7 +2779,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812c7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812c8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -4249,7 +4249,10 @@ try{if(!state.visib)state.visib=JSON.parse(localStorage.getItem(KVIS)||'{}')}cat
 function _visKey(t,c){return t+'|'+c}
 function _visRule(t,c){return (state.visib||{})[_visKey(t,c)]}
 function _visMetricas(p){try{var a=(typeof areaOf==='function'&&areaOf(p))||'';var ks=[['act',p.id],['sys',a+'§'+(p.sistema||'')],['area',a]];for(var i=0;i<ks.length;i++){var r=_visRule(ks[i][0],ks[i][1]);if(r&&r.activo&&r.metricas===false)return false}return true}catch(e){return true}}
-function _puedeVer(t,c){try{if(typeof esAdmin==='function'&&esAdmin())return true;var r=_visRule(t,c);if(!r||!r.activo||!Array.isArray(r.permitidos))return true;var me=(state.user&&state.user.supervisor)||'';return r.permitidos.indexOf(me)>-1}catch(e){return true}}
+function _puedeVer(t,c){try{if(typeof esAdmin==='function'&&esAdmin())return true;var r=_visRule(t,c);if(!r||!r.activo||!Array.isArray(r.permitidos))return true;/* mientras te ves como supervisor, tu nombre NO te abre la puerta: se muestra lo que
+   veria alguien que no esta en la lista. Si no, como estas en 'permitidos' seguirias
+   viendo todo y la prueba no serviria de nada. */
+if(window._impRol)return false;var me=(state.user&&state.user.supervisor)||'';return r.permitidos.indexOf(me)>-1}catch(e){return true}}
 function _pullVisib(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
  fetch(sbBase()+'/rest/v1/visibilidad?select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto),{headers:sbHead()}).then(function(r){return r.ok?r.json():null}).then(function(rows){if(!rows)return;
   var m={};rows.forEach(function(x){if(x&&x.tipo&&x.clave!=null)m[_visKey(x.tipo,x.clave)]={activo:!!x.activo,permitidos:Array.isArray(x.permitidos)?x.permitidos:[],metricas:(x.metricas!==false),quien:x.quien||''}});
@@ -6297,6 +6300,7 @@ function _cbRender(){
     H+='<div class="_cbCard" data-id="'+esc(c.id)+'" style="background:#fff;border:1.5px solid var(--line);border-left:4px solid #7A4B00;border-radius:13px;padding:12px 13px;margin-bottom:10px;cursor:pointer">';
     H+='<div style="display:flex;align-items:baseline;gap:7px">';
     H+='<span style="flex:none;background:#7A4B00;color:#fff;border-radius:20px;padding:1px 9px;font-size:11px;font-weight:900">N° '+(L.length-ix)+'</span>';
+    if(c.tipo)H+='<span style="flex:none;background:#1F3864;color:#fff;border-radius:20px;padding:1px 9px;font-size:10.5px;font-weight:900;letter-spacing:.03em">'+esc(c.tipo)+'</span>';
     H+='<div style="flex:1;min-width:0;font-size:13.5px;font-weight:800;color:#1F3864;overflow-wrap:anywhere">'+esc(c.titulo||'(sin título)')+'</div>';
     if(mio)H+='<button class="_cbDel" data-id="'+esc(c.id)+'" title="Borrar este cambio" style="flex:none;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:8px;width:28px;height:28px;font-weight:900;cursor:pointer">🗑</button>';
     H+='</div>';
@@ -6378,6 +6382,11 @@ function _cbNvRender(){
   var t=(document.getElementById('_cbTit')||{}).value||'';
   var c=(document.getElementById('_cbCom')||{}).value||'';
   var H='';
+  var tp=(document.getElementById('_cbTipo')||{}).value||(window._cbTipoUlt||'');
+  H+='<label style="font-size:12px;font-weight:800;color:#5C6779;display:block;margin-bottom:4px">Tipo de cambio</label>';
+  H+='<select id="_cbTipo" style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:10px;padding:11px;font-size:13.5px;margin-bottom:12px;background:#fff">'+
+     ['','RFI','FCR','REDLINE','OTRO'].map(function(o){
+       return '<option value="'+esc(o)+'"'+(o===tp?' selected':'')+'>'+(o?esc(o):'Elige el tipo…')+'</option>'}).join('')+'</select>';
   H+='<label style="font-size:12px;font-weight:800;color:#5C6779;display:block;margin-bottom:4px">¿De qué es el cambio?</label>';
   H+='<input id="_cbTit" value="'+esc(t)+'" placeholder="Ej.: Cambio de recorrido de bandeja" style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:10px;padding:11px;font-size:13.5px;margin-bottom:12px">';
   H+='<label style="font-size:12px;font-weight:800;color:#5C6779;display:block;margin-bottom:4px">Comentario — qué cambió y por qué</label>';
@@ -6409,6 +6418,7 @@ function _cbNvRender(){
   H+='<div id="_cbZona" style="border:2px dashed #BFD8C6;border-radius:12px;padding:16px;text-align:center;color:#0C5132;font-size:12px;font-weight:700;background:#F4FAF6;margin-bottom:14px">Arrastra aquí tus archivos</div>';
   H+='<button id="_cbGo" style="width:100%;background:#0C5132;color:#fff;border:0;border-radius:11px;padding:14px;font-weight:800;font-size:14px;cursor:pointer">✓ Registrar el cambio</button>';
   w.innerHTML=H;
+  var _sel=document.getElementById('_cbTipo');if(_sel)_sel.onchange=function(){window._cbTipoUlt=_sel.value};
   document.getElementById('_cbSubir').onclick=function(){
     var inp=document.createElement('input');inp.type='file';inp.multiple=true;
     inp.onchange=function(){Array.prototype.slice.call(inp.files||[]).forEach(function(f){
@@ -6496,6 +6506,8 @@ function _cbBarraPinta(lista,est,total,fase){
 async function _cbCrear(){
   var tit=String((document.getElementById('_cbTit')||{}).value||'').trim();
   var com=String((document.getElementById('_cbCom')||{}).value||'').trim();
+  var tipo=String((document.getElementById('_cbTipo')||{}).value||'').trim();
+  if(!tipo){if(typeof toast==='function')toast('Elige el tipo: RFI, FCR, REDLINE u OTRO');return}
   if(!tit){if(typeof toast==='function')toast('Ponle un título al cambio');return}
   if(!com){if(typeof toast==='function')toast('Escribe el comentario del cambio');return}
   var id=_cbId('CB');
@@ -6526,7 +6538,7 @@ async function _cbCrear(){
       mime:r.mime||'',tamano:r.tamano||0,subido_por:r.subido_por||'',eliminado:false,elim_por:'',elim_ts:0})});
   window._cbSubiendo=false;window._cbXhrs=[];
   pinta('Guardando el cambio…');
-  var c={id:id,titulo:tit,comentario:com,disciplina:(state.user&&state.user.disc)||'',
+  var c={id:id,titulo:tit,comentario:com,tipo:tipo,disciplina:(state.user&&state.user.disc)||'',
     area:'',sistema:((((DATA._byId||{})[window._cbPid||''])||{}).sistema)||'',
     partida_id:window._cbPid||'',creado_por:_cbYo(),fecha:(typeof todayISO==='function'?todayISO():''),
     estado:'abierto',adjuntos:adj,eliminado:false,elim_por:'',elim_ts:0};
@@ -6552,6 +6564,7 @@ function _cbVer(id){
      '<b style="font-size:15px;color:#7A4B00">📝 Cambio</b>'+
      '<button id="_cbVerX" style="margin-left:auto;background:#eef2f7;border:0;border-radius:8px;padding:8px 12px;font-weight:700">✕</button></div>';
   H+='<div style="flex:1;overflow:auto;padding:13px 14px 18px">';
+  if(c.tipo)H+='<div style="display:inline-block;background:#1F3864;color:#fff;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:900;letter-spacing:.03em;margin-bottom:6px">'+esc(c.tipo)+'</div>';
   H+='<div style="font-size:15px;font-weight:800;color:#1F3864;line-height:1.35">'+esc(c.titulo||'')+'</div>';
   H+='<div style="font-size:11px;color:var(--muted);margin:4px 0 12px">Por <b style="color:#7A4B00">'+esc(c.creado_por||'—')+'</b>'+(c.disciplina?(' · '+esc(c.disciplina)):'')+' · '+esc(_cbFecha(c.created_at||c.ts))+'</div>';
   if(c.partida_id)H+='<div style="font-size:11.5px;font-weight:800;color:#0C5132;margin-bottom:10px">🏗 '+esc(c.partida_id)+' · '+esc((((DATA._byId||{})[c.partida_id])||{}).nombre||'')+'</div>';
