@@ -2386,8 +2386,47 @@ function _pdFechaTxt(f){try{
   if(f===todayISO())t+=' · HOY';
   else if(f===_pdAddDias(todayISO(),-1))t+=' · ayer';
   return t}catch(e){return f}}
+/* === LA FOTO DEL DÍA, POR ESPECIALIDAD ===
+   Cada día guarda su propia lista: quién estuvo, con qué cargo y en qué cuadrilla,
+   agrupado por especialidad. Se guarda como fila en ajustes_create_110826 con
+   clave 'pdia:<fecha>' — esa tabla tiene lápida (eliminado/elim_por/elim_ts), ts,
+   cell_at, trigger de updated_at y tiempo real, comprobado. Así los días pasados
+   quedan inmunes: cambiar el padrón hoy no reescribe lo que ya pasó. */
+function _pdSnapKey(f){return 'pdia:'+f}
+function _pdSnapAll(){if(!state.pdSnap){try{state.pdSnap=JSON.parse(localStorage.getItem('obf4_pdsnap')||'{}')||{}}catch(e){state.pdSnap={}}}return state.pdSnap}
+function _pdSnapSave(){try{localStorage.setItem('obf4_pdsnap',JSON.stringify(_pdSnapAll()))}catch(e){}}
+function _pdSnapArma(f){
+  var por={};
+  _pdVivosDelDia(f).forEach(function(x){
+    var e=x.esp||'(sin especialidad)';
+    (por[e]=por[e]||[]).push({pid:x.pid,nombre:x.nombre,cargo:x.cargo,cuadrilla:x.cuad||''})});
+  var tot=0;for(var k in por)tot+=por[k].length;
+  return {fecha:f,total:tot,esp:por,quien:(state.user&&state.user.supervisor)||''}}
+async function _pdSnapGuardar(f){
+  try{
+    if(!f)return;
+    var snap=_pdSnapArma(f);
+    var H=_pdSnapAll(),ya=H[f];
+    if(ya&&JSON.stringify(ya.esp)===JSON.stringify(snap.esp))return;   /* nada nuevo */
+    H[f]=snap;_pdSnapSave();
+    if(typeof sbReady==='function'&&sbReady()&&navigator.onLine){
+      var t=(typeof nowSrv==='function'?nowSrv():Date.now());
+      await sbUpsert('ajustes_create_110826',[{proyecto:DATA.proyecto,clave:_pdSnapKey(f),valor:snap,
+        descripcion:'Personal del día '+f+' por especialidad',
+        quien:(state.user&&state.user.supervisor)||'',ts:t,cell_at:Date.now(),
+        eliminado:false,elim_por:'',elim_ts:0}],'proyecto,clave')}
+  }catch(e){}}
+async function _pdSnapPull(){
+  if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
+  try{
+    var R=await sbSelect('ajustes_create_110826','select=clave,valor,eliminado&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&clave=like.pdia:*&limit=800');
+    var H=_pdSnapAll();
+    (R||[]).forEach(function(r){if(r&&!r.eliminado&&r.valor&&r.valor.fecha)H[r.valor.fecha]=r.valor});
+    state.pdSnap=H;_pdSnapSave();
+  }catch(e){}}
+try{var _pdsBase=syncPull;syncPull=async function(){var r=await _pdsBase.apply(this,arguments);try{await _pdSnapPull()}catch(e){}return r}}catch(_pdsw){}
 /* la gente designada ese día exacto, sin heredar de días anteriores */
-function _pdDelDia(f){
+function _pdVivosDelDia(f){
   var m=(state.persDia&&state.persDia[f])||{},o=[];
   for(var k in m){var d=m[k];
     if(!d||d.estado!=='designado'||d.eliminado)continue;
@@ -2395,6 +2434,18 @@ function _pdDelDia(f){
     o.push({pid:k,nombre:p.nombre||'',cargo:p.cargo||'',esp:p.especialidad||'(sin especialidad)',cuad:d.cuadrilla||''})}
   o.sort(function(a,b){return ((typeof _cargoRank==='function'?_cargoRank(a.cargo)-_cargoRank(b.cargo):0))||String(a.nombre).localeCompare(String(b.nombre))});
   return o}
+function _pdDelDia(f){
+  var hoy=(typeof todayISO==='function')?todayISO():'';
+  var vivo=_pdVivosDelDia(f);
+  if(f===hoy){try{_pdSnapGuardar(f)}catch(e){}return vivo}
+  var snap=_pdSnapAll()[f];
+  if(snap&&snap.esp){
+    var o=[];Object.keys(snap.esp).forEach(function(e){(snap.esp[e]||[]).forEach(function(x){
+      o.push({pid:x.pid,nombre:x.nombre,cargo:x.cargo,esp:e,cuad:x.cuadrilla||''})})});
+    o.sort(function(a,b){return ((typeof _cargoRank==='function'?_cargoRank(a.cargo)-_cargoRank(b.cargo):0))||String(a.nombre).localeCompare(String(b.nombre))});
+    return o}
+  if(vivo.length){try{_pdSnapGuardar(f)}catch(e){}}
+  return vivo}
 function _pdDiaBodyHtml(){
   var f=_pdVerF(),hoy=todayISO();
   var admin=_pdEsAdmin();
@@ -2779,7 +2830,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812d4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812d5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
