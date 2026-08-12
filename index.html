@@ -2780,7 +2780,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812b6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812b7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -6147,7 +6147,9 @@ async function _cbPull(){
   if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
   var pf='proyecto=eq.'+encodeURIComponent(DATA.proyecto);
   try{
-    var C=await sbSelect(T_CB,'select=*&'+pf+'&order=created_at.desc&limit=2000');
+    var C=null;
+    try{C=await sbSelect(T_CB,'select=*&'+pf+'&order=created_at.desc&limit=2000');window._cbSinTabla=false}
+    catch(e0){if(String((e0&&e0.message)||'').indexOf('404')>=0){window._cbSinTabla=true;try{if(document.getElementById('_cbOv'))_cbRender()}catch(_e){}}throw e0}
     var A=await sbSelect(T_CBA,'select=*&'+pf+'&limit=5000');
     if(C)state.cambiosX=_cbMezcla(_cbAll(),C);
     if(A)state.cambiosAdj=_cbMezcla(_cbAdj(),A);
@@ -6200,7 +6202,9 @@ function _cbFecha(v){try{var d=v?new Date(v):null;if(!d||isNaN(d))return '';
 function _cbRender(){
   var w=document.getElementById('_cbBody');if(!w)return;
   var L=_cbVivos();
-  var H='<button id="_cbNuevo" style="width:100%;background:#7A4B00;color:#fff;border:0;border-radius:11px;padding:13px;font-weight:800;font-size:14px;margin-bottom:12px;cursor:pointer">+ Registrar un cambio</button>';
+  var H='';
+  if(window._cbSinTabla)H+='<div style="background:#FDECEA;border:1.5px solid #F1B4B0;border-radius:12px;padding:11px 12px;margin-bottom:11px;font-size:12px;color:#8A2A22;line-height:1.5"><b>Falta crear las tablas en la base.</b><br>Corre una vez el archivo <b>SQL_CAMBIOS_120826.sql</b> en Supabase → SQL Editor. Hasta entonces se puede mirar, pero no guardar.</div>';
+  H+='<button id="_cbNuevo" style="width:100%;background:#7A4B00;color:#fff;border:0;border-radius:11px;padding:13px;font-weight:800;font-size:14px;margin-bottom:12px;cursor:pointer">+ Registrar un cambio</button>';
   if(!L.length){H+='<div style="text-align:center;color:var(--muted);font-size:13px;padding:26px 10px;line-height:1.6">Todavía no hay cambios registrados.<br>El primero se crea con el botón de arriba.</div>';w.innerHTML=H;
     var b0=document.getElementById('_cbNuevo');if(b0)b0.onclick=_cbNuevo;return}
   H+='<div style="font-size:11.5px;color:var(--muted);margin-bottom:9px">'+L.length+' cambio'+(L.length===1?'':'s')+' registrado'+(L.length===1?'':'s')+' — todos los ven</div>';
@@ -6338,7 +6342,8 @@ async function _cbCrear(){
     estado:'abierto',eliminado:false,elim_por:'',elim_ts:0};
   try{await _cbGuardar(c,true)}
   catch(e){if(btn){btn.disabled=false;btn.textContent='✓ Registrar el cambio'}
-    if(typeof toast==='function')toast('No se pudo guardar — revisa la señal');return}
+    var m=String((e&&e.message)||e);
+    if(typeof toast==='function')toast(m.indexOf('404')>=0?'Faltan las tablas de Cambios en la base — corre el SQL':'No se pudo guardar — revisa la señal');return}
   var ok=0,mal=0;
   for(var i=0;i<window._cbCola.length;i++){var x=window._cbCola[i];
     if(btn)btn.textContent='Subiendo '+(i+1)+'/'+window._cbCola.length+'…';
