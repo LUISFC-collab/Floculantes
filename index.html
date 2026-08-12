@@ -2775,7 +2775,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812b4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -4697,6 +4697,74 @@ async function _catPull(){
 }
 try{var _catPullBase=syncPull;syncPull=async function(){var r=await _catPullBase.apply(this,arguments);try{await _catPull()}catch(e){}return r};}catch(_cw2){}
 try{setTimeout(function(){try{_catPull()}catch(e){}},1200)}catch(_ct){}
+
+/* === CANDADO CONTRA DATOS DE OTRO PROYECTO ===
+   Varios equipos traían en su caché las actividades de WaterTransition (obra-feable
+   fue un clon suyo) y al abrir Floculantes las volvían a subir a esta base. El
+   nombre del proyecto no sirve de filtro: la app las re-sella como "Floculantes".
+   Lo que sí las delata es el SISTEMA: una actividad de este proyecto siempre cuelga
+   de un sistema del catálogo o de uno creado aquí (wbs_extra). Todo lo demás se
+   descarta del celular —así deja de re-subirse— y el admin además lo borra del
+   servidor. Se puede apagar con el ajuste candado_ajenas en false. */
+function _fluSistemas(){
+  var S={};
+  try{(DATA.partidas||[]).forEach(function(p){if(p&&p.sistema)S[String(p.sistema).trim().toLowerCase()]=1})}catch(e){}
+  try{(state.wbsX||[]).forEach(function(r){if(r&&!r.eliminado&&r.tipo==='sistema'&&r.nombre)S[String(r.nombre).trim().toLowerCase()]=1})}catch(e){}
+  try{(state.sysExtra||[]).forEach(function(x){var n=(x&&x.sistema)||x;if(n)S[String(n).trim().toLowerCase()]=1})}catch(e){}
+  return S}
+function _fluIds(){
+  var I={};
+  try{(DATA.partidas||[]).forEach(function(p){if(p&&p.id)I[String(p.id)]=1})}catch(e){}
+  return I}
+function _fluEsAjena(n,S){
+  if(!n)return false;
+  var s=String(n.sistema||'').trim().toLowerCase();
+  if(!s)return false;                 /* sin sistema no se juzga: se deja pasar */
+  return !S[s]}
+async function _limpiaAjeno(){
+  try{
+    if(_ajGet('candado_ajenas',true)===false)return;
+    if(!(DATA.partidas||[]).length)return;   /* sin catálogo cargado no hay con qué comparar */
+    var S=_fluSistemas(),I=_fluIds();
+    if(Object.keys(S).length<3)return;       /* catálogo a medio cargar: no arriesgar */
+    var fuera=(state.nuevas||[]).filter(function(n){return _fluEsAjena(n,S)});
+    if(!fuera.length)return;
+    var ids={};fuera.forEach(function(n){ids[n.id]=1});
+    /* fuera del celular: así este equipo deja de re-subirlas */
+    state.nuevas=(state.nuevas||[]).filter(function(n){return !ids[n.id]});
+    try{store.set(KN,state.nuevas)}catch(e){}
+    try{var mCam=false;for(var k in (state.meta||{})){if(ids[k]){delete state.meta[k];mCam=true}}
+      if(mCam)store.set(KM,state.meta)}catch(e){}
+    try{state.partes=(state.partes||[]).filter(function(p){return !ids[p&&(p.id||p.partida_id)]});store.set(KP,state.partes)}catch(e){}
+    var nIds=Object.keys(ids);
+    if(typeof _logAdd==='function')try{_logAdd('candado',nIds.length+' actividad(es) de otro proyecto descartadas: '+nIds.slice(0,6).join(', '))}catch(e){}
+    /* el admin además las saca de la base, para que no le lleguen a los demás */
+    if(typeof esAdmin==='function'&&esAdmin()&&typeof sbReady==='function'&&sbReady()&&navigator.onLine){
+      for(var i=0;i<nIds.length;i++){
+        var q='proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&partida_id=eq.'+encodeURIComponent(nIds[i]);
+        try{await sbDelete('nuevas',q)}catch(e){}
+        try{await sbDelete('metrados',q)}catch(e){}
+        try{await sbDelete('programacion',q)}catch(e){}
+        try{await sbDelete('ediciones',q)}catch(e){}
+        try{await sbDelete('restricciones_partida','partida_id=eq.'+encodeURIComponent(nIds[i]))}catch(e){}
+      }
+      /* metrados sueltos de partidas que no existen ni en el catálogo ni en nuevas */
+      try{
+        var M=await sbSelect('metrados','select=partida_id&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&limit=3000');
+        var vivos={};(state.nuevas||[]).forEach(function(n){vivos[n.id]=1});
+        var hu={};(M||[]).forEach(function(r){if(r&&r.partida_id&&!I[r.partida_id]&&!vivos[r.partida_id])hu[r.partida_id]=1});
+        var hk=Object.keys(hu);
+        for(var j=0;j<hk.length&&j<400;j++){
+          try{await sbDelete('metrados','proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&partida_id=eq.'+encodeURIComponent(hk[j]))}catch(e){}}
+        if(hk.length&&typeof toast==='function')toast('🧹 '+hk.length+' metrado(s) de otro proyecto retirados');
+      }catch(e){}
+    }
+    if(typeof toast==='function')toast('🧹 '+nIds.length+' actividad(es) de otro proyecto quitadas de este equipo');
+    try{if(typeof renderList==='function')renderList()}catch(e){}
+  }catch(e){}
+}
+try{var _laBase=syncPull;syncPull=async function(){var r=await _laBase.apply(this,arguments);try{await _limpiaAjeno()}catch(e){}return r}}catch(_law){}
+try{setTimeout(function(){try{_limpiaAjeno()}catch(e){}},6000)}catch(_lat){}
 
 function _cuKey(){return (state.user&&state.user.supervisor)||''}
 function _cuAll(){if(window._cuCache&&window._cuCache.sup&&window._cuCache.sup!==_cuKey())window._cuCache=null;
