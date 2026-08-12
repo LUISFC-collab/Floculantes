@@ -2683,7 +2683,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -5250,6 +5250,104 @@ function _docCrear(){
     disciplina:(state.user&&state.user.disc)||'',color:'',eliminado:false,elim_por:'',elim_ts:0});
   if(typeof toast==='function')toast('📁 Carpeta creada');
 }
+/* === PRECARGA: lo que se arrastra queda en espera hasta que se toque Subir === */
+window._docCola=window._docCola||[];
+function _docColaAdd(file,rel){
+  if(!file)return;
+  var clave=(rel||'')+'|'+file.name+'|'+file.size;
+  if(window._docCola.some(function(x){return x.clave===clave}))return;
+  window._docCola.push({clave:clave,file:file,nombre:file.name,rel:rel||'',size:file.size||0});
+}
+/* lee una carpeta arrastrada, con sus subcarpetas */
+function _docLeerEntry(entry,base){
+  return new Promise(function(res){
+    if(!entry)return res();
+    if(entry.isFile){entry.file(function(f){_docColaAdd(f,base);res()},function(){res()});return}
+    if(entry.isDirectory){
+      var rd=entry.createReader();var todos=[];
+      var leer=function(){rd.readEntries(function(ents){
+        if(!ents.length){
+          var p=Promise.resolve();
+          todos.forEach(function(e){p=p.then(function(){return _docLeerEntry(e,(base?base+'/':'')+entry.name)})});
+          p.then(res);return}
+        todos=todos.concat(Array.prototype.slice.call(ents));leer()},function(){res()})};
+      leer();return}
+    res()});
+}
+async function _docSoltar(dt){
+  if(!_docPuedeSubir()){var c=_docCarpDe(_docActual());
+    if(typeof toast==='function')toast('Solo '+((c&&c.creado_por)||'quien la creó')+' puede subir aquí');return}
+  var items=dt&&dt.items?Array.prototype.slice.call(dt.items):[];
+  var conEntries=items.length&&items[0].webkitGetAsEntry;
+  if(conEntries){
+    var ents=items.map(function(it){try{return it.webkitGetAsEntry()}catch(e){return null}}).filter(Boolean);
+    for(var i=0;i<ents.length;i++){await _docLeerEntry(ents[i],'')}
+  }else{
+    Array.prototype.slice.call((dt&&dt.files)||[]).forEach(function(f){_docColaAdd(f,'')});
+  }
+  _docRender();
+  if(typeof toast==='function')toast('📥 '+window._docCola.length+' archivo(s) en espera — revisa y toca Subir');
+}
+function _docColaQuitar(clave){
+  window._docCola=window._docCola.filter(function(x){return x.clave!==clave});_docRender();
+}
+function _docColaHTML(){
+  if(!window._docCola.length)return '';
+  var total=window._docCola.reduce(function(t,x){return t+(x.size||0)},0);
+  var H='<div style="background:#FFF8E8;border:1.5px solid #EFC98A;border-radius:13px;padding:12px 12px 10px;margin-bottom:12px">';
+  H+='<div style="font-weight:900;font-size:13px;color:#7A4B00;margin-bottom:2px">📥 En espera de subir ('+window._docCola.length+')</div>';
+  H+='<div style="font-size:11px;color:#8a6d1f;margin-bottom:9px">'+_docTam(total)+' en total · quita con ✕ lo que no quieras subir</div>';
+  window._docCola.forEach(function(x){
+    H+='<div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #EFC98A;border-radius:9px;padding:8px 9px;margin-bottom:6px">';
+    H+='<span style="font-size:17px">'+_docIcono(x.nombre)+'</span>';
+    H+='<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:700;color:#1B2433;overflow-wrap:anywhere">'+esc(x.nombre)+'</div>';
+    H+='<div style="font-size:10.5px;color:var(--muted)">'+_docTam(x.size)+(x.rel?(' · 📁 '+esc(x.rel)):'')+'</div></div>';
+    H+='<button class="_docColaX" data-k="'+esc(x.clave)+'" title="No subir este" style="flex:none;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:8px;width:27px;height:27px;font-weight:900;cursor:pointer">✕</button></div>';
+  });
+  H+='<div style="display:flex;gap:8px;margin-top:8px">';
+  H+='<button id="_docColaClr" style="flex:none;background:#eef2f7;border:0;border-radius:10px;padding:11px 13px;font-weight:800;font-size:12.5px;cursor:pointer">Descartar todo</button>';
+  H+='<button id="_docColaGo" style="flex:1;background:#0C5132;color:#fff;border:0;border-radius:10px;padding:11px;font-weight:800;font-size:13px;cursor:pointer">⬆ Subir '+window._docCola.length+' archivo(s)</button>';
+  H+='</div></div>';
+  return H;
+}
+async function _docCarpetaPara(rel){
+  /* asegura la subcarpeta de una carpeta arrastrada; devuelve su id */
+  var pid=_docActual();
+  if(!rel)return pid;
+  var partes=rel.split('/').filter(Boolean);
+  for(var i=0;i<partes.length;i++){
+    var nom=partes[i];
+    var ya=_docCarp().filter(function(c){return !c.eliminado&&(c.padre_id||'')===pid&&String(c.nombre).toLowerCase()===nom.toLowerCase()})[0];
+    if(ya){pid=ya.id;continue}
+    var nueva={id:_docNuevoId('C'),nombre:nom,padre_id:pid,creado_por:_docSup(),
+      disciplina:(state.user&&state.user.disc)||'',color:'',eliminado:false,elim_por:'',elim_ts:0};
+    await _docGuardarCarpeta(nueva);pid=nueva.id;
+  }
+  return pid;
+}
+async function _docColaSubir(){
+  if(!window._docCola.length)return;
+  if(!_docPuedeSubir()){if(typeof toast==='function')toast('No puedes subir aquí');return}
+  var lista=window._docCola.slice();var ok=0,fall=0;
+  if(typeof toast==='function')toast('⬆ Subiendo '+lista.length+' archivo(s)…');
+  for(var i=0;i<lista.length;i++){var x=lista[i];
+    try{
+      var cid=await _docCarpetaPara(x.rel);
+      var id=_docNuevoId('A');
+      var limpio=String(x.nombre||'archivo').replace(/[^\w.\- ]+/g,'_');
+      var ruta=cid+'/'+id+'_'+limpio;
+      var r=await fetch(sbBase()+'/storage/v1/object/documentos/'+encodeURI(ruta),{method:'POST',
+        headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey,'Content-Type':(x.file.type||'application/octet-stream')},body:x.file});
+      if(!r.ok){fall++;continue}
+      await _docGuardarArchivo({id:id,carpeta_id:cid,nombre:x.nombre,ruta:ruta,
+        mime:x.file.type||'',tamano:x.size||0,subido_por:_docSup(),eliminado:false,elim_por:'',elim_ts:0});
+      window._docCola=window._docCola.filter(function(z){return z.clave!==x.clave});
+      ok++;
+    }catch(e){fall++}}
+  _docRender();
+  if(typeof toast==='function')toast(fall?('✓ '+ok+' subido(s) · '+fall+' con error'):('✓ '+ok+' archivo(s) subido(s)'));
+}
+
 function _docRender(){
   var w=document.getElementById('_docBody');if(!w)return;
   var cid=_docActual();var cur=cid?_docCarpDe(cid):null;
@@ -5267,6 +5365,7 @@ function _docRender(){
   if(cid)H+='<button id="_docUp" type="button"'+(subir?'':' disabled')+' style="flex:1;background:'+(subir?'#1F3864':'#C7D2E0')+';color:#fff;border:0;border-radius:11px;padding:12px;font-weight:800;font-size:13px;cursor:'+(subir?'pointer':'not-allowed')+'">⬆ Subir archivo</button>';
   H+='</div>';
   if(cid&&!subir)H+='<div style="background:#FCEFD9;border:1px solid #EFC98A;border-radius:10px;padding:9px 11px;font-size:11.5px;color:#7A4B00;margin-bottom:11px">Puedes ver y descargar todo. Subir aquí solo <b>'+esc((cur&&cur.creado_por)||'su dueño')+'</b>.</div>';
+  H+=_docColaHTML();
   var hijas=_docHijas(cid), archivos=cid?_docArchDe(cid):[];
   hijas.forEach(function(c){
     var mio=_docMio(c);var n=_docHijas(c.id).length+_docArchDe(c.id).length;
@@ -5292,9 +5391,12 @@ function _docRender(){
   if(cid&&subir)H+='<div id="_docZona" style="margin-top:12px;border:2px dashed #BFD8C6;border-radius:12px;padding:18px;text-align:center;color:#0C5132;font-size:12px;font-weight:700;background:#F4FAF6">Arrastra aquí tus archivos</div>';
   w.innerHTML=H;
   var b=document.getElementById('_docNueva');if(b)b.onclick=_docCrear;
+  Array.prototype.forEach.call(w.querySelectorAll('._docColaX'),function(x){x.onclick=function(e){e.stopPropagation();_docColaQuitar(x.getAttribute('data-k'))}});
+  var _cg=document.getElementById('_docColaGo');if(_cg)_cg.onclick=_docColaSubir;
+  var _cc=document.getElementById('_docColaClr');if(_cc)_cc.onclick=function(){window._docCola=[];_docRender()};
   var up=document.getElementById('_docUp');if(up&&subir)up.onclick=function(){
     var inp=document.createElement('input');inp.type='file';inp.multiple=true;
-    inp.onchange=function(){_docSubir(inp.files)};inp.click()};
+    inp.onchange=function(){Array.prototype.slice.call(inp.files||[]).forEach(function(f){_docColaAdd(f,'')});_docRender();if(typeof toast==='function')toast('📥 '+window._docCola.length+' archivo(s) en espera — toca Subir')};inp.click()};
   Array.prototype.forEach.call(w.querySelectorAll('._docRuta'),function(x){x.onclick=function(){
     window._docNav=window._docNav.slice(0,+x.getAttribute('data-n'));_docRender()}});
   Array.prototype.forEach.call(w.querySelectorAll('._docCard'),function(x){x.onclick=function(){
@@ -5328,7 +5430,7 @@ function _docAbrir(){
     var z=document.getElementById('_docZona');if(z){z.style.background='#F4FAF6';z.style.borderColor='#BFD8C6'}})});
   ov.addEventListener('drop',function(e){
     if(!_docPuedeSubir())return;e.preventDefault();e.stopPropagation();
-    var dt=e.dataTransfer;if(dt&&dt.files&&dt.files.length)_docSubir(dt.files)});
+    _docSoltar(e.dataTransfer)});
   _docRender();
   try{_docPull()}catch(e){}
 }
