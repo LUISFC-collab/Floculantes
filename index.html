@@ -2779,7 +2779,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812c4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812c5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -2860,62 +2860,118 @@ async function _elimCatVolver(pid){
   try{await _catPull()}catch(e){}
   _showActEliminadas()}
 /* --- papelera de documentos --- */
+/* --- papelera de documentos: se puede marcar varios y actuar de golpe --- */
+window._dpSel={};
 async function _docPapelera(){
   var ov=document.getElementById('_dpOv');if(ov)ov.remove();
+  window._dpSel={};
   ov=document.createElement('div');ov.id='_dpOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483646;background:#0b1220;color:#cfe3ff;font:13px system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
   ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><b style="font-size:15px;color:#f5b8d4">📄 Documentos eliminados</b>'+
     '<button id="_dpX" style="margin-left:auto;background:#444;color:#fff;border:0;border-radius:8px;padding:8px 12px">✕ Cerrar</button></div>'+
     _elimBarraHTML('docs')+
+    '<div id="_dpAcc" style="display:none;gap:7px;margin-bottom:8px"></div>'+
     '<div id="_dpBody" style="flex:1;overflow:auto;background:#0d1117;border:1px solid #2e1622;border-radius:10px;padding:8px">Cargando…</div>';
   document.body.appendChild(ov);
   ov.querySelector('#_dpX').onclick=function(){ov.remove()};
   _elimBarraWire(ov,'docs');
-  var B=ov.querySelector('#_dpBody');
   var C=[],A=[];
-  try{C=await sbSelect(T_DC,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&eliminado=is.true&order=elim_ts.desc&limit=2000')||[]}catch(e){}
-  try{A=await sbSelect(T_DA,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&eliminado=is.true&order=elim_ts.desc&limit=3000')||[]}catch(e){}
+  try{C=await sbSelect(T_DC,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&eliminado=is.true&order=elim_ts.desc&limit=3000')||[]}catch(e){}
+  try{A=await sbSelect(T_DA,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&eliminado=is.true&order=elim_ts.desc&limit=5000')||[]}catch(e){}
+  window._dpC=C;window._dpA=A;
+  _dpPinta();
+}
+function _dpMarcados(){
+  var c=[],a=[];
+  for(var k in window._dpSel){if(!window._dpSel[k])continue;
+    if(k.indexOf('C|')===0)c.push(k.slice(2));else a.push(k.slice(2))}
+  return {carp:c,arch:a}}
+function _dpPinta(){
+  var B=document.getElementById('_dpBody');if(!B)return;
+  var C=window._dpC||[],A=window._dpA||[];
   var adm=(typeof esAdmin==='function'&&esAdmin());
-  if(!C.length&&!A.length){B.innerHTML='<div style="color:#7d8590;padding:16px;text-align:center">La papelera de documentos está vacía.</div>';return}
-  var H='';
+  if(!C.length&&!A.length){B.innerHTML='<div style="color:#7d8590;padding:16px;text-align:center">La papelera de documentos está vacía.</div>';
+    var acc0=document.getElementById('_dpAcc');if(acc0)acc0.style.display='none';return}
   var mb=A.reduce(function(t,x){return t+(Number(x.tamano)||0)},0);
-  H+='<div style="font-size:11.5px;color:#9db4d6;margin-bottom:9px;line-height:1.5">'+C.length+' carpeta(s) y '+A.length+' archivo(s) en la papelera ('+_docTam(mb)+'). '+
-     (adm?'Puedes devolverlos a su sitio o borrarlos para siempre.':'Solo el administrador puede devolverlos o borrarlos definitivamente.')+'</div>';
+  var H='<div style="font-size:11.5px;color:#9db4d6;margin-bottom:9px;line-height:1.5">'+C.length+' carpeta(s) y '+A.length+' archivo(s) en la papelera ('+_docTam(mb)+'). '+
+    (adm?'Marca las que quieras y usa los botones de arriba; si no marcas nada, actúan sobre todo.':'Solo el administrador puede devolverlos o borrarlos definitivamente.')+'</div>';
+  var fila=function(tipo,id,ico,tit,sub){
+    var k=tipo+'|'+id;var on=!!window._dpSel[k];
+    return '<div style="border:1px solid '+(on?'#1E7A46':'#4a1a2e')+';border-radius:10px;padding:8px 10px;margin-bottom:6px;background:'+(on?'#12251b':'#221019')+';display:flex;gap:9px;align-items:center">'+
+      (adm?('<input type="checkbox" class="_dpCk" data-k="'+esc(k)+'" '+(on?'checked':'')+' style="width:18px;height:18px;flex:none;cursor:pointer">'):'')+
+      '<div style="flex:1;min-width:0"><b style="color:#f5b8d4;overflow-wrap:anywhere">'+ico+' '+esc(tit)+'</b>'+
+      '<div style="color:#9db4d6;font-size:11px">'+sub+'</div></div>'+
+      (adm?('<button class="_dpR1" data-k="'+esc(k)+'" title="Devolver a su sitio" style="background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;flex:none">♻</button>'+
+            '<button class="_dpK1" data-k="'+esc(k)+'" data-n="'+esc(tit)+'" title="Borrar definitivamente" style="background:#7A1A1A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;flex:none">🗑</button>'):'')+
+      '</div>'};
   if(C.length){H+='<div style="font-weight:800;color:#f5b8d4;font-size:12.5px;margin:4px 0 6px">📁 Carpetas ('+C.length+')</div>';
-    C.forEach(function(c){
-      H+='<div style="border:1px solid #4a1a2e;border-radius:10px;padding:8px 10px;margin-bottom:6px;background:#221019;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
-         '<div style="flex:1;min-width:0"><b style="color:#f5b8d4">📁 '+esc(c.nombre||'')+'</b>'+
-         '<div style="color:#9db4d6;font-size:11px">borrada por '+esc(c.elim_por||'?')+(c.elim_ts?(' · '+esc(_docFecha(Number(c.elim_ts)))):'')+'</div></div>'+
-         (adm?('<button class="_dpRC" data-id="'+esc(c.id)+'" style="background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800">♻ Devolver</button>'+
-              '<button class="_dpKC" data-id="'+esc(c.id)+'" data-n="'+esc(c.nombre||'')+'" style="background:#7A1A1A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800">🗑</button>'):'')+
-         '</div>'})}
+    C.forEach(function(c){H+=fila('C',c.id,'📁',c.nombre||'',
+      'borrada por '+esc(c.elim_por||'?')+(c.elim_ts?(' · '+esc(_docFecha(Number(c.elim_ts)))):''))})}
   if(A.length){H+='<div style="font-weight:800;color:#f5b8d4;font-size:12.5px;margin:12px 0 6px">📄 Archivos ('+A.length+')</div>';
-    A.forEach(function(a){
-      H+='<div style="border:1px solid #4a1a2e;border-radius:10px;padding:8px 10px;margin-bottom:6px;background:#221019;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
-         '<div style="flex:1;min-width:0"><b style="color:#cfe3ff;font-size:12px;overflow-wrap:anywhere">'+esc(a.nombre||'')+'</b>'+
-         '<div style="color:#9db4d6;font-size:11px">'+_docTam(a.tamano)+' · borrado por '+esc(a.elim_por||'?')+(a.elim_ts?(' · '+esc(_docFecha(Number(a.elim_ts)))):'')+'</div></div>'+
-         (adm?('<button class="_dpRA" data-id="'+esc(a.id)+'" style="background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800">♻ Devolver</button>'+
-              '<button class="_dpKA" data-id="'+esc(a.id)+'" data-n="'+esc(a.nombre||'')+'" data-r="'+esc(a.ruta||'')+'" style="background:#7A1A1A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800">🗑</button>'):'')+
-         '</div>'})}
+    A.forEach(function(a){H+=fila('A',a.id,'📄',a.nombre||'',
+      _docTam(a.tamano)+' · borrado por '+esc(a.elim_por||'?')+(a.elim_ts?(' · '+esc(_docFecha(Number(a.elim_ts)))):''))})}
   B.innerHTML=H;
-  var reviv=async function(tabla,id){
-    var t=(typeof nowSrv==='function'?nowSrv():Date.now());
-    await sbUpsert(tabla,[{proyecto:DATA.proyecto,id:id,eliminado:false,elim_por:'',elim_ts:0,
-      quien:(state.user&&state.user.supervisor)||'',ts:t,cell_at:Date.now()}],'proyecto,id')};
-  B.querySelectorAll('._dpRC').forEach(function(b){b.onclick=async function(){
-    try{await reviv(T_DC,b.getAttribute('data-id'));await _docPull();toast('♻ Carpeta devuelta');_docPapelera()}catch(e){toast('No se pudo')}}});
-  B.querySelectorAll('._dpRA').forEach(function(b){b.onclick=async function(){
-    try{await reviv(T_DA,b.getAttribute('data-id'));await _docPull();toast('♻ Archivo devuelto');_docPapelera()}catch(e){toast('No se pudo')}}});
-  B.querySelectorAll('._dpKC').forEach(function(b){b.onclick=async function(){
-    if(!confirm('¿Borrar DEFINITIVAMENTE la carpeta "'+b.getAttribute('data-n')+'"?\n\nYa no se podrá recuperar.'))return;
-    try{await sbDelete(T_DC,'proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&id=eq.'+encodeURIComponent(b.getAttribute('data-id')));
-      await _docPull();toast('Borrada definitivamente');_docPapelera()}catch(e){toast('No se pudo')}}});
-  B.querySelectorAll('._dpKA').forEach(function(b){b.onclick=async function(){
-    if(!confirm('¿Borrar DEFINITIVAMENTE "'+b.getAttribute('data-n')+'"?\n\nSe borra también el archivo del almacén. Ya no se podrá recuperar.'))return;
-    var ruta=b.getAttribute('data-r');
-    try{if(ruta)await fetch(sbBase()+'/storage/v1/object/documentos',{method:'DELETE',headers:sbHead({'Content-Type':'application/json'}),body:JSON.stringify({prefixes:[ruta]})})}catch(e){}
-    try{await sbDelete(T_DA,'proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&id=eq.'+encodeURIComponent(b.getAttribute('data-id')));
-      await _docPull();toast('Borrado definitivamente');_docPapelera()}catch(e){toast('No se pudo')}}});
+  B.querySelectorAll('._dpCk').forEach(function(cb){cb.onchange=function(){
+    window._dpSel[cb.getAttribute('data-k')]=cb.checked;_dpPinta()}});
+  B.querySelectorAll('._dpR1').forEach(function(b){b.onclick=function(){
+    var k=b.getAttribute('data-k');_dpAccion('devolver',{carp:k[0]==='C'?[k.slice(2)]:[],arch:k[0]==='A'?[k.slice(2)]:[]},true)}});
+  B.querySelectorAll('._dpK1').forEach(function(b){b.onclick=function(){
+    var k=b.getAttribute('data-k');_dpAccion('borrar',{carp:k[0]==='C'?[k.slice(2)]:[],arch:k[0]==='A'?[k.slice(2)]:[]},true,b.getAttribute('data-n'))}});
+  /* la barra de acciones */
+  var acc=document.getElementById('_dpAcc');if(!acc)return;
+  if(!adm){acc.style.display='none';return}
+  var s=_dpMarcados();var n=s.carp.length+s.arch.length;
+  acc.style.display='flex';
+  acc.innerHTML='<button id="_dpTodo" style="flex:none;background:#233246;color:#cfe3ff;border:0;border-radius:9px;padding:10px 12px;font-weight:800;font-size:12px;cursor:pointer">'+(n?'Quitar marcas':'Marcar todo')+'</button>'+
+    '<button id="_dpRAll" style="flex:1;background:#1E7A46;color:#fff;border:0;border-radius:9px;padding:10px;font-weight:800;font-size:12.5px;cursor:pointer">♻ '+(n?('Devolver '+n+' marcado'+(n===1?'':'s')):'Devolver todo')+'</button>'+
+    '<button id="_dpKAll" style="flex:1;background:#7A1A1A;color:#fff;border:0;border-radius:9px;padding:10px;font-weight:800;font-size:12.5px;cursor:pointer">🗑 '+(n?('Borrar '+n+' definitivo'):'Borrar todo definitivo')+'</button>';
+  document.getElementById('_dpTodo').onclick=function(){
+    if(n){window._dpSel={}}
+    else{(window._dpC||[]).forEach(function(c){window._dpSel['C|'+c.id]=true});
+         (window._dpA||[]).forEach(function(a){window._dpSel['A|'+a.id]=true})}
+    _dpPinta()};
+  document.getElementById('_dpRAll').onclick=function(){
+    var s2=_dpMarcados();
+    if(!s2.carp.length&&!s2.arch.length)s2={carp:(window._dpC||[]).map(function(c){return c.id}),arch:(window._dpA||[]).map(function(a){return a.id})};
+    _dpAccion('devolver',s2)};
+  document.getElementById('_dpKAll').onclick=function(){
+    var s2=_dpMarcados();
+    if(!s2.carp.length&&!s2.arch.length)s2={carp:(window._dpC||[]).map(function(c){return c.id}),arch:(window._dpA||[]).map(function(a){return a.id})};
+    _dpAccion('borrar',s2)};
+}
+async function _dpAccion(que,sel,uno,nom){
+  var nC=sel.carp.length,nA=sel.arch.length,n=nC+nA;
+  if(!n)return;
+  var txt=(que==='devolver')
+    ?('¿Devolver '+(uno?('"'+(nom||'')+'"'):(n+' elemento'+(n===1?'':'s')))+' a su sitio?')
+    :('¿Borrar DEFINITIVAMENTE '+(uno?('"'+(nom||'')+'"'):(n+' elemento'+(n===1?'':'s')))+'?\n\nSe borra también el archivo del almacén. Ya no se podrá recuperar.');
+  if(!confirm(txt))return;
+  var B=document.getElementById('_dpBody');
+  var paso=function(i){if(B)B.innerHTML='<div style="padding:22px;text-align:center;color:#9db4d6">'+(que==='devolver'?'Devolviendo':'Borrando')+' '+i+' de '+n+'…</div>'};
+  var t=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'';
+  var hecho=0,err=0;
+  var mapA={};(window._dpA||[]).forEach(function(a){mapA[a.id]=a});
+  var mapC={};(window._dpC||[]).forEach(function(c){mapC[c.id]=c});
+  for(var i=0;i<sel.carp.length;i++){paso(++hecho);
+    try{
+      if(que==='devolver')await sbUpsert(T_DC,[{proyecto:DATA.proyecto,id:sel.carp[i],eliminado:false,elim_por:'',elim_ts:0,quien:yo,ts:t,cell_at:Date.now()}],'proyecto,id');
+      else await sbDelete(T_DC,'proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&id=eq.'+encodeURIComponent(sel.carp[i]));
+    }catch(e){err++}}
+  var rutas=[];
+  for(var j=0;j<sel.arch.length;j++){paso(++hecho);
+    var a=mapA[sel.arch[j]];
+    try{
+      if(que==='devolver')await sbUpsert(T_DA,[{proyecto:DATA.proyecto,id:sel.arch[j],eliminado:false,elim_por:'',elim_ts:0,quien:yo,ts:t,cell_at:Date.now()}],'proyecto,id');
+      else{if(a&&a.ruta)rutas.push(a.ruta);
+        await sbDelete(T_DA,'proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&id=eq.'+encodeURIComponent(sel.arch[j]))}
+    }catch(e){err++}}
+  if(que!=='devolver'&&rutas.length){
+    for(var k=0;k<rutas.length;k+=60){
+      try{await fetch(sbBase()+'/storage/v1/object/documentos',{method:'DELETE',
+        headers:sbHead({'Content-Type':'application/json'}),body:JSON.stringify({prefixes:rutas.slice(k,k+60)})})}catch(e){}}}
+  try{await _docPull()}catch(e){}
+  if(typeof toast==='function')toast(err?((que==='devolver'?'Devueltos':'Borrados')+' con '+err+' error(es)'):((que==='devolver'?'♻ Devuelto(s): ':'🗑 Borrado(s): ')+n));
+  _docPapelera();
 }
 
 async function _showActEliminadas(){if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof _gateAcc==='function'&&!_gateAcc('act_ver_elim','Ver actividades eliminadas'))return;}
