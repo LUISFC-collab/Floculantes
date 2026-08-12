@@ -2681,7 +2681,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260811b7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260811b8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -4828,6 +4828,68 @@ function renderStorm(){var o=stormOverall();var ss=$('stormState');if(ss){ss.cla
    try{if(typeof syncNow==='function')syncNow(true)}catch(_e){}
    setTimeout(function(){try{renderStorm()}catch(_e2){}},1400)};
  }}
+/* === Horarios de tormenta SIN ENVIAR: se pueden corregir y descartar ===
+   Un episodio sale de dos entradas del log: la que lo abre y la 'libre'
+   que lo cierra. Mientras no se haya enviado, se puede tocar para
+   cambiarle la hora o quitarlo con la X. */
+function _stEntradas(ep){var log=(state.storm&&state.storm.log)||[];var ini=null,fin=null;
+for(var i=0;i<log.length;i++){var e=log[i];if(e.zona===ep.zona&&stormDbId(e.id)===ep.iniId){ini=e;break}}
+if(ini){log.forEach(function(e){if(e.zona!==ep.zona||e.nivel!=='libre')return;if(e.ts<=ini.ts)return;if(!fin||e.ts<fin.ts)fin=e})}
+return {ini:ini,fin:fin}}
+function _stLocal(ts){try{var d=new Date(Number(ts)||Date.now());var p=function(n){return (n<10?'0':'')+n};
+return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes())}catch(e){return ''}}
+function _stQuitar(ep){try{
+var E=_stEntradas(ep);if(!E.ini)return;
+if(!confirm('¿Quitar este horario de tormenta?\n\n'+ep.zona+' · '+fmtHora(ep.ini)+(ep.fin?(' → '+fmtHora(ep.fin)):' (en curso)')+'\n\nNo se ha enviado, así que solo se borra de este celular.'))return;
+var quitar=[E.ini];if(E.fin)quitar.push(E.fin);
+state.storm.log=(state.storm.log||[]).filter(function(e){return quitar.indexOf(e)<0});
+try{if(state.storm.envIds)delete state.storm.envIds[ep.iniId]}catch(_e){}
+try{if(ep._srv&&typeof tombAdd==='function'){tombAdd('tormenta',ep.iniId);if(typeof tombShareAdd==='function')tombShareAdd('tormenta',ep.iniId)}}catch(_e2){}
+stormSave();renderStorm();
+if(typeof toast==='function')toast('🗑 Horario quitado de este celular')}catch(e){}}
+function _stEditar(ep){try{
+var E=_stEntradas(ep);if(!E.ini){if(typeof toast==='function')toast('No se puede editar este horario');return}
+var ov=document.createElement('div');ov.id='_stEdOv';
+ov.style.cssText='position:fixed;inset:0;z-index:2147483000;background:rgba(15,25,45,.55);display:flex;align-items:flex-end;justify-content:center';
+var h='<div style="background:#fff;width:100%;max-width:440px;border-radius:16px 16px 0 0;padding:16px 15px 18px">';
+h+='<div style="font-weight:900;font-size:15px;color:#1F3864">✏️ Corregir el horario</div>';
+h+='<div style="font-size:12px;color:#5C6779;margin:2px 0 13px">'+esc(ep.zona)+' · '+esc(String(ep.nivel).toUpperCase())+' — todavía no se envió</div>';
+h+='<label style="font-size:12px;font-weight:700;color:#5C6779;display:block;margin-bottom:3px">Empezó</label>';
+h+='<input type="datetime-local" id="_stI" value="'+_stLocal(ep.ini)+'" style="margin-bottom:11px">';
+h+='<label style="font-size:12px;font-weight:700;color:#5C6779;display:block;margin-bottom:3px">Terminó</label>';
+h+=E.fin?('<input type="datetime-local" id="_stF" value="'+_stLocal(ep.fin)+'">')
+        :('<div style="background:#FCEFD9;border:1px solid #EFC98A;border-radius:9px;padding:9px 11px;font-size:12.5px;color:#7A4B00;font-weight:700">Sigue en curso — se cierra al marcar la zona como LIBRE</div>');
+h+='<div style="display:flex;gap:8px;margin-top:16px"><button id="_stX" style="flex:1;background:#eef2f7;border:0;border-radius:10px;padding:13px;font-weight:700">Cancelar</button>';
+h+='<button id="_stOk" style="flex:1;background:#1F3864;color:#fff;border:0;border-radius:10px;padding:13px;font-weight:800">Guardar</button></div></div>';
+ov.innerHTML=h;document.body.appendChild(ov);
+ov.onclick=function(e){if(e.target===ov)ov.remove()};
+document.getElementById('_stX').onclick=function(){ov.remove()};
+document.getElementById('_stOk').onclick=function(){
+  var vi=document.getElementById('_stI').value;var fi=document.getElementById('_stF');
+  var ti=vi?new Date(vi).getTime():0;if(!ti){if(typeof toast==='function')toast('Pon la hora de inicio');return}
+  var tf=(fi&&fi.value)?new Date(fi.value).getTime():null;
+  if(tf&&tf<=ti){if(typeof toast==='function')toast('La hora de término debe ser posterior al inicio');return}
+  E.ini.ts=ti;E.ini.synced=false;
+  if(E.fin&&tf){E.fin.ts=tf;E.fin.synced=false}
+  stormSave();ov.remove();renderStorm();
+  if(typeof toast==='function')toast('✓ Horario corregido')};
+}catch(e){}}
+/* engancha la X y el toque para editar sobre las filas sin enviar */
+function _stInject(){try{var lg=$('stormLog');if(!lg)return;
+var eps=stormEpisodes();var porId={};eps.forEach(function(ep){porId[ep.iniId]=ep});
+Array.prototype.forEach.call(lg.querySelectorAll('._stChk'),function(chk){
+  var fila=chk.parentElement;if(!fila||fila._stOk)return;fila._stOk=1;
+  var ep=porId[chk.getAttribute('data-eid')];if(!ep)return;
+  var txt=fila.querySelector('span');
+  if(txt){txt.style.cursor='pointer';txt.title='Toca para corregir la hora antes de enviarlo';
+    txt.onclick=function(e){e.stopPropagation();_stEditar(ep)}}
+  var x=document.createElement('button');x.type='button';x.textContent='✕';
+  x.title='Quitar este horario (no se ha enviado)';
+  x.style.cssText='margin-left:auto;flex:none;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:8px;width:26px;height:26px;font-weight:900;font-size:13px;line-height:1;cursor:pointer';
+  x.onclick=function(e){e.stopPropagation();_stQuitar(ep)};
+  fila.appendChild(x)})}catch(e){}}
+try{var _stRsBase=renderStorm;renderStorm=function(){var r=_stRsBase.apply(this,arguments);try{_stInject()}catch(e){}return r}}catch(_sw){}
+
 function updStormBanner(){var b=$('stormBanner');if(!b)return;var o=stormOverall();var ph=document.querySelector('.phone');if(o==='libre'){b.classList.add('hidden');if(ph){ph.classList.remove('storm-red','storm-yellow')}try{_botBar()}catch(e){}return}var zlist=ZONAS.filter(function(z){return zonaNivel(z)!=='libre'}).map(function(z){return z+' ('+zonaNivel(z)+')'}).join(', ');b.className='stormbanner '+(o==='rojo'?'sb-red':'sb-yellow');b.innerHTML=(o==='rojo'?'⛈ TORMENTA ELÉCTRICA — PARAR TRABAJOS':'⚠ Alerta amarilla de tormenta')+'<small>'+esc(zlist)+'</small>';if(ph){ph.classList.toggle('storm-red',o==='rojo');ph.classList.toggle('storm-yellow',o==='amarillo')}b.onclick=openStorm;try{_botBar()}catch(e){}}
 function openStorm(){$('scrDiario').classList.add('hidden');$('scrList').classList.add('hidden');if($('scrProg'))$('scrProg').classList.add('hidden');$('scrStorm').classList.remove('hidden');if($('stormSub'))$('stormSub').textContent=(state.user?state.user.supervisor:'');renderStorm();syncNow(true)}
 function closeStorm(){$('scrStorm').classList.add('hidden');$('scrDiario').classList.remove('hidden');renderDiario()}
