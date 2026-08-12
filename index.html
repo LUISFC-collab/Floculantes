@@ -2775,7 +2775,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812b2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -3476,6 +3476,28 @@ async function _backup(){
   }
   linea('✓ clasificación de fotos: '+Object.keys(_cnt).sort().map(function(c){return c+' '+_cnt[c]}).join(' · '),'#7fd7a5');
  }catch(_fce){}
+ /* 2-bis) LOS ARCHIVOS DE LA CARPETA DOCUMENTOS (bucket 'documentos') */
+ try{
+  est.textContent='bajando los documentos del proyecto…';
+  var _dcs=(db['doc_carpetas_create_120826']||[]),_das=(db['doc_archivos_create_120826']||[]);
+  var _nomC={};_dcs.forEach(function(c){if(c&&c.id)_nomC[c.id]=String(c.nombre||c.id).replace(/[\/:*?"<>|]+/g,'_')});
+  var _rutaDe=function(a){ /* rearma la ruta de carpetas para que el ZIP salga igual que en la app */
+    var partes=[],cid=a.carpeta_id,guarda=0;
+    while(cid&&guarda++<30){partes.unshift(_nomC[cid]||cid);var pa=null;_dcs.forEach(function(c){if(c.id===cid)pa=c.padre_id||''});cid=pa}
+    return 'documentos/'+(partes.length?partes.join('/')+'/':'')+String(a.nombre||'archivo').replace(/[\/:*?"<>|]+/g,'_')};
+  var _dok=0,_dmal=0,_dbytes=0;
+  for(var _di=0;_di<_das.length;_di++){var _da=_das[_di];
+   if(!_da||!_da.ruta)continue;
+   est.textContent='documento '+(_di+1)+'/'+_das.length+'…';
+   try{var _dr2=await fetch(sbBase()+'/storage/v1/object/documentos/'+encodeURI(_da.ruta),{headers:sbHead()});
+    if(!_dr2.ok){_dmal++;continue}
+    var _dab2=await _dr2.arrayBuffer();
+    if(_dab2&&_dab2.byteLength>0){
+      files.push({name:(_da.eliminado?'documentos_papelera/':'')+_rutaDe(_da),data:new Uint8Array(_dab2)});
+      _dok++;_dbytes+=_dab2.byteLength}
+   }catch(_de2){_dmal++}}
+  linea('✓ documentos: '+_dok+' archivo(s) · '+_kb(_dbytes)+(_dmal?(' · '+_dmal+' sin respaldo (ya no están en el almacén)'):''),_dmal?'#FFD27A':'#7fd7a5');
+ }catch(_dz){linea('✗ documentos: '+((_dz&&_dz.message)||_dz),'#ff9d9d')}
  /* 3) INFO DEL EQUIPO (lo que vive en este teléfono/PC, aparte de la base) */
  var seed={},nK=0,lsBytes=0;try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(!k||k.indexOf('obf4_')!==0)continue;var v=localStorage.getItem(k);if(v==null)continue;seed[k]=v;nK++;lsBytes+=v.length}}catch(e){}
  files.push({name:'dispositivo/localStorage.json',data:enc.encode(JSON.stringify(seed))});
