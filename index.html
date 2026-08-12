@@ -2779,7 +2779,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812c8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812c9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -5685,6 +5685,8 @@ function _docRama(cid){
   return ids;
 }
 async function _docBorrar(c){
+  if(typeof _cbEsProtegida==='function'&&_cbEsProtegida(c)){
+    if(typeof toast==='function')toast('🔒 La carpeta de CAMBIOS no se puede borrar — ni el administrador');return}
   if(!_docMio(c)){if(typeof toast==='function')toast('Solo '+(c.creado_por||'quien la creó')+' puede borrar esta carpeta');return}
   var rama=_docRama(c.id);
   var subs=rama.length-1;
@@ -6065,6 +6067,8 @@ async function _docColaSubir(){
    Solo cambia la etiqueta: el archivo guardado en el almacén no se mueve.
    Queda con su ts y el trigger de la tabla refresca updated_at. */
 async function _docRenombrar(c){
+  if(typeof _cbEsProtegida==='function'&&_cbEsProtegida(c)){
+    if(typeof toast==='function')toast('🔒 La carpeta de CAMBIOS no se puede renombrar');return}
   if(!_docMio(c)){if(typeof toast==='function')toast('Solo '+(c.creado_por||'quien la creo')+' puede cambiarle el nombre');return}
   var nom=prompt('Nuevo nombre de la carpeta:',c.nombre||'');if(nom==null)return;nom=String(nom).trim();
   if(!nom){if(typeof toast==='function')toast('Ponle un nombre');return}
@@ -6117,6 +6121,7 @@ function _docRender(){
     H+='<div style="display:flex;align-items:center;gap:10px"><span style="font-size:22px">📁</span>';
     H+='<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px;color:#1F3864;overflow-wrap:anywhere">'+esc(c.nombre)+'</div>';
     H+='<div style="font-size:11.5px;color:var(--muted)">'+n+' elemento'+(n===1?'':'s')+'</div></div>';
+    if(typeof _cbEsProtegida==='function'&&_cbEsProtegida(c))mio=false;
     if(mio)H+='<button class="_docRen" data-cid="'+esc(c.id)+'" title="Cambiar el nombre" style="flex:none;background:#EAF1FB;color:#1F3864;border:1px solid #BFD3EE;border-radius:8px;width:30px;height:30px;font-weight:900;cursor:pointer">✏️</button>';
     if(mio)H+='<button class="_docDel" data-cid="'+esc(c.id)+'" title="Borrar carpeta" style="flex:none;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:8px;width:30px;height:30px;font-weight:900;cursor:pointer">🗑</button>';
     H+='</div><div style="margin-top:8px;padding-top:7px;border-top:1px dashed var(--line);font-size:10.5px;color:var(--muted);line-height:1.45">';
@@ -6461,6 +6466,29 @@ function _cbPickDoc(){
         mime:(a&&a.mime)||'',tamano:(a&&a.tamano)||0,subido_por:(a&&a.subido_por)||''}});
     ov.remove();_cbNvRender()};
 }
+/* === Los cambios se archivan solos en Documentos ===
+   Todo cambio crea su carpeta dentro de "CAMBIOS DEL PROYECTO", y sus sustentos
+   quedan como documentos de verdad (doc_carpetas/doc_archivos_create_120826, que
+   ya tienen lápida, trigger de updated_at y tiempo real). Esa carpeta raíz está
+   protegida: nadie la puede borrar ni renombrar, tampoco el admin. */
+var CB_CARPETA='CAMBIOS DEL PROYECTO';
+function _cbEsProtegida(c){return !!(c&&(c.protegida||String(c.nombre||'')===CB_CARPETA))}
+async function _cbCarpetaRaiz(){
+  try{if(typeof _docPull==='function')await _docPull()}catch(e){}
+  var ya=_docCarp().filter(function(c){return !c.eliminado&&!(c.padre_id||'')&&String(c.nombre)===CB_CARPETA})[0];
+  if(ya){if(!ya.protegida){ya.protegida=true;try{await _docGuardarCarpeta(ya,true)}catch(e){}}return ya.id}
+  var nueva={id:_docNuevoId('C'),nombre:CB_CARPETA,padre_id:'',creado_por:_cbYo(),
+    disciplina:'',color:'',protegida:true,eliminado:false,elim_por:'',elim_ts:0};
+  await _docGuardarCarpeta(nueva,true);return nueva.id}
+async function _cbCarpetaDe(c){
+  var raiz=await _cbCarpetaRaiz();
+  var nom=(c.tipo?(c.tipo+' · '):'')+String(c.titulo||'').slice(0,60).replace(/[\/:*?"<>|]+/g,'-');
+  var ya=_docCarp().filter(function(x){return !x.eliminado&&(x.padre_id||'')===raiz&&String(x.nombre)===nom})[0];
+  if(ya)return ya.id;
+  var sub={id:_docNuevoId('C'),nombre:nom,padre_id:raiz,creado_por:_cbYo(),
+    disciplina:(state.user&&state.user.disc)||'',color:'',cambio_id:c.id,
+    eliminado:false,elim_por:'',elim_ts:0};
+  await _docGuardarCarpeta(sub,true);return sub.id}
 /* ---------- pantalla de carga ---------- */
 function _cbBarra(lista,est){
   var ov=document.getElementById('_cbSubOv');if(ov)ov.remove();
@@ -6518,16 +6546,25 @@ async function _cbCrear(){
   var ov=_cbBarra(lista,est);
   var pinta=function(f){_cbBarraPinta(lista,est,total,f)};
   pinta(lista.length?'⬆ Subiendo los archivos…':'Guardando el cambio…');
-  var adj=[];
+  var adj=[],carpCambio='';
+  if(lista.length){
+    pinta('📁 Preparando su carpeta en Documentos…');
+    try{carpCambio=await _cbCarpetaDe({id:id,titulo:tit,tipo:tipo})}catch(e){}
+    pinta('⬆ Subiendo los archivos…');
+  }
   for(var i=0;i<lista.length&&!window._cbAbort;i++){
     var x=lista[i],s=est[x.clave];s.estado='sube';s.subido=0;pinta();
     try{
       var aid=_cbId('CA');
       var limpio=String(x.nombre||'archivo').replace(/[^\w.\- ]+/g,'_');
-      var ruta='_cambios/'+id+'/'+aid+'_'+limpio;
+      /* si hay carpeta, el archivo vive en Documentos como cualquier otro */
+      var ruta=carpCambio?(carpCambio+'/'+aid+'_'+limpio):('_cambios/'+id+'/'+aid+'_'+limpio);
       await _docSubirUno(x.file,ruta,function(l){s.subido=l;pinta()},function(xh){window._cbXhrs.push(xh)});
       s.subido=x.size||0;s.estado='ok';
-      adj.push({id:aid,tipo:'archivo',nombre:x.nombre,ruta:ruta,doc_id:'',carpeta_id:'',
+      if(carpCambio){try{await _docGuardarArchivo({id:aid,carpeta_id:carpCambio,nombre:x.nombre,ruta:ruta,
+        mime:(x.file&&x.file.type)||'',tamano:x.size||0,subido_por:_cbYo(),cambio_id:id,
+        eliminado:false,elim_por:'',elim_ts:0},true)}catch(e){}}
+      adj.push({id:aid,tipo:'archivo',nombre:x.nombre,ruta:ruta,doc_id:carpCambio?aid:'',carpeta_id:carpCambio,
         mime:(x.file&&x.file.type)||'',tamano:x.size||0,subido_por:_cbYo(),
         eliminado:false,elim_por:'',elim_ts:0});
     }catch(e){s.estado='mal';s.msg=String((e&&e.message)||e).slice(0,60);s.subido=0}
@@ -6580,7 +6617,7 @@ function _cbVer(id){
        '<div style="font-size:10.5px;color:var(--muted)">'+(esRef?'referencia a Documentos':'subido con el cambio')+' · '+_docTam(a.tamano)+(a.subido_por?(' · '+esc(a.subido_por)):'')+'</div></div>';
     H+='</div><div style="display:flex;gap:6px;margin-top:8px">';
     H+='<button class="_cbBaja" data-id="'+esc(a.id)+'" data-c="'+esc(c.id)+'" style="flex:1;background:#1F3864;color:#fff;border:0;border-radius:9px;padding:9px;font-weight:800;font-size:12px;cursor:pointer">⬇ Abrir / guardar</button>';
-    if(esRef)H+='<button class="_cbIr" data-cid="'+esc(a.carpeta_id)+'" style="flex:1;background:#0C5132;color:#fff;border:0;border-radius:9px;padding:9px;font-weight:800;font-size:12px;cursor:pointer">📁 Ir a Documentos</button>';
+    if(a.carpeta_id)H+='<button class="_cbIr" data-cid="'+esc(a.carpeta_id)+'" style="flex:1;background:#0C5132;color:#fff;border:0;border-radius:9px;padding:9px;font-weight:800;font-size:12px;cursor:pointer">📁 Ir a Documentos</button>';
     H+='</div></div>';
   });
   H+='</div></div>';
