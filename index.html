@@ -2780,7 +2780,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812b7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812b8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -4478,10 +4478,16 @@ try{setTimeout(function(){try{_ajPull()}catch(e){}},1500)}catch(_ajt){}
 
 function _undOculto(){try{return !!window._cfgOcultarUnd && !(typeof esAdmin==='function'&&esAdmin())}catch(e){return false}}
 function _undInject(){try{var w=$('list');if(!w)return;
-Array.prototype.forEach.call(w.querySelectorAll('.leaf ._lfDato'),function(b){b.style.display=_undOculto()?'none':''})}catch(e){}}
+Array.prototype.forEach.call(w.querySelectorAll('.leaf ._lfDato'),function(b){b.style.display=_undOculto()?'none':''});
+try{_cbInject()}catch(e){}
+Array.prototype.forEach.call(w.querySelectorAll('.leaf ._lfDato'),function(b){if(b.parentElement)_lfFit(b.parentElement)})}catch(e){}}
 async function _undPull(){try{
 if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
-await _ajPull();var v=!!_ajGet('ocultar_und',false);
+await _ajPull();
+try{var vc=!!_ajGet('ocultar_cambios',false);
+ if(vc!==window._cfgOcultarCamb){window._cfgOcultarCamb=vc;try{localStorage.setItem('obf4_ocultarcamb',vc?'1':'')}catch(e){}
+  try{var sl2=$('scrList');if(sl2&&!sl2.classList.contains('hidden')&&typeof renderList==='function')renderList()}catch(e){}}}catch(e){}
+var v=!!_ajGet('ocultar_und',false);
 if(v===window._cfgOcultarUnd)return;
 window._cfgOcultarUnd=v;try{localStorage.setItem('obf4_ocultarund',v?'1':'')}catch(e){}
 try{var sl=$('scrList');if(sl&&!sl.classList.contains('hidden')&&typeof renderList==='function')renderList()}catch(e){}
@@ -6182,14 +6188,15 @@ function _cbBadge(){try{
   if(p)p.textContent='Ver los cambios ('+n+')';
 }catch(e){}}
 /* ---------- lista ---------- */
-function _cbAbrir(){
+function _cbAbrir(pid){
+  window._cbPid=pid||'';
   var ov=document.getElementById('_cbOv');if(ov)ov.remove();
   ov=document.createElement('div');ov.id='_cbOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483380;background:var(--bg,#eef2f7);display:flex;flex-direction:column';
   ov.innerHTML='<div style="background:#7A4B00;color:#fff;padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));display:flex;align-items:center;gap:10px;flex:none">'+
     '<button id="_cbX" style="background:rgba(255,255,255,.16);color:#fff;border:0;border-radius:12px;width:42px;height:42px;font-size:19px;cursor:pointer">‹</button>'+
-    '<div><div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#F3D9A8">Proyecto</div>'+
-    '<div style="font-size:16px;font-weight:700">📝 Cambios</div></div></div>'+
+    '<div style="min-width:0"><div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#F3D9A8">'+(window._cbPid?esc(window._cbPid):'Proyecto')+'</div>'+
+    '<div style="font-size:16px;font-weight:700;max-width:72vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📝 Cambios'+(window._cbPid?(' · '+esc(((DATA._byId&&DATA._byId[window._cbPid])||{}).nombre||'')):'')+'</div></div></div>'+
     '<div id="_cbBody" style="flex:1;overflow:auto;padding:13px 12px 30px"></div>';
   document.body.appendChild(ov);
   document.getElementById('_cbX').onclick=function(){ov.remove()};
@@ -6202,10 +6209,11 @@ function _cbFecha(v){try{var d=v?new Date(v):null;if(!d||isNaN(d))return '';
 function _cbRender(){
   var w=document.getElementById('_cbBody');if(!w)return;
   var L=_cbVivos();
+  if(window._cbPid)L=L.filter(function(c){return String(c.partida_id||'')===String(window._cbPid)});
   var H='';
   if(window._cbSinTabla)H+='<div style="background:#FDECEA;border:1.5px solid #F1B4B0;border-radius:12px;padding:11px 12px;margin-bottom:11px;font-size:12px;color:#8A2A22;line-height:1.5"><b>Falta crear las tablas en la base.</b><br>Corre una vez el archivo <b>SQL_CAMBIOS_120826.sql</b> en Supabase → SQL Editor. Hasta entonces se puede mirar, pero no guardar.</div>';
   H+='<button id="_cbNuevo" style="width:100%;background:#7A4B00;color:#fff;border:0;border-radius:11px;padding:13px;font-weight:800;font-size:14px;margin-bottom:12px;cursor:pointer">+ Registrar un cambio</button>';
-  if(!L.length){H+='<div style="text-align:center;color:var(--muted);font-size:13px;padding:26px 10px;line-height:1.6">Todavía no hay cambios registrados.<br>El primero se crea con el botón de arriba.</div>';w.innerHTML=H;
+  if(!L.length){H+='<div style="text-align:center;color:var(--muted);font-size:13px;padding:26px 10px;line-height:1.6">'+(window._cbPid?'Esta actividad todavía no tiene cambios.':'Todavía no hay cambios registrados.')+'<br>El primero se crea con el botón de arriba.</div>';w.innerHTML=H;
     var b0=document.getElementById('_cbNuevo');if(b0)b0.onclick=_cbNuevo;return}
   H+='<div style="font-size:11.5px;color:var(--muted);margin-bottom:9px">'+L.length+' cambio'+(L.length===1?'':'s')+' registrado'+(L.length===1?'':'s')+' — todos los ven</div>';
   L.forEach(function(c,ix){
@@ -6338,7 +6346,8 @@ async function _cbCrear(){
   var btn=document.getElementById('_cbGo');if(btn){btn.disabled=true;btn.textContent='Guardando…'}
   var id=_cbId('CB');
   var c={id:id,titulo:tit,comentario:com,disciplina:(state.user&&state.user.disc)||'',
-    area:'',sistema:'',partida_id:'',creado_por:_cbYo(),fecha:(typeof todayISO==='function'?todayISO():''),
+    area:'',sistema:(((DATA._byId&&DATA._byId[window._cbPid||''])||{}).sistema)||'',
+    partida_id:window._cbPid||'',creado_por:_cbYo(),fecha:(typeof todayISO==='function'?todayISO():''),
     estado:'abierto',eliminado:false,elim_por:'',elim_ts:0};
   try{await _cbGuardar(c,true)}
   catch(e){if(btn){btn.disabled=false;btn.textContent='✓ Registrar el cambio'}
@@ -6410,6 +6419,75 @@ function _cbVer(id){
     try{_docAbrir();window._docNav=cid?[cid]:[];_docRender()}catch(e){}
   }});
 }
+/* === BOTÓN DE CAMBIOS EN CADA ACTIVIDAD ===
+   Va en la misma tira que UND, MET y las restricciones, y se enciende o apaga
+   para los supervisores desde el panel de ⚙, igual que el de UND (el admin
+   siempre lo ve). Lleva el contador de cuántos cambios tiene esa actividad.
+   La tira se reparte sola: con más botones se achican, con menos se agrandan. */
+function _cbOculto(){try{return !!window._cfgOcultarCamb && !(typeof esAdmin==='function'&&esAdmin())}catch(e){return false}}
+async function _cbSetOculto(v){try{
+  window._cfgOcultarCamb=!!v;try{localStorage.setItem('obf4_ocultarcamb',v?'1':'')}catch(e){}
+  await _ajSet('ocultar_cambios',!!v,'Oculta el botón CAMBIOS a los supervisores');
+  try{if(typeof renderList==='function')renderList()}catch(e){}
+  if(typeof toast==='function')toast(v?'🙈 El botón CAMBIOS queda oculto para los supervisores':'👁 El botón CAMBIOS vuelve a verse para todos');
+}catch(e){}}
+try{window._cfgOcultarCamb=!!localStorage.getItem('obf4_ocultarcamb')}catch(_ec0){}
+try{window._cfgOcultarCamb=!!_ajGet('ocultar_cambios',false)}catch(_ec1){}
+function _cbDeAct(pid){return _cbAll().filter(function(c){return !c.eliminado&&String(c.partida_id||'')===String(pid)})}
+/* reparte el ancho de la tira según cuántos botones queden visibles */
+function _lfFit(tira){try{
+  var bs=Array.prototype.filter.call(tira.children,function(b){return b.style.display!=='none'});
+  var n=bs.length;if(!n)return;
+  var chico=(n>=6),medio=(n===5);
+  tira.style.gap=chico?'4px':'5px';
+  bs.forEach(function(b){
+    b.style.flex='1 1 0';b.style.minWidth='0';b.style.overflow='hidden';
+    var ic=b.querySelector('span[style*="border:1.5px solid"]');
+    var tx=b.querySelectorAll('span')[1];
+    if(ic){var s=chico?18:(medio?22:24);ic.style.width=s+'px';ic.style.height=s+'px';ic.style.fontSize=(chico?10:12)+'px'}
+    if(tx&&tx.style)tx.style.fontSize=(chico?10:(medio?11.5:12.5))+'px';
+    if(!ic&&!tx)b.style.fontSize=(chico?14:16)+'px';
+    b.style.padding=chico?'6px 2px':'6px 3px';
+  })}catch(e){}}
+function _cbInject(){try{
+  var w=$('list');if(!w)return;
+  Array.prototype.forEach.call(w.querySelectorAll('.leaf[data-id]'),function(el){
+    var id=el.getAttribute('data-id');if(!id)return;
+    var tira=el.querySelector('._lfDato')&&el.querySelector('._lfDato').parentElement;
+    if(!tira)return;
+    var b=tira.querySelector('._lfCamb');
+    if(_cbOculto()){if(b)b.style.display='none';_lfFit(tira);return}
+    var n=_cbDeAct(id).length;
+    if(!b){
+      b=document.createElement('button');b.className='_lfCamb';
+      b.title='Cambios de esta actividad — comentario y sustento';
+      b.style.cssText='flex:1 1 0;min-width:0;background:#7A4B00;color:#fff;border:0;border-radius:9px;padding:6px 3px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:4px;overflow:hidden';
+      b.onclick=function(e){e.stopPropagation();_cbAbrir(id)};
+      tira.appendChild(b);
+    }
+    b.style.display='';
+    b.innerHTML='<span style="font-size:13px;line-height:1;flex:none">📝</span>'+
+      (n?('<span style="font-weight:900;font-size:11px;background:#fff;color:#7A4B00;border-radius:20px;padding:0 5px;flex:none">'+n+'</span>')
+        :('<span style="font-weight:800;font-size:10.5px;white-space:nowrap">CAMB</span>'));
+    _lfFit(tira);
+  })}catch(e){}}
+/* el interruptor en el panel de ⚙, igual que el de UND */
+function _cbSwPanel(ov){try{
+  if(!ov||ov.querySelector('#_cbSw'))return;
+  var cuerpo=ov.querySelector('#_cfgBody');if(!cuerpo)return;
+  var box=document.createElement('div');
+  box.style.cssText='background:#101a30;border:1px solid #243a5e;border-radius:12px;padding:12px;margin-bottom:12px';
+  box.innerHTML='<b style="color:#fff;font-size:14px">📝 Botón CAMBIOS (en cada actividad)</b>'+
+    '<div style="color:#9fb6d8;font-size:12px;margin:4px 0 10px">Pone o quita el botón de cambios junto a UND y MET, en las tres especialidades. Tú, como admin, lo sigues viendo. Los botones se reparten el ancho solos.</div>';
+  var b=document.createElement('button');b.id='_cbSw';
+  var pinta=function(){var on=!!window._cfgOcultarCamb;
+    b.textContent=on?'🙈 Oculto para supervisores — tocar para mostrarlo':'👁 Visible para todos — tocar para ocultarlo';
+    b.style.cssText='width:100%;border:0;border-radius:9px;padding:11px;font-weight:800;cursor:pointer;color:#fff;background:'+(on?'#B42318':'#1E7A46')};
+  pinta();
+  b.onclick=async function(){await _cbSetOculto(!window._cfgOcultarCamb);pinta()};
+  box.appendChild(b);cuerpo.insertBefore(box,cuerpo.firstChild)}catch(e){}}
+try{if(!window._cbSwWired){window._cbSwWired=1;setInterval(function(){var ov=document.getElementById('_cfgOv');if(ov)_cbSwPanel(ov)},700)}}catch(_cbsw){}
+
 /* el botón del panel de ⚙, igual que el de UND */
 function _cbBotonPanel(ov){try{
   if(!ov||ov.querySelector('#_cbPanelBtn'))return;
@@ -6421,14 +6499,14 @@ function _cbBotonPanel(ov){try{
   var b=document.createElement('button');b.id='_cbPanelBtn';
   b.textContent='Ver los cambios ('+_cbCuenta()+')';
   b.style.cssText='width:100%;border:0;border-radius:9px;padding:11px;font-weight:800;cursor:pointer;color:#fff;background:#7A4B00';
-  b.onclick=function(){_cbAbrir()};
+  b.onclick=function(){_cbAbrir('')};
   box.appendChild(b);cuerpo.insertBefore(box,cuerpo.firstChild)}catch(e){}}
 try{if(!window._cbWired){window._cbWired=1;setInterval(function(){var ov=document.getElementById('_cfgOv');if(ov)_cbBotonPanel(ov)},700)}}catch(_cbw){}
 try{var _cbPullBase=syncPull;syncPull=async function(){var r=await _cbPullBase.apply(this,arguments);try{await _cbPull()}catch(e){}return r}}catch(_cbw2){}
 try{setTimeout(function(){try{_cbPull()}catch(e){}},2200)}catch(_cbt){}
 
 if($('repBtnAll')){var _rb=$('repBtnAll');_rb.textContent='📄 Documentos';_rb.title='Carpetas y archivos del proyecto';_rb.onclick=_docAbrir}
-try{var _cbB=$('btnCambios');if(_cbB){_cbB.title='Cambios del proyecto con su sustento';_cbB.onclick=_cbAbrir;_cbBadge()}}catch(_cbe){}
+try{var _cbB=$('btnCambios');if(_cbB){_cbB.title='Cambios del proyecto con su sustento';_cbB.onclick=function(){_cbAbrir('')};_cbBadge()}}catch(_cbe){}
 if($('btnMiProg'))$('btnMiProg').onclick=function(){if(typeof _showMiProg==='function')_showMiProg()};
 var KPEN='obf4_pend';
 if(!state.pend){try{state.pend=JSON.parse(localStorage.getItem(KPEN)||'[]')}catch(e){state.pend=[]}}
