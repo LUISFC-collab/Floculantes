@@ -1231,7 +1231,7 @@ function renderList(){
   $('sTot').textContent=list.length;$('sNm').textContent=list.filter(p=>!metaOf(p.id)).length;
   /* SOLO ADMIN: las actividades eliminadas siguen visibles en su lugar, en rojo tenue (los promedios de arriba NO las cuentan) */
   if(typeof esAdminReal==='function'&&esAdminReal()&&!window._impRol){/* con "Actuar como" activo la vista es EXACTAMENTE la de ese rol: sin tarjetas rojas */try{var _elimL=DATA.partidas.concat(state.nuevas||[]).map(applyEdit).filter(function(p){return p.esp===state.user.disc&&(typeof tombHas==='function'&&tombHas('partida',p.id))&&!tombHas('permdel',p.id)});/* incluye NUEVAS eliminadas: mismo procedimiento que las del catálogo (rojo + zona) */_elimL.forEach(function(p){p._elim=true});if(_elimL.length)list=list.concat(_elimL)}catch(_ee){}}
-  if(q)list=list.filter(p=>p.id.toLowerCase().includes(q)||p.nombre.toLowerCase().includes(q));
+  if(q)list=list.filter(function(p){return (typeof _busqMatch==='function')?_busqMatch(p,q):(p.id.toLowerCase().includes(q)||p.nombre.toLowerCase().includes(q))});
   /* filtros G3: checks que se SUMAN (unión) + filtro por nº de sistema */
   var _fc=window._fchk||{};var _fon=[];for(var _fk in _fc)if(_fc[_fk])_fon.push(_fk);
   if(_fon.length){list=list.filter(function(p){return _fon.some(function(k){if(k.indexOf('alc:')===0)return (typeof _alcDe==='function')&&_alcDe(p.id)===k.slice(4);if(k==='nuevas')return (typeof _nuevaDe==='function')&&!!_nuevaDe(p.id);
@@ -2830,7 +2830,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812d5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812d6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -4653,6 +4653,103 @@ pinta();
 b.onclick=async function(){await _undSet(!window._cfgOcultarUnd);pinta()};
 box.appendChild(b);cuerpo.insertBefore(box,cuerpo.firstChild)}catch(e){}}
 try{if(!window._undAdmWired){window._undAdmWired=1;setInterval(function(){var ov=document.getElementById('_cfgOv');if(ov)_undBotonAdmin(ov)},700)}}catch(_ua){}
+
+/* === 🔎 BUSCAR TECLEANDO ===
+   Un botón propio que abre el buscador. Primero eliges dónde buscar
+   (código, código QPS o nombre) y después escribes; la lista se filtra sola. */
+window._busqModo=window._busqModo||'cod';
+function _busqArt(p){try{
+  var bp=(DATA._byId&&DATA._byId[p.id])||p;
+  return String((bp&&(bp.articulo||bp.articulo_pago))||'')}catch(e){return ''}}
+function _busqItem(p){try{
+  var bp=(DATA._byId&&DATA._byId[p.id])||p;
+  return String((bp&&bp.item)||p.id||'')}catch(e){return String(p.id||'')}}
+function _busqMatch(p,q){
+  q=String(q||'').trim().toLowerCase();if(!q)return true;
+  var m=window._busqModo||'cod';
+  var id=String(p.id||'').toLowerCase(),item=_busqItem(p).toLowerCase();
+  var nom=String(p.nombre||'').toLowerCase(),art=_busqArt(p).toLowerCase();
+  if(m==='cod')return id.indexOf(q)>=0||item.indexOf(q)>=0;
+  if(m==='qps')return art.indexOf(q)>=0;
+  if(m==='nom')return nom.indexOf(q)>=0;
+  return id.indexOf(q)>=0||item.indexOf(q)>=0||nom.indexOf(q)>=0||art.indexOf(q)>=0}
+function _busqBarra(){
+  var b=document.getElementById('_busqBar');if(b)return b;
+  var tools=document.querySelector('#scrList .tools');if(!tools)return null;
+  b=document.createElement('div');b.id='_busqBar';
+  b.style.cssText='display:none;width:100%;background:#fff;border:1.5px solid #C9D2E0;border-radius:12px;padding:10px 11px;margin-top:8px';
+  b.innerHTML='<div style="font-size:11.5px;font-weight:800;color:#5C6779;margin-bottom:6px">¿Dónde busco?</div>'+
+    '<div id="_busqModos" style="display:flex;gap:6px;margin-bottom:9px"></div>'+
+    '<div style="display:flex;gap:7px">'+
+    '<input id="_busqTxt" placeholder="Escribe y va filtrando…" style="flex:1;min-width:0;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:10px;padding:11px;font-size:13.5px">'+
+    '<button id="_busqX" style="flex:none;background:#eef2f7;border:0;border-radius:10px;padding:0 13px;font-weight:800;cursor:pointer">✕</button></div>'+
+    '<div id="_busqInfo" style="font-size:11px;color:var(--muted);margin-top:7px"></div>';
+  tools.appendChild(b);
+  var modos=[['cod','🔢 Código','Busca por el código de la actividad, como 4.03.01'],
+             ['qps','📋 Código QPS','Busca por el artículo de pago del contrato, como 8.4.3'],
+             ['nom','🔤 Nombre','Busca dentro del nombre de la actividad']];
+  var pinta=function(){
+    var c=b.querySelector('#_busqModos');
+    c.innerHTML=modos.map(function(m){var on=(window._busqModo===m[0]);
+      return '<button class="_busqM" data-m="'+m[0]+'" title="'+esc(m[2])+'" style="flex:1;padding:9px 4px;border:0;border-radius:9px;font-weight:800;font-size:11.5px;cursor:pointer;background:'+(on?'#1F3864':'#EEF2F7')+';color:'+(on?'#fff':'#5C6779')+'">'+m[1]+'</button>'}).join('');
+    Array.prototype.forEach.call(c.querySelectorAll('._busqM'),function(x){x.onclick=function(){
+      window._busqModo=x.getAttribute('data-m');pinta();
+      var t=document.getElementById('_busqTxt');if(t){t.focus();_busqAplica()}}});
+    var m0=modos.filter(function(m){return m[0]===window._busqModo})[0];
+    var inp=document.getElementById('_busqTxt');
+    if(inp)inp.placeholder=(window._busqModo==='cod')?'Ej.: 4.03.01':((window._busqModo==='qps')?'Ej.: 8.4.3':'Ej.: bandeja, variador, cable…');
+    var inf=document.getElementById('_busqInfo');if(inf&&m0)inf.textContent=m0[2]};
+  b._pinta=pinta;pinta();
+  document.getElementById('_busqTxt').addEventListener('input',_busqAplica);
+  document.getElementById('_busqX').onclick=function(){
+    var t=document.getElementById('_busqTxt');if(t)t.value='';_busqAplica();_busqToggle(false)};
+  return b}
+function _busqAplica(){
+  var t=document.getElementById('_busqTxt');
+  var s=$('inSearch');if(s){s.value=t?t.value:'';}
+  try{renderList()}catch(e){}
+  try{
+    var inf=document.getElementById('_busqInfo');
+    if(inf&&t&&t.value.trim()){
+      var n=document.querySelectorAll('#list .leaf[data-id]').length;
+      inf.textContent=n?(n+' actividad(es) encontrada(s)'):'Nada con ese texto — prueba otro modo'}
+    else if(inf){var b=document.getElementById('_busqBar');if(b&&b._pinta)b._pinta()}
+  }catch(e){}}
+function _busqToggle(abrir){
+  var b=_busqBarra();if(!b)return;
+  var on=(abrir===undefined)?(b.style.display==='none'):!!abrir;
+  b.style.display=on?'block':'none';
+  var bt=document.getElementById('btnBuscar');
+  if(bt){bt.style.background=on?'#1F3864':'';bt.style.color=on?'#fff':'';bt.style.borderColor=on?'#1F3864':''}
+  if(on){var t=document.getElementById('_busqTxt');if(t)setTimeout(function(){try{t.focus()}catch(e){}},60)}}
+/* los 6 botones parejos, 3 y 3, con el mismo alto de siempre */
+function _busqBoton(){try{
+  var tools=document.querySelector('#scrList .tools');if(!tools)return;
+  var b=document.getElementById('btnBuscar');
+  if(!b){b=document.createElement('button');b.id='btnBuscar';b.type='button';
+    b.textContent='🔎 Buscar';b.title='Buscar tecleando por código, código QPS o nombre';
+    b.onclick=function(){_busqToggle()}}
+  var g=document.getElementById('_toolsGrid');
+  if(!g){g=document.createElement('div');g.id='_toolsGrid';
+    g.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%';
+    tools.insertBefore(g,tools.firstChild);
+    tools.style.flexWrap='wrap'}
+  var orden=['topGantt','topVis','btnBuscar','btnFiltros','btnAll','btnOrden'];
+  orden.forEach(function(id){
+    var el=(id==='btnBuscar')?b:document.getElementById(id);
+    if(!el)return;
+    if(el.parentNode!==g)g.appendChild(el);
+    el.style.width='100%';el.style.minWidth='0';el.style.flex='none';el.style.margin='0';
+    el.style.height='46px';el.style.padding='0 6px';el.style.borderRadius='11px';
+    el.style.fontSize='12.5px';el.style.fontWeight='800';el.style.whiteSpace='nowrap';
+    el.style.overflow='hidden';el.style.textOverflow='ellipsis';
+    el.style.display='inline-flex';el.style.alignItems='center';el.style.justifyContent='center';
+    if(id==='btnBuscar'&&!el._css){el._css=1;
+      el.style.background='#fff';el.style.border='1.5px solid var(--line)';el.style.color='var(--brand2)';el.style.cursor='pointer'}});
+  /* el buscador va debajo de la rejilla, a todo el ancho */
+  var bar=document.getElementById('_busqBar');if(bar&&bar.parentNode!==tools)tools.appendChild(bar);
+}catch(e){}}
+try{setTimeout(_busqBoton,900);setInterval(_busqBoton,2500)}catch(_bqw){}
 
 function _hhDe(p){if(p&&p.id&&typeof _hhOff==='function'&&_hhOff(p.id))return 0;var h=p&&p.hh;h=Number(h);return isFinite(h)&&h>0?h:0}
 /* La base del porcentaje: contra las HH de la especialidad o contra las de
