@@ -899,7 +899,24 @@ function dayList(){const set=new Set(myParts().map(p=>p.fecha));set.add(todayISO
 function partesDia(f){return myParts().filter(p=>p.fecha===f);}
 function sentInfo(f){const ps=partesDia(f);if(!ps.length)return{st:'sin'};return ps.every(p=>p.synced)?{st:'env'}:{st:'pend'};}
 function renderDiario(){try{var _bp=$('btnProg');if(_bp)_bp.textContent='\ud83d\udcc5 Cronograma'}catch(_e){}
-  const pcts=acts(state.user.disc).filter(function(p){return !esNA(p)&&_visMetricas(p)}).map(pctOf);$('dAv').textContent=(pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):0)+'%';
+  /* el mismo "0% de XX%" de la lista, con la base que eligio el admin */
+  try{
+    var _ids=acts(state.user.disc).map(function(p){return p.id});
+    var _g=(typeof _grupoHH==='function')?_grupoHH(_ids):null;
+    if(_g&&_g.peso){
+      $('dAv').textContent=_hhPct(_g.pts)+' de '+_hhPct(_g.peso);
+      $('dAv').style.fontSize='15px';
+      $('dAv').title='Avance por horas-hombre. '+((state.user&&state.user.disc)||'')+' vale '+_hhPct(_g.peso)+' de '+((typeof _pesoBaseTxt==='function')?_pesoBaseTxt():'la especialidad')+'.';
+      var _kd=$('dAv').parentElement&&$('dAv').parentElement.querySelector('.k');
+      if(_kd)_kd.textContent='avance real (HH)';
+    }else{
+      const pcts=acts(state.user.disc).filter(function(p){return !esNA(p)&&_visMetricas(p)}).map(pctOf);
+      $('dAv').textContent=(pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):0)+'%';
+    }
+  }catch(_ed){
+    const pcts2=acts(state.user.disc).filter(function(p){return !esNA(p)&&_visMetricas(p)}).map(pctOf);
+    $('dAv').textContent=(pcts2.length?Math.round(pcts2.reduce((a,b)=>a+b,0)/pcts2.length):0)+'%';
+  }
   const days=dayList();const wp=days.filter(f=>partesDia(f).filter(p=>!esCuadre(p)).length);
   $('dDays').textContent=wp.length;$('dPend').textContent=wp.filter(f=>['pend','cam'].includes(sentInfo(f).st)).length;
   const w=$('diaList');w.innerHTML='';
@@ -2831,7 +2848,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812d9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812e1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
