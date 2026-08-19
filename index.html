@@ -2854,7 +2854,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812f3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812f4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -5058,7 +5058,8 @@ function _fzRegUI(){try{
     var falta=Math.max(0,(Number(x.cantidad)||0)-(Number(x.avance)||0));
     H+='<button class="_fzRegB" data-f="'+esc(x.id)+'" style="flex:1;min-width:44%;text-align:left;padding:9px 10px;border-radius:9px;border:1.5px solid '+(on?'#1F3864':'#C9D2E0')+';background:'+(on?'#1F3864':'#fff')+';color:'+(on?'#fff':'#1B2433')+';cursor:pointer">'+
        '<div style="font-size:12px;font-weight:800">'+esc(x.nombre||'')+'</div>'+
-       '<div style="font-size:10px;opacity:.85;margin-top:2px">'+pc+'% hecho · faltan '+(Math.round(falta*100)/100)+' '+esc(x.unidad||'')+' · vale '+(Math.round((Number(x.peso)||0)*10)/10)+'%'+(x.cierra?' · cierra':'')+'</div></button>'});
+       '<div style="font-size:10px;opacity:.85;margin-top:2px">'+pc+'% hecho · faltan '+(Math.round(falta*100)/100)+' '+esc(x.unidad||'')+' · vale '+(Math.round((Number(x.peso)||0)*10)/10)+'%</div>'+
+       (x.cierra?'<div style="font-size:9.5px;opacity:.85;margin-top:2px">se mide en la unidad del contrato y lleva la actividad al 100%</div>':'')+'</button>'});
   H+='</div>';
   caja.innerHTML=H;
   Array.prototype.forEach.call(caja.querySelectorAll('._fzRegB'),function(b){b.onclick=function(e){
@@ -5421,17 +5422,22 @@ function _apuUI(p){
       if(gsx.length){
         var cant=(typeof metaOf==='function'&&metaOf(id))?metaOf(id).total:(p.metrado||0);
         var und=r.unidad||p.unidad||'UND';
-        var res=gsx.map(function(g){return {g:g,pct:_apuGrupoPct(r,g.id)}});
-        var suma=0;res.forEach(function(z){suma+=z.pct});
-        /* lo que no cae en ningun apartado se reparte en la ultima, que es la que cierra */
-        var lista=res.map(function(z,ix){
-          var pz=(ix<res.length-1)?Math.round(z.pct/suma*1000)/10:0;return {n:z.g.nombre,p:pz}});
-        var ac=0;lista.forEach(function(z,ix){if(ix<lista.length-1)ac+=z.p});
-        lista[lista.length-1].p=Math.round((100-ac)*10)/10;
-        if(!confirm('Usar los apartados como pesos?\n\n'+lista.map(function(z){return z.n+': '+z.p+'%'}).join('\n')+'\n\nLa última cierra la actividad con la unidad del contrato.'))return;
+        var undC=((typeof metaOf==='function'&&metaOf(id))?metaOf(id).unidad:'')||und;
+        /* cada apartado se lleva SU porcentaje real del costo; lo que no esta en
+           ningun apartado se convierte en la parte que cierra la actividad. */
+        var lista=gsx.map(function(g){return {n:g.nombre,p:Math.round(_apuGrupoPct(r,g.id)*10)/10}});
+        var cub=0;lista.forEach(function(z){cub+=z.p});cub=Math.round(cub*10)/10;
+        var resto=Math.round((100-cub)*10)/10;
+        if(resto>0.05){lista.push({n:'Ejecucion en obra',p:resto,cierra:true})}
+        else{var ac0=0;lista.forEach(function(z,ix){if(ix<lista.length-1)ac0+=z.p});
+             lista[lista.length-1].p=Math.round((100-ac0)*10)/10;
+             lista[lista.length-1].cierra=true}
+        if(!confirm('Usar los apartados como pesos?\n\n'+lista.map(function(z){return z.n+': '+z.p+'%'+(z.cierra?'  (cierra la actividad)':'')}).join('\n')+'\n\nLa ultima se mide en '+cant+' '+undC+', que es lo que lleva la actividad al 100%.'))return;
         try{
-          var fases=lista.map(function(z,ix){return {id:'F'+Date.now().toString(36)+ix,nombre:z.n,
-            unidad:und,cantidad:cant,peso:z.p,avance:0}});
+          var fases=lista.map(function(z,ix){
+            var esUlt=(ix===lista.length-1);
+            return {id:'F'+Date.now().toString(36)+ix,nombre:z.n,
+              unidad:esUlt?undC:und,cantidad:cant,peso:z.p,avance:0,cierra:esUlt}});
           await _fzGuardar(id,fases,false);
           if(adm)await _apuGuardar(id,r,false);
           try{if(typeof renderList==='function')renderList()}catch(e){}
