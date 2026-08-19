@@ -2854,7 +2854,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812f2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812f3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -5134,6 +5134,11 @@ function _apuGrupoCol(g){return _APU_COL[(g&&g.col)||0]||_APU_COL[0]}
 function _apuNuevoGid(r){
   var n=1,us={};(_apuGrupos(r)||[]).forEach(function(g){us[g.id]=1});
   while(us['G'+n])n++;return 'G'+n}
+/* cantidades: 4 decimales como maximo, sin ceros de cola (0.0000) */
+function _apuCant(n){n=Number(n);if(!isFinite(n))return '0';
+  var v=Math.round(n*1e4)/1e4;
+  var t=v.toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
+  return t===''?'0':t}
 function _apuMon(n){n=Number(n);if(!isFinite(n))return '—';
   var s=Math.abs(n).toFixed(2).split('.');
   return (n<0?'-':'')+s[0].replace(/\B(?=(\d{3})+(?!\d))/g,',')+'.'+s[1]}
@@ -5226,7 +5231,7 @@ function _apuUI(p){
        '<div style="background:#F4F7FB;border-radius:9px;padding:7px 8px"><div style="font-size:9.5px;font-weight:800;color:#5C6779">UNIDAD</div>'+
        '<div style="font-size:13px;font-weight:800;color:#1B2433">'+esc(r.unidad||p.unidad||'—')+'</div></div>'+
        '<div style="background:#F4F7FB;border-radius:9px;padding:7px 8px"><div style="font-size:9.5px;font-weight:800;color:#5C6779">RENDIM./DÍA</div>'+
-       '<div style="font-size:13px;font-weight:800;color:#1B2433">'+(r.rendimiento!=null&&r.rendimiento!==''?_apuNum(r.rendimiento):'—')+'</div></div>'+
+       '<div style="font-size:13px;font-weight:800;color:#1B2433">'+(r.rendimiento!=null&&r.rendimiento!==''?_apuCant(r.rendimiento):'—')+'</div></div>'+
        '<div style="background:#F4F7FB;border-radius:9px;padding:7px 8px"><div style="font-size:9.5px;font-weight:800;color:#5C6779">CUADRILLA</div>'+
        '<div style="font-size:13px;font-weight:800;color:#1B2433">'+esc(r.cuadrilla||'—')+'</div></div></div>';
     if(metQ()>0){
@@ -5234,7 +5239,7 @@ function _apuUI(p){
       H+='<label id="_apuXM" style="display:flex;align-items:center;gap:9px;margin-top:9px;background:'+(on?'#EAF3EC':'#F4F7FB')+';border:1.5px solid '+(on?'#0C5132':'var(--line)')+';border-radius:10px;padding:9px 11px;cursor:pointer">'+
         '<input type="checkbox" id="_apuXMc" '+(on?'checked':'')+' style="width:19px;height:19px;flex:none;cursor:pointer">'+
         '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:800;color:'+(on?'#0C5132':'#1B2433')+'">Multiplicar por el metrado</div>'+
-        '<div style="font-size:10.5px;color:#5C6779">'+(on?('Mostrando lo que hace falta para las '+metQ()+' '+esc(metU())):('Ahora se ve por 1 '+esc(r.unidad||p.unidad||'und')+' · el metrado es '+metQ()+' '+esc(metU())))+'</div></div></label>';
+        '<div style="font-size:10.5px;color:#5C6779">'+(on?('Mostrando lo que hace falta para las '+_apuCant(metQ())+' '+esc(metU())):('Ahora se ve por 1 '+esc(r.unidad||p.unidad||'und')+' · el metrado es '+metQ()+' '+esc(metU())))+'</div></div></label>';
     }
     if(r.familia)H+='<div style="margin-top:8px;background:#FCEFD9;border:1px solid #EFC98A;border-radius:9px;padding:8px 10px;font-size:10.5px;color:#7A4B00;line-height:1.45">'+
       '<b>APU de familia.</b> El contrato analiza en un solo APU el ítem '+esc(r.familia_qps||'')+', que en la lista está partido en '+(r.familia_n||0)+' actividades. '+
@@ -5289,7 +5294,7 @@ function _apuUI(p){
         if(marcable)H+='<span style="flex:none;width:21px;height:21px;border-radius:6px;border:2px solid '+(gx?cx[0]:'#C9D2E0')+';background:'+(gx?cx[0]:'#fff')+';color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:900">'+(gx?'✓':'')+'</span>';
         H+='<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:700;color:#1B2433;line-height:1.35;overflow-wrap:anywhere">'+esc(x.descripcion||'')+'</div>';
         H+='<div style="display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:5px;font-size:10.5px;color:#5C6779">'+
-           '<span><b style="color:#1B2433">'+(Math.round(cantX*1e4)/1e4)+'</b> '+esc(x.unidad||'')+'</span>'+
+           '<span><b style="color:#1B2433">'+_apuCant(cantX)+'</b> '+esc(x.unidad||'')+'</span>'+
            (x.cuadrilla?('<span>cuad. <b style="color:#1B2433">'+esc(x.cuadrilla)+'</b></span>'):'')+
            '<span>P.U. <b style="color:#1B2433">'+_apuMon(x.precio)+'</b></span>'+
            '<span style="margin-left:auto">Parcial <b style="color:#0C5132;font-size:12px">'+_apuMon(par)+'</b></span></div>';
@@ -5330,7 +5335,7 @@ function _apuUI(p){
     pie.innerHTML='<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:7px">'+
       '<span style="font-size:11.5px;color:#5C6779;font-weight:700">Costo del APU</span>'+
       '<b style="font-size:17px;color:#0C5132">'+_apuMon(tot)+'</b>'+
-      '<span style="font-size:11px;color:#5C6779">'+(window._apuXMet&&metQ()>0?('por las '+metQ()+' '+esc(metU())):('por '+esc(r.unidad||p.unidad||'und')))+'</span>'+
+      '<span style="font-size:11px;color:#5C6779">'+(window._apuXMet&&metQ()>0?('por las '+_apuCant(metQ())+' '+esc(metU())):('por '+esc(r.unidad||p.unidad||'und')))+'</span>'+
       '<span style="margin-left:auto;font-size:10.5px">'+difTxt+'</span></div>'+
       '<div style="background:'+(gsp.length?'#F7FAFC':'#F4F7FB')+';border:1px solid var(--line);border-radius:11px;padding:9px 11px">'+
       resumenG+
