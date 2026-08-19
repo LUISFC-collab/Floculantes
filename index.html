@@ -2852,7 +2852,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812e4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812e5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -5023,7 +5023,7 @@ function _fzInject(){try{
     el.addEventListener('click',function(ev){
       if(window._reorderOn)return;
       var t=ev.target;
-      if(t&&t.closest&&t.closest('button,input,select,textarea,a,label,.cname,.chip,.res-badge,.alc-badge'))return;
+      if(t&&t.closest&&t.closest('button,input,select,textarea,a,label,.res-badge,.alc-badge'))return;
       var id=el.getAttribute('data-id');
       var p=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0]);
       if(p)_fzUI(p)})})}catch(e){}}
@@ -5240,17 +5240,30 @@ function _actDetalle(id){
   var bt=document.getElementById('_actHH');
   if(bt)bt.onclick=async function(){bt.disabled=true;bt.textContent='Guardando…';await _hhToggle(id);ov.remove();_actDetalle(id)};
 }
-/* el admin toca el texto de la actividad y se abre su ficha */
+/* La ficha de costos del admin vive en el menu del engranaje: el nombre ya no
+   la abre, porque tocar cualquier parte de la tarjeta abre las Partes. */
 function _actInject(){try{
-  if(!(typeof esAdmin==='function'&&esAdmin()))return;
   var w=$('list');if(!w)return;
-  Array.prototype.forEach.call(w.querySelectorAll('.leaf[data-id]'),function(el){
-    var id=el.getAttribute('data-id');if(!id)return;
-    var nm=el.querySelector('.cname');if(!nm||nm._actOk)return;nm._actOk=1;
-    nm.style.cursor='pointer';nm.title='Toca para ver la ficha: HH, precio unitario y costo total (admin)';
-    nm.addEventListener('click',function(e){
-      if(e.target&&e.target.closest&&e.target.closest('button,.res-badge,.alc-badge'))return;
-      e.stopPropagation();_actDetalle(id)})})}catch(e){}}
+  Array.prototype.forEach.call(w.querySelectorAll('.leaf[data-id] .cname'),function(nm){
+    nm.style.cursor='';nm.title=''})}catch(e){}}
+function _actGearItem(){try{
+  if(!(typeof esAdmin==='function'&&esAdmin()))return;
+  var sh=document.getElementById('mGear');if(!sh)return;
+  var pan=sh.querySelector('.panel');if(!pan)return;
+  if(pan.querySelector('#gearFicha'))return;
+  var ref=pan.querySelector('#gearEdit');
+  var d=document.createElement('div');d.id='gearFicha';
+  if(ref)d.className=ref.className||'';
+  d.style.cssText='display:flex;gap:10px;align-items:center;padding:12px 14px;border-top:1px solid var(--line);cursor:pointer';
+  d.innerHTML='<span style="font-size:19px;flex:none">&#8505;</span><div style="flex:1;min-width:0">'+
+    '<b style="display:block;font-size:13.5px;color:#1F3864">Ficha de la actividad</b>'+
+    '<small style="color:var(--muted);font-size:11.5px">Horas-hombre, precio unitario y costo total del contrato</small></div>';
+  d.onclick=function(){var p=(typeof gearP!=='undefined')?gearP:null;
+    try{closeSheet('mGear')}catch(e){}
+    if(p&&typeof _actDetalle==='function')setTimeout(function(){_actDetalle(p.id)},120)};
+  if(ref&&ref.parentNode===pan)pan.insertBefore(d,ref.nextSibling);else pan.appendChild(d);
+}catch(e){}}
+try{if(!window._actGearWired){window._actGearWired=1;setInterval(_actGearItem,700)}}catch(_agw){}
 
 try{var _hhRlBase=renderList;renderList=function(){var r=_hhRlBase.apply(this,arguments);try{window._hhCache=null;_hhInject();_actInject()}catch(e){}return r}}catch(_hw){}
 
