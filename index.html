@@ -2776,7 +2776,7 @@ function _openRestrForm(p,cat,esFut){_restrFotos=[];var nm=cat==='mina'?'Restric
 
 function openReg(p){if(typeof diaCerrado==='function'&&diaCerrado(activeDate)){if(typeof toast==='function')toast('Día bloqueado: el administrador debe habilitar este día para modificar');return}regId=p.id;regInc='Ninguna';regFotos=[];selDate=activeDate;regCuad=null;window._regCuadLock=false;regPer=PERTIPOS.map(t=>({tipo:t,cant:0,fixed:true})).concat(((state.puestos&&state.puestos[state.user.disc])||[]).map(function(t){return {tipo:t,cant:0,fixed:true,saved:true}}));
   $('rId').textContent=p.id;$('rName').textContent=p.nombre;$('rObs').value='';setInc('Ninguna');
-  renderBars(p);updDnote(p);renderMeta(p);renderPer();try{window._regPerBase=JSON.parse(JSON.stringify(regPer))}catch(e){}try{renderCuadPick()}catch(e){}renderRepo(p);renderRestr(p);renderThumbs();updStore();renderHist(p);
+  renderBars(p);updDnote(p);renderMeta(p);try{_fzRegUI()}catch(_ef){}renderPer();try{window._regPerBase=JSON.parse(JSON.stringify(regPer))}catch(e){}try{renderCuadPick()}catch(e){}renderRepo(p);renderRestr(p);renderThumbs();updStore();renderHist(p);
   $('rEditMet').onclick=()=>{closeSheet('mReg');openMetrado(p,true)};openSheet('mReg')}
 $('rCant').addEventListener('input',()=>{const p=acts(state.user.disc).find(x=>x.id===regId);if(p)updLive(p)});
 $('rRange').addEventListener('input',e=>setRange(+e.target.value));
@@ -2794,7 +2794,11 @@ $('rSave').onclick=()=>{if(typeof _gateW==='function'&&!_gateW())return;if(typeo
   const _obsTxt=$('rObs').value.trim();if(_obsTxt&&typeof _gateAcc==='function'&&!_gateAcc('av_obs','Escribir observaciones'))return;
   const base={id:regId,fecha:selDate||todayISO(),disc:state.user.disc,supervisor:state.user.supervisor,nombre:p?p.nombre:regId,sistema:p?p.sistema:'',cuadrilla:(regCuad?('Cuadrilla '+regCuad.numero+'.'+regCuad.version):(p?p.cuadrilla:'')),personal:per,incidencia:regInc,obs:_obsTxt,fotos:regFotos.slice(),cell_at:Date.now(),ts:(typeof nowSrv==='function'?nowSrv():Date.now()),client_id:uuid(),synced:false};base.apr=1;
   if(m.unidad==='glb'){base.tipo='glb';base.pctGlb=+$('rPctNum').value||0}else if(m.unidad==='na'){base.tipo='cant';base.cant=0}
-  else{const add=+$('rCant').value;if(!add||add<=0){toast('Ingresa la cantidad ejecutada');return}base.tipo='cant';base.cant=add}
+  else{const add=+$('rCant').value;if(!add||add<=0){toast('Ingresa la cantidad ejecutada');return}base.tipo='cant';base.cant=add;
+    /* si la partida esta dividida en partes, el avance se le suma a la parte elegida */
+    /* ojo: NO se le agrega la columna a 'partes' (no existe en la tabla y tumbaria
+       el envio entero); lo ejecutado se acumula en la fila de partes de la partida */
+    try{if(typeof _fzDe==='function'&&_fzDe(regId)&&window._regFase){_fzSumar(regId,window._regFase,add)}}catch(_efz){}}
   state.partes.push(base);if(!store.set(KP,state.partes)){state.partes.pop();toast('Almacenamiento lleno: exporta y libera fotos');return}
   if(typeof logCambio==='function')logCambio('avance',regId,base.tipo==='glb'?((base.pctGlb||0)+'% global'):(m.unidad==='na'?'constancia del día (no aporta avance)':('+'+base.cant+' '+(m.unidad||''))));
   closeSheet('mReg');renderList();bumpReporte();toast(base.apr===0?'Metrado guardado ✓ — pendiente de aprobación del admin':'Metrado guardado ✓ (se sube al tener señal)');syncNow(true)};
@@ -2848,7 +2852,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812e1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812e2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -4607,6 +4611,7 @@ function _undOculto(){try{return !!window._cfgOcultarUnd && !(typeof esAdmin==='
 function _undInject(){try{var w=$('list');if(!w)return;
 Array.prototype.forEach.call(w.querySelectorAll('.leaf ._lfDato'),function(b){b.style.display=_undOculto()?'none':''});
 try{_cbInject()}catch(e){}
+try{_fzInject()}catch(e){}
 try{_pesoInject()}catch(e){}
 
 Array.prototype.forEach.call(w.querySelectorAll('.leaf ._lfDato'),function(b){if(b.parentElement)_lfFit(b.parentElement)})}catch(e){}}
@@ -4768,6 +4773,268 @@ function _busqBoton(){try{
   var bar=document.getElementById('_busqBar');if(bar&&bar.parentNode!==tools)tools.appendChild(bar);
 }catch(e){}}
 try{setTimeout(_busqBoton,900);setInterval(_busqBoton,2500)}catch(_bqw){}
+
+/* === PARTES DE LA PARTIDA (suministro · montaje · pruebas · lo que haga falta) ===
+   Una partida del contrato suele traer trabajos que no valen lo mismo: suministrar
+   30 UND puede valer 5% y montar 10 UND el 95%. Aqui el supervisor parte la
+   actividad en cuantas partes necesite, cada una con SU unidad, SU cantidad y SU
+   peso, y los pesos siempre suman 100.
+   Cuando una partida tiene partes, su avance sale de ellas:
+   avance = suma de (peso de la parte x lo ejecutado de esa parte).
+   Si no tiene partes, la partida sigue funcionando exactamente como siempre.
+   Se guarda una fila por partida en ajustes_create_110826, clave 'fase:<id>', con
+   lapida (eliminado/elim_por/elim_ts), ts, cell_at, trigger de updated_at y tiempo
+   real: todo comprobado en esa tabla. */
+function _fzKey(id){return 'fase:'+id}
+function _fzAll(){if(!state.fases){try{state.fases=JSON.parse(localStorage.getItem('obf4_fases')||'{}')||{}}catch(e){state.fases={}}}return state.fases}
+function _fzSave(){try{localStorage.setItem('obf4_fases',JSON.stringify(_fzAll()))}catch(e){}}
+function _fzDe(id){var r=_fzAll()[id];return (r&&!r.eliminado&&r.fases&&r.fases.length)?r:null}
+function _fzNuevoId(){return 'F'+Date.now().toString(36)+Math.floor(Math.random()*46656).toString(36)}
+function _fzPctParte(x){
+  var c=Number(x.cantidad)||0,a=Number(x.avance)||0;
+  if(c>0)return Math.max(0,Math.min(100,a/c*100));
+  return a>0?100:0}
+function _fzPct(id){
+  var r=_fzDe(id);if(!r)return null;
+  var tot=0,pts=0;
+  (r.fases||[]).forEach(function(x){var w=Number(x.peso)||0;tot+=w;pts+=w*_fzPctParte(x)/100});
+  if(tot<=0)return null;
+  return Math.round(pts/tot*100)}
+function _fzResumen(id){
+  var r=_fzDe(id);if(!r)return '';
+  return (r.fases||[]).map(function(x){return x.nombre+' '+(Math.round((Number(x.peso)||0)*10)/10)+'%'}).join(' · ')}
+async function _fzGuardar(id,fases,borrar){
+  var t=(typeof nowSrv==='function'?nowSrv():Date.now());
+  var yo=(state.user&&state.user.supervisor)||'';
+  var r={partida_id:id,fases:fases||[],quien:yo,ts:t,
+    eliminado:!!borrar,elim_por:borrar?yo:'',elim_ts:borrar?t:0};
+  var H=_fzAll();H[id]=r;_fzSave();
+  if(typeof sbReady==='function'&&sbReady()&&navigator.onLine){
+    await sbUpsert('ajustes_create_110826',[{proyecto:DATA.proyecto,clave:_fzKey(id),valor:r,
+      descripcion:'Partes de la partida '+id,quien:yo,ts:t,cell_at:Date.now(),
+      eliminado:!!borrar,elim_por:borrar?yo:'',elim_ts:borrar?t:0}],'proyecto,clave')}
+}
+async function _fzPull(){
+  if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
+  try{
+    var R=await sbSelect('ajustes_create_110826','select=clave,valor,eliminado,ts&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&clave=like.fase:*&limit=2000');
+    var H=_fzAll(),cambio=false;
+    (R||[]).forEach(function(r){
+      var v=(r&&r.valor)||{};var id=v.partida_id||String(r.clave||'').slice(5);if(!id)return;
+      var loc=H[id];
+      if(loc&&(Number(loc.ts)||0)>(Number(r.ts)||0))return;
+      v.eliminado=!!r.eliminado;v.ts=Number(r.ts)||0;
+      if(JSON.stringify(loc)!==JSON.stringify(v)){H[id]=v;cambio=true}});
+    state.fases=H;_fzSave();
+    if(cambio){try{if(typeof renderList==='function')renderList()}catch(e){}}
+  }catch(e){}}
+try{var _fzPullBase=syncPull;syncPull=async function(){var r=await _fzPullBase.apply(this,arguments);try{await _fzPull()}catch(e){}return r}}catch(_fzw){}
+try{setTimeout(function(){try{_fzPull()}catch(e){}},2600)}catch(_fzt){}
+/* el avance de la partida pasa a salir de sus partes */
+try{var _pctBaseFz=pctOf;pctOf=function(p){
+  try{var r=(p&&p.id)?_fzPct(p.id):null;if(r!=null)return r}catch(e){}
+  return _pctBaseFz.apply(this,arguments)}}catch(_fzp){}
+/* ---------- la pantalla de definicion ---------- */
+function _fzUI(p){
+  if(!p||!p.id)return;
+  var id=p.id;
+  var m=(typeof metaOf==='function')?metaOf(id):null;
+  var undBase=(m&&m.unidad)||p.unidad||'UND';
+  var cantBase=(m&&m.total)||p.metrado||0;
+  var actual=_fzAll()[id];
+  var fases=(actual&&actual.fases&&!actual.eliminado)?JSON.parse(JSON.stringify(actual.fases)):[
+    {id:_fzNuevoId(),nombre:'Suministro',unidad:undBase,cantidad:cantBase,peso:30,avance:0},
+    {id:_fzNuevoId(),nombre:'Montaje',unidad:undBase,cantidad:cantBase,peso:70,avance:0}];
+  var ov=document.getElementById('_fzOv');if(ov)ov.remove();
+  ov=document.createElement('div');ov.id='_fzOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483410;background:var(--bg,#eef2f7);display:flex;flex-direction:column';
+  ov.innerHTML='<div style="background:#1F3864;color:#fff;padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));display:flex;align-items:center;gap:10px;flex:none">'+
+    '<button id="_fzX" style="background:rgba(255,255,255,.16);color:#fff;border:0;border-radius:12px;width:42px;height:42px;font-size:19px;cursor:pointer;flex:none">&lsaquo;</button>'+
+    '<div style="min-width:0"><div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#AFC4E8">'+esc(codeOf(p))+'</div>'+
+    '<div style="font-size:15px;font-weight:700;max-width:72vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Partes de la partida</div></div></div>'+
+    '<div id="_fzBody" style="flex:1;overflow:auto;padding:13px 12px 26px"></div>'+
+    '<div id="_fzPie" style="flex:none;padding:10px 12px 14px;padding-bottom:max(14px,env(safe-area-inset-bottom));background:#fff;border-top:1px solid var(--line)"></div>';
+  document.body.appendChild(ov);
+  document.getElementById('_fzX').onclick=function(){ov.remove()};
+  var suma=function(){var t=0;fases.forEach(function(x){t+=Number(x.peso)||0});return Math.round(t*100)/100};
+  var pinta=function(){
+    var w=document.getElementById('_fzBody');if(!w)return;
+    var s=suma(),ok=(Math.abs(s-100)<0.01);
+    var H='<div style="font-size:12.5px;color:#5C6779;line-height:1.5;margin-bottom:11px">'+
+      esc(String(p.nombre||'').slice(0,110))+(String(p.nombre||'').length>110?'&hellip;':'')+
+      '<div style="margin-top:4px;font-size:11.5px;color:var(--muted)">Contrato: '+cantBase+' '+esc(undBase)+
+      ((p.hh!=null)?(' · '+Math.round(Number(p.hh)||0)+' hh'):'')+'</div></div>';
+    fases.forEach(function(x,i){
+      var pc=_fzPctParte(x);
+      H+='<div style="background:#fff;border:1.5px solid var(--line);border-radius:13px;padding:11px 12px;margin-bottom:9px">';
+      H+='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">';
+      H+='<input class="_fzN" data-i="'+i+'" value="'+esc(x.nombre||'')+'" placeholder="Nombre de la parte" style="flex:1;min-width:0;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:9px;padding:9px;font-size:13px;font-weight:700">';
+      H+='<button class="_fzDel" data-i="'+i+'" title="Quitar esta parte" style="flex:none;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:8px;width:32px;height:32px;font-weight:900;cursor:pointer">&times;</button></div>';
+      H+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px">';
+      H+='<div><label style="font-size:10.5px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Cantidad</label>'+
+         '<input class="_fzC" data-i="'+i+'" type="number" step="any" value="'+(x.cantidad!=null?x.cantidad:'')+'" style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:9px;padding:9px;font-size:13px"></div>';
+      H+='<div><label style="font-size:10.5px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Unidad</label>'+
+         '<input class="_fzU" data-i="'+i+'" value="'+esc(x.unidad||'')+'" placeholder="UND, m, Glb." style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:9px;padding:9px;font-size:13px"></div>';
+      H+='<div><label style="font-size:10.5px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Peso %</label>'+
+         '<input class="_fzP" data-i="'+i+'" type="number" step="any" value="'+(x.peso!=null?x.peso:'')+'" style="width:100%;box-sizing:border-box;border:1.5px solid #1F3864;border-radius:9px;padding:9px;font-size:13px;font-weight:800;color:#1F3864"></div>';
+      H+='</div>';
+      H+='<div style="display:flex;align-items:center;gap:8px;margin-top:9px">';
+      H+='<label style="font-size:10.5px;font-weight:800;color:#5C6779;flex:none">Ejecutado</label>';
+      H+='<input class="_fzA" data-i="'+i+'" type="number" step="any" value="'+(x.avance!=null?x.avance:0)+'" style="width:92px;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:9px;padding:8px;font-size:13px">';
+      H+='<span style="font-size:11px;color:var(--muted);flex:none">'+esc(x.unidad||'')+'</span>';
+      H+='<span style="flex:1;height:7px;background:#EAEEF5;border-radius:4px;overflow:hidden;border:1px solid #DBE2EC"><i style="display:block;height:100%;width:'+pc+'%;background:#1E7A46"></i></span>';
+      H+='<b style="font-size:11.5px;color:#1E7A46;flex:none;min-width:34px;text-align:right">'+Math.round(pc)+'%</b>';
+      H+='</div>';
+      H+='<div style="margin-top:6px;font-size:10.5px;color:var(--muted)">Aporta <b style="color:#1F3864">'+(Math.round((Number(x.peso)||0)*pc)/100).toFixed(1)+'%</b> al avance de la partida</div>';
+      H+='</div>';
+    });
+    H+='<button id="_fzAdd" style="width:100%;background:#EAF1FB;color:#1F3864;border:1.5px dashed #1F3864;border-radius:11px;padding:12px;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:12px">+ Agregar otra parte</button>';
+    H+='<div style="display:flex;gap:7px;margin-bottom:6px">'+
+       '<button id="_fzEq" style="flex:1;background:#eef2f7;border:0;border-radius:10px;padding:11px 6px;font-weight:800;font-size:11.5px;cursor:pointer">Repartir parejo</button>'+
+       '<button id="_fzProp" style="flex:1;background:#eef2f7;border:0;border-radius:10px;padding:11px 6px;font-weight:800;font-size:11.5px;cursor:pointer">Segun cantidad</button>'+
+       '<button id="_fzAj" style="flex:1;background:'+(ok?'#eef2f7':'#FCEFD9')+';border:0;border-radius:10px;padding:11px 6px;font-weight:800;font-size:11.5px;cursor:pointer">Ajustar a 100</button></div>';
+    w.innerHTML=H;
+    var pie=document.getElementById('_fzPie');
+    var avPrev=0,tot=0;fases.forEach(function(x){var wp=Number(x.peso)||0;tot+=wp;avPrev+=wp*_fzPctParte(x)/100});
+    avPrev=tot>0?Math.round(avPrev/tot*100):0;
+    pie.innerHTML='<div style="display:flex;align-items:center;gap:9px;margin-bottom:9px">'+
+      '<div style="flex:1"><div style="height:9px;background:#EAEEF5;border-radius:5px;overflow:hidden;border:1px solid #DBE2EC">'+
+      '<i style="display:block;height:100%;width:'+Math.min(100,s)+'%;background:'+(ok?'#1E7A46':(s>100?'#B42318':'#B45309'))+'"></i></div></div>'+
+      '<b style="font-size:13px;color:'+(ok?'#1E7A46':(s>100?'#B42318':'#B45309'))+';flex:none">'+s+'%</b></div>'+
+      '<div style="font-size:11.5px;color:'+(ok?'#1E7A46':'#B45309')+';font-weight:700;margin-bottom:9px">'+
+      (ok?('Los pesos suman 100 &mdash; la partida iria en '+avPrev+'%'):(s<100?('Faltan '+Math.round((100-s)*100)/100+'% para llegar a 100'):('Sobran '+Math.round((s-100)*100)/100+'% &mdash; pasa de 100')))+'</div>'+
+      '<div style="display:flex;gap:7px">'+
+      ((actual&&!actual.eliminado)?'<button id="_fzQuitar" style="flex:none;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:10px;padding:13px 12px;font-weight:800;font-size:12.5px;cursor:pointer">Quitar partes</button>':'')+
+      '<button id="_fzOk" '+(ok?'':'disabled ')+'style="flex:1;background:'+(ok?'#0C5132':'#C7D2E0')+';color:#fff;border:0;border-radius:11px;padding:14px;font-weight:800;font-size:14px;cursor:'+(ok?'pointer':'default')+'">Guardar las partes</button></div>';
+    var leer=function(){
+      Array.prototype.forEach.call(w.querySelectorAll('._fzN'),function(e){fases[+e.getAttribute('data-i')].nombre=e.value});
+      Array.prototype.forEach.call(w.querySelectorAll('._fzU'),function(e){fases[+e.getAttribute('data-i')].unidad=e.value});
+      Array.prototype.forEach.call(w.querySelectorAll('._fzC'),function(e){fases[+e.getAttribute('data-i')].cantidad=(e.value===''?null:Number(e.value))});
+      Array.prototype.forEach.call(w.querySelectorAll('._fzP'),function(e){fases[+e.getAttribute('data-i')].peso=(e.value===''?0:Number(e.value))});
+      Array.prototype.forEach.call(w.querySelectorAll('._fzA'),function(e){fases[+e.getAttribute('data-i')].avance=(e.value===''?0:Number(e.value))})};
+    Array.prototype.forEach.call(w.querySelectorAll('._fzN,._fzU'),function(e){e.oninput=function(){leer()}});
+    Array.prototype.forEach.call(w.querySelectorAll('._fzC,._fzP,._fzA'),function(e){e.onchange=function(){leer();pinta()}});
+    Array.prototype.forEach.call(w.querySelectorAll('._fzDel'),function(b){b.onclick=function(){leer();
+      if(fases.length<=1){if(typeof toast==='function')toast('Tiene que quedar al menos una parte');return}
+      fases.splice(+b.getAttribute('data-i'),1);pinta()}});
+    document.getElementById('_fzAdd').onclick=function(){leer();
+      fases.push({id:_fzNuevoId(),nombre:'',unidad:undBase,cantidad:cantBase,peso:0,avance:0});pinta()};
+    document.getElementById('_fzEq').onclick=function(){leer();
+      var n=fases.length;var base=Math.floor(10000/n)/100;
+      fases.forEach(function(x){x.peso=base});
+      fases[n-1].peso=Math.round((100-base*(n-1))*100)/100;pinta()};
+    document.getElementById('_fzProp').onclick=function(){leer();
+      var t=0;fases.forEach(function(x){t+=Math.abs(Number(x.cantidad)||0)});
+      if(!t){if(typeof toast==='function')toast('Pon primero las cantidades');return}
+      var acum=0;
+      fases.forEach(function(x,i){
+        if(i<fases.length-1){x.peso=Math.round(Math.abs(Number(x.cantidad)||0)/t*10000)/100;acum+=x.peso}
+        else x.peso=Math.round((100-acum)*100)/100});
+      pinta()};
+    document.getElementById('_fzAj').onclick=function(){leer();
+      var t=suma();if(t<=0){if(typeof toast==='function')toast('Pon algun peso primero');return}
+      var acum=0;
+      fases.forEach(function(x,i){
+        if(i<fases.length-1){x.peso=Math.round((Number(x.peso)||0)/t*10000)/100;acum+=x.peso}
+        else x.peso=Math.round((100-acum)*100)/100});
+      pinta()};
+    var ok2=document.getElementById('_fzOk');
+    if(ok2)ok2.onclick=async function(){
+      leer();
+      if(Math.abs(suma()-100)>0.01){if(typeof toast==='function')toast('Los pesos deben sumar 100');return}
+      if(fases.filter(function(x){return !String(x.nombre||'').trim()}).length){
+        if(typeof toast==='function')toast('Ponle nombre a cada parte');return}
+      ok2.disabled=true;ok2.textContent='Guardando...';
+      try{await _fzGuardar(id,fases,false)}
+      catch(e){ok2.disabled=false;ok2.textContent='Guardar las partes';
+        if(typeof toast==='function')toast('No se pudo guardar - revisa la senal');return}
+      ov.remove();
+      try{if(typeof renderList==='function')renderList()}catch(e){}
+      if(typeof toast==='function')toast('Partes guardadas - la partida va en '+(_fzPct(id)||0)+'%')};
+    var q=document.getElementById('_fzQuitar');
+    if(q)q.onclick=async function(){
+      if(!confirm('Quitar las partes de esta partida?\n\nVuelve a medirse como antes, con su metrado normal.'))return;
+      try{await _fzGuardar(id,fases,true)}catch(e){}
+      ov.remove();try{if(typeof renderList==='function')renderList()}catch(e){}
+      if(typeof toast==='function')toast('Partes quitadas')};
+  };
+  pinta();
+}
+/* la opcion en el menu de la actividad */
+function _fzGearItem(){try{
+  var sh=document.getElementById('mGear');if(!sh)return;
+  var pan=sh.querySelector('.panel');if(!pan)return;
+  if(pan.querySelector('#gearFases'))return;
+  var ref=pan.querySelector('#gearEdit');
+  var d=document.createElement('div');d.id='gearFases';
+  if(ref)d.className=ref.className||'';
+  d.style.cssText='display:flex;gap:10px;align-items:center;padding:12px 14px;border-top:1px solid var(--line);cursor:pointer';
+  d.innerHTML='<span style="font-size:19px;flex:none">&#9878;</span><div style="flex:1;min-width:0">'+
+    '<b style="display:block;font-size:13.5px;color:#1F3864">Partes de la partida</b>'+
+    '<small style="color:var(--muted);font-size:11.5px">Suministro, montaje, pruebas... cada una con su unidad y su peso; siempre suman 100</small></div>';
+  d.onclick=function(){var p=(typeof gearP!=='undefined')?gearP:null;
+    try{closeSheet('mGear')}catch(e){}
+    if(p)setTimeout(function(){_fzUI(p)},120)};
+  if(ref&&ref.parentNode===pan)pan.insertBefore(d,ref.nextSibling);else pan.appendChild(d);
+}catch(e){}}
+try{if(!window._fzWired){window._fzWired=1;setInterval(_fzGearItem,700)}}catch(_fzg){}
+/* el sello en la tarjeta cuando la partida tiene partes */
+function _fzInject(){try{
+  var w=$('list');if(!w)return;
+  Array.prototype.forEach.call(w.querySelectorAll('._fzTag'),function(x){x.remove()});
+  Array.prototype.forEach.call(w.querySelectorAll('.leaf[data-id]'),function(el){
+    var id=el.getAttribute('data-id');var r=_fzDe(id);if(!r)return;
+    var nm=el.querySelector('.cname');if(!nm)return;
+    var b=document.createElement('span');b.className='_fzTag';
+    b.title='Partes: '+_fzResumen(id)+'. El avance de la partida sale de ellas - toca para ver o cambiar.';
+    b.style.cssText='display:inline-block;margin-left:6px;font-size:9.5px;font-weight:800;color:#1F3864;background:#EAF1FB;border:1px solid #BFD3EE;border-radius:5px;padding:1px 5px;cursor:pointer;vertical-align:middle';
+    b.textContent='⚖ '+(r.fases||[]).length+' partes';
+    b.onclick=function(e){e.stopPropagation();
+      var p=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0]);
+      if(p)_fzUI(p)};
+    nm.appendChild(b)})}catch(e){}}
+/* ---------- al reportar metrado, elegir a que parte va ---------- */
+window._regFase=null;
+function _fzRegUI(){try{
+  var id=(typeof regId!=='undefined')?regId:null;if(!id)return;
+  var caja=document.getElementById('_fzReg');
+  var r=_fzDe(id);
+  if(!r){if(caja)caja.remove();window._regFase=null;return}
+  var lbl=document.getElementById('rCantLbl');if(!lbl)return;
+  var cont=lbl.parentElement;if(!cont)return;
+  if(!caja){caja=document.createElement('div');caja.id='_fzReg';
+    caja.style.cssText='background:#EAF1FB;border:1.5px solid #BFD3EE;border-radius:11px;padding:10px 11px;margin-bottom:10px';
+    cont.parentNode.insertBefore(caja,cont)}
+  var fs=r.fases||[];
+  if(!window._regFase||!fs.filter(function(x){return x.id===window._regFase}).length)window._regFase=fs[0].id;
+  var H='<div style="font-size:11.5px;font-weight:800;color:#1F3864;margin-bottom:7px">A que parte va este avance?</div>';
+  H+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  fs.forEach(function(x){
+    var on=(x.id===window._regFase);var pc=Math.round(_fzPctParte(x));
+    var falta=Math.max(0,(Number(x.cantidad)||0)-(Number(x.avance)||0));
+    H+='<button class="_fzRegB" data-f="'+esc(x.id)+'" style="flex:1;min-width:44%;text-align:left;padding:9px 10px;border-radius:9px;border:1.5px solid '+(on?'#1F3864':'#C9D2E0')+';background:'+(on?'#1F3864':'#fff')+';color:'+(on?'#fff':'#1B2433')+';cursor:pointer">'+
+       '<div style="font-size:12px;font-weight:800">'+esc(x.nombre||'')+'</div>'+
+       '<div style="font-size:10px;opacity:.85;margin-top:2px">'+pc+'% hecho · faltan '+(Math.round(falta*100)/100)+' '+esc(x.unidad||'')+' · vale '+(Math.round((Number(x.peso)||0)*10)/10)+'%</div></button>'});
+  H+='</div>';
+  caja.innerHTML=H;
+  Array.prototype.forEach.call(caja.querySelectorAll('._fzRegB'),function(b){b.onclick=function(e){
+    e.preventDefault();window._regFase=b.getAttribute('data-f');_fzRegUI();
+    var f=(_fzDe(id).fases||[]).filter(function(x){return x.id===window._regFase})[0];
+    var l=document.getElementById('rCantLbl');
+    if(l&&f)l.textContent='Avance del dia — '+f.nombre+' ('+(f.unidad||'')+')'}});
+  var f0=fs.filter(function(x){return x.id===window._regFase})[0];
+  if(f0)lbl.textContent='Avance del dia — '+f0.nombre+' ('+(f0.unidad||'')+')';
+}catch(e){}}
+/* al guardar el avance, se suma a la parte elegida */
+async function _fzSumar(id,fid,cant){
+  try{
+    var r=_fzDe(id);if(!r||!fid||!cant)return;
+    var fases=JSON.parse(JSON.stringify(r.fases||[]));
+    var toco=false;
+    fases.forEach(function(x){if(x.id===fid){x.avance=(Number(x.avance)||0)+Number(cant);toco=true}});
+    if(!toco)return;
+    await _fzGuardar(id,fases,false);
+  }catch(e){}}
 
 function _hhDe(p){if(p&&p.id&&typeof _hhOff==='function'&&_hhOff(p.id))return 0;var h=p&&p.hh;h=Number(h);return isFinite(h)&&h>0?h:0}
 /* La base del porcentaje: contra las HH de la especialidad o contra las de
