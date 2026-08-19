@@ -2776,7 +2776,9 @@ function _openRestrForm(p,cat,esFut){_restrFotos=[];var nm=cat==='mina'?'Restric
 
 function openReg(p){if(typeof diaCerrado==='function'&&diaCerrado(activeDate)){if(typeof toast==='function')toast('Día bloqueado: el administrador debe habilitar este día para modificar');return}regId=p.id;regInc='Ninguna';regFotos=[];selDate=activeDate;regCuad=null;window._regCuadLock=false;regPer=PERTIPOS.map(t=>({tipo:t,cant:0,fixed:true})).concat(((state.puestos&&state.puestos[state.user.disc])||[]).map(function(t){return {tipo:t,cant:0,fixed:true,saved:true}}));
   $('rId').textContent=p.id;$('rName').textContent=p.nombre;$('rObs').value='';setInc('Ninguna');
-  renderBars(p);updDnote(p);renderMeta(p);try{_fzRegUI()}catch(_ef){}renderPer();try{window._regPerBase=JSON.parse(JSON.stringify(regPer))}catch(e){}try{renderCuadPick()}catch(e){}renderRepo(p);renderRestr(p);renderThumbs();updStore();renderHist(p);
+  renderBars(p);updDnote(p);renderMeta(p);try{_fzRegUI()}catch(_ef){}renderPer();try{window._regPerBase=JSON.parse(JSON.stringify(regPer))}catch(e){}try{renderCuadPick()}catch(e){}renderRepo(p);/* las restricciones ya no se muestran aqui: tienen su propio apartado.
+     En su lugar, si la partida tiene pesos definidos, sale el selector de partes. */
+  try{var _rr=$('rRestr');if(_rr)_rr.innerHTML=''}catch(_err){}renderThumbs();updStore();renderHist(p);
   $('rEditMet').onclick=()=>{closeSheet('mReg');openMetrado(p,true)};openSheet('mReg')}
 $('rCant').addEventListener('input',()=>{const p=acts(state.user.disc).find(x=>x.id===regId);if(p)updLive(p)});
 $('rRange').addEventListener('input',e=>setRange(+e.target.value));
@@ -2852,7 +2854,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812e5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812e6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -4612,6 +4614,7 @@ function _undInject(){try{var w=$('list');if(!w)return;
 Array.prototype.forEach.call(w.querySelectorAll('.leaf ._lfDato'),function(b){b.style.display=_undOculto()?'none':''});
 try{_cbInject()}catch(e){}
 try{_fzInject()}catch(e){}
+try{_apuInject()}catch(e){}
 try{_pesoInject()}catch(e){}
 
 Array.prototype.forEach.call(w.querySelectorAll('.leaf ._lfDato'),function(b){if(b.parentElement)_lfFit(b.parentElement)})}catch(e){}}
@@ -4878,19 +4881,24 @@ function _fzUI(p){
       esc(String(p.nombre||'').slice(0,110))+(String(p.nombre||'').length>110?'&hellip;':'')+
       '<div style="margin-top:4px;font-size:11.5px;color:var(--muted)">Contrato: '+cantBase+' '+esc(undBase)+
       ((p.hh!=null)?(' · '+Math.round(Number(p.hh)||0)+' hh'):'')+'</div></div>';
+    /* la ULTIMA parte cierra la cadena: va siempre con la unidad y el metrado del
+       contrato (100 m siguen siendo 100 m), y esos dos campos no se tocan. */
+    if(fases.length){var _ult=fases[fases.length-1];_ult.unidad=undBase;_ult.cantidad=cantBase;_ult.cierra=true;
+      fases.forEach(function(z,zi){if(zi<fases.length-1)z.cierra=false})}
     fases.forEach(function(x,i){
       var pc=_fzPctParte(x);
+      var _fin=(i===fases.length-1);
       H+='<div style="background:#fff;border:1.5px solid var(--line);border-radius:13px;padding:11px 12px;margin-bottom:9px">';
       H+='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">';
       H+='<input class="_fzN" data-i="'+i+'" value="'+esc(x.nombre||'')+'" placeholder="Nombre de la parte" style="flex:1;min-width:0;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:9px;padding:9px;font-size:13px;font-weight:700">';
       H+='<button class="_fzDel" data-i="'+i+'" title="Quitar esta parte" style="flex:none;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:8px;width:32px;height:32px;font-weight:900;cursor:pointer">&times;</button></div>';
       H+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px">';
       H+='<div><label style="font-size:10.5px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Cantidad</label>'+
-         '<input class="_fzC" data-i="'+i+'" type="number" step="any" value="'+(x.cantidad!=null?x.cantidad:'')+'" style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:9px;padding:9px;font-size:13px"></div>';
+         '<input class="_fzC" data-i="'+i+'" type="number" step="any" '+(_fin?'disabled ':'')+'value="'+(x.cantidad!=null?x.cantidad:'')+'" style="width:100%;box-sizing:border-box;border:1.5px solid '+(_fin?'#DBE2EC':'#C9D2E0')+';border-radius:9px;padding:9px;font-size:13px'+(_fin?';background:#F4F7FB;color:#5C6779':'')+'"></div>';
       var _cono=(_FZ_UND_TOP.indexOf(String(x.unidad||''))>=0)||(_FZ_UND_MAS.indexOf(String(x.unidad||''))>=0);
       var _otra=!!x.otra||(!_cono&&!!x.unidad);
       H+='<div><label style="font-size:10.5px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Unidad</label>'+
-         '<select class="_fzUS" data-i="'+i+'" style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:9px;padding:9px;font-size:13px;background:#fff">'+_fzUndOpts(x.unidad,_otra)+'</select>'+
+         '<select class="_fzUS" data-i="'+i+'" '+(_fin?'disabled ':'')+'style="width:100%;box-sizing:border-box;border:1.5px solid '+(_fin?'#DBE2EC':'#C9D2E0')+';border-radius:9px;padding:9px;font-size:13px;background:'+(_fin?'#F4F7FB':'#fff')+';color:'+(_fin?'#5C6779':'inherit')+'">'+_fzUndOpts(x.unidad,_otra)+'</select>'+
          '<input class="_fzU" data-i="'+i+'" value="'+esc(x.unidad||'')+'" placeholder="Escribe la unidad" style="width:100%;box-sizing:border-box;border:1.5px solid #1F3864;border-radius:9px;padding:9px;font-size:13px;margin-top:5px;display:'+(_otra?'block':'none')+'"></div>';
       H+='<div><label style="font-size:10.5px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Peso %</label>'+
          '<input class="_fzP" data-i="'+i+'" type="number" step="any" value="'+(x.peso!=null?x.peso:'')+'" style="width:100%;box-sizing:border-box;border:1.5px solid #1F3864;border-radius:9px;padding:9px;font-size:13px;font-weight:800;color:#1F3864"></div>';
@@ -4903,6 +4911,7 @@ function _fzUI(p){
       H+='<b style="font-size:11.5px;color:#1E7A46;flex:none;min-width:34px;text-align:right">'+Math.round(pc)+'%</b>';
       H+='</div>';
       H+='<div style="margin-top:6px;font-size:10.5px;color:var(--muted)">Aporta <b style="color:#1F3864">'+(Math.round((Number(x.peso)||0)*pc)/100).toFixed(1)+'%</b> al avance de la partida</div>';
+      if(_fin)H+='<div style="margin-top:6px;background:#EAF3EC;border:1px solid #BFD8C6;border-radius:8px;padding:7px 9px;font-size:10.5px;color:#0C5132;line-height:1.45"><b>Esta cierra la actividad.</b> Va siempre con la unidad y el metrado del contrato ('+cantBase+' '+esc(undBase)+'): es lo que la lleva al 100%. Las de arriba sí pueden ir en otra unidad.</div>';
       H+='</div>';
     });
     H+='<button id="_fzAdd" style="width:100%;background:#EAF1FB;color:#1F3864;border:1.5px dashed #1F3864;border-radius:11px;padding:12px;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:12px">+ Agregar otra parte</button>';
@@ -4926,7 +4935,7 @@ function _fzUI(p){
     var leer=function(){
       Array.prototype.forEach.call(w.querySelectorAll('._fzN'),function(e){fases[+e.getAttribute('data-i')].nombre=e.value});
       Array.prototype.forEach.call(w.querySelectorAll('._fzU'),function(e){fases[+e.getAttribute('data-i')].unidad=e.value});
-      Array.prototype.forEach.call(w.querySelectorAll('._fzC'),function(e){fases[+e.getAttribute('data-i')].cantidad=(e.value===''?null:Number(e.value))});
+      Array.prototype.forEach.call(w.querySelectorAll('._fzC'),function(e){if(e.disabled)return;fases[+e.getAttribute('data-i')].cantidad=(e.value===''?null:Number(e.value))});
       Array.prototype.forEach.call(w.querySelectorAll('._fzP'),function(e){fases[+e.getAttribute('data-i')].peso=(e.value===''?0:Number(e.value))});
       Array.prototype.forEach.call(w.querySelectorAll('._fzA'),function(e){fases[+e.getAttribute('data-i')].avance=(e.value===''?0:Number(e.value))})};
     Array.prototype.forEach.call(w.querySelectorAll('._fzN,._fzU'),function(e){e.oninput=function(){leer()}});
@@ -4942,7 +4951,8 @@ function _fzUI(p){
       if(fases.length<=1){if(typeof toast==='function')toast('Tiene que quedar al menos una parte');return}
       fases.splice(+b.getAttribute('data-i'),1);pinta()}});
     document.getElementById('_fzAdd').onclick=function(){leer();
-      fases.push({id:_fzNuevoId(),nombre:'',unidad:undBase,cantidad:cantBase,peso:0,avance:0});pinta()};
+      /* entra antes de la ultima, que es la que cierra la cadena */
+      fases.splice(Math.max(0,fases.length-1),0,{id:_fzNuevoId(),nombre:'',unidad:undBase,cantidad:cantBase,peso:0,avance:0});pinta()};
     document.getElementById('_fzEq').onclick=function(){leer();
       var n=fases.length;var base=Math.floor(10000/n)/100;
       fases.forEach(function(x){x.peso=base});
@@ -5026,7 +5036,7 @@ function _fzInject(){try{
       if(t&&t.closest&&t.closest('button,input,select,textarea,a,label,.res-badge,.alc-badge'))return;
       var id=el.getAttribute('data-id');
       var p=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0]);
-      if(p)_fzUI(p)})})}catch(e){}}
+      if(p){if(typeof _apuMenu==='function')_apuMenu(p);else _fzUI(p)}})})}catch(e){}}
 /* ---------- al reportar metrado, elegir a que parte va ---------- */
 window._regFase=null;
 function _fzRegUI(){try{
@@ -5048,7 +5058,7 @@ function _fzRegUI(){try{
     var falta=Math.max(0,(Number(x.cantidad)||0)-(Number(x.avance)||0));
     H+='<button class="_fzRegB" data-f="'+esc(x.id)+'" style="flex:1;min-width:44%;text-align:left;padding:9px 10px;border-radius:9px;border:1.5px solid '+(on?'#1F3864':'#C9D2E0')+';background:'+(on?'#1F3864':'#fff')+';color:'+(on?'#fff':'#1B2433')+';cursor:pointer">'+
        '<div style="font-size:12px;font-weight:800">'+esc(x.nombre||'')+'</div>'+
-       '<div style="font-size:10px;opacity:.85;margin-top:2px">'+pc+'% hecho · faltan '+(Math.round(falta*100)/100)+' '+esc(x.unidad||'')+' · vale '+(Math.round((Number(x.peso)||0)*10)/10)+'%</div></button>'});
+       '<div style="font-size:10px;opacity:.85;margin-top:2px">'+pc+'% hecho · faltan '+(Math.round(falta*100)/100)+' '+esc(x.unidad||'')+' · vale '+(Math.round((Number(x.peso)||0)*10)/10)+'%'+(x.cierra?' · cierra':'')+'</div></button>'});
   H+='</div>';
   caja.innerHTML=H;
   Array.prototype.forEach.call(caja.querySelectorAll('._fzRegB'),function(b){b.onclick=function(e){
@@ -5069,6 +5079,323 @@ async function _fzSumar(id,fid,cant){
     if(!toco)return;
     await _fzGuardar(id,fases,false);
   }catch(e){}}
+
+/* === APU DE LA PARTIDA (analisis de precios unitarios) ===
+   Cada partida puede llevar su APU: mano de obra, materiales, equipos y
+   subcontratos, cada insumo con su unidad, cuadrilla, cantidad, precio y parcial.
+   Todos lo VEN; solo el administrador lo edita (borrar fila con la X, o cambiar
+   un valor con el lapiz).
+   Lo bonito: cada insumo tiene un check de SUMINISTRO. Lo marcado se suma y sale
+   el porcentaje que el suministro representa del costo, y con un boton eso se
+   convierte en el peso de la parte "Suministro" de la partida. Asi el 21.53 de
+   material sobre 40.57 el metro deja de ser un numero suelto: pasa a ser 53%.
+   Una fila por partida en ajustes_create_110826, clave 'apu:<id>', con lapida,
+   ts, cell_at, trigger de updated_at y tiempo real. */
+var _APU_GRUPOS=[['MO','Mano de obra','#1F3864'],['MAT','Materiales','#0C5132'],
+                 ['EQU','Equipos y herramientas','#7A4B00'],['SUB','Subcontratos','#5B3A8A']];
+function _apuKey(id){return 'apu:'+id}
+function _apuAll(){if(!state.apus){try{state.apus=JSON.parse(localStorage.getItem('obf4_apus')||'{}')||{}}catch(e){state.apus={}}}return state.apus}
+function _apuSaveLocal(){try{localStorage.setItem('obf4_apus',JSON.stringify(_apuAll()))}catch(e){}}
+function _apuDe(id){var r=_apuAll()[id];return (r&&!r.eliminado)?r:null}
+function _apuNuevoId(){return 'A'+Date.now().toString(36)+Math.floor(Math.random()*46656).toString(36)}
+function _apuNum(v){var n=Number(v);return isFinite(n)?n:0}
+function _apuParcial(x){
+  if(x.parcial!=null&&x.parcial!=='')return _apuNum(x.parcial);
+  return Math.round(_apuNum(x.cantidad)*_apuNum(x.precio)*1e6)/1e6}
+function _apuTotal(r){var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado)t+=_apuParcial(x)});return Math.round(t*1e6)/1e6}
+function _apuSum(r){var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado&&x.suministro)t+=_apuParcial(x)});return Math.round(t*1e6)/1e6}
+function _apuPctSum(r){var t=_apuTotal(r);return t>0?(_apuSum(r)/t*100):0}
+function _apuMon(n){n=Number(n);if(!isFinite(n))return '—';
+  var s=Math.abs(n).toFixed(2).split('.');
+  return (n<0?'-':'')+s[0].replace(/\B(?=(\d{3})+(?!\d))/g,',')+'.'+s[1]}
+async function _apuGuardar(id,r,borrar){
+  var t=(typeof nowSrv==='function'?nowSrv():Date.now());
+  var yo=(state.user&&state.user.supervisor)||'';
+  r.partida_id=id;r.quien=yo;r.ts=t;
+  r.eliminado=!!borrar;r.elim_por=borrar?yo:'';r.elim_ts=borrar?t:0;
+  var H=_apuAll();H[id]=r;_apuSaveLocal();
+  if(typeof sbReady==='function'&&sbReady()&&navigator.onLine){
+    await sbUpsert('ajustes_create_110826',[{proyecto:DATA.proyecto,clave:_apuKey(id),valor:r,
+      descripcion:'APU de la partida '+id,quien:yo,ts:t,cell_at:Date.now(),
+      eliminado:!!borrar,elim_por:borrar?yo:'',elim_ts:borrar?t:0}],'proyecto,clave')}
+}
+async function _apuPull(){
+  if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
+  try{
+    var R=await sbSelect('ajustes_create_110826','select=clave,valor,eliminado,ts&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&clave=like.apu:*&limit=2000');
+    var H=_apuAll(),cambio=false;
+    (R||[]).forEach(function(r){
+      var v=(r&&r.valor)||{};var id=v.partida_id||String(r.clave||'').slice(4);if(!id)return;
+      var loc=H[id];
+      if(loc&&(_apuNum(loc.ts))>(_apuNum(r.ts)))return;
+      v.eliminado=!!r.eliminado;v.ts=_apuNum(r.ts);
+      if(JSON.stringify(loc)!==JSON.stringify(v)){H[id]=v;cambio=true}});
+    state.apus=H;_apuSaveLocal();
+    if(cambio){try{if(document.getElementById('_apuOv'))_apuUI(window._apuP)}catch(e){}}
+  }catch(e){}}
+try{var _apuPullBase=syncPull;syncPull=async function(){var r=await _apuPullBase.apply(this,arguments);try{await _apuPull()}catch(e){}return r}}catch(_apw){}
+try{setTimeout(function(){try{_apuPull()}catch(e){}},2800)}catch(_apt){}
+/* ---------- el menu que sale al tocar la tarjeta ---------- */
+function _apuMenu(p){
+  if(!p||!p.id)return;
+  var r=_apuDe(p.id),f=(typeof _fzDe==='function')?_fzDe(p.id):null;
+  var ov=document.createElement('div');ov.id='_apuMenuOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483405;background:rgba(15,25,45,.55);display:flex;align-items:flex-end;justify-content:center';
+  var H='<div style="background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:15px 14px 18px;padding-bottom:max(18px,env(safe-area-inset-bottom))">';
+  H+='<div style="font-size:11px;font-weight:800;color:#0C5132;letter-spacing:.03em">'+esc(codeOf(p))+'</div>';
+  H+='<div style="font-size:13px;font-weight:700;color:#1B2433;margin:3px 0 14px;line-height:1.4">'+esc(String(p.nombre||'').slice(0,120))+(String(p.nombre||'').length>120?'…':'')+'</div>';
+  H+='<button id="_amApu" style="width:100%;text-align:left;background:#EAF3EC;border:1.5px solid #BFD8C6;border-radius:12px;padding:13px 14px;margin-bottom:9px;cursor:pointer;display:flex;gap:11px;align-items:center">'+
+     '<span style="font-size:21px;flex:none">📊</span><div style="flex:1;min-width:0">'+
+     '<b style="display:block;font-size:14px;color:#0C5132">Ver el APU</b>'+
+     '<small style="color:#5C6779;font-size:11.5px">'+(r?((r.insumos||[]).filter(function(x){return !x.eliminado}).length+' insumos · '+_apuMon(_apuTotal(r))+' por '+esc(r.unidad||p.unidad||'und')):'Todavía sin APU cargado')+'</small></div></button>';
+  H+='<button id="_amFz" style="width:100%;text-align:left;background:#EAF1FB;border:1.5px solid #BFD3EE;border-radius:12px;padding:13px 14px;margin-bottom:14px;cursor:pointer;display:flex;gap:11px;align-items:center">'+
+     '<span style="font-size:21px;flex:none">⚖</span><div style="flex:1;min-width:0">'+
+     '<b style="display:block;font-size:14px;color:#1F3864">Definir las partes y sus pesos</b>'+
+     '<small style="color:#5C6779;font-size:11.5px">'+(f?esc(_fzResumen(p.id)):'Suministro, montaje, pruebas… siempre suman 100')+'</small></div></button>';
+  H+='<button id="_amX" style="width:100%;background:#eef2f7;border:0;border-radius:11px;padding:13px;font-weight:700">Cerrar</button></div>';
+  ov.innerHTML=H;document.body.appendChild(ov);
+  ov.onclick=function(e){if(e.target===ov)ov.remove()};
+  document.getElementById('_amX').onclick=function(){ov.remove()};
+  document.getElementById('_amApu').onclick=function(){ov.remove();_apuUI(p)};
+  document.getElementById('_amFz').onclick=function(){ov.remove();if(typeof _fzUI==='function')_fzUI(p)};
+}
+/* ---------- la pantalla del APU ---------- */
+function _apuUI(p){
+  if(!p||!p.id)return;window._apuP=p;
+  var id=p.id,adm=(typeof esAdmin==='function'&&esAdmin());
+  var base=_apuAll()[id];
+  var r=base?JSON.parse(JSON.stringify(base)):{partida_id:id,unidad:(p.unidad||''),rendimiento:(p.rend||null),cuadrilla:'',insumos:[]};
+  if(r.eliminado){r.eliminado=false;r.insumos=r.insumos||[]}
+  var ov=document.getElementById('_apuOv');if(ov)ov.remove();
+  ov=document.createElement('div');ov.id='_apuOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483412;background:var(--bg,#eef2f7);display:flex;flex-direction:column';
+  ov.innerHTML='<div style="background:#0C5132;color:#fff;padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));display:flex;align-items:center;gap:10px;flex:none">'+
+    '<button id="_apuX" style="background:rgba(255,255,255,.16);color:#fff;border:0;border-radius:12px;width:42px;height:42px;font-size:19px;cursor:pointer;flex:none">&lsaquo;</button>'+
+    '<div style="min-width:0"><div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#A9DDBC">'+esc(codeOf(p))+'</div>'+
+    '<div style="font-size:15px;font-weight:700">APU de la partida</div></div></div>'+
+    '<div id="_apuBody" style="flex:1;overflow:auto;padding:12px 11px 22px"></div>'+
+    '<div id="_apuPie" style="flex:none;padding:10px 11px 12px;padding-bottom:max(12px,env(safe-area-inset-bottom));background:#fff;border-top:1px solid var(--line)"></div>';
+  document.body.appendChild(ov);
+  document.getElementById('_apuX').onclick=function(){ov.remove()};
+  var vivos=function(){return (r.insumos||[]).filter(function(x){return !x.eliminado})};
+  var pinta=function(){
+    var w=document.getElementById('_apuBody');if(!w)return;
+    var tot=_apuTotal(r),sum=_apuSum(r),pc=_apuPctSum(r);
+    var puC=(p.pu!=null)?Number(p.pu):null;
+    var H='';
+    /* cabecera: rendimiento, unidad, cuadrilla */
+    H+='<div style="background:#fff;border:1.5px solid var(--line);border-radius:13px;padding:11px 12px;margin-bottom:11px">';
+    H+='<div style="font-size:12.5px;font-weight:700;color:#1B2433;line-height:1.4;margin-bottom:8px">'+esc(String(p.nombre||'').slice(0,120))+(String(p.nombre||'').length>120?'…':'')+'</div>';
+    H+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px">'+
+       '<div style="background:#F4F7FB;border-radius:9px;padding:7px 8px"><div style="font-size:9.5px;font-weight:800;color:#5C6779">UNIDAD</div>'+
+       '<div style="font-size:13px;font-weight:800;color:#1B2433">'+esc(r.unidad||p.unidad||'—')+'</div></div>'+
+       '<div style="background:#F4F7FB;border-radius:9px;padding:7px 8px"><div style="font-size:9.5px;font-weight:800;color:#5C6779">RENDIM./DÍA</div>'+
+       '<div style="font-size:13px;font-weight:800;color:#1B2433">'+(r.rendimiento!=null&&r.rendimiento!==''?_apuNum(r.rendimiento):'—')+'</div></div>'+
+       '<div style="background:#F4F7FB;border-radius:9px;padding:7px 8px"><div style="font-size:9.5px;font-weight:800;color:#5C6779">CUADRILLA</div>'+
+       '<div style="font-size:13px;font-weight:800;color:#1B2433">'+esc(r.cuadrilla||'—')+'</div></div></div>';
+    if(adm)H+='<button id="_apuCab" style="width:100%;margin-top:8px;background:#EAF1FB;color:#1F3864;border:1px solid #BFD3EE;border-radius:9px;padding:8px;font-weight:800;font-size:11.5px;cursor:pointer">✎ Cambiar unidad, rendimiento o cuadrilla</button>';
+    H+='</div>';
+    /* los insumos por grupo */
+    if(!vivos().length){
+      H+='<div style="text-align:center;color:var(--muted);font-size:13px;padding:22px 12px;line-height:1.6">Esta partida todavía no tiene APU.<br>'+(adm?'Agrega sus insumos con el botón de abajo.':'El administrador es quien lo carga.')+'</div>';
+    }
+    _APU_GRUPOS.forEach(function(g){
+      var arr=vivos().filter(function(x){return (x.grupo||'MAT')===g[0]});
+      if(!arr.length)return;
+      var sg=0;arr.forEach(function(x){sg+=_apuParcial(x)});
+      H+='<div style="display:flex;align-items:center;gap:7px;margin:12px 2px 7px">'+
+         '<span style="width:9px;height:9px;border-radius:50%;background:'+g[2]+';flex:none"></span>'+
+         '<b style="font-size:12px;color:'+g[2]+';flex:1">'+g[1]+'</b>'+
+         '<b style="font-size:12px;color:'+g[2]+'">'+_apuMon(sg)+'</b></div>';
+      arr.forEach(function(x){
+        var i=(r.insumos||[]).indexOf(x);
+        var par=_apuParcial(x);
+        H+='<div style="background:#fff;border:1.5px solid '+(x.suministro?'#BFD8C6':'var(--line)')+';border-radius:12px;padding:10px 11px;margin-bottom:8px'+(x.suministro?';box-shadow:inset 3px 0 0 #0C5132':'')+'">';
+        H+='<div style="display:flex;gap:9px;align-items:flex-start">';
+        H+='<label style="flex:none;display:flex;align-items:center;padding-top:1px"><input type="checkbox" class="_apuChk" data-i="'+i+'" '+(x.suministro?'checked':'')+' title="Marca si este insumo es SUMINISTRO" style="width:19px;height:19px;cursor:pointer"></label>';
+        H+='<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:700;color:#1B2433;line-height:1.35;overflow-wrap:anywhere">'+esc(x.descripcion||'')+'</div>';
+        H+='<div style="display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:5px;font-size:10.5px;color:#5C6779">'+
+           '<span><b style="color:#1B2433">'+_apuNum(x.cantidad)+'</b> '+esc(x.unidad||'')+'</span>'+
+           (x.cuadrilla?('<span>cuad. <b style="color:#1B2433">'+esc(x.cuadrilla)+'</b></span>'):'')+
+           '<span>P.U. <b style="color:#1B2433">'+_apuMon(x.precio)+'</b></span>'+
+           '<span style="margin-left:auto">Parcial <b style="color:#0C5132;font-size:12px">'+_apuMon(par)+'</b></span></div>';
+        if(x.suministro)H+='<div style="margin-top:5px;font-size:10px;font-weight:800;color:#0C5132">SUMINISTRO · '+(tot>0?(Math.round(par/tot*1000)/10):0)+'% del costo</div>';
+        H+='</div>';
+        if(adm)H+='<div style="flex:none;display:flex;flex-direction:column;gap:5px">'+
+          '<button class="_apuEd" data-i="'+i+'" title="Modificar valor" style="background:#EAF1FB;color:#1F3864;border:1px solid #BFD3EE;border-radius:8px;width:30px;height:30px;font-size:13px;cursor:pointer">✎</button>'+
+          '<button class="_apuDel" data-i="'+i+'" title="Quitar del APU" style="background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:8px;width:30px;height:30px;font-weight:900;cursor:pointer">✕</button></div>';
+        H+='</div></div>';
+      });
+    });
+    if(adm)H+='<button id="_apuAdd" style="width:100%;background:#EAF3EC;color:#0C5132;border:1.5px dashed #7FB894;border-radius:11px;padding:12px;font-weight:800;font-size:13px;cursor:pointer;margin-top:6px">+ Agregar insumo</button>';
+    w.innerHTML=H;
+    /* el pie: total, suministro y el puente con los pesos */
+    var pie=document.getElementById('_apuPie');
+    var difTxt='';
+    if(puC!=null&&isFinite(puC)&&puC>0&&tot>0){
+      var d=tot-puC,dp=Math.abs(d)/puC*100;
+      difTxt=(Math.abs(d)<0.01)?'<span style="color:#0C5132;font-weight:800">= al contrato</span>'
+        :('<span style="color:'+(d>0?'#B42318':'#B45309')+';font-weight:800">'+(d>0?'+':'')+_apuMon(d)+' vs contrato ('+(Math.round(dp*10)/10)+'%)</span>')}
+    pie.innerHTML='<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:7px">'+
+      '<span style="font-size:11.5px;color:#5C6779;font-weight:700">Costo del APU</span>'+
+      '<b style="font-size:17px;color:#0C5132">'+_apuMon(tot)+'</b>'+
+      '<span style="font-size:11px;color:#5C6779">por '+esc(r.unidad||p.unidad||'und')+'</span>'+
+      '<span style="margin-left:auto;font-size:10.5px">'+difTxt+'</span></div>'+
+      '<div style="background:'+(sum>0?'#EAF3EC':'#F4F7FB')+';border:1px solid '+(sum>0?'#BFD8C6':'var(--line)')+';border-radius:11px;padding:9px 11px">'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+      '<div style="flex:1;min-width:0"><div style="font-size:11.5px;font-weight:800;color:#0C5132">Suministro marcado</div>'+
+      '<div style="font-size:10.5px;color:#5C6779">'+_apuMon(sum)+' de '+_apuMon(tot)+'</div></div>'+
+      '<b style="font-size:19px;color:#0C5132;flex:none">'+(Math.round(pc*10)/10)+'%</b></div>'+
+      (sum>0?('<button id="_apuAPeso" style="width:100%;margin-top:8px;background:#0C5132;color:#fff;border:0;border-radius:9px;padding:11px;font-weight:800;font-size:12.5px;cursor:pointer">⚖ Usar como peso: Suministro '+(Math.round(pc*10)/10)+'% · Montaje '+(Math.round((100-pc)*10)/10)+'%</button>'):
+        '<div style="margin-top:6px;font-size:10.5px;color:#5C6779">Marca con el check los insumos que son suministro y aquí sale su peso.</div>')+
+      '</div>'+
+      (adm?'<button id="_apuOk" style="width:100%;margin-top:9px;background:#0C5132;color:#fff;border:0;border-radius:11px;padding:13px;font-weight:800;font-size:13.5px;cursor:pointer">Guardar el APU</button>':
+           '<div style="margin-top:8px;font-size:10.5px;color:var(--muted);text-align:center">Solo el administrador puede modificar el APU</div>');
+    /* enganches */
+    Array.prototype.forEach.call(w.querySelectorAll('._apuChk'),function(c){c.onchange=async function(){
+      var x=r.insumos[+c.getAttribute('data-i')];if(!x)return;
+      x.suministro=c.checked;pinta();
+      if(!adm){try{await _apuGuardar(id,r,false)}catch(e){}}}});
+    if(adm){
+      Array.prototype.forEach.call(w.querySelectorAll('._apuDel'),function(b){b.onclick=function(){
+        var i=+b.getAttribute('data-i'),x=r.insumos[i];if(!x)return;
+        if(!confirm('Quitar "'+String(x.descripcion||'').slice(0,60)+'" del APU?'))return;
+        x.eliminado=true;x.elim_por=(state.user&&state.user.supervisor)||'';x.elim_ts=Date.now();pinta()}});
+      Array.prototype.forEach.call(w.querySelectorAll('._apuEd'),function(b){b.onclick=function(){
+        _apuEditar(r,+b.getAttribute('data-i'),pinta)}});
+      var add=document.getElementById('_apuAdd');
+      if(add)add.onclick=function(){
+        r.insumos=r.insumos||[];
+        r.insumos.push({id:_apuNuevoId(),grupo:'MAT',descripcion:'',unidad:'',cuadrilla:'',cantidad:1,precio:0,parcial:null,suministro:false,eliminado:false});
+        pinta();setTimeout(function(){_apuEditar(r,r.insumos.length-1,pinta)},80)};
+      var cab=document.getElementById('_apuCab');
+      if(cab)cab.onclick=function(){_apuCabecera(r,pinta)};
+      var ok=document.getElementById('_apuOk');
+      if(ok)ok.onclick=async function(){
+        ok.disabled=true;ok.textContent='Guardando…';
+        try{await _apuGuardar(id,r,false)}
+        catch(e){ok.disabled=false;ok.textContent='Guardar el APU';
+          if(typeof toast==='function')toast('No se pudo guardar — revisa la señal');return}
+        try{if(typeof renderList==='function')renderList()}catch(e){}
+        ov.remove();
+        if(typeof toast==='function')toast('APU guardado · '+_apuMon(_apuTotal(r))+' por '+(r.unidad||''))};
+    }
+    var ap=document.getElementById('_apuAPeso');
+    if(ap)ap.onclick=async function(){
+      var pcs=Math.round(_apuPctSum(r)*10)/10;
+      if(!confirm('Usar el APU para repartir los pesos?\n\nSuministro '+pcs+'%\nMontaje '+(Math.round((100-pcs)*10)/10)+'%\n\nSe crean o actualizan las Partes de la partida.'))return;
+      try{
+        var fz=(typeof _fzDe==='function')?_fzDe(id):null;
+        var cant=(typeof metaOf==='function'&&metaOf(id))?metaOf(id).total:(p.metrado||0);
+        var und=r.unidad||p.unidad||'UND';
+        var fases;
+        if(fz&&fz.fases&&fz.fases.length>=2){
+          fases=JSON.parse(JSON.stringify(fz.fases));
+          fases[0].peso=pcs;fases[1].peso=Math.round((100-pcs)*10)/10;
+        }else{
+          fases=[{id:'F'+Date.now().toString(36)+'a',nombre:'Suministro',unidad:und,cantidad:cant,peso:pcs,avance:0},
+                 {id:'F'+Date.now().toString(36)+'b',nombre:'Montaje',unidad:und,cantidad:cant,peso:Math.round((100-pcs)*10)/10,avance:0}]}
+        await _fzGuardar(id,fases,false);
+        if(adm)await _apuGuardar(id,r,false);
+        try{if(typeof renderList==='function')renderList()}catch(e){}
+        if(typeof toast==='function')toast('⚖ Pesos puestos desde el APU');
+      }catch(e){if(typeof toast==='function')toast('No se pudo aplicar')}};
+  };
+  pinta();
+}
+/* editar un insumo (solo admin) */
+function _apuEditar(r,i,onOk){
+  var x=r.insumos[i];if(!x)return;
+  var ov=document.createElement('div');ov.id='_apuEdOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483420;background:rgba(15,25,45,.55);display:flex;align-items:flex-end;justify-content:center';
+  var campo=function(l,cls,val,tipo,ph){
+    return '<div style="margin-bottom:9px"><label style="font-size:11px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">'+l+'</label>'+
+      '<input class="'+cls+'" type="'+(tipo||'text')+'" '+(tipo==='number'?'step="any" ':'')+'value="'+esc(val==null?'':String(val))+'" placeholder="'+esc(ph||'')+'" style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:10px;padding:11px;font-size:13.5px"></div>'};
+  var H='<div style="background:#fff;width:100%;max-width:480px;max-height:92vh;overflow:auto;border-radius:16px 16px 0 0;padding:15px 14px 18px;padding-bottom:max(18px,env(safe-area-inset-bottom))">';
+  H+='<div style="font-weight:900;font-size:15px;color:#0C5132;margin-bottom:12px">Modificar el insumo</div>';
+  H+='<div style="margin-bottom:9px"><label style="font-size:11px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Tipo</label>'+
+     '<select class="_eG" style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:10px;padding:11px;font-size:13.5px;background:#fff">'+
+     _APU_GRUPOS.map(function(g){return '<option value="'+g[0]+'"'+(((x.grupo||'MAT')===g[0])?' selected':'')+'>'+g[1]+'</option>'}).join('')+'</select></div>';
+  H+=campo('Descripción','_eD',x.descripcion,'text','Ej.: Tubería conduit flexible 3/4"');
+  H+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">';
+  H+='<div><label style="font-size:11px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Unidad</label>'+
+     '<select class="_eUS" style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:10px;padding:11px;font-size:13.5px;background:#fff">'+
+     ((typeof _fzUndOpts==='function')?_fzUndOpts(x.unidad):'<option>'+esc(x.unidad||'')+'</option>')+'</select>'+
+     '<input class="_eU" value="'+esc(x.unidad||'')+'" placeholder="Escribe la unidad" style="width:100%;box-sizing:border-box;border:1.5px solid #1F3864;border-radius:10px;padding:10px;font-size:13px;margin-top:5px;display:none"></div>';
+  H+='<div>'+campo('Cuadrilla','_eQ',x.cuadrilla,'text','Ej.: 0.1')+'</div>';
+  H+='</div>';
+  H+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">'+
+     '<div>'+campo('Cantidad','_eC',x.cantidad,'number','')+'</div>'+
+     '<div>'+campo('Precio unitario','_eP',x.precio,'number','')+'</div></div>';
+  H+=campo('Parcial (déjalo vacío y se calcula solo)','_ePar',(x.parcial==null?'':x.parcial),'number','cantidad × precio');
+  H+='<label style="display:flex;align-items:center;gap:9px;background:#EAF3EC;border:1px solid #BFD8C6;border-radius:10px;padding:11px;margin:4px 0 13px;cursor:pointer">'+
+     '<input type="checkbox" class="_eS" '+(x.suministro?'checked':'')+' style="width:19px;height:19px">'+
+     '<span style="font-size:12.5px;font-weight:700;color:#0C5132">Este insumo es SUMINISTRO</span></label>';
+  H+='<div style="display:flex;gap:8px"><button id="_eX" style="flex:1;background:#eef2f7;border:0;border-radius:11px;padding:13px;font-weight:700">Cancelar</button>'+
+     '<button id="_eOk" style="flex:1;background:#0C5132;color:#fff;border:0;border-radius:11px;padding:13px;font-weight:800">Aplicar</button></div></div>';
+  ov.innerHTML=H;document.body.appendChild(ov);
+  ov.onclick=function(e){if(e.target===ov)ov.remove()};
+  var us=ov.querySelector('._eUS'),ut=ov.querySelector('._eU');
+  var cono=us&&Array.prototype.some.call(us.options,function(o){return o.value===String(x.unidad||'')});
+  if(!cono&&x.unidad){us.value='__OTRA__';ut.style.display='block'}
+  if(us)us.onchange=function(){if(us.value==='__OTRA__'){ut.style.display='block';ut.value='';ut.focus()}else{ut.style.display='none';ut.value=us.value}};
+  ov.querySelector('#_eX').onclick=function(){ov.remove()};
+  ov.querySelector('#_eOk').onclick=function(){
+    x.grupo=ov.querySelector('._eG').value;
+    x.descripcion=ov.querySelector('._eD').value.trim();
+    x.unidad=(us&&us.value==='__OTRA__')?ut.value.trim():(us?us.value:ut.value.trim());
+    x.cuadrilla=ov.querySelector('._eQ').value.trim();
+    x.cantidad=_apuNum(ov.querySelector('._eC').value);
+    x.precio=_apuNum(ov.querySelector('._eP').value);
+    var pv=ov.querySelector('._ePar').value;
+    x.parcial=(pv===''?null:_apuNum(pv));
+    x.suministro=ov.querySelector('._eS').checked;
+    if(!x.descripcion){if(typeof toast==='function')toast('Ponle una descripción');return}
+    ov.remove();if(onOk)onOk()};
+}
+/* editar la cabecera del APU (solo admin) */
+function _apuCabecera(r,onOk){
+  var ov=document.createElement('div');ov.id='_apuCabOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483420;background:rgba(15,25,45,.55);display:flex;align-items:flex-end;justify-content:center';
+  ov.innerHTML='<div style="background:#fff;width:100%;max-width:460px;border-radius:16px 16px 0 0;padding:15px 14px 18px;padding-bottom:max(18px,env(safe-area-inset-bottom))">'+
+    '<div style="font-weight:900;font-size:15px;color:#0C5132;margin-bottom:12px">Cabecera del APU</div>'+
+    '<label style="font-size:11px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Unidad de la partida</label>'+
+    '<select class="_cUS" style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:10px;padding:11px;font-size:13.5px;margin-bottom:9px;background:#fff">'+
+    ((typeof _fzUndOpts==='function')?_fzUndOpts(r.unidad):'<option>'+esc(r.unidad||'')+'</option>')+'</select>'+
+    '<input class="_cU" value="'+esc(r.unidad||'')+'" placeholder="Escribe la unidad" style="width:100%;box-sizing:border-box;border:1.5px solid #1F3864;border-radius:10px;padding:10px;font-size:13px;margin-bottom:9px;display:none">'+
+    '<label style="font-size:11px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Rendimiento por día</label>'+
+    '<input class="_cR" type="number" step="any" value="'+(r.rendimiento==null?'':r.rendimiento)+'" style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:10px;padding:11px;font-size:13.5px;margin-bottom:9px">'+
+    '<label style="font-size:11px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Cuadrilla</label>'+
+    '<input class="_cQ" value="'+esc(r.cuadrilla||'')+'" placeholder="Ej.: 1 op. + 1 ay." style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:10px;padding:11px;font-size:13.5px;margin-bottom:14px">'+
+    '<div style="display:flex;gap:8px"><button id="_cX" style="flex:1;background:#eef2f7;border:0;border-radius:11px;padding:13px;font-weight:700">Cancelar</button>'+
+    '<button id="_cOk" style="flex:1;background:#0C5132;color:#fff;border:0;border-radius:11px;padding:13px;font-weight:800">Aplicar</button></div></div>';
+  document.body.appendChild(ov);
+  ov.onclick=function(e){if(e.target===ov)ov.remove()};
+  var us=ov.querySelector('._cUS'),ut=ov.querySelector('._cU');
+  var cono=Array.prototype.some.call(us.options,function(o){return o.value===String(r.unidad||'')});
+  if(!cono&&r.unidad){us.value='__OTRA__';ut.style.display='block'}
+  us.onchange=function(){if(us.value==='__OTRA__'){ut.style.display='block';ut.value='';ut.focus()}else{ut.style.display='none';ut.value=us.value}};
+  ov.querySelector('#_cX').onclick=function(){ov.remove()};
+  ov.querySelector('#_cOk').onclick=function(){
+    r.unidad=(us.value==='__OTRA__')?ut.value.trim():us.value;
+    var rv=ov.querySelector('._cR').value;r.rendimiento=(rv===''?null:_apuNum(rv));
+    r.cuadrilla=ov.querySelector('._cQ').value.trim();
+    ov.remove();if(onOk)onOk()};
+}
+/* el sello de APU en la tarjeta */
+function _apuInject(){try{
+  var w=$('list');if(!w)return;
+  Array.prototype.forEach.call(w.querySelectorAll('._apuTag'),function(x){x.remove()});
+  Array.prototype.forEach.call(w.querySelectorAll('.leaf[data-id]'),function(el){
+    var id=el.getAttribute('data-id');var r=_apuDe(id);
+    if(!r||!(r.insumos||[]).filter(function(x){return !x.eliminado}).length)return;
+    var nm=el.querySelector('.cname');if(!nm)return;
+    var pc=Math.round(_apuPctSum(r)*10)/10;
+    var b=document.createElement('span');b.className='_apuTag';
+    b.title='APU: '+_apuMon(_apuTotal(r))+' por '+(r.unidad||'')+(pc>0?(' · suministro '+pc+'%'):'');
+    b.style.cssText='display:inline-block;margin-left:6px;font-size:9.5px;font-weight:800;color:#0C5132;background:#EAF3EC;border:1px solid #BFD8C6;border-radius:5px;padding:1px 5px;vertical-align:middle';
+    b.textContent='APU '+_apuMon(_apuTotal(r));
+    nm.appendChild(b)})}catch(e){}}
 
 function _hhDe(p){if(p&&p.id&&typeof _hhOff==='function'&&_hhOff(p.id))return 0;var h=p&&p.hh;h=Number(h);return isFinite(h)&&h>0?h:0}
 /* La base del porcentaje: contra las HH de la especialidad o contra las de
