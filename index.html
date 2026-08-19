@@ -2854,7 +2854,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812e7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812e8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -5105,6 +5105,35 @@ function _apuParcial(x){
 function _apuTotal(r){var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado)t+=_apuParcial(x)});return Math.round(t*1e6)/1e6}
 function _apuSum(r){var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado&&x.suministro)t+=_apuParcial(x)});return Math.round(t*1e6)/1e6}
 function _apuPctSum(r){var t=_apuTotal(r);return t>0?(_apuSum(r)/t*100):0}
+/* --- APARTADOS: los crea el supervisor (Suministro, Montaje, Pruebas...).
+   Cada insumo pertenece a UNO solo; el que ya esta tomado no se puede asignar
+   a otro sin sacarlo antes. --- */
+var _APU_COL=[['#0C5132','#EAF3EC'],['#1F3864','#EAF1FB'],['#7A4B00','#FCEFD9'],
+              ['#5B3A8A','#F1EAFA'],['#B42318','#FBE7E3'],['#0E7490','#E6F6FA'],
+              ['#8A3A5E','#FAE8F0'],['#3F6212','#EEF7E2']];
+function _apuGrupos(r){
+  if(!r)return [];
+  if(!r.grupos){
+    r.grupos=[];
+    /* lo que venia marcado como suministro pasa a ser el apartado Suministro */
+    var hay=(r.insumos||[]).some(function(x){return x.suministro});
+    if(hay){
+      var g={id:'G1',nombre:'Suministro',col:0};
+      r.grupos.push(g);
+      (r.insumos||[]).forEach(function(x){if(x.suministro)x.grupo_id='G1'})}
+  }
+  return r.grupos}
+function _apuGrupoDe(r,x){
+  if(!x||!x.grupo_id)return null;
+  return (_apuGrupos(r)||[]).filter(function(g){return g.id===x.grupo_id})[0]||null}
+function _apuGrupoTot(r,gid){
+  var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado&&x.grupo_id===gid)t+=_apuParcial(x)});
+  return Math.round(t*1e6)/1e6}
+function _apuGrupoPct(r,gid){var t=_apuTotal(r);return t>0?(_apuGrupoTot(r,gid)/t*100):0}
+function _apuGrupoCol(g){return _APU_COL[(g&&g.col)||0]||_APU_COL[0]}
+function _apuNuevoGid(r){
+  var n=1,us={};(_apuGrupos(r)||[]).forEach(function(g){us[g.id]=1});
+  while(us['G'+n])n++;return 'G'+n}
 function _apuMon(n){n=Number(n);if(!isFinite(n))return '—';
   var s=Math.abs(n).toFixed(2).split('.');
   return (n<0?'-':'')+s[0].replace(/\B(?=(\d{3})+(?!\d))/g,',')+'.'+s[1]}
@@ -5198,6 +5227,31 @@ function _apuUI(p){
       'El costo de abajo es el del análisis completo, no el de esta actividad sola.</div>';
     if(adm)H+='<button id="_apuCab" style="width:100%;margin-top:8px;background:#EAF1FB;color:#1F3864;border:1px solid #BFD3EE;border-radius:9px;padding:8px;font-weight:800;font-size:11.5px;cursor:pointer">✎ Cambiar unidad, rendimiento o cuadrilla</button>';
     H+='</div>';
+    /* la barra de apartados */
+    var gs=_apuGrupos(r);
+    H+='<div style="background:#fff;border:1.5px solid var(--line);border-radius:13px;padding:10px 11px;margin-bottom:11px">';
+    H+='<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">'+
+       '<b style="font-size:12px;color:#1F3864;flex:1">Apartados del APU</b>'+
+       '<button id="_apuGAdd" title="Crear un apartado" style="flex:none;background:#0C5132;color:#fff;border:0;border-radius:9px;width:32px;height:32px;font-size:18px;font-weight:900;cursor:pointer;line-height:1">+</button></div>';
+    if(!gs.length){
+      H+='<div style="font-size:11.5px;color:var(--muted);line-height:1.5">Crea uno con el <b>+</b> —por ejemplo <b>Suministro</b>— y después toca los insumos que le pertenecen. Cada insumo puede estar en un solo apartado.</div>';
+    }else{
+      H+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      gs.forEach(function(g){
+        var c=_apuGrupoCol(g),on=(window._apuGSel===g.id);
+        var pg=Math.round(_apuGrupoPct(r,g.id)*10)/10;
+        H+='<button class="_apuGSel" data-g="'+esc(g.id)+'" style="flex:1;min-width:44%;text-align:left;border-radius:10px;padding:8px 10px;cursor:pointer;border:2px solid '+c[0]+';background:'+(on?c[0]:c[1])+';color:'+(on?'#fff':c[0])+'">'+
+           '<div style="font-size:12px;font-weight:900;display:flex;gap:6px;align-items:center"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(g.nombre)+'</span><span>'+pg+'%</span></div>'+
+           '<div style="font-size:10px;opacity:.9;margin-top:2px">'+_apuMon(_apuGrupoTot(r,g.id))+(on?' · tocando los insumos los asignas':'')+'</div></button>'});
+      H+='</div>';
+      if(window._apuGSel){
+        var gsel=gs.filter(function(g){return g.id===window._apuGSel})[0];
+        if(gsel)H+='<div style="margin-top:8px;display:flex;gap:7px">'+
+          '<button id="_apuGFin" style="flex:1;background:#eef2f7;border:0;border-radius:9px;padding:9px;font-weight:800;font-size:11.5px;cursor:pointer">Listo</button>'+
+          '<button id="_apuGRen" style="flex:none;background:#EAF1FB;color:#1F3864;border:1px solid #BFD3EE;border-radius:9px;padding:9px 11px;font-weight:800;font-size:11.5px;cursor:pointer">Renombrar</button>'+
+          '<button id="_apuGDel" style="flex:none;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:9px;padding:9px 11px;font-weight:800;font-size:11.5px;cursor:pointer">Borrar</button></div>'}
+    }
+    H+='</div>';
     /* los insumos por grupo */
     if(!vivos().length){
       H+='<div style="text-align:center;color:var(--muted);font-size:13px;padding:22px 12px;line-height:1.6">Esta partida todavía no tiene APU.<br>'+(adm?'Agrega sus insumos con el botón de abajo.':'El administrador es quien lo carga.')+'</div>';
@@ -5213,16 +5267,18 @@ function _apuUI(p){
       arr.forEach(function(x){
         var i=(r.insumos||[]).indexOf(x);
         var par=_apuParcial(x);
-        H+='<div style="background:#fff;border:1.5px solid '+(x.suministro?'#BFD8C6':'var(--line)')+';border-radius:12px;padding:10px 11px;margin-bottom:8px'+(x.suministro?';box-shadow:inset 3px 0 0 #0C5132':'')+'">';
+        var gx=_apuGrupoDe(r,x),cx=gx?_apuGrupoCol(gx):null;
+        var marcable=!!window._apuGSel;
+        H+='<div class="_apuFila" data-i="'+i+'" style="background:'+(cx?cx[1]:'#fff')+';border:1.5px solid '+(cx?cx[0]:'var(--line)')+';border-radius:12px;padding:10px 11px;margin-bottom:8px'+(cx?(';box-shadow:inset 4px 0 0 '+cx[0]):'')+(marcable?';cursor:pointer':'')+'">';
         H+='<div style="display:flex;gap:9px;align-items:flex-start">';
-        H+='<label style="flex:none;display:flex;align-items:center;padding-top:1px"><input type="checkbox" class="_apuChk" data-i="'+i+'" '+(x.suministro?'checked':'')+' title="Marca si este insumo es SUMINISTRO" style="width:19px;height:19px;cursor:pointer"></label>';
+        if(marcable)H+='<span style="flex:none;width:21px;height:21px;border-radius:6px;border:2px solid '+(gx?cx[0]:'#C9D2E0')+';background:'+(gx?cx[0]:'#fff')+';color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:900">'+(gx?'✓':'')+'</span>';
         H+='<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:700;color:#1B2433;line-height:1.35;overflow-wrap:anywhere">'+esc(x.descripcion||'')+'</div>';
         H+='<div style="display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:5px;font-size:10.5px;color:#5C6779">'+
            '<span><b style="color:#1B2433">'+_apuNum(x.cantidad)+'</b> '+esc(x.unidad||'')+'</span>'+
            (x.cuadrilla?('<span>cuad. <b style="color:#1B2433">'+esc(x.cuadrilla)+'</b></span>'):'')+
            '<span>P.U. <b style="color:#1B2433">'+_apuMon(x.precio)+'</b></span>'+
            '<span style="margin-left:auto">Parcial <b style="color:#0C5132;font-size:12px">'+_apuMon(par)+'</b></span></div>';
-        if(x.suministro)H+='<div style="margin-top:5px;font-size:10px;font-weight:800;color:#0C5132">SUMINISTRO · '+(tot>0?(Math.round(par/tot*1000)/10):0)+'% del costo</div>';
+        if(gx)H+='<div style="margin-top:5px;font-size:10px;font-weight:800;color:'+cx[0]+'">'+esc(String(gx.nombre).toUpperCase())+' · '+(tot>0?(Math.round(par/tot*1000)/10):0)+'% del costo</div>';
         H+='</div>';
         if(adm)H+='<div style="flex:none;display:flex;flex-direction:column;gap:5px">'+
           '<button class="_apuEd" data-i="'+i+'" title="Modificar valor" style="background:#EAF1FB;color:#1F3864;border:1px solid #BFD3EE;border-radius:8px;width:30px;height:30px;font-size:13px;cursor:pointer">✎</button>'+
@@ -5239,26 +5295,80 @@ function _apuUI(p){
       var d=tot-puC,dp=Math.abs(d)/puC*100;
       difTxt=(Math.abs(d)<0.01)?'<span style="color:#0C5132;font-weight:800">= al contrato</span>'
         :('<span style="color:'+(d>0?'#B42318':'#B45309')+';font-weight:800">'+(d>0?'+':'')+_apuMon(d)+' vs contrato ('+(Math.round(dp*10)/10)+'%)</span>')}
+    var gsp=_apuGrupos(r);
+    var resumenG='';
+    if(gsp.length){
+      resumenG='<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px">';
+      var libre=100;
+      gsp.forEach(function(g){var c=_apuGrupoCol(g),pg=Math.round(_apuGrupoPct(r,g.id)*10)/10;libre-=pg;
+        resumenG+='<div style="display:flex;align-items:center;gap:8px">'+
+          '<span style="width:9px;height:9px;border-radius:50%;background:'+c[0]+';flex:none"></span>'+
+          '<span style="flex:1;font-size:11.5px;font-weight:700;color:#1B2433;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(g.nombre)+'</span>'+
+          '<span style="font-size:10.5px;color:var(--muted);flex:none">'+_apuMon(_apuGrupoTot(r,g.id))+'</span>'+
+          '<b style="font-size:12.5px;color:'+c[0]+';flex:none;min-width:44px;text-align:right">'+pg+'%</b></div>'});
+      libre=Math.round(libre*10)/10;
+      if(libre>0.05)resumenG+='<div style="display:flex;align-items:center;gap:8px;opacity:.7">'+
+        '<span style="width:9px;height:9px;border-radius:50%;background:#98A2B3;flex:none"></span>'+
+        '<span style="flex:1;font-size:11.5px;color:#5C6779">sin apartado</span>'+
+        '<b style="font-size:12.5px;color:#5C6779;flex:none;min-width:44px;text-align:right">'+libre+'%</b></div>';
+      resumenG+='</div>'}
     pie.innerHTML='<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:7px">'+
       '<span style="font-size:11.5px;color:#5C6779;font-weight:700">Costo del APU</span>'+
       '<b style="font-size:17px;color:#0C5132">'+_apuMon(tot)+'</b>'+
       '<span style="font-size:11px;color:#5C6779">por '+esc(r.unidad||p.unidad||'und')+'</span>'+
       '<span style="margin-left:auto;font-size:10.5px">'+difTxt+'</span></div>'+
-      '<div style="background:'+(sum>0?'#EAF3EC':'#F4F7FB')+';border:1px solid '+(sum>0?'#BFD8C6':'var(--line)')+';border-radius:11px;padding:9px 11px">'+
-      '<div style="display:flex;align-items:center;gap:8px">'+
-      '<div style="flex:1;min-width:0"><div style="font-size:11.5px;font-weight:800;color:#0C5132">Suministro marcado</div>'+
-      '<div style="font-size:10.5px;color:#5C6779">'+_apuMon(sum)+' de '+_apuMon(tot)+'</div></div>'+
-      '<b style="font-size:19px;color:#0C5132;flex:none">'+(Math.round(pc*10)/10)+'%</b></div>'+
-      (sum>0?('<button id="_apuAPeso" style="width:100%;margin-top:8px;background:#0C5132;color:#fff;border:0;border-radius:9px;padding:11px;font-weight:800;font-size:12.5px;cursor:pointer">⚖ Usar como peso: Suministro '+(Math.round(pc*10)/10)+'% · Montaje '+(Math.round((100-pc)*10)/10)+'%</button>'):
-        '<div style="margin-top:6px;font-size:10.5px;color:#5C6779">Marca con el check los insumos que son suministro y aquí sale su peso.</div>')+
+      '<div style="background:'+(gsp.length?'#F7FAFC':'#F4F7FB')+';border:1px solid var(--line);border-radius:11px;padding:9px 11px">'+
+      resumenG+
+      (gsp.length?('<button id="_apuAPeso" style="width:100%;background:#0C5132;color:#fff;border:0;border-radius:9px;padding:11px;font-weight:800;font-size:12.5px;cursor:pointer">⚖ Usar estos apartados como los pesos de la partida</button>'):
+        '<div style="font-size:10.5px;color:#5C6779">Crea apartados con el <b>+</b> de arriba y marca qué insumos van en cada uno.</div>')+
       '</div>'+
       (adm?'<button id="_apuOk" style="width:100%;margin-top:9px;background:#0C5132;color:#fff;border:0;border-radius:11px;padding:13px;font-weight:800;font-size:13.5px;cursor:pointer">Guardar el APU</button>':
            '<div style="margin-top:8px;font-size:10.5px;color:var(--muted);text-align:center">Solo el administrador puede modificar el APU</div>');
     /* enganches */
-    Array.prototype.forEach.call(w.querySelectorAll('._apuChk'),function(c){c.onchange=async function(){
-      var x=r.insumos[+c.getAttribute('data-i')];if(!x)return;
-      x.suministro=c.checked;pinta();
-      if(!adm){try{await _apuGuardar(id,r,false)}catch(e){}}}});
+    /* crear, elegir, renombrar y borrar apartados */
+    var gadd=document.getElementById('_apuGAdd');
+    if(gadd)gadd.onclick=async function(){
+      var nm=prompt('Nombre del apartado (ej.: Suministro, Montaje, Pruebas):');
+      if(nm==null)return;nm=String(nm).trim();
+      if(!nm){if(typeof toast==='function')toast('Ponle un nombre');return}
+      var gs2=_apuGrupos(r);
+      if(gs2.some(function(g){return String(g.nombre).toLowerCase()===nm.toLowerCase()})){
+        if(typeof toast==='function')toast('Ya existe un apartado con ese nombre');return}
+      var g={id:_apuNuevoGid(r),nombre:nm,col:gs2.length%_APU_COL.length};
+      gs2.push(g);window._apuGSel=g.id;pinta();
+      try{await _apuGuardar(id,r,false)}catch(e){}
+      if(typeof toast==='function')toast('Ahora toca los insumos que van en "'+nm+'"')};
+    Array.prototype.forEach.call(w.querySelectorAll('._apuGSel'),function(b){b.onclick=function(){
+      var g=b.getAttribute('data-g');
+      window._apuGSel=(window._apuGSel===g)?null:g;pinta()}});
+    var gfin=document.getElementById('_apuGFin');
+    if(gfin)gfin.onclick=function(){window._apuGSel=null;pinta()};
+    var gren=document.getElementById('_apuGRen');
+    if(gren)gren.onclick=async function(){
+      var g=(_apuGrupos(r)||[]).filter(function(z){return z.id===window._apuGSel})[0];if(!g)return;
+      var nm=prompt('Nuevo nombre del apartado:',g.nombre);if(nm==null)return;nm=String(nm).trim();
+      if(!nm)return;g.nombre=nm;pinta();try{await _apuGuardar(id,r,false)}catch(e){}};
+    var gdel=document.getElementById('_apuGDel');
+    if(gdel)gdel.onclick=async function(){
+      var g=(_apuGrupos(r)||[]).filter(function(z){return z.id===window._apuGSel})[0];if(!g)return;
+      var n=vivos().filter(function(x){return x.grupo_id===g.id}).length;
+      if(!confirm('Borrar el apartado "'+g.nombre+'"?'+(n?('\n\nSus '+n+' insumo(s) quedan sin apartado.'):'')))return;
+      (r.insumos||[]).forEach(function(x){if(x.grupo_id===g.id){x.grupo_id='';x.suministro=false}});
+      r.grupos=(r.grupos||[]).filter(function(z){return z.id!==g.id});
+      window._apuGSel=null;pinta();try{await _apuGuardar(id,r,false)}catch(e){}};
+    /* tocar un insumo lo mete o lo saca del apartado activo */
+    Array.prototype.forEach.call(w.querySelectorAll('._apuFila'),function(f){f.onclick=async function(ev){
+      if(!window._apuGSel)return;
+      if(ev.target&&ev.target.closest&&ev.target.closest('button'))return;
+      var x=r.insumos[+f.getAttribute('data-i')];if(!x)return;
+      if(x.grupo_id&&x.grupo_id!==window._apuGSel){
+        var otro=_apuGrupoDe(r,x);
+        if(typeof toast==='function')toast('Ya está en "'+((otro&&otro.nombre)||'otro apartado')+'" — sácalo de ahí primero');
+        return}
+      if(x.grupo_id===window._apuGSel){x.grupo_id='';x.suministro=false}
+      else{x.grupo_id=window._apuGSel;
+        var g2=_apuGrupoDe(r,x);x.suministro=!!(g2&&/suministr/i.test(g2.nombre))}
+      pinta();try{await _apuGuardar(id,r,false)}catch(e){}}});
     if(adm){
       Array.prototype.forEach.call(w.querySelectorAll('._apuDel'),function(b){b.onclick=function(){
         var i=+b.getAttribute('data-i'),x=r.insumos[i];if(!x)return;
@@ -5285,6 +5395,27 @@ function _apuUI(p){
     }
     var ap=document.getElementById('_apuAPeso');
     if(ap)ap.onclick=async function(){
+      var gsx=_apuGrupos(r).filter(function(g){return _apuGrupoTot(r,g.id)>0});
+      if(gsx.length){
+        var cant=(typeof metaOf==='function'&&metaOf(id))?metaOf(id).total:(p.metrado||0);
+        var und=r.unidad||p.unidad||'UND';
+        var res=gsx.map(function(g){return {g:g,pct:_apuGrupoPct(r,g.id)}});
+        var suma=0;res.forEach(function(z){suma+=z.pct});
+        /* lo que no cae en ningun apartado se reparte en la ultima, que es la que cierra */
+        var lista=res.map(function(z,ix){
+          var pz=(ix<res.length-1)?Math.round(z.pct/suma*1000)/10:0;return {n:z.g.nombre,p:pz}});
+        var ac=0;lista.forEach(function(z,ix){if(ix<lista.length-1)ac+=z.p});
+        lista[lista.length-1].p=Math.round((100-ac)*10)/10;
+        if(!confirm('Usar los apartados como pesos?\n\n'+lista.map(function(z){return z.n+': '+z.p+'%'}).join('\n')+'\n\nLa última cierra la actividad con la unidad del contrato.'))return;
+        try{
+          var fases=lista.map(function(z,ix){return {id:'F'+Date.now().toString(36)+ix,nombre:z.n,
+            unidad:und,cantidad:cant,peso:z.p,avance:0}});
+          await _fzGuardar(id,fases,false);
+          if(adm)await _apuGuardar(id,r,false);
+          try{if(typeof renderList==='function')renderList()}catch(e){}
+          if(typeof toast==='function')toast('⚖ Pesos puestos desde el APU')
+        }catch(e){if(typeof toast==='function')toast('No se pudo aplicar')}
+        return}
       var pcs=Math.round(_apuPctSum(r)*10)/10;
       if(!confirm('Usar el APU para repartir los pesos?\n\nSuministro '+pcs+'%\nMontaje '+(Math.round((100-pcs)*10)/10)+'%\n\nSe crean o actualizan las Partes de la partida.'))return;
       try{
