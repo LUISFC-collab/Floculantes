@@ -2852,7 +2852,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812e2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812e3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -4785,6 +4785,20 @@ try{setTimeout(_busqBoton,900);setInterval(_busqBoton,2500)}catch(_bqw){}
    Se guarda una fila por partida en ajustes_create_110826, clave 'fase:<id>', con
    lapida (eliminado/elim_por/elim_ts), ts, cell_at, trigger de updated_at y tiempo
    real: todo comprobado en esa tabla. */
+/* las unidades: primero las que de verdad se usan aqui, luego las menos comunes,
+   y al final "Otra..." que abre una casilla para escribirla */
+var _FZ_UND_TOP=['UND','Glb.','m','m2','m3','kg','Lt'];
+var _FZ_UND_MAS=['pto','pza','ml','cm','mm','ton','gal','par','juego','rollo','caja','saco','bolsa','tramo','hr','dia','jornal','%'];
+function _fzUndOpts(actual){
+  var a=String(actual||'');
+  var conocida=(_FZ_UND_TOP.indexOf(a)>=0)||(_FZ_UND_MAS.indexOf(a)>=0);
+  var H='';
+  H+='<optgroup label="Las mas usadas">'+_FZ_UND_TOP.map(function(u){
+    return '<option value="'+esc(u)+'"'+(u===a?' selected':'')+'>'+esc(u)+'</option>'}).join('')+'</optgroup>';
+  H+='<optgroup label="Otras unidades">'+_FZ_UND_MAS.map(function(u){
+    return '<option value="'+esc(u)+'"'+(u===a?' selected':'')+'>'+esc(u)+'</option>'}).join('')+'</optgroup>';
+  H+='<option value="__OTRA__"'+((!conocida&&a)?' selected':'')+'>Otra...</option>';
+  return H}
 function _fzKey(id){return 'fase:'+id}
 function _fzAll(){if(!state.fases){try{state.fases=JSON.parse(localStorage.getItem('obf4_fases')||'{}')||{}}catch(e){state.fases={}}}return state.fases}
 function _fzSave(){try{localStorage.setItem('obf4_fases',JSON.stringify(_fzAll()))}catch(e){}}
@@ -4873,8 +4887,10 @@ function _fzUI(p){
       H+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px">';
       H+='<div><label style="font-size:10.5px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Cantidad</label>'+
          '<input class="_fzC" data-i="'+i+'" type="number" step="any" value="'+(x.cantidad!=null?x.cantidad:'')+'" style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:9px;padding:9px;font-size:13px"></div>';
+      var _cono=(_FZ_UND_TOP.indexOf(String(x.unidad||''))>=0)||(_FZ_UND_MAS.indexOf(String(x.unidad||''))>=0);
       H+='<div><label style="font-size:10.5px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Unidad</label>'+
-         '<input class="_fzU" data-i="'+i+'" value="'+esc(x.unidad||'')+'" placeholder="UND, m, Glb." style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:9px;padding:9px;font-size:13px"></div>';
+         '<select class="_fzUS" data-i="'+i+'" style="width:100%;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:9px;padding:9px;font-size:13px;background:#fff">'+_fzUndOpts(x.unidad)+'</select>'+
+         '<input class="_fzU" data-i="'+i+'" value="'+esc(x.unidad||'')+'" placeholder="Escribe la unidad" style="width:100%;box-sizing:border-box;border:1.5px solid #1F3864;border-radius:9px;padding:9px;font-size:13px;margin-top:5px;display:'+((!_cono&&x.unidad)?'block':'none')+'"></div>';
       H+='<div><label style="font-size:10.5px;font-weight:800;color:#5C6779;display:block;margin-bottom:3px">Peso %</label>'+
          '<input class="_fzP" data-i="'+i+'" type="number" step="any" value="'+(x.peso!=null?x.peso:'')+'" style="width:100%;box-sizing:border-box;border:1.5px solid #1F3864;border-radius:9px;padding:9px;font-size:13px;font-weight:800;color:#1F3864"></div>';
       H+='</div>';
@@ -4913,6 +4929,12 @@ function _fzUI(p){
       Array.prototype.forEach.call(w.querySelectorAll('._fzP'),function(e){fases[+e.getAttribute('data-i')].peso=(e.value===''?0:Number(e.value))});
       Array.prototype.forEach.call(w.querySelectorAll('._fzA'),function(e){fases[+e.getAttribute('data-i')].avance=(e.value===''?0:Number(e.value))})};
     Array.prototype.forEach.call(w.querySelectorAll('._fzN,._fzU'),function(e){e.oninput=function(){leer()}});
+    Array.prototype.forEach.call(w.querySelectorAll('._fzUS'),function(e){e.onchange=function(){
+      var i=+e.getAttribute('data-i');
+      var txt=w.querySelector('._fzU[data-i="'+i+'"]');
+      if(e.value==='__OTRA__'){if(txt){txt.style.display='block';txt.value='';txt.focus()}fases[i].unidad=''}
+      else{if(txt){txt.style.display='none';txt.value=e.value}fases[i].unidad=e.value}
+      pinta()}});
     Array.prototype.forEach.call(w.querySelectorAll('._fzC,._fzP,._fzA'),function(e){e.onchange=function(){leer();pinta()}});
     Array.prototype.forEach.call(w.querySelectorAll('._fzDel'),function(b){b.onclick=function(){leer();
       if(fases.length<=1){if(typeof toast==='function')toast('Tiene que quedar al menos una parte');return}
@@ -4960,8 +4982,8 @@ function _fzUI(p){
   };
   pinta();
 }
-/* la opcion en el menu de la actividad */
-function _fzGearItem(){try{
+/* (la entrada del engranaje se quito: ahora se abre tocando la tarjeta) */
+function _fzGearItemViejo(){try{
   var sh=document.getElementById('mGear');if(!sh)return;
   var pan=sh.querySelector('.panel');if(!pan)return;
   if(pan.querySelector('#gearFases'))return;
@@ -4977,7 +4999,7 @@ function _fzGearItem(){try{
     if(p)setTimeout(function(){_fzUI(p)},120)};
   if(ref&&ref.parentNode===pan)pan.insertBefore(d,ref.nextSibling);else pan.appendChild(d);
 }catch(e){}}
-try{if(!window._fzWired){window._fzWired=1;setInterval(_fzGearItem,700)}}catch(_fzg){}
+
 /* el sello en la tarjeta cuando la partida tiene partes */
 function _fzInject(){try{
   var w=$('list');if(!w)return;
@@ -4992,7 +5014,17 @@ function _fzInject(){try{
     b.onclick=function(e){e.stopPropagation();
       var p=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0]);
       if(p)_fzUI(p)};
-    nm.appendChild(b)})}catch(e){}}
+    nm.appendChild(b)});
+  /* tocar la tarjeta abre sus partes (los botones y el texto del nombre siguen con lo suyo) */
+  Array.prototype.forEach.call(w.querySelectorAll('.leaf[data-id]'),function(el){
+    if(el._fzClick)return;el._fzClick=1;
+    el.addEventListener('click',function(ev){
+      if(window._reorderOn)return;
+      var t=ev.target;
+      if(t&&t.closest&&t.closest('button,input,select,textarea,a,label,.cname,.chip,.res-badge,.alc-badge'))return;
+      var id=el.getAttribute('data-id');
+      var p=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0]);
+      if(p)_fzUI(p)})})}catch(e){}}
 /* ---------- al reportar metrado, elegir a que parte va ---------- */
 window._regFase=null;
 function _fzRegUI(){try{
