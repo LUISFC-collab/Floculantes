@@ -2916,7 +2916,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812g4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812g5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -5425,6 +5425,19 @@ function _apuMenu(p){
 /* Arma las partes de la partida desde los apartados del APU. Conserva el avance
    y los movimientos de las que se llaman igual, y lo que no cae en ningun apartado
    se vuelve la parte que cierra. Queda marcado origen:'apu' para recalcular solo. */
+/* se considera que los pesos vienen del APU si quedo la marca, o si alguna parte
+   se llama igual que un apartado (los creados antes de la marca) */
+function _fzVieneDelApu(id){
+  try{
+    var f=_fzDe(id);if(!f)return false;
+    if(f.origen==='apu')return true;
+    var r=_apuDe(id);if(!r)return false;
+    var gs=(_apuGrupos(r)||[]).map(function(g){return String(g.nombre||'').trim().toLowerCase()});
+    if(!gs.length)return false;
+    return (f.fases||[]).some(function(x){
+      var n=String(x.nombre||'').trim().toLowerCase();
+      return gs.indexOf(n)>=0||n==='ejecucion en obra'})
+  }catch(e){return false}}
 async function _fzDesdeApu(id,p,silencioso){
   try{
     var r=_apuDe(id);if(!r)return false;
@@ -5648,7 +5661,7 @@ function _apuUI(p){
       var g=(_apuGrupos(r)||[]).filter(function(z){return z.id===window._apuGSel})[0];if(!g)return;
       var nm=prompt('Nuevo nombre del apartado:',g.nombre);if(nm==null)return;nm=String(nm).trim();
       if(!nm)return;g.nombre=nm;pinta();try{await _apuGuardar(id,r,false)}catch(e){}
-      try{if((_fzDe(id)||{}).origen==='apu')await _fzDesdeApu(id,p,true)}catch(e){}};
+      try{if(_fzVieneDelApu(id))await _fzDesdeApu(id,p,true)}catch(e){}};
     var gdel=document.getElementById('_apuGDel');
     if(gdel)gdel.onclick=async function(){
       var g=(_apuGrupos(r)||[]).filter(function(z){return z.id===window._apuGSel})[0];if(!g)return;
@@ -5657,7 +5670,7 @@ function _apuUI(p){
       (r.insumos||[]).forEach(function(x){if(x.grupo_id===g.id){x.grupo_id='';x.suministro=false}});
       r.grupos=(r.grupos||[]).filter(function(z){return z.id!==g.id});
       window._apuGSel=null;pinta();try{await _apuGuardar(id,r,false)}catch(e){}
-      try{if((_fzDe(id)||{}).origen==='apu')await _fzDesdeApu(id,p,false)}catch(e){}};
+      try{if(_fzVieneDelApu(id))await _fzDesdeApu(id,p,false)}catch(e){}};
     /* tocar un insumo lo mete o lo saca del apartado activo */
     Array.prototype.forEach.call(w.querySelectorAll('._apuFila'),function(f){f.onclick=async function(ev){
       if(!window._apuGSel)return;
@@ -5671,7 +5684,7 @@ function _apuUI(p){
       else{x.grupo_id=window._apuGSel;
         var g2=_apuGrupoDe(r,x);x.suministro=!!(g2&&/suministr/i.test(g2.nombre))}
       pinta();try{await _apuGuardar(id,r,false)}catch(e){}
-      try{if((_fzDe(id)||{}).origen==='apu')await _fzDesdeApu(id,p,true)}catch(e){}}});
+      try{if(_fzVieneDelApu(id))await _fzDesdeApu(id,p,true)}catch(e){}}});
     if(adm){
       Array.prototype.forEach.call(w.querySelectorAll('._apuDel'),function(b){b.onclick=function(){
         var i=+b.getAttribute('data-i'),x=r.insumos[i];if(!x)return;
