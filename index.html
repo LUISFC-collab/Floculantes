@@ -2861,7 +2861,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812f8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260812f9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -5122,9 +5122,46 @@ function _fzCargasInject(p){try{
     e.style.cssText='display:inline-block;margin-left:7px;font-size:9.5px;font-weight:800;border-radius:5px;padding:1px 6px;vertical-align:middle;'+
       (f?('color:'+(f.cierra?'#1F3864':'#0C5132')+';background:'+(f.cierra?'#EAF1FB':'#EAF3EC')+';border:1px solid '+(f.cierra?'#BFD3EE':'#BFD8C6'))
         :'color:#8A4B00;background:#FCEFD9;border:1px solid #EFC98A');
-    e.textContent=f?String(f.nombre):'sin parte';
-    e.title=f?('Este avance se cargo en la parte "'+f.nombre+'"'):'Esta carga es anterior a las partes: no esta asignada a ninguna';
+    e.textContent=f?String(f.nombre):'sin parte — asignar';
+    e.title=f?('Este avance se cargo en la parte "'+f.nombre+'". Toca para cambiarla.')
+             :'Esta carga no esta en ninguna parte. Toca para asignarla.';
+    e.style.cursor='pointer';
+    e.onclick=function(ev){ev.stopPropagation();_fzAsignarCarga(p,pa,f)};
     b.parentNode.insertBefore(e,b.nextSibling)})}catch(e){}}
+/* elegir a que parte pertenece una carga ya guardada */
+function _fzAsignarCarga(p,carga,actual){
+  try{
+    var r=_fzDe(p.id);if(!r||!carga)return;
+    var fs=(r.fases||[]);
+    var ov=document.createElement('div');ov.id='_fzAsOv';
+    ov.style.cssText='position:fixed;inset:0;z-index:2147483500;background:rgba(15,25,45,.55);display:flex;align-items:flex-end;justify-content:center';
+    var H='<div style="background:#fff;width:100%;max-width:460px;border-radius:16px 16px 0 0;padding:15px 14px 18px;padding-bottom:max(18px,env(safe-area-inset-bottom))">';
+    H+='<div style="font-weight:900;font-size:15px;color:#1F3864">A que parte pertenece esta carga?</div>';
+    H+='<div style="font-size:12px;color:#5C6779;margin:3px 0 13px">+'+carga.cant+' del '+esc(String(carga.fecha||''))+' · '+esc(carga.supervisor||'')+'</div>';
+    fs.forEach(function(x){
+      var on=(actual&&actual.id===x.id);
+      H+='<button class="_fzAsB" data-f="'+esc(x.id)+'" style="width:100%;text-align:left;margin-bottom:8px;border-radius:11px;padding:12px 13px;cursor:pointer;border:2px solid '+(x.cierra?'#1F3864':'#0C5132')+';background:'+(on?(x.cierra?'#1F3864':'#0C5132'):'#fff')+';color:'+(on?'#fff':'#1B2433')+'">'+
+         '<div style="font-size:13px;font-weight:800">'+esc(x.nombre)+(on?' · actual':'')+'</div>'+
+         '<div style="font-size:10.5px;opacity:.85;margin-top:2px">'+(Number(x.avance)||0)+' de '+(Number(x.cantidad)||0)+' '+esc(x.unidad||'')+' · vale '+(Math.round((Number(x.peso)||0)*10)/10)+'%</div></button>'});
+    H+=(actual?'<button id="_fzAsQ" style="width:100%;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:11px;padding:12px;font-weight:800;margin-bottom:8px">Quitarla de '+esc(actual.nombre)+'</button>':'');
+    H+='<button id="_fzAsX" style="width:100%;background:#eef2f7;border:0;border-radius:11px;padding:12px;font-weight:700">Cancelar</button></div>';
+    ov.innerHTML=H;document.body.appendChild(ov);
+    ov.onclick=function(e){if(e.target===ov)ov.remove()};
+    ov.querySelector('#_fzAsX').onclick=function(){ov.remove()};
+    var q=ov.querySelector('#_fzAsQ');
+    if(q)q.onclick=async function(){await _fzQuitarPorCid(p.id,carga.client_id);ov.remove();
+      try{openActMenu(p,true)}catch(e){}
+      if(typeof toast==='function')toast('Carga sin parte')};
+    Array.prototype.forEach.call(ov.querySelectorAll('._fzAsB'),function(b){b.onclick=async function(){
+      var fid=b.getAttribute('data-f');
+      if(actual&&actual.id===fid){ov.remove();return}
+      if(actual)await _fzQuitarPorCid(p.id,carga.client_id);
+      await _fzSumar(p.id,fid,Number(carga.cant)||0,carga.fecha,carga.client_id);
+      ov.remove();
+      try{if(typeof renderList==='function')renderList()}catch(e){}
+      try{openActMenu(p,true)}catch(e){}
+      if(typeof toast==='function')toast('Carga asignada')}});
+  }catch(e){}}
 /* al borrar una carga, se descuenta de la parte donde se cargo (no de otra) */
 async function _fzQuitarPorCid(id,cid){
   try{
@@ -5549,10 +5586,17 @@ function _apuUI(p){
              lista[lista.length-1].cierra=true}
         if(!confirm('Usar los apartados como pesos?\n\n'+lista.map(function(z){return z.n+': '+z.p+'%'+(z.cierra?'  (cierra la actividad)':'')}).join('\n')+'\n\nLa ultima se mide en '+cant+' '+undC+', que es lo que lleva la actividad al 100%.'))return;
         try{
+          /* si ya habia partes, se conserva lo avanzado de las que se llaman igual:
+             regenerar los pesos no puede borrar lo que ya se reporto */
+          var prev={};try{((_fzDe(id)||{}).fases||[]).forEach(function(q){
+            prev[String(q.nombre||'').trim().toLowerCase()]=q})}catch(_ep){}
           var fases=lista.map(function(z,ix){
             var esUlt=(ix===lista.length-1);
-            return {id:'F'+Date.now().toString(36)+ix,nombre:z.n,
-              unidad:esUlt?undC:und,cantidad:cant,peso:z.p,avance:0,cierra:esUlt}});
+            var vj=prev[String(z.n||'').trim().toLowerCase()];
+            return {id:(vj&&vj.id)||('F'+Date.now().toString(36)+ix),nombre:z.n,
+              unidad:esUlt?undC:und,cantidad:cant,peso:z.p,
+              avance:(vj?(Number(vj.avance)||0):0),
+              movs:(vj&&vj.movs)?vj.movs:[],cierra:esUlt}});
           await _fzGuardar(id,fases,false);
           if(adm)await _apuGuardar(id,r,false);
           try{if(typeof renderList==='function')renderList()}catch(e){}
