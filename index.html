@@ -2919,7 +2919,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260820g6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260820g7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -7546,12 +7546,21 @@ function _galBorrarFoto(a){
   var c=_docCarpDe(a.carpeta_id);
   if(!(_docMio(c)||a.subido_por===_docSup()||_docAdmin())){
     if(typeof toast==='function')toast('Esta foto la subio '+(a.subido_por||'otra persona')+' — no puedes borrarla');return}
-  _galConfirm('\ud83d\uddd1 Borrar esta foto','Se va a Eliminadas \u00b7 Fotos, no se pierde: desde ahi se puede devolver.','Borrar','#B42318',async function(){
+  _galConfirm('\ud83d\uddd1 Borrar esta foto','Se va a Eliminadas \u00b7 Fotos, no se pierde: desde ahi se puede devolver.','Borrar','#B42318',function(){
+    var antes={e:a.eliminado,q:a.elim_por,t:a.elim_ts};
     a.eliminado=true;a.elim_por=_docSup();a.elim_ts=(typeof nowSrv==='function'?nowSrv():Date.now());
-    try{await _docGuardarArchivo(a,true)}
-    catch(e){a.eliminado=false;_docRender();if(typeof toast==='function')toast('\u26a0 No se pudo borrar en el servidor \u2014 reintenta');return}
+    /* se quita de la pantalla en el acto; el servidor va detras */
+    try{_docSave()}catch(_e){}
     _docRender();
     if(typeof toast==='function')toast('\ud83d\uddd1 A Eliminadas \u00b7 Fotos');
+    (async function(){
+      try{await _docGuardarArchivo(a,true)}
+      catch(e){
+        a.eliminado=antes.e;a.elim_por=antes.q;a.elim_ts=antes.t;
+        try{_docSave()}catch(_e2){}
+        _docRender();
+        if(typeof toast==='function')toast('\u26a0 No se pudo borrar en el servidor \u2014 la foto volvio a su sitio')}
+    })();
   });
 }
 /* En una carpeta marcada como de fotos sube cualquier supervisor, no solo quien
@@ -7790,7 +7799,6 @@ function _galBorradas(){
   return _docArch().filter(function(a){return a.eliminado&&gals[a.carpeta_id]&&_galEsFoto(a)})
     .sort(function(x,y){return (Number(y.elim_ts)||0)-(Number(x.elim_ts)||0)})}
 async function _galPapelera(){
-  try{await _docPull()}catch(e){}
   var ov=document.getElementById('_gpOv');if(ov)ov.remove();
   ov=document.createElement('div');ov.id='_gpOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;color:#cfe3ff;font:13px system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
@@ -7801,6 +7809,8 @@ async function _galPapelera(){
   document.body.appendChild(ov);
   document.getElementById('_gpX').onclick=function(){ov.remove()};
   _gpPinta();
+  /* se pinta con lo que ya hay y se refresca cuando llega el servidor */
+  try{_docPull().then(function(){if(document.getElementById('_gpOv'))_gpPinta()})}catch(e){}
 }
 function _gpPinta(){
   var B=document.getElementById('_gpBody');if(!B)return;
@@ -7836,22 +7846,36 @@ function _gpAccion(a,que){
   _galConfirm(dev?'\u267b Devolver la foto':'\ud83d\uddd1 Borrar para siempre',
     dev?('Vuelve a la galer\u00eda, a su fecha: '+((a.nombre)||''))
        :('Se borra tambi\u00e9n el archivo del almac\u00e9n. Esto ya no se puede deshacer: '+((a.nombre)||'')),
-    dev?'Devolver':'Borrar para siempre', dev?'#1E7A46':'#7A1A1A', async function(){
+    dev?'Devolver':'Borrar para siempre', dev?'#1E7A46':'#7A1A1A', function(){
     var t=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=_docSup();
-    try{
-      if(dev){
-        await sbUpsert(T_DA,[{proyecto:DATA.proyecto,id:a.id,eliminado:false,elim_por:'',elim_ts:0,quien:yo,ts:t,cell_at:Date.now()}],'proyecto,id');
-      }else{
-        await sbDelete(T_DA,'proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&id=eq.'+encodeURIComponent(a.id));
-        if(a.ruta){try{await fetch(sbBase()+'/storage/v1/object/documentos',{method:'DELETE',
-          headers:sbHead({'Content-Type':'application/json'}),body:JSON.stringify({prefixes:[a.ruta]})})}catch(_es){}}
-        /* la fecha guardada de esa foto ya no hace falta */
-        try{var F=_galFechas(a.carpeta_id);if(F[a.id]){delete F[a.id];_galSave(a.carpeta_id);await _galPush(a.carpeta_id)}}catch(_ef){}
-      }
-    }catch(e){if(typeof toast==='function')toast('\u26a0 No se pudo \u2014 reintenta');return}
-    try{await _docPull()}catch(e){}
-    if(typeof toast==='function')toast(dev?'\u267b Devuelta a la galer\u00eda':'\ud83d\uddd1 Borrada para siempre');
+    /* primero la pantalla, para que responda en el acto */
+    var arr=_docArch(),ix=-1;arr.forEach(function(x,k){if(x.id===a.id)ix=k});
+    var copia=JSON.parse(JSON.stringify(a));
+    if(dev){a.eliminado=false;a.elim_por='';a.elim_ts=0;a.ts=t;a.cell_at=Date.now();a.quien=yo}
+    else if(ix>=0)arr.splice(ix,1);
+    try{_docSave()}catch(_e){}
     _gpPinta();
+    if(typeof toast==='function')toast(dev?'\u267b Devuelta a la galer\u00eda':'\ud83d\uddd1 Borrada para siempre');
+    (async function(){
+      try{
+        if(dev){
+          await sbUpsert(T_DA,[{proyecto:DATA.proyecto,id:a.id,eliminado:false,elim_por:'',elim_ts:0,quien:yo,ts:t,cell_at:Date.now()}],'proyecto,id');
+        }else{
+          await sbDelete(T_DA,'proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&id=eq.'+encodeURIComponent(a.id));
+          if(a.ruta){try{await fetch(sbBase()+'/storage/v1/object/documentos',{method:'DELETE',
+            headers:sbHead({'Content-Type':'application/json'}),body:JSON.stringify({prefixes:[a.ruta]})})}catch(_es){}}
+          /* la fecha guardada de esa foto ya no hace falta */
+          try{var F=_galFechas(a.carpeta_id);if(F[a.id]){delete F[a.id];_galSave(a.carpeta_id);_galPush(a.carpeta_id)}}catch(_ef){}
+        }
+      }catch(e){
+        /* no se pudo: se deja como estaba y se avisa */
+        if(dev){a.eliminado=copia.eliminado;a.elim_por=copia.elim_por;a.elim_ts=copia.elim_ts}
+        else{_docArch().push(copia)}
+        try{_docSave()}catch(_e3){}
+        _gpPinta();
+        if(typeof toast==='function')toast('\u26a0 No se pudo \u2014 quedo como estaba');return}
+      try{if(document.getElementById('_docOv'))_docRender()}catch(_er){}
+    })();
   });
 }
 /* --- elegir fotos de la galeria al reportar metrado --- */
