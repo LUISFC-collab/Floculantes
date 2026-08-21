@@ -3220,7 +3220,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260821a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260821a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -5180,7 +5180,12 @@ function _fzUndOpts(actual,forzarOtra){
 function _fzKey(id){return 'fase:'+id}
 function _fzAll(){if(!state.fases){try{state.fases=JSON.parse(localStorage.getItem('obf4_fases')||'{}')||{}}catch(e){state.fases={}}}return state.fases}
 function _fzSave(){try{localStorage.setItem('obf4_fases',JSON.stringify(_fzAll()))}catch(e){}}
-function _fzDe(id){var r=_fzAll()[id];return (r&&!r.eliminado&&r.fases&&r.fases.length)?r:null}
+function _fzDe(id){var r=_fzAll()[id];
+  if(!(r&&!r.eliminado&&r.fases&&r.fases.length))return null;
+  /* la cadena siempre termina en la unidad del contrato: si ninguna parte
+     cierra (dato viejo o manual mal guardado), cierra la ultima */
+  try{if(!r.fases.some(function(f){return f.cierra}))r.fases[r.fases.length-1].cierra=true}catch(_e){}
+  return r}
 function _fzNuevoId(){return 'F'+Date.now().toString(36)+Math.floor(Math.random()*46656).toString(36)}
 function _fzPctParte(x){
   var c=Number(x.cantidad)||0,a=Number(x.avance)||0;
@@ -5205,7 +5210,9 @@ async function _fzGuardar(id,fases,borrar,origen){
   var t=(typeof nowSrv==='function'?nowSrv():Date.now());
   var yo=(state.user&&state.user.supervisor)||'';
   var ant=null;try{ant=_fzAll()[id]}catch(_e){}
-  var r={partida_id:id,fases:fases||[],quien:yo,ts:t,
+  fases=fases||[];
+  try{if(fases.length&&!fases.some(function(f){return f.cierra}))fases[fases.length-1].cierra=true}catch(_e){}
+  var r={partida_id:id,fases:fases,quien:yo,ts:t,
     origen:(origen||(ant&&ant.origen)||''),
     eliminado:!!borrar,elim_por:borrar?yo:'',elim_ts:borrar?t:0};
   var H=_fzAll();H[id]=r;_fzSave();
@@ -5943,6 +5950,11 @@ function _apuUI(p){
     H+='<div style="background:#fff;border:1.5px solid var(--line);border-radius:13px;padding:10px 11px;margin-bottom:11px">';
     H+='<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">'+
        '<b style="font-size:12px;color:#1F3864;flex:1">Apartados del APU</b>'+
+       (function(){try{
+         var fzx=_fzDe(id);
+         if(fzx&&(fzx.fases||[]).length&&!(_apuGrupos(r)||[]).length){
+           return '<span style="flex:none;background:#FCEFD9;color:#7A4B00;border:1px solid #EFC98A;border-radius:8px;padding:3px 8px;font-size:10px;font-weight:800" title="La actividad tiene partes definidas a mano que no salen de estos apartados">⚠ tiene partes a mano</span>'}
+         }catch(_e){}return ''})()+
        '<button id="_apuGAdd" title="Crear un apartado" style="flex:none;background:#0C5132;color:#fff;border:0;border-radius:9px;width:32px;height:32px;font-size:18px;font-weight:900;cursor:pointer;line-height:1">+</button></div>';
     if(!gs.length){
       H+='<div style="font-size:11.5px;color:var(--muted);line-height:1.5">Crea uno con el <b>+</b> —por ejemplo <b>Suministro</b>— y después toca los insumos que le pertenecen. Cada insumo puede estar en un solo apartado.</div>';
