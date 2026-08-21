@@ -1937,7 +1937,8 @@ function _wkAcum(cutISO){
     }else if(m&&m.unidad!=='na'){
       a=(typeof acumCantAt==='function')?acumCantAt(p.id,cutISO):0;tot=Number(m.total)||0;
     }else return;
-    if(a>0||hh>0)out[p.id]=[Math.round(a*1e4)/1e4,Math.round(tot*1e4)/1e4,Math.round(hh*100)/100,nuevasIds[p.id]?1:0];
+    if(a>0||hh>0)out[p.id]=[Math.round(a*1e4)/1e4,Math.round(tot*1e4)/1e4,Math.round(hh*100)/100,nuevasIds[p.id]?1:0,
+      String((m&&m.unidad)||p.unidad||'UND'),String((typeof _nomAct==='function'?_nomAct(p):p.nombre)||p.id).slice(0,90)];
   }catch(e){}});
   return out}
 /* el % del proyecto con el universo de la app: hh ganadas / hh totales,
@@ -2085,13 +2086,15 @@ function _wkProcesarP62(xml,ss,semN,datos,topar,qps){
   function D(it){var d=datos[it];return d?{a:Number(d[0])||0,tot:Number(d[1])||0,hh:Number(d[2])||0}:null}
   var colSem=WK_COLS[semN-27];
   var pasadas=WK_COLS.slice(0,semN-27);
-  var porItem={};
+  var porItem={},plantilla=null,maxFila=0;
   xml.replace(/<row r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g,function(todo,rs,cuerpo){
-    var r=+rs;if(r<3)return todo;
+    var r=+rs;if(r>maxFila)maxFila=r;
+    if(r<3)return todo;
     var celdas={};
     cuerpo.replace(/<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g,function(_t,col,attrs,inner){
       inner=inner||'';
       var vm=inner.match(/<v>([^<]*)<\/v>/);var val=vm?vm[1]:'';
+      if(!val){var im=inner.match(/<is>[\s\S]*?<t[^>]*>([^<]*)<\/t>/);if(im)val=im[1]}
       if(/t="s"/.test(attrs)&&/^\d+$/.test(val))val=ss[+val]||'';
       var sm=attrs.match(/s="(\d+)"/);
       celdas[col]={v:val,s:sm?sm[1]:null};return _t});
@@ -2101,6 +2104,8 @@ function _wkProcesarP62(xml,ss,semN,datos,topar,qps){
     var est=null;
     for(var i=pasadas.length-1;i>=0;i--){var cc=celdas[pasadas[i]];if(cc&&cc.s!=null){est=cc.s;break}}
     (porItem[_wkClave(a)]=porItem[_wkClave(a)]||[]).push({fila:r,lb0:lb0,pas:pas,est:est});
+    plantilla={fila:r,estilos:{}};
+    for(var cst in celdas)plantilla.estilos[cst]=celdas[cst].s;
     return todo});
   /* que grupos tienen fila en el cronograma (su representante esta en porItem) */
   var grupoFila={};
@@ -2143,12 +2148,34 @@ function _wkProcesarP62(xml,ss,semN,datos,topar,qps){
   Object.keys(datos).sort().forEach(function(it){
     var d=D(it);if(!d||!(d.a>0))return;
     if(!cubiertos[_wkClave(it)]){
-      var esN=(datos[it]&&datos[it][3])?1:0;
-      avisos.push(it+(esN?' (partida ADICIONAL de la app)':'')+': sin fila en el cronograma — no entra a P6-2 pero S\u00cd al % del proyecto')}});
+      if(datos[it]&&datos[it][3])return;   /* adicional: se agrega como fila nueva */
+      avisos.push(it+': sin fila en el cronograma — no entra a P6-2 pero S\u00cd al % del proyecto')}});
   var x2=xml.replace(/<row r="(\d+)"[^>]*>[\s\S]*?<\/row>/g,function(todo,rs){
     var r=+rs;if(!escribir[r])return todo;
     return _wkPonCelda(todo,r,colSem,escribir[r].v,escribir[r].s)});
-  return {xml:x2,escritas:Object.keys(escribir).length,resumen:resumen,avisos:avisos}}
+  /* las ADICIONALES de la app que no tienen fila: se agregan al final de P6-2
+     con el formato de las filas existentes. La proxima semana, si la plantilla
+     es este mismo archivo, ya son filas normales y acumulan solas. */
+  var agregadas=[],nf=maxFila;
+  Object.keys(datos).sort().forEach(function(it){
+    var d=datos[it];if(!d||!d[3])return;               /* solo adicionales */
+    if(porItem[_wkClave(it)])return;                    /* ya tiene fila */
+    var a=Number(d[0])||0,tot=Number(d[1])||0,hh=Number(d[2])||0;
+    var und=String(d[4]||'UND'),nom=String(d[5]||it);
+    var q=a;if(topar&&tot>0&&q>tot)q=tot;
+    q=Math.round(q*1e4)/1e4;
+    nf++;
+    var E=plantilla?plantilla.estilos:{};
+    function tx(col,v2){return '<c r="'+col+nf+'"'+(E[col]!=null?(' s="'+E[col]+'"'):'')+' t="inlineStr"><is><t>'+String(v2).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</t></is></c>'}
+    function nm2(col,v2){return v2>0?('<c r="'+col+nf+'"'+(E[col]!=null?(' s="'+E[col]+'"'):'')+'><v>'+String(Math.round(v2*1e4)/1e4)+'</v></c>'):''}
+    var fila='<row r="'+nf+'">'+
+      tx('A',it)+nm2('B',tot)+tx('C',und)+nm2('D',hh)+tx('E','AD'+agregadas.length)+tx('F',nom)+
+      (q>0?('<c r="'+colSem+nf+'"'+(E[colSem]!=null?(' s="'+E[colSem]+'"'):(plantilla&&plantilla.estilos.V!=null?(' s="'+plantilla.estilos.V+'"'):''))+'><v>'+String(q)+'</v></c>'):'')+
+      '</row>';
+    x2=x2.replace('</sheetData>',fila+'</sheetData>');
+    agregadas.push({it:it,nom:nom,q:q,fila:nf});
+    resumen.push({it:it,g:'',pas:0,nuevo:q,topado:false,fuera:0,adicional:true})});
+  return {xml:x2,escritas:Object.keys(escribir).length+agregadas.length,resumen:resumen,avisos:avisos,agregadas:agregadas}}
 function _wkLeerSS(xml){
   var ss=[];xml.replace(/<si>([\s\S]*?)<\/si>/g,function(_t,cuerpo){
     var tx='';cuerpo.replace(/<t[^>]*>([^<]*)<\/t>/g,function(_t2,t){tx+=t;return _t2});
@@ -2253,6 +2280,8 @@ function _wkExcel(){
       /* resumen visible */
       var H='<div style="background:#EAF3EC;border:1px solid #BFD8C6;border-radius:10px;padding:9px 11px;font-size:12px;color:#0C5132;font-weight:800;margin-bottom:8px">✓ Descargado · S'+semN+' · '+r.escritas+' fila(s) en P6-2 · carátula en '+semN+
         (phy?('<br>📈 % del proyecto (universo de la app, '+pctA.hhT+' hh): <b>'+(Math.round(pctA.pct*1e4)/100)+'%</b> → estampado en PHYSICAL % PROGRESS · semana: '+(Math.round((pctA.pct-phy.previo)*1e4)/100)+'%'):'')+'</div>';
+      var adic=(r.agregadas||[]);
+      if(adic.length){H+='<div style="background:#F1ECFA;border:1px solid #B9A3DE;border-radius:10px;padding:8px 10px;font-size:11.5px;color:#5B3A8A;margin-bottom:8px;line-height:1.6">\u2795 '+adic.length+' partida(s) ADICIONAL(es) agregadas al final de P6-2 (con su formato): '+adic.map(function(x){return '<b>'+x.it+'</b> fila '+x.fila}).join(' \u00b7 ')+'</div>'}
       var conD=r.resumen.filter(function(x){return x.nuevo>0});
       if(conD.length){H+='<div style="font-size:11.5px;color:#1B2433;line-height:1.7">'+conD.map(function(x){
         return '<b>'+x.it+'</b>'+(x.g?(' <span style="color:#5B3A8A;font-weight:800">['+x.g+']</span>'):'')+': +'+x.nuevo+(x.topado?(' <span style="color:#7A4B00">(con sobremetrado topado al 100%'+(x.fuera?(', quedan '+x.fuera+' fuera'):'')+')</span>'):'')}).join(' · ')+'</div>'}
@@ -3329,7 +3358,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260821a5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260821a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
