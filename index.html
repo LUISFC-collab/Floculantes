@@ -1915,9 +1915,12 @@ function _wkClave(txt){
 /* el acumulado del aplicativo por partida al corte: [cantidad, metrado, hh] */
 function _wkAcum(cutISO){
   var out={};
-  (DATA.partidas||[]).forEach(function(p){try{
+  var todas=(DATA.partidas||[]).concat(state.nuevas||[]);
+  var nuevasIds={};(state.nuevas||[]).forEach(function(n){if(n&&n.id)nuevasIds[n.id]=1});
+  todas.forEach(function(p){try{
+    if(!p||!p.id||out[p.id])return;
     var m=(typeof metaOf==='function')?metaOf(p.id):null;
-    var hh=0;try{hh=Number(_hhDe(p))||0}catch(e){}
+    var hh=0;try{hh=((typeof _hhOff==='function'&&_hhOff(p.id))?0:(Number(_hhDe(p))||0))}catch(e){}
     var a=0,tot=0;
     var fz=null;try{fz=(typeof _fzDe==='function')?_fzDe(p.id):null}catch(e){}
     if(fz&&(fz.fases||[]).length){
@@ -1934,9 +1937,17 @@ function _wkAcum(cutISO){
     }else if(m&&m.unidad!=='na'){
       a=(typeof acumCantAt==='function')?acumCantAt(p.id,cutISO):0;tot=Number(m.total)||0;
     }else return;
-    if(a>0||hh>0)out[p.id]=[Math.round(a*1e4)/1e4,Math.round(tot*1e4)/1e4,Math.round(hh*100)/100];
+    if(a>0||hh>0)out[p.id]=[Math.round(a*1e4)/1e4,Math.round(tot*1e4)/1e4,Math.round(hh*100)/100,nuevasIds[p.id]?1:0];
   }catch(e){}});
   return out}
+/* el % del proyecto con el universo de la app: hh ganadas / hh totales,
+   cada partida topada a su 100% (la misma vara del panel) */
+function _wkPctApp(datos){
+  var hhT=0,pts=0;
+  for(var k in datos){var d=datos[k];var hh=Number(d[2])||0;if(!(hh>0))continue;
+    hhT+=hh;var tot=Number(d[1])||0;
+    if(tot>0)pts+=hh*Math.min(1,(Number(d[0])||0)/tot)}
+  return {pct:hhT>0?pts/hhT:0,hhT:Math.round(hhT*10)/10,pts:Math.round(pts*10)/10}}
 /* ---------- zip: leer y rearmar sin librerias ---------- */
 var _WKCRC=null;
 function _wkCrc32(u8){
@@ -1996,6 +2007,43 @@ function _wkZipArmar(entradas){
   fv.setUint16(8,entradas.length,true);fv.setUint16(10,entradas.length,true);
   fv.setUint32(12,cdlen,true);fv.setUint32(16,cdoff,true);
   return new Blob(locales.concat(centrales,[fin]),{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}
+/* El % del proyecto se estampa en PHYSICAL % PROGRESS: la celda de la semana
+   en la fila '% ACTUAL ACUMULADO' deja de ser formula (su SUMPRODUCT solo ve el
+   cronograma congelado) y pasa a ser el valor del universo de la app. La fila
+   '% ACTUAL SEMANA' ya era valores pegados: se completa acumulado menos previo. */
+function _wkPonPct(xml,ss,semN,pct){
+  var col=WK_COLS[semN-27];
+  function filaDe(texto){
+    var out=0;
+    xml.replace(/<row r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g,function(todo,rs,cuerpo){
+      if(out)return todo;
+      var cm=cuerpo.match(/<c r="C\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/);
+      if(cm){var vm=(cm[2]||'').match(/<v>([^<]*)<\/v>/);var v=vm?vm[1]:'';
+        if(/t="s"/.test(cm[1])&&/^\d+$/.test(v))v=ss[+v]||'';
+        if(String(v).trim()===texto)out=+rs}
+      return todo});
+    return out}
+  var fAc=filaDe('% ACTUAL ACUMULADO');
+  var fSe=filaDe('% ACTUAL SEMANA');
+  if(!fAc)throw new Error("no se hallo la fila '% ACTUAL ACUMULADO' en PHYSICAL % PROGRESS");
+  /* el acumulado de la semana previa, para el delta semanal */
+  var prev=0;
+  if(semN>27){var colPrev=WK_COLS[semN-28];
+    var re=new RegExp('<c r="'+colPrev+fAc+'"[^>]*?(?:/>|>([\\s\\S]*?)</c>)');
+    var m=xml.match(re);if(m){var vm2=(m[1]||'').match(/<v>([^<]*)<\/v>/);if(vm2)prev=Number(vm2[1])||0}}
+  function pon(fila,valor){
+    var re2=new RegExp('<c r="'+col+fila+'"([^>]*?)(?:/>|>[\\s\\S]*?</c>)');
+    var m2=xml.match(re2);
+    var vtx=String(Math.round(valor*1e6)/1e6);
+    if(m2){
+      var sm=m2[1].match(/s="(\d+)"/);
+      xml=xml.replace(m2[0],'<c r="'+col+fila+'"'+(sm?(' s="'+sm[1]+'"'):'')+'><v>'+vtx+'</v></c>')
+    }else{
+      xml=xml.replace(new RegExp('(<row r="'+fila+'"[^>]*>)'),'$1<c r="'+col+fila+'"><v>'+vtx+'</v></c>')}
+  }
+  pon(fAc,pct);
+  if(fSe)pon(fSe,Math.round((pct-prev)*1e6)/1e6);
+  return {xml:xml,filaAcum:fAc,filaSem:fSe,previo:prev}}
 /* ---------- resolver las hojas por su NOMBRE ---------- */
 function _wkXmlTxt(t){return String(t||'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&')}
 function _wkHojas(wbxml,relsxml){
@@ -2094,7 +2142,9 @@ function _wkProcesarP62(xml,ss,semN,datos,topar,qps){
   /* lo del aplicativo que no tiene destino en el cronograma */
   Object.keys(datos).sort().forEach(function(it){
     var d=D(it);if(!d||!(d.a>0))return;
-    if(!cubiertos[_wkClave(it)])avisos.push(it+': no tiene fila ni grupo en el cronograma (acum '+d.a+' queda sin cargar)')});
+    if(!cubiertos[_wkClave(it)]){
+      var esN=(datos[it]&&datos[it][3])?1:0;
+      avisos.push(it+(esN?' (partida ADICIONAL de la app)':'')+': sin fila en el cronograma — no entra a P6-2 pero S\u00cd al % del proyecto')}});
   var x2=xml.replace(/<row r="(\d+)"[^>]*>[\s\S]*?<\/row>/g,function(todo,rs){
     var r=+rs;if(!escribir[r])return todo;
     return _wkPonCelda(todo,r,colSem,escribir[r].v,escribir[r].s)});
@@ -2155,7 +2205,7 @@ function _wkExcel(){
       var leer=async function(n){var en=mapa[n];return dec.decode(en.metodo===8?await _wkInflar(en.datos):en.datos)};
       /* las hojas se buscan por su nombre, no por numero de archivo */
       var hojas=_wkHojas(await leer('xl/workbook.xml'),mapa['xl/_rels/workbook.xml.rels']?await leer('xl/_rels/workbook.xml.rels'):'');
-      var hP62=hojas['P6-2'],hCar=hojas['Car\u00e1tula (P)'],hQPS=hojas['De QPS'];
+      var hP62=hojas['P6-2'],hCar=hojas['Car\u00e1tula (P)'],hQPS=hojas['De QPS'],hPhy=hojas['PHYSICAL % PROGRESS'];
       if(!hP62||!mapa[hP62])throw new Error('el libro no trae la hoja P6-2 — \u00bfes la plantilla correcta?');
       if(!hCar||!mapa[hCar])throw new Error('el libro no trae la hoja Car\u00e1tula (P)');
       var ss=_wkLeerSS(await leer('xl/sharedStrings.xml'));
@@ -2174,6 +2224,12 @@ function _wkExcel(){
       else if(/<calcPr/.test(wbx))wbx=wbx.replace(/<calcPr([^>]*?)\/>/,'<calcPr$1 fullCalcOnLoad="1"/>');
       else wbx=wbx.replace('</workbook>','<calcPr fullCalcOnLoad="1"/></workbook>');
       var cambiar={};cambiar[hP62]=r.xml;cambiar[hCar]=x22;cambiar['xl/workbook.xml']=wbx;
+      /* el % final con el universo de la app (todas las partidas + adicionales) */
+      var pctA=_wkPctApp(datos),phy=null;
+      if(hPhy&&mapa[hPhy]){
+        try{phy=_wkPonPct(await leer(hPhy),ss,semN,pctA.pct);cambiar[hPhy]=phy.xml}
+        catch(_ep){r.avisos.push('No se pudo estampar el % en PHYSICAL % PROGRESS: '+String((_ep&&_ep.message)||_ep))}}
+      else r.avisos.push('El libro no trae la hoja PHYSICAL % PROGRESS — el % del proyecto no se estampo');
       for(var nm in cambiar){
         var u8=enc.encode(cambiar[nm]),en2=mapa[nm];
         en2.crc=_wkCrc32(u8);en2.usz=u8.length;en2.metodo=8;en2.datos=await _wkDeflar(u8)}
@@ -2188,13 +2244,15 @@ function _wkExcel(){
         var t=(typeof nowSrv==='function'?nowSrv():Date.now());
         await sbUpsert('ajustes_create_110826',[{proyecto:DATA.proyecto,clave:'excel_semanal',
           valor:{semana:semN,corte:corte,filas:r.escritas,items:r.resumen.length,avisos:r.avisos.length,tope:topar,
+                 pct_app:Math.round(pctA.pct*1e4)/1e4,hh_app:pctA.hhT,
                  quien:(state.user&&state.user.supervisor)||'',cuando:new Date().toISOString()},
           descripcion:'Ultimo Excel semanal generado',quien:(state.user&&state.user.supervisor)||'',
           ts:t,cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0}],'proyecto,clave');
         if(typeof logCambio==='function')logCambio('excel','S'+semN,'Excel semanal generado ('+r.escritas+' filas)');
       }catch(_et){}
       /* resumen visible */
-      var H='<div style="background:#EAF3EC;border:1px solid #BFD8C6;border-radius:10px;padding:9px 11px;font-size:12px;color:#0C5132;font-weight:800;margin-bottom:8px">✓ Descargado · S'+semN+' · '+r.escritas+' fila(s) escritas en P6-2 · carátula en '+semN+'</div>';
+      var H='<div style="background:#EAF3EC;border:1px solid #BFD8C6;border-radius:10px;padding:9px 11px;font-size:12px;color:#0C5132;font-weight:800;margin-bottom:8px">✓ Descargado · S'+semN+' · '+r.escritas+' fila(s) en P6-2 · carátula en '+semN+
+        (phy?('<br>📈 % del proyecto (universo de la app, '+pctA.hhT+' hh): <b>'+(Math.round(pctA.pct*1e4)/100)+'%</b> → estampado en PHYSICAL % PROGRESS · semana: '+(Math.round((pctA.pct-phy.previo)*1e4)/100)+'%'):'')+'</div>';
       var conD=r.resumen.filter(function(x){return x.nuevo>0});
       if(conD.length){H+='<div style="font-size:11.5px;color:#1B2433;line-height:1.7">'+conD.map(function(x){
         return '<b>'+x.it+'</b>'+(x.g?(' <span style="color:#5B3A8A;font-weight:800">['+x.g+']</span>'):'')+': +'+x.nuevo+(x.topado?(' <span style="color:#7A4B00">(con sobremetrado topado al 100%'+(x.fuera?(', quedan '+x.fuera+' fuera'):'')+')</span>'):'')}).join(' · ')+'</div>'}
@@ -3271,7 +3329,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260821a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260821a5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
