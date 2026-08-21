@@ -2919,7 +2919,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260820g1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260820g2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -7535,49 +7535,51 @@ async function _galPull(){
       var loc=state.galFechas[cid]||{};for(var k in f){if(!loc[k])loc[k]=f[k]}
       state.galFechas[cid]=loc;_galSave(cid)})}catch(e){}}
 try{var _galPullBase=syncPull;syncPull=async function(){var r=await _galPullBase.apply(this,arguments);try{await _galPull()}catch(e){}return r}}catch(_gw){}
-/* --- la fecha de la foto: primero la que trae dentro, si no la del archivo --- */
+/* --- Cuando se TOMO la foto. Se busca el bloque EXIF dentro del archivo (la
+   matriz que graba la camara) y de ahi sale el dia y la hora reales. Se rastrea
+   el marcador "Exif\0\0" en crudo, asi sirve igual para JPG que para el HEIC
+   del iPhone. Si la foto no trae esa matriz, recien ahi se usa la fecha del
+   archivo, y queda marcado para que se note la diferencia. --- */
 function _galFechaDe(file){
   return new Promise(function(res){
-    var fin=function(d){try{
-      var x=(d instanceof Date&&!isNaN(d))?d:new Date(file.lastModified||Date.now());
+    var arma=function(x,src){
       var p=function(n){return (n<10?'0':'')+n};
-      res(x.getFullYear()+'-'+p(x.getMonth()+1)+'-'+p(x.getDate()))
-    }catch(e){res('')}};
+      return {dt:x.getFullYear()+'-'+p(x.getMonth()+1)+'-'+p(x.getDate())+' '+p(x.getHours())+':'+p(x.getMinutes()),src:src}};
+    var fin=function(d){try{
+      if(d instanceof Date&&!isNaN(d))return res(arma(d,'foto'));
+      return res(arma(new Date(file.lastModified||Date.now()),'archivo'))
+    }catch(e){res({dt:'',src:'archivo'})}};
     try{
-      if(!/jpe?g/i.test(file.type||'')&&!/\.jpe?g$/i.test(file.name||''))return fin(null);
       var fr=new FileReader();
       fr.onerror=function(){fin(null)};
       fr.onload=function(){try{
-        var v=new DataView(fr.result);
-        if(v.getUint16(0)!==0xFFD8)return fin(null);
-        var off=2,len=v.byteLength;
-        while(off<len-4){
-          var m=v.getUint16(off);
-          if(m===0xFFE1){
-            var s=off+4;
-            if(v.getUint32(s)!==0x45786966)return fin(null);
-            var tiff=s+6, le=(v.getUint16(tiff)===0x4949);
-            var g16=function(o){return v.getUint16(o,le)},g32=function(o){return v.getUint32(o,le)};
-            var ifd=tiff+g32(tiff+4);
-            var buscar=function(dir){
-              var n=g16(dir);
-              for(var i=0;i<n;i++){
-                var e=dir+2+i*12,tag=g16(e);
-                if(tag===0x9003||tag===0x0132){
-                  var vo=tiff+g32(e+8),txt='';
-                  for(var j=0;j<19;j++)txt+=String.fromCharCode(v.getUint8(vo+j));
-                  return txt}
-                if(tag===0x8769){var sub=tiff+g32(e+8);var rr=buscar(sub);if(rr)return rr}}
-              return ''};
-            var txt=buscar(ifd);
-            if(txt&&/^\d{4}[:\-]\d{2}[:\-]\d{2}/.test(txt)){
-              var a=txt.slice(0,10).replace(/:/g,'-').split('-');
-              return fin(new Date(+a[0],(+a[1])-1,+a[2]))}
-            return fin(null)}
-          if((m&0xFF00)!==0xFF00)break;
-          off+=2+v.getUint16(off+2)}
-        fin(null)}catch(e){fin(null)}};
-      fr.readAsArrayBuffer(file.slice(0,256*1024));
+        var buf=fr.result,u=new Uint8Array(buf),v=new DataView(buf),n=u.length,tiff=-1;
+        for(var k=0;k<n-16;k++){
+          if(u[k]===0x45&&u[k+1]===0x78&&u[k+2]===0x69&&u[k+3]===0x66&&u[k+4]===0&&u[k+5]===0){
+            var t=k+6,b0=u[t],b1=u[t+1];
+            if((b0===0x49&&b1===0x49)||(b0===0x4D&&b1===0x4D)){tiff=t;break}}}
+        if(tiff<0)return fin(null);
+        var le=(v.getUint16(tiff)===0x4949);
+        var g16=function(o){return v.getUint16(o,le)},g32=function(o){return v.getUint32(o,le)};
+        if(g16(tiff+2)!==42)return fin(null);
+        var hall={};
+        var texto=function(o){var x='';for(var z=0;z<19;z++){var c=v.getUint8(o+z);if(!c)break;x+=String.fromCharCode(c)}return x};
+        var buscar=function(dir,hondo){
+          if(hondo>3||dir<=0||dir+2>n)return;
+          var c=g16(dir);if(c>512)return;
+          for(var q=0;q<c;q++){
+            var e=dir+2+q*12;if(e+12>n)break;
+            var tag=g16(e);
+            if(tag===0x9003||tag===0x9004||tag===0x0132){var vo=tiff+g32(e+8);if(vo>0&&vo+19<n)hall[tag]=texto(vo)}
+            else if(tag===0x8769||tag===0x8825)buscar(tiff+g32(e+8),hondo+1)}};
+        buscar(tiff+g32(tiff+4),0);
+        var txt=hall[0x9003]||hall[0x9004]||hall[0x0132]||'';
+        if(!/^\d{4}[:\-]\d{2}[:\-]\d{2}/.test(txt))return fin(null);
+        var a=txt.slice(0,10).replace(/:/g,'-').split('-');
+        var d=new Date(+a[0],(+a[1])-1,+a[2],+(txt.slice(11,13)||0),+(txt.slice(14,16)||0),+(txt.slice(17,19)||0));
+        return fin(isNaN(d)?null:d)
+      }catch(e){fin(null)}};
+      fr.readAsArrayBuffer(file.slice(0,1024*1024));
     }catch(e){fin(null)}})}
 /* --- subir fotos a la galeria --- */
 async function _galSubir(cid,files){
@@ -7590,8 +7592,10 @@ async function _galSubir(cid,files){
   window._docSubiendo=true;window._docAbort=false;window._docXhrs=[];
   _docBarraAbrir(items,est,total);
   var pinta=function(f){_docBarraPinta(items,est,total,f)};
-  pinta('📷 Leyendo la fecha de cada foto…');
-  var F=_galFechas(cid),ok=0,mal=0;
+  try{var _hd=document.querySelector('#_docSubOv div div');
+      if(_hd)_hd.textContent='📷 Subiendo fotos a la galería'}catch(_eh){}
+  pinta('Leyendo en cada foto el día y la hora en que se tomó…');
+  var F=_galFechas(cid),ok=0,mal=0,conMatriz=0;
   for(var k=0;k<items.length&&!window._docAbort;k++){
     var x=items[k],s=est[x.clave];s.estado='sube';pinta();
     try{
@@ -7608,14 +7612,28 @@ async function _galSubir(cid,files){
         mime:'image/jpeg',tamano:blob.size||0,subido_por:_docSup(),
         eliminado:false,elim_por:'',elim_ts:0},true);
       F[aid]=fecha||'';_galSave(cid);
+      if(fecha&&fecha.src==='foto')conMatriz++;
       s.estado='ok';s.subido=x.size||0;ok++;
     }catch(e){s.estado='mal';s.msg=String((e&&e.message)||e).slice(0,60);mal++}
     pinta();
   }
   window._docSubiendo=false;window._docXhrs=[];
   try{await _galPush(cid)}catch(e){}
-  pinta(mal?('Termino con '+mal+' error(es)'):'✓ '+ok+' foto(s) en la galeria');
-  var b=document.getElementById('_dsBtn');if(b)b.textContent='Cerrar';
+  pinta('');
+  /* el check grande: se ve claro que ya termino, y cuantas traian su fecha real */
+  try{var f=document.getElementById('_dsFase');
+    if(f)f.innerHTML=mal
+      ? '<span style="color:#B42318;font-weight:800">⚠ '+ok+' subida(s), '+mal+' con error</span>'
+      : '<span style="display:inline-flex;align-items:center;gap:7px;color:#0C5132;font-weight:900;font-size:14px">'+
+        '<span style="background:#0C5132;color:#fff;border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center">✓</span>'+
+        'Listo · '+ok+' foto'+(ok===1?'':'s')+'</span>'+
+        '<div style="font-size:11px;color:#5C6779;margin-top:5px">'+conMatriz+' con su día y hora real de la cámara'+
+        ((ok-conMatriz)>0?(' · '+(ok-conMatriz)+' sin esa información, va la fecha del archivo'):'')+'</div>';
+    var bb=document.getElementById('_dsBar');if(bb&&!mal)bb.style.width='100%';
+  }catch(_ec){}
+  var b=document.getElementById('_dsBtn');
+  if(b){b.textContent=mal?'Cerrar':'✓ Listo';
+    if(!mal){b.style.background='#0C5132';b.style.color='#fff'}}
   _docRender();
 }
 /* --- miniaturas: el bucket es privado, se traen y se muestran como blob --- */
@@ -7628,34 +7646,60 @@ async function _galThumb(a,img){
     var u=URL.createObjectURL(await r.blob());
     window._galBlob[a.id]=u;img.src=u;
   }catch(e){}}
+/* fecha y hora de una foto. Lo guardado puede ser el objeto nuevo {dt,src} o,
+   de las primeras subidas, un texto suelto; los dos se entienden igual */
+function _galDT(a,F){
+  var g=(F&&F[a.id]),v='',src='archivo';
+  if(g&&typeof g==='object'){v=String(g.dt||'');src=g.src||'archivo'}
+  else if(g)v=String(g);
+  if(!v){var c=String(a.created_at||'');if(c){v=c.slice(0,10)+' '+c.slice(11,16);src='subida'}}
+  var d=v.slice(0,10),t=v.slice(11,16);
+  return {d:d||'sin fecha',t:t||'',h:(t?t.slice(0,2):'--'),src:src,ord:(d||'')+' '+(t||'')}}
+function _galDiaLbl(d){
+  try{if(/^\d{4}-\d{2}-\d{2}$/.test(d)){
+    var x=new Date(d+'T00:00:00');
+    var DS=['domingo','lunes','martes','mi\u00e9rcoles','jueves','viernes','s\u00e1bado'];
+    var MS=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    var l=DS[x.getDay()]+' '+x.getDate()+' '+MS[x.getMonth()]+' '+x.getFullYear();
+    if(d===((typeof todayISO==='function')?todayISO():''))l+=' \u00b7 HOY';
+    return l}}catch(e){}
+  return d||'sin fecha'}
+function _galHoraLbl(h){return (h==='--')?'sin hora':(h+':00 a '+h+':59')}
+function _galEsFoto(a){return /\.(jpe?g|png|webp|gif|heic|heif|bmp|avif)$/i.test(String((a&&a.nombre)||''))}
 function _galHTML(cid){
-  var arch=_docArchDe(cid);
-  var F=_galFechas(cid);
-  var esFoto=function(a){return /\.(jpe?g|png|webp|gif|heic|heif|bmp|avif)$/i.test(String(a.nombre||''))};
-  var fotos=arch.filter(esFoto),otros=arch.filter(function(a){return !esFoto(a)});
+  var arch=_docArchDe(cid), F=_galFechas(cid);
+  var fotos=arch.filter(_galEsFoto);
   if(!fotos.length)return {html:'',fotos:[]};
-  var por={};
-  fotos.forEach(function(a){var f=F[a.id]||String(a.created_at||'').slice(0,10)||'sin fecha';
-    (por[f]=por[f]||[]).push(a)});
-  var dias=Object.keys(por).sort(function(a,b){return String(b).localeCompare(String(a))});
+  /* primero por dia, y dentro de cada dia por hora, siempre de lo nuevo a lo viejo */
+  var porDia={},sinMatriz=0;
+  fotos.forEach(function(a){var m=_galDT(a,F);a._dt=m;if(m.src!=='foto')sinMatriz++;
+    (porDia[m.d]=porDia[m.d]||[]).push(a)});
+  var dias=Object.keys(porDia).sort(function(x,y){return String(y).localeCompare(String(x))});
   var H='';
+  H+='<div style="font-size:10.5px;color:var(--muted);margin:8px 2px 0;line-height:1.5">'+
+     '\ud83d\udcf7 = d\u00eda y hora en que se tom\u00f3, le\u00eddos de la propia foto'+
+     (sinMatriz?(' \u00b7 \ud83d\uddd3 = la foto no traía esa información, va la fecha del archivo ('+sinMatriz+')'):'')+'</div>';
   dias.forEach(function(d){
-    var lbl=d;
-    try{if(/^\d{4}-\d{2}-\d{2}$/.test(d)){var x=new Date(d+'T00:00:00');
-      var DS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
-      var MS=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-      lbl=DS[x.getDay()]+' '+x.getDate()+' '+MS[x.getMonth()]+' '+x.getFullYear();
-      if(d===((typeof todayISO==='function')?todayISO():''))lbl+=' · HOY'}}catch(e){}
-    H+='<div style="display:flex;align-items:center;gap:8px;margin:12px 2px 7px">'+
-       '<b style="font-size:12px;color:#0C5132;text-transform:capitalize">'+esc(lbl)+'</b>'+
-       '<span style="flex:1;height:1px;background:var(--line)"></span>'+
-       '<span style="font-size:11px;color:var(--muted)">'+por[d].length+'</span></div>';
-    H+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:7px">';
-    por[d].forEach(function(a){
-      H+='<div class="_galIt" data-aid="'+esc(a.id)+'" style="position:relative;border-radius:10px;overflow:hidden;border:1.5px solid var(--line);background:#EEF2F7;cursor:pointer;aspect-ratio:1/1">'+
-         '<img class="_galImg" data-aid="'+esc(a.id)+'" style="width:100%;height:100%;object-fit:cover;display:block">'+
-         '<span class="_galDel" data-aid="'+esc(a.id)+'" title="Borrar" style="position:absolute;top:4px;right:4px;background:rgba(180,35,24,.92);color:#fff;border-radius:7px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px">✕</span></div>'});
-    H+='</div>'});
+    H+='<div style="display:flex;align-items:center;gap:8px;margin:14px 2px 2px">'+
+       '<span style="background:#0C5132;color:#fff;border-radius:8px;padding:3px 9px;font-size:11.5px;font-weight:900;text-transform:capitalize">'+esc(_galDiaLbl(d))+'</span>'+
+       '<span style="flex:1;height:2px;background:#0C5132;opacity:.18"></span>'+
+       '<span style="font-size:11px;color:var(--muted);font-weight:700">'+porDia[d].length+' foto'+(porDia[d].length===1?'':'s')+'</span></div>';
+    var porH={};
+    porDia[d].forEach(function(a){(porH[a._dt.h]=porH[a._dt.h]||[]).push(a)});
+    var horas=Object.keys(porH).sort(function(x,y){return String(y).localeCompare(String(x))});
+    horas.forEach(function(h){
+      H+='<div style="display:flex;align-items:center;gap:7px;margin:10px 2px 6px">'+
+         '<span style="font-size:11px;font-weight:800;color:#5B3A8A">\ud83d\udd50 '+esc(_galHoraLbl(h))+'</span>'+
+         '<span style="flex:1;height:1px;background:#5B3A8A;opacity:.22"></span>'+
+         '<span style="font-size:10.5px;color:var(--muted)">'+porH[h].length+'</span></div>';
+      H+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:7px">';
+      porH[h].sort(function(x,y){return String(y._dt.ord).localeCompare(String(x._dt.ord))}).forEach(function(a){
+        var mk=(a._dt.src==='foto')?'\ud83d\udcf7':'\ud83d\uddd3';
+        H+='<div class="_galIt" data-aid="'+esc(a.id)+'" style="position:relative;border-radius:10px;overflow:hidden;border:1.5px solid var(--line);background:#EEF2F7;cursor:pointer;aspect-ratio:1/1">'+
+           '<img class="_galImg" data-aid="'+esc(a.id)+'" style="width:100%;height:100%;object-fit:cover;display:block">'+
+           (a._dt.t?('<span style="position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(10,18,32,.78));color:#fff;font-size:10.5px;font-weight:800;padding:12px 6px 4px">'+mk+' '+esc(a._dt.t)+'</span>'):'')+
+           '<span class="_galDel" data-aid="'+esc(a.id)+'" title="Borrar" style="position:absolute;top:4px;right:4px;background:rgba(180,35,24,.92);color:#fff;border-radius:7px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px">\u2715</span></div>'});
+      H+='</div>'})});
   return {html:H,fotos:fotos}}
 function _galWire(w,cid){
   Array.prototype.forEach.call(w.querySelectorAll('._galImg'),function(img){
