@@ -3388,7 +3388,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260821b6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260821b7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -8674,15 +8674,26 @@ function _galPicker(onElegir){
     '<button id="_galPkOk" style="background:#fff;color:#0C5132;border:0;border-radius:11px;padding:0 14px;height:40px;font-weight:800;font-size:13px;cursor:pointer">Usar (0)</button></div>'+
     '<div id="_galPkBody" style="flex:1;overflow:auto;padding:12px 11px 24px"></div>';
   document.body.appendChild(ov);
-  var sel={};
+  var sel={},abierto={};
   var pinta=function(){
     var w=document.getElementById('_galPkBody');
     if(!gals.length){w.innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:30px 14px;line-height:1.6">Todavia no hay carpetas de fotos.<br>En Documentos, entra a una carpeta y marca <b>“Carpeta de fotos”</b> arriba.</div>';return}
     var H='';
-    gals.forEach(function(c){
-      var g=_galHTML(c.id);
-      H+='<div style="font-weight:800;font-size:12.5px;color:#1F3864;margin:6px 2px 2px">📁 '+esc(c.nombre)+'</div>';
-      H+=g.html||'<div style="color:var(--muted);font-size:12px;padding:8px 2px">Sin fotos todavia</div>'});
+    /* como WBS: solo las carpetas que tienen fotos, plegables */
+    var conFotos=gals.map(function(c){return {c:c,g:_galHTML(c.id)}}).filter(function(x){return (x.g.fotos||[]).length>0});
+    if(!conFotos.length){w.innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:30px 14px">Las carpetas de fotos están vacías todavía.</div>';return}
+    if(conFotos.length===1&&!(conFotos[0].c.id in abierto))abierto[conFotos[0].c.id]=true;
+    conFotos.forEach(function(x){
+      var c=x.c,g=x.g,open=!!abierto[c.id];
+      var nMarc=(g.fotos||[]).filter(function(f){return sel[f.id]}).length;
+      H+='<div class="_gpkHead" data-cid="'+esc(c.id)+'" style="display:flex;align-items:center;gap:9px;background:#fff;border:1.5px solid '+(open?'#0C5132':'var(--line)')+';border-radius:12px;padding:11px 12px;margin:8px 0 '+(open?'6px':'0')+';cursor:pointer;-webkit-tap-highlight-color:transparent">'+
+        '<span style="flex:none;font-size:13px;color:#0C5132;font-weight:900;transform:rotate('+(open?'90deg':'0deg')+');transition:transform .15s">▸</span>'+
+        '<span style="flex:1;min-width:0"><b style="font-size:13px;color:#1F3864">📁 '+esc(c.nombre)+'</b> '+
+        '<span style="font-size:12px;font-weight:800;color:#0C5132">('+g.fotos.length+')</span>'+
+        '<span style="display:block;font-size:11px;color:var(--muted);margin-top:1px">— '+esc(c.creado_por||'sin dueño')+'</span></span>'+
+        (nMarc?('<span style="flex:none;background:#0C5132;color:#fff;border-radius:20px;padding:3px 9px;font-size:11px;font-weight:900">'+nMarc+' ✓</span>'):'')+
+        '</div>';
+      if(open)H+='<div style="padding:0 2px 6px">'+g.html+'</div>'});
     _pintaSinSalto(w,H);
     Array.prototype.forEach.call(w.querySelectorAll('._galImg'),function(img){
       var a=_docArch().filter(function(z){return z.id===img.getAttribute('data-aid')})[0];
@@ -8690,6 +8701,8 @@ function _galPicker(onElegir){
     Array.prototype.forEach.call(w.querySelectorAll('._galDel'),function(x){x.remove()});
     Array.prototype.forEach.call(w.querySelectorAll('._galFec'),function(x){x.remove()});
     Array.prototype.forEach.call(w.querySelectorAll('._galDia'),function(x){x.remove()});
+    Array.prototype.forEach.call(w.querySelectorAll('._gpkHead'),function(h){h.onclick=function(){
+      var cid=h.getAttribute('data-cid');abierto[cid]=!abierto[cid];pinta()}});
     Array.prototype.forEach.call(w.querySelectorAll('._galIt'),function(d){
       var id=d.getAttribute('data-aid');
       var on=!!sel[id];
