@@ -2007,7 +2007,7 @@ function _wkPonCelda(rowxml,rnum,col,valor,estilo){
   while((m=re.exec(rowxml))){if(+m[2]===rnum&&_wkOrdenCol(m[1])>_wkOrdenCol(col)){mejor=m.index;break}}
   if(mejor!=null)return rowxml.slice(0,mejor)+nueva+rowxml.slice(mejor);
   return rowxml.replace('</row>',nueva+'</row>')}
-function _wkProcesarP62(xml,ss,semN,acum){
+function _wkProcesarP62(xml,ss,semN,acum,topar){
   var colSem=WK_COLS[semN-27];
   var pasadas=WK_COLS.slice(0,semN-27);
   var porItem={},filasXml={};
@@ -2031,18 +2031,23 @@ function _wkProcesarP62(xml,ss,semN,acum){
   Object.keys(acum).sort().forEach(function(it){
     var fl=porItem[_wkClave(it)];
     if(!fl){avisos.push(it+': no tiene fila en P6-2 (acum '+acum[it]+' queda sin cargar)');return}
-    var pas=0;fl.forEach(function(f){pas+=f.pas});
-    var delta=Math.round((acum[it]-pas)*1e4)/1e4;
+    var pas=0,lb0tot=0;fl.forEach(function(f){pas+=f.pas;lb0tot+=f.lb0});
+    /* con tope: lo reportable llega hasta el 100% del LB0 del Excel; el resto es
+       sobremetrado y se deja fuera (queda avisado) */
+    var eff=acum[it],topado=false;
+    if(topar&&lb0tot>0&&eff>lb0tot+1e-9){eff=lb0tot;topado=true}
+    var delta=Math.round((eff-pas)*1e4)/1e4;
     if(delta<-1e-9){avisos.push(it+': el Excel ya tiene MÁS que el aplicativo ('+(Math.round(pas*1e4)/1e4)+' vs '+acum[it]+') — no se toca');return}
-    if(delta<1e-9){resumen.push({it:it,pas:pas,nuevo:0});return}
+    if(delta<1e-9){resumen.push({it:it,pas:pas,nuevo:0,topado:topado});return}
     var resto=delta;
     for(var i=0;i<fl.length;i++){
       var cap=Math.max(0,Math.round((fl[i].lb0-fl[i].pas)*1e6)/1e6);
-      var pon=(i===fl.length-1)?resto:Math.min(resto,cap);
+      var pon=(i===fl.length-1&&!topar)?resto:Math.min(resto,cap);
       pon=Math.round(pon*1e4)/1e4;
       if(pon>1e-9){escribir[fl[i].fila]={v:pon,s:fl[i].est};resto=Math.round((resto-pon)*1e6)/1e6}
       if(resto<=1e-9)break}
-    resumen.push({it:it,pas:pas,nuevo:delta})});
+    resumen.push({it:it,pas:pas,nuevo:delta,topado:topado,
+      fuera:topado?(Math.round((acum[it]-lb0tot)*1e4)/1e4):0})});
   var x2=xml.replace(/<row r="(\d+)"[^>]*>[\s\S]*?<\/row>/g,function(todo,rs){
     var r=+rs;if(!escribir[r])return todo;
     return _wkPonCelda(todo,r,colSem,escribir[r].v,escribir[r].s)});
@@ -2067,6 +2072,10 @@ function _wkExcel(){
     '<div style="font-size:12px;color:#5C6779;line-height:1.5;margin-bottom:12px">Elige la semana y tu Excel plantilla. Se llena la hoja <b>P6-2</b> con lo real del aplicativo (descontando lo ya cargado en semanas pasadas) y la <b>Carátula (P)</b> pasa a esa semana. Nada más se toca.</div>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Semana</label>'+
     '<select id="_wkSel" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:11px">'+ops+'</select>'+
+    '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Sobremetrados</label>'+
+    '<select id="_wkTope" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:11px">'+
+    '<option value="tope" selected>Solo hasta el 100% del metrado LB0 (topar el sobremetrado)</option>'+
+    '<option value="todo">Incluir el sobremetrado (todo lo ejecutado)</option></select>'+
     '<button id="_wkPick" style="width:100%;background:#EAF1FB;color:#1F3864;border:1.5px dashed #7FA0F5;border-radius:11px;padding:13px;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:11px">📄 Elegir el Excel plantilla…</button>'+
     '<input type="file" id="_wkFile" accept=".xlsx" style="display:none">'+
     '<div id="_wkMsg" style="font-size:12px;color:#5C6779;margin-bottom:11px"></div>'+
@@ -2101,7 +2110,8 @@ function _wkExcel(){
       var ss=_wkLeerSS(await leer('xl/sharedStrings.xml'));
       /* P6-2: confirmar que sheet20 ES P6-2 mirando el titulo de la fila 1 */
       var x20=await leer('xl/worksheets/sheet20.xml');
-      var r=_wkProcesarP62(x20,ss,semN,acum);
+      var topar=((document.getElementById('_wkTope')||{}).value!=='todo');
+      var r=_wkProcesarP62(x20,ss,semN,acum,topar);
       /* Caratula C17 */
       var x22=await leer('xl/worksheets/sheet22.xml');
       var c17=x22.match(/<c r="C17"[^>]*>[\s\S]*?<\/c>/);
@@ -2126,7 +2136,7 @@ function _wkExcel(){
       try{
         var t=(typeof nowSrv==='function'?nowSrv():Date.now());
         await sbUpsert('ajustes_create_110826',[{proyecto:DATA.proyecto,clave:'excel_semanal',
-          valor:{semana:semN,corte:corte,filas:r.escritas,items:r.resumen.length,avisos:r.avisos.length,
+          valor:{semana:semN,corte:corte,filas:r.escritas,items:r.resumen.length,avisos:r.avisos.length,tope:topar,
                  quien:(state.user&&state.user.supervisor)||'',cuando:new Date().toISOString()},
           descripcion:'Ultimo Excel semanal generado',quien:(state.user&&state.user.supervisor)||'',
           ts:t,cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0}],'proyecto,clave');
@@ -2136,7 +2146,9 @@ function _wkExcel(){
       var H='<div style="background:#EAF3EC;border:1px solid #BFD8C6;border-radius:10px;padding:9px 11px;font-size:12px;color:#0C5132;font-weight:800;margin-bottom:8px">✓ Descargado · S'+semN+' · '+r.escritas+' fila(s) escritas en P6-2 · carátula en '+semN+'</div>';
       var conD=r.resumen.filter(function(x){return x.nuevo>0});
       if(conD.length){H+='<div style="font-size:11.5px;color:#1B2433;line-height:1.7">'+conD.map(function(x){
-        return '<b>'+x.it+'</b>: +'+x.nuevo}).join(' · ')+'</div>'}
+        return '<b>'+x.it+'</b>: +'+x.nuevo+(x.topado?(' <span style="color:#7A4B00">(topado al 100%, quedan '+x.fuera+' de sobremetrado fuera)</span>'):'')}).join(' · ')+'</div>'}
+      var top2=r.resumen.filter(function(x){return x.topado&&!(x.nuevo>0)});
+      if(top2.length){H+='<div style="font-size:11px;color:#7A4B00;margin-top:6px">Topados sin delta: '+top2.map(function(x){return x.it}).join(', ')+'</div>'}
       if(r.avisos.length){H+='<div style="background:#FCEFD9;border:1px solid #EFC98A;border-radius:10px;padding:8px 10px;font-size:11px;color:#7A4B00;margin-top:8px;line-height:1.6">'+r.avisos.map(function(a2){return '⚠ '+a2}).join('<br>')+'</div>'}
       msg.innerHTML=H;
       g.textContent='✓ Listo — generar otra vez';g.disabled=false;
@@ -3208,7 +3220,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260821a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260821a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
