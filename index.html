@@ -2919,7 +2919,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260812h2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260820g1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -7502,6 +7502,231 @@ async function _docRenombrarArchivo(a){
   _docRender();
   if(typeof toast==='function')toast('✏️ Ahora se llama "'+nom+'"');
 }
+/* === GALERIA DE FOTOS DENTRO DE DOCUMENTOS ===
+   Una carpeta se puede marcar como galeria con el check de arriba. Al hacerlo
+   aparece el boton de Fotos: se suben desde camara o galeria del equipo, la app
+   lee la fecha de la propia foto (EXIF, y si no la trae, la del archivo) y las
+   ordena por dia, de lo mas nuevo a lo mas viejo.
+   Despues, al reportar metrado en una actividad, se pueden elegir estas fotos
+   en vez de tomar una nueva.
+   La marca de galeria va en la columna 'color' de doc_carpetas_create_120826 y
+   las fechas en ajustes_create_110826 con clave 'gal:<carpeta>', las dos con
+   lapida, ts, trigger de updated_at y tiempo real. */
+function _docEsGal(c){return !!c&&String(c.color||'')==='FOTOS'}
+function _galFechas(cid){if(!state.galFechas)state.galFechas={};
+  if(!state.galFechas[cid]){try{state.galFechas[cid]=JSON.parse(localStorage.getItem('obf4_gal_'+cid)||'{}')||{}}catch(e){state.galFechas[cid]={}}}
+  return state.galFechas[cid]}
+function _galSave(cid){try{localStorage.setItem('obf4_gal_'+cid,JSON.stringify(_galFechas(cid)))}catch(e){}}
+async function _galPush(cid){
+  try{
+    if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
+    var t=(typeof nowSrv==='function'?nowSrv():Date.now());
+    await sbUpsert('ajustes_create_110826',[{proyecto:DATA.proyecto,clave:'gal:'+cid,
+      valor:{carpeta_id:cid,fechas:_galFechas(cid)},descripcion:'Fechas de las fotos de la galeria',
+      quien:(state.user&&state.user.supervisor)||'',ts:t,cell_at:Date.now(),
+      eliminado:false,elim_por:'',elim_ts:0}],'proyecto,clave')}catch(e){}}
+async function _galPull(){
+  if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
+  try{
+    var R=await sbSelect('ajustes_create_110826','select=clave,valor&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&clave=like.gal:*&limit=500');
+    if(!state.galFechas)state.galFechas={};
+    (R||[]).forEach(function(r){var v=(r&&r.valor)||{};var cid=v.carpeta_id||String(r.clave||'').slice(4);
+      if(!cid)return;var f=v.fechas||{};
+      var loc=state.galFechas[cid]||{};for(var k in f){if(!loc[k])loc[k]=f[k]}
+      state.galFechas[cid]=loc;_galSave(cid)})}catch(e){}}
+try{var _galPullBase=syncPull;syncPull=async function(){var r=await _galPullBase.apply(this,arguments);try{await _galPull()}catch(e){}return r}}catch(_gw){}
+/* --- la fecha de la foto: primero la que trae dentro, si no la del archivo --- */
+function _galFechaDe(file){
+  return new Promise(function(res){
+    var fin=function(d){try{
+      var x=(d instanceof Date&&!isNaN(d))?d:new Date(file.lastModified||Date.now());
+      var p=function(n){return (n<10?'0':'')+n};
+      res(x.getFullYear()+'-'+p(x.getMonth()+1)+'-'+p(x.getDate()))
+    }catch(e){res('')}};
+    try{
+      if(!/jpe?g/i.test(file.type||'')&&!/\.jpe?g$/i.test(file.name||''))return fin(null);
+      var fr=new FileReader();
+      fr.onerror=function(){fin(null)};
+      fr.onload=function(){try{
+        var v=new DataView(fr.result);
+        if(v.getUint16(0)!==0xFFD8)return fin(null);
+        var off=2,len=v.byteLength;
+        while(off<len-4){
+          var m=v.getUint16(off);
+          if(m===0xFFE1){
+            var s=off+4;
+            if(v.getUint32(s)!==0x45786966)return fin(null);
+            var tiff=s+6, le=(v.getUint16(tiff)===0x4949);
+            var g16=function(o){return v.getUint16(o,le)},g32=function(o){return v.getUint32(o,le)};
+            var ifd=tiff+g32(tiff+4);
+            var buscar=function(dir){
+              var n=g16(dir);
+              for(var i=0;i<n;i++){
+                var e=dir+2+i*12,tag=g16(e);
+                if(tag===0x9003||tag===0x0132){
+                  var vo=tiff+g32(e+8),txt='';
+                  for(var j=0;j<19;j++)txt+=String.fromCharCode(v.getUint8(vo+j));
+                  return txt}
+                if(tag===0x8769){var sub=tiff+g32(e+8);var rr=buscar(sub);if(rr)return rr}}
+              return ''};
+            var txt=buscar(ifd);
+            if(txt&&/^\d{4}[:\-]\d{2}[:\-]\d{2}/.test(txt)){
+              var a=txt.slice(0,10).replace(/:/g,'-').split('-');
+              return fin(new Date(+a[0],(+a[1])-1,+a[2]))}
+            return fin(null)}
+          if((m&0xFF00)!==0xFF00)break;
+          off+=2+v.getUint16(off+2)}
+        fin(null)}catch(e){fin(null)}};
+      fr.readAsArrayBuffer(file.slice(0,256*1024));
+    }catch(e){fin(null)}})}
+/* --- subir fotos a la galeria --- */
+async function _galSubir(cid,files){
+  var lista=Array.prototype.slice.call(files||[]);
+  if(!lista.length)return;
+  var est={},items=[];
+  for(var i=0;i<lista.length;i++)items.push({clave:'g'+i,file:lista[i],nombre:lista[i].name,size:lista[i].size||0});
+  items.forEach(function(x){est[x.clave]={estado:'espera',subido:0,msg:''}});
+  var total=items.reduce(function(t,x){return t+(x.size||0)},0);
+  window._docSubiendo=true;window._docAbort=false;window._docXhrs=[];
+  _docBarraAbrir(items,est,total);
+  var pinta=function(f){_docBarraPinta(items,est,total,f)};
+  pinta('📷 Leyendo la fecha de cada foto…');
+  var F=_galFechas(cid),ok=0,mal=0;
+  for(var k=0;k<items.length&&!window._docAbort;k++){
+    var x=items[k],s=est[x.clave];s.estado='sube';pinta();
+    try{
+      var fecha=await _galFechaDe(x.file);
+      /* se guarda ya redimensionada, como el resto de fotos de la app */
+      var du=await resize(x.file);
+      var blob=dataURLtoBlob(du);
+      var aid=_docNuevoId('A');
+      var limpio=String(x.nombre||'foto.jpg').replace(/[^\w.\- ]+/g,'_');
+      var ruta=cid+'/'+aid+'_'+limpio;
+      await _docSubirUno(new File([blob],limpio,{type:'image/jpeg'}),ruta,
+        function(l){s.subido=l;pinta()},function(xh){window._docXhrs.push(xh)});
+      await _docGuardarArchivo({id:aid,carpeta_id:cid,nombre:x.nombre,ruta:ruta,
+        mime:'image/jpeg',tamano:blob.size||0,subido_por:_docSup(),
+        eliminado:false,elim_por:'',elim_ts:0},true);
+      F[aid]=fecha||'';_galSave(cid);
+      s.estado='ok';s.subido=x.size||0;ok++;
+    }catch(e){s.estado='mal';s.msg=String((e&&e.message)||e).slice(0,60);mal++}
+    pinta();
+  }
+  window._docSubiendo=false;window._docXhrs=[];
+  try{await _galPush(cid)}catch(e){}
+  pinta(mal?('Termino con '+mal+' error(es)'):'✓ '+ok+' foto(s) en la galeria');
+  var b=document.getElementById('_dsBtn');if(b)b.textContent='Cerrar';
+  _docRender();
+}
+/* --- miniaturas: el bucket es privado, se traen y se muestran como blob --- */
+window._galBlob=window._galBlob||{};
+async function _galThumb(a,img){
+  try{
+    if(window._galBlob[a.id]){img.src=window._galBlob[a.id];return}
+    var r=await fetch(sbBase()+'/storage/v1/object/documentos/'+encodeURI(a.ruta),{headers:sbHead()});
+    if(!r.ok)return;
+    var u=URL.createObjectURL(await r.blob());
+    window._galBlob[a.id]=u;img.src=u;
+  }catch(e){}}
+function _galHTML(cid){
+  var arch=_docArchDe(cid);
+  var F=_galFechas(cid);
+  var esFoto=function(a){return /\.(jpe?g|png|webp|gif|heic|heif|bmp|avif)$/i.test(String(a.nombre||''))};
+  var fotos=arch.filter(esFoto),otros=arch.filter(function(a){return !esFoto(a)});
+  if(!fotos.length)return {html:'',fotos:[]};
+  var por={};
+  fotos.forEach(function(a){var f=F[a.id]||String(a.created_at||'').slice(0,10)||'sin fecha';
+    (por[f]=por[f]||[]).push(a)});
+  var dias=Object.keys(por).sort(function(a,b){return String(b).localeCompare(String(a))});
+  var H='';
+  dias.forEach(function(d){
+    var lbl=d;
+    try{if(/^\d{4}-\d{2}-\d{2}$/.test(d)){var x=new Date(d+'T00:00:00');
+      var DS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+      var MS=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+      lbl=DS[x.getDay()]+' '+x.getDate()+' '+MS[x.getMonth()]+' '+x.getFullYear();
+      if(d===((typeof todayISO==='function')?todayISO():''))lbl+=' · HOY'}}catch(e){}
+    H+='<div style="display:flex;align-items:center;gap:8px;margin:12px 2px 7px">'+
+       '<b style="font-size:12px;color:#0C5132;text-transform:capitalize">'+esc(lbl)+'</b>'+
+       '<span style="flex:1;height:1px;background:var(--line)"></span>'+
+       '<span style="font-size:11px;color:var(--muted)">'+por[d].length+'</span></div>';
+    H+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:7px">';
+    por[d].forEach(function(a){
+      H+='<div class="_galIt" data-aid="'+esc(a.id)+'" style="position:relative;border-radius:10px;overflow:hidden;border:1.5px solid var(--line);background:#EEF2F7;cursor:pointer;aspect-ratio:1/1">'+
+         '<img class="_galImg" data-aid="'+esc(a.id)+'" style="width:100%;height:100%;object-fit:cover;display:block">'+
+         '<span class="_galDel" data-aid="'+esc(a.id)+'" title="Borrar" style="position:absolute;top:4px;right:4px;background:rgba(180,35,24,.92);color:#fff;border-radius:7px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px">✕</span></div>'});
+    H+='</div>'});
+  return {html:H,fotos:fotos}}
+function _galWire(w,cid){
+  Array.prototype.forEach.call(w.querySelectorAll('._galImg'),function(img){
+    var a=_docArch().filter(function(z){return z.id===img.getAttribute('data-aid')})[0];
+    if(a)_galThumb(a,img)});
+  Array.prototype.forEach.call(w.querySelectorAll('._galIt'),function(d){d.onclick=function(e){
+    if(e.target&&e.target.classList&&e.target.classList.contains('_galDel'))return;
+    var a=_docArch().filter(function(z){return z.id===d.getAttribute('data-aid')})[0];
+    if(a&&typeof _docAbrirArchivo==='function')_docAbrirArchivo(a)}});
+  Array.prototype.forEach.call(w.querySelectorAll('._galDel'),function(b){b.onclick=function(e){
+    e.stopPropagation();
+    var a=_docArch().filter(function(z){return z.id===b.getAttribute('data-aid')})[0];
+    if(a&&typeof _docBorrarArchivo==='function')_docBorrarArchivo(a)}});
+}
+/* --- elegir fotos de la galeria al reportar metrado --- */
+function _galCarpetas(){return _docCarp().filter(function(c){return !c.eliminado&&_docEsGal(c)})}
+function _galPicker(onElegir){
+  var gals=_galCarpetas();
+  var ov=document.createElement('div');ov.id='_galPkOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483550;background:var(--bg,#eef2f7);display:flex;flex-direction:column';
+  ov.innerHTML='<div style="background:#0C5132;color:#fff;padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));display:flex;align-items:center;gap:10px;flex:none">'+
+    '<button id="_galPkX" style="background:rgba(255,255,255,.16);color:#fff;border:0;border-radius:12px;width:42px;height:42px;font-size:19px;cursor:pointer;flex:none">‹</button>'+
+    '<div style="flex:1;min-width:0"><div style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#A9DDBC">Galeria del proyecto</div>'+
+    '<div style="font-size:15px;font-weight:700">🖼 Elige las fotos</div></div>'+
+    '<button id="_galPkOk" style="background:#fff;color:#0C5132;border:0;border-radius:11px;padding:0 14px;height:40px;font-weight:800;font-size:13px;cursor:pointer">Usar (0)</button></div>'+
+    '<div id="_galPkBody" style="flex:1;overflow:auto;padding:12px 11px 24px"></div>';
+  document.body.appendChild(ov);
+  var sel={};
+  var pinta=function(){
+    var w=document.getElementById('_galPkBody');
+    if(!gals.length){w.innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:30px 14px;line-height:1.6">Todavia no hay carpetas de fotos.<br>En Documentos, entra a una carpeta y marca <b>“Carpeta de fotos”</b> arriba.</div>';return}
+    var H='';
+    gals.forEach(function(c){
+      var g=_galHTML(c.id);
+      H+='<div style="font-weight:800;font-size:12.5px;color:#1F3864;margin:6px 2px 2px">📁 '+esc(c.nombre)+'</div>';
+      H+=g.html||'<div style="color:var(--muted);font-size:12px;padding:8px 2px">Sin fotos todavia</div>'});
+    w.innerHTML=H;
+    Array.prototype.forEach.call(w.querySelectorAll('._galImg'),function(img){
+      var a=_docArch().filter(function(z){return z.id===img.getAttribute('data-aid')})[0];
+      if(a)_galThumb(a,img)});
+    Array.prototype.forEach.call(w.querySelectorAll('._galDel'),function(x){x.remove()});
+    Array.prototype.forEach.call(w.querySelectorAll('._galIt'),function(d){
+      var id=d.getAttribute('data-aid');
+      if(sel[id]){d.style.borderColor='#0C5132';d.style.boxShadow='0 0 0 3px rgba(12,81,50,.25)';
+        if(!d.querySelector('._galCk')){var s=document.createElement('span');s.className='_galCk';
+          s.textContent='✓';s.style.cssText='position:absolute;top:4px;right:4px;background:#0C5132;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-weight:900';
+          d.appendChild(s)}}
+      else{d.style.borderColor='var(--line)';d.style.boxShadow='';var q=d.querySelector('._galCk');if(q)q.remove()}
+      d.onclick=function(){sel[id]=!sel[id];pinta()}});
+    var n=Object.keys(sel).filter(function(k){return sel[k]}).length;
+    document.getElementById('_galPkOk').textContent='Usar ('+n+')'};
+  pinta();
+  document.getElementById('_galPkX').onclick=function(){ov.remove()};
+  document.getElementById('_galPkOk').onclick=async function(){
+    var ids=Object.keys(sel).filter(function(k){return sel[k]});
+    if(!ids.length){if(typeof toast==='function')toast('Marca al menos una foto');return}
+    var b=document.getElementById('_galPkOk');b.disabled=true;b.textContent='Trayendo…';
+    var out=[];
+    for(var i=0;i<ids.length;i++){
+      var a=_docArch().filter(function(z){return z.id===ids[i]})[0];if(!a)continue;
+      try{
+        var r=await fetch(sbBase()+'/storage/v1/object/documentos/'+encodeURI(a.ruta),{headers:sbHead()});
+        if(!r.ok)continue;
+        var bl=await r.blob();
+        var du=await new Promise(function(res2){var fr=new FileReader();fr.onload=function(){res2(fr.result)};fr.readAsDataURL(bl)});
+        out.push(du)
+      }catch(e){}}
+    ov.remove();
+    if(onElegir)onElegir(out);
+  };
+}
 function _docRender(){
   var w=document.getElementById('_docBody');if(!w)return;
   var cid=_docActual();var cur=cid?_docCarpDe(cid):null;
@@ -7517,7 +7742,15 @@ function _docRender(){
   H+='<div style="display:flex;gap:8px;margin-bottom:12px">';
   H+='<button id="_docNueva" type="button" style="flex:1;background:#0C5132;color:#fff;border:0;border-radius:11px;padding:12px;font-weight:800;font-size:13px;cursor:pointer">+ '+(cid?'Subcarpeta':'Nueva carpeta')+'</button>';
   if(cid)H+='<button id="_docUp" type="button"'+(subir?'':' disabled')+' style="flex:1;background:'+(subir?'#1F3864':'#C7D2E0')+';color:#fff;border:0;border-radius:11px;padding:12px;font-weight:800;font-size:13px;cursor:'+(subir?'pointer':'not-allowed')+'">⬆ Subir archivo</button>';
+  if(cid&&_docEsGal(cur)&&subir)H+='<button id="_docFotos" type="button" style="flex:1;background:#5B3A8A;color:#fff;border:0;border-radius:11px;padding:12px;font-weight:800;font-size:13px;cursor:pointer">📷 Fotos</button>';
   H+='</div>';
+  /* el check que convierte la carpeta en galeria de fotos */
+  if(cid&&_docMio(cur)){
+    var _gon=_docEsGal(cur);
+    H+='<label id="_docGalLb" style="display:flex;align-items:center;gap:9px;background:'+(_gon?'#F1ECFA':'#fff')+';border:1.5px solid '+(_gon?'#B9A3DE':'var(--line)')+';border-radius:12px;padding:10px 12px;margin-bottom:11px;cursor:pointer">'+
+      '<input type="checkbox" id="_docGalCk"'+(_gon?' checked':'')+' style="width:19px;height:19px;accent-color:#5B3A8A;flex:none">'+
+      '<span style="flex:1;min-width:0"><span style="display:block;font-weight:800;font-size:12.5px;color:#5B3A8A">🖼 Carpeta de fotos</span>'+
+      '<span style="display:block;font-size:11px;color:var(--muted);line-height:1.4">Se ordenan solas por la fecha de cada foto y se pueden usar al reportar metrado.</span></span></label>'}
   if(cid&&!subir)H+='<div style="background:#FCEFD9;border:1px solid #EFC98A;border-radius:10px;padding:9px 11px;font-size:11.5px;color:#7A4B00;margin-bottom:11px">Puedes ver y descargar todo. Subir aquí solo <b>'+esc((cur&&cur.creado_por)||'su dueño')+'</b>.</div>';
   H+=_docColaHTML();
   var hijas=_docHijas(cid), archivos=cid?_docArchDe(cid):[];
@@ -7535,6 +7768,10 @@ function _docRender(){
     if(c.updated_at)H+='<br>Última modificación: '+esc(_docFecha(c.updated_at));
     H+='</div></div>';
   });
+  var _galOn=cid&&_docEsGal(cur), _galRes=null;
+  if(_galOn){_galRes=_galHTML(cid);H+=_galRes.html;
+    var _yaG={};(_galRes.fotos||[]).forEach(function(z){_yaG[z.id]=1});
+    archivos=archivos.filter(function(z){return !_yaG[z.id]})}
   archivos.forEach(function(a){
     H+='<div class="_docFile" data-aid="'+esc(a.id)+'" style="background:#fff;border:1.5px solid var(--line);border-radius:13px;padding:11px 13px;margin-bottom:9px;cursor:pointer">';
     H+='<div style="display:flex;align-items:center;gap:10px"><span style="font-size:21px">'+_docIcono(a.nombre)+'</span>';
@@ -7544,10 +7781,23 @@ function _docRender(){
     H+='<button class="_docDelA" data-aid="'+esc(a.id)+'" title="Borrar archivo" style="flex:none;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:8px;width:30px;height:30px;font-weight:900;cursor:pointer">🗑</button>';
     H+='</div></div>';
   });
-  if(!hijas.length&&!archivos.length)H+='<div style="text-align:center;color:var(--muted);font-size:13px;padding:22px 10px">'+(cid?'Carpeta vacía.':'Todavía no hay carpetas.')+'</div>';
+  if(!hijas.length&&!archivos.length&&!(_galRes&&_galRes.fotos.length))H+='<div style="text-align:center;color:var(--muted);font-size:13px;padding:22px 10px">'+(cid?(_galOn?'Todavía no hay fotos aquí. Toca 📷 Fotos.':'Carpeta vacía.'):'Todavía no hay carpetas.')+'</div>';
   if(cid&&subir)H+='<div id="_docZona" style="margin-top:12px;border:2px dashed #BFD8C6;border-radius:12px;padding:18px;text-align:center;color:#0C5132;font-size:12px;font-weight:700;background:#F4FAF6">Arrastra aquí tus archivos</div>';
   w.innerHTML=H;
   var b=document.getElementById('_docNueva');if(b)b.onclick=_docCrear;
+  var _gck=document.getElementById('_docGalCk');
+  if(_gck)_gck.onchange=async function(){
+    var c=_docCarpDe(cid);if(!c)return;
+    c.color=_gck.checked?'FOTOS':'';
+    try{await _docGuardarCarpeta(c,true)}catch(e){}
+    if(typeof toast==='function')toast(_gck.checked?'🖼 Ya es carpeta de fotos':'Vuelve a ser carpeta normal');
+    _docRender()};
+  var _gbt=document.getElementById('_docFotos');
+  if(_gbt)_gbt.onclick=function(){
+    var inp=document.createElement('input');inp.type='file';inp.multiple=true;
+    inp.accept='image/*,.heic,.heif';
+    inp.onchange=function(){var fs=inp.files;if(fs&&fs.length)_galSubir(cid,fs)};inp.click()};
+  if(_galOn){try{_galWire(w,cid)}catch(_eg){}}
   Array.prototype.forEach.call(w.querySelectorAll('._docColaX'),function(x){x.onclick=function(e){e.stopPropagation();_docColaQuitar(x.getAttribute('data-k'))}});
   Array.prototype.forEach.call(w.querySelectorAll('._docColaXC'),function(x){x.onclick=function(e){e.stopPropagation();_docColaQuitarCarp(x.getAttribute('data-n'))}});
   var _cg=document.getElementById('_docColaGo');if(_cg)_cg.onclick=_docColaSubir;
@@ -9397,12 +9647,17 @@ function _fotoPick(opts,cb){try{
  opts=opts||{};var fecha=opts.fecha||(typeof todayISO==='function'?todayISO():'');var disc=opts.disc||(state.user&&state.user.disc)||'';
  var old=document.getElementById('_fpOv');if(old)old.remove();
  var ov=document.createElement('div');ov.id='_fpOv';ov.style.cssText='position:fixed;inset:0;z-index:2147483300;background:rgba(15,25,45,.55);display:flex;align-items:flex-end;justify-content:center';
- ov.innerHTML='<div style="background:#fff;width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:14px;box-sizing:border-box;max-height:88vh;overflow:auto"><div style="font-weight:800;color:#1F3864;margin-bottom:10px">📷 Agregar foto</div><button id="_fpCam" style="width:100%;background:#1E7A46;color:#fff;border:0;border-radius:12px;padding:13px;font-weight:800;margin-bottom:8px">📷 Tomar foto</button><button id="_fpGal" style="width:100%;background:#1F6FEB;color:#fff;border:0;border-radius:12px;padding:13px;font-weight:800;margin-bottom:8px">🖼 Galería del teléfono</button><button id="_fpDb" style="width:100%;background:#5B3A8A;color:#fff;border:0;border-radius:12px;padding:13px;font-weight:800;margin-bottom:8px">🗄 Una ya subida ese día · '+esc(fecha)+' · '+esc(disc)+'</button><div id="_fpGrid"></div><button id="_fpX" style="width:100%;background:#eef2f7;border:0;border-radius:12px;padding:12px;font-weight:700">Cancelar</button><input type="file" id="_fpFileCam" accept="image/*,.heic,.heif" capture="environment" style="display:none"><input type="file" id="_fpFileGal" accept="image/*,.heic,.heif" multiple style="display:none"></div>';
+ ov.innerHTML='<div style="background:#fff;width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:14px;box-sizing:border-box;max-height:88vh;overflow:auto"><div style="font-weight:800;color:#1F3864;margin-bottom:10px">📷 Agregar foto</div><button id="_fpCam" style="width:100%;background:#1E7A46;color:#fff;border:0;border-radius:12px;padding:13px;font-weight:800;margin-bottom:8px">📷 Tomar foto</button><button id="_fpGal" style="width:100%;background:#1F6FEB;color:#fff;border:0;border-radius:12px;padding:13px;font-weight:800;margin-bottom:8px">🖼 Galería del teléfono</button><button id="_fpProy" style="width:100%;background:#0C5132;color:#fff;border:0;border-radius:12px;padding:13px;font-weight:800;margin-bottom:8px">🖼 Galería del proyecto (Documentos)</button><button id="_fpDb" style="width:100%;background:#5B3A8A;color:#fff;border:0;border-radius:12px;padding:13px;font-weight:800;margin-bottom:8px">🗄 Una ya subida ese día · '+esc(fecha)+' · '+esc(disc)+'</button><div id="_fpGrid"></div><button id="_fpX" style="width:100%;background:#eef2f7;border:0;border-radius:12px;padding:12px;font-weight:700">Cancelar</button><input type="file" id="_fpFileCam" accept="image/*,.heic,.heif" capture="environment" style="display:none"><input type="file" id="_fpFileGal" accept="image/*,.heic,.heif" multiple style="display:none"></div>';
  document.body.appendChild(ov);ov.onclick=function(e){if(e.target===ov)ov.remove()};
  document.getElementById('_fpX').onclick=function(){ov.remove()};
  function viaFile(inpId){var inp=document.getElementById(inpId);inp.onchange=function(e){var fs=e.target.files;if(fs&&fs.length){ov.remove();try{cb({files:fs})}catch(_e){}}};inp.click()}
  document.getElementById('_fpCam').onclick=function(){viaFile('_fpFileCam')};
  document.getElementById('_fpGal').onclick=function(){viaFile('_fpFileGal')};
+ var _fpp=document.getElementById('_fpProy');
+ if(_fpp)_fpp.onclick=function(){
+   if(typeof _galPicker!=='function'){if(typeof toast==='function')toast('Galería no disponible');return}
+   ov.remove();
+   _galPicker(function(dus){if(dus&&dus.length){try{cb({urls:dus})}catch(_e){}}})};
  document.getElementById('_fpDb').onclick=async function(){var g=document.getElementById('_fpGrid');g.innerHTML='<div style="padding:12px;text-align:center;color:#5C6779;font-size:12px">Buscando fotos del '+esc(fecha)+'…</div>';
   var rows=[];try{rows=await (await fetch(sbBase()+'/rest/v1/fotos?proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&fecha=eq.'+encodeURIComponent(fecha)+'&disciplina=eq.'+encodeURIComponent(safeName(disc))+'&url=not.is.null&select=url,foto_id,partida_id,supervisor&order=ts.desc&limit=120',{headers:sbHead()})).json()}catch(e){}
   if(!Array.isArray(rows))rows=[];
