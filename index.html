@@ -2919,7 +2919,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260820g9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260820h1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -7446,7 +7446,7 @@ async function _docColaSubir(){
     try{mapa[claves[k]]=await _docCarpetaPara(claves[k])}catch(e){errCarp=String(e&&e.message||e)}
   }
   pinta('⬆ Subiendo los archivos…');
-  var idx=0,ok=0,fall=0;
+  var idx=0,ok=0,fall=0,galTocadas=[];
   var obrero=async function(){
     while(!window._docAbort){
       var i=idx++;if(i>=lista.length)return;
@@ -7462,6 +7462,13 @@ async function _docColaSubir(){
         s.subido=x.size||0;
         await _docGuardarArchivo({id:id,carpeta_id:cid,nombre:x.nombre,ruta:ruta,
           mime:x.file.type||'',tamano:x.size||0,subido_por:_docSup(),eliminado:false,elim_por:'',elim_ts:0},true);
+        /* si cayo en una carpeta de fotos, se le lee el dia y la hora igual que
+           con el boton de Fotos: antes entraba sin fecha y se acomodaba mal */
+        try{var _cg=_docCarpDe(cid);
+          if(_cg&&_docEsGal(_cg)&&_galEsFoto({nombre:x.nombre})){
+            var _fg=await _galFechaDe(x.file);
+            var _FG=_galFechas(cid);_FG[id]=_fg||'';_galSave(cid);
+            if(galTocadas.indexOf(cid)<0)galTocadas.push(cid)}}catch(_eg){}
         window._docCola=window._docCola.filter(function(z){return z.clave!==x.clave});
         s.estado='ok';ok++;
       }catch(e){s.estado='mal';s.msg=String((e&&e.message)||e).slice(0,70);s.subido=0;fall++}
@@ -7471,6 +7478,7 @@ async function _docColaSubir(){
   /* de tres en tres: rinde mucho más que uno por uno y no satura la señal */
   await Promise.all([obrero(),obrero(),obrero()]);
   window._docSubiendo=false;window._docXhrs=[];
+  for(var gi=0;gi<galTocadas.length;gi++){try{await _galPush(galTocadas[gi])}catch(_ep){}}
   var cancel=window._docAbort;
   lista.forEach(function(x){var s=est[x.clave];if(s.estado==='sube'||s.estado==='espera'){s.estado='mal';s.msg=cancel?'cancelado':'no se llegó a subir';s.subido=0}});
   pinta(cancel?('⛔ Cancelado — '+ok+' ya estaban subidos'):(fall?('Terminó con '+fall+' error'+(fall===1?'':'es')):'✓ Todo subido correctamente'));
@@ -7671,7 +7679,7 @@ async function _galSubir(cid,files){
   try{var _hd=document.querySelector('#_docSubOv div div');
       if(_hd)_hd.textContent='📷 Subiendo fotos a la galería'}catch(_eh){}
   pinta('Leyendo en cada foto el día y la hora en que se tomó…');
-  var F=_galFechas(cid),ok=0,mal=0,conMatriz=0;
+  var F=_galFechas(cid),ok=0,mal=0,conMatriz=0,sinFecha=[];
   for(var k=0;k<items.length&&!window._docAbort;k++){
     var x=items[k],s=est[x.clave];s.estado='sube';pinta();
     try{
@@ -7688,7 +7696,7 @@ async function _galSubir(cid,files){
         mime:'image/jpeg',tamano:blob.size||0,subido_por:_docSup(),
         eliminado:false,elim_por:'',elim_ts:0},true);
       F[aid]=fecha||'';_galSave(cid);
-      if(fecha&&fecha.src==='foto')conMatriz++;
+      if(fecha&&fecha.src==='foto')conMatriz++;else sinFecha.push(aid);
       s.estado='ok';s.subido=x.size||0;ok++;
     }catch(e){s.estado='mal';s.msg=String((e&&e.message)||e).slice(0,60);mal++}
     pinta();
@@ -7706,6 +7714,13 @@ async function _galSubir(cid,files){
         '<div style="font-size:11px;color:#5C6779;margin-top:5px">'+conMatriz+' con su día y hora real de la cámara'+
         ((ok-conMatriz)>0?(' · '+(ok-conMatriz)+' sin esa información, va la fecha del archivo'):'')+'</div>';
     var bb=document.getElementById('_dsBar');if(bb&&!mal)bb.style.width='100%';
+    /* si alguna llego sin su fecha real, se le puede poner el dia aqui mismo */
+    if(f&&sinFecha.length){
+      var bf=document.createElement('button');
+      bf.textContent=LAPZ+' Ponles su día real ('+sinFecha.length+')';
+      bf.style.cssText='display:block;margin-top:9px;background:#5B3A8A;color:#fff;border:0;border-radius:10px;padding:11px 13px;font-weight:800;font-size:12.5px;cursor:pointer;width:100%';
+      bf.onclick=function(){var o=document.getElementById('_docSubOv');if(o)o.remove();_docRender();_galFijarFecha(cid,sinFecha,false)};
+      f.appendChild(bf)}
   }catch(_ec){}
   var b=document.getElementById('_dsBtn');
   if(b){b.textContent=mal?'Cerrar':'✓ Listo';
@@ -7732,12 +7747,17 @@ async function _galThumb(a,img){
   }catch(e){_galSinArchivo(img,'Sin conexión con el almacén');return false}}
 /* fecha y hora de una foto. Lo guardado puede ser el objeto nuevo {dt,src} o,
    de las primeras subidas, un texto suelto; los dos se entienden igual */
+/* created_at viene del servidor en hora UTC, 5 horas adelantada: usada tal
+   cual, una foto subida de noche caia en el dia SIGUIENTE. Se pasa a local. */
+function _galLoc(c){try{var x=new Date(c);if(isNaN(x))return '';
+  var p=function(n){return (n<10?'0':'')+n};
+  return x.getFullYear()+'-'+p(x.getMonth()+1)+'-'+p(x.getDate())+' '+p(x.getHours())+':'+p(x.getMinutes())}catch(e){return ''}}
 function _galDT(a,F){
   var g=(F&&F[a.id]),v='',src='archivo';
   if(g&&typeof g==='object'){v=String(g.dt||'');src=g.src||'archivo'}
   else if(g)v=String(g);
-  var c=String(a.created_at||'');
-  if(!v&&c){v=c.slice(0,10)+' '+c.slice(11,16);src='subida'}
+  var c=_galLoc(a.created_at||'');
+  if(!v&&c){v=c;src='subida'}
   /* de las primeras subidas quedo el dia sin la hora: se completa con la de la tabla */
   else if(v&&v.length<=10){v=v.slice(0,10)+(c?(' '+c.slice(11,16)):'');src='subida'}
   var d=v.slice(0,10),t=v.slice(11,16);
@@ -7761,7 +7781,7 @@ function _galHTML(cid){
   var porDia={},sinMatriz=0;
   /* la fecha va en su propio envoltorio: si se le pega a la fila, esa fila deja
      de poder guardarse porque la tabla no tiene esa columna */
-  fotos.forEach(function(a){var m=_galDT(a,F);if(m.src!=='foto')sinMatriz++;
+  fotos.forEach(function(a){var m=_galDT(a,F);if(m.src!=='foto'&&m.src!=='manual')sinMatriz++;
     (porDia[m.d]=porDia[m.d]||[]).push({a:a,m:m})});
   var dias=Object.keys(porDia).sort(function(x,y){return String(y).localeCompare(String(x))});
   var H='';
@@ -8022,7 +8042,8 @@ function _docRender(){
   H+='<div style="display:flex;gap:8px;margin-bottom:12px">';
   H+='<button id="_docNueva" type="button" style="flex:1;background:#0C5132;color:#fff;border:0;border-radius:11px;padding:12px;font-weight:800;font-size:13px;cursor:pointer">+ '+(cid?'Subcarpeta':'Nueva carpeta')+'</button>';
   if(cid)H+='<button id="_docUp" type="button"'+(subir?'':' disabled')+' style="flex:1;background:'+(subir?'#1F3864':'#C7D2E0')+';color:#fff;border:0;border-radius:11px;padding:12px;font-weight:800;font-size:13px;cursor:'+(subir?'pointer':'not-allowed')+'">⬆ Subir archivo</button>';
-  if(cid&&_docEsGal(cur)&&subir)H+='<button id="_docFotos" type="button" style="flex:1;background:#5B3A8A;color:#fff;border:0;border-radius:11px;padding:12px;font-weight:800;font-size:13px;cursor:pointer">📷 Fotos</button>';
+  if(cid&&_docEsGal(cur)&&subir)H+='<button id="_docFotos" type="button" style="flex:1;background:#5B3A8A;color:#fff;border:0;border-radius:11px;padding:12px;font-weight:800;font-size:13px;cursor:pointer">📷 Fotos</button>'+
+    '<input type="file" id="_docFotosInp" multiple accept="image/*" style="display:none">';
   H+='</div>';
   /* el check que convierte la carpeta en galeria de fotos */
   if(cid&&_docMio(cur)){
@@ -8074,9 +8095,14 @@ function _docRender(){
     _docRender()};
   var _gbt=document.getElementById('_docFotos');
   if(_gbt)_gbt.onclick=function(){
-    var inp=document.createElement('input');inp.type='file';inp.multiple=true;
-    inp.accept='image/*,.heic,.heif';
-    inp.onchange=function(){var fs=inp.files;if(fs&&fs.length)_galSubir(cid,fs)};inp.click()};
+    /* el input vive en la pantalla con multiple puesto en el HTML: asi el
+       telefono abre su selector de fotos con marcar-varias. El accept va solo
+       con image/* porque mezclarle extensiones manda a algunos telefonos al
+       selector de documentos, que no deja marcar varias. */
+    var inp=document.getElementById('_docFotosInp');if(!inp)return;
+    inp.value='';
+    inp.onchange=function(){var fs=inp.files;if(fs&&fs.length)_galSubir(cid,fs)};
+    inp.click()};
   if(_galOn){try{_galWire(w,cid)}catch(_eg){}}
   Array.prototype.forEach.call(w.querySelectorAll('._docColaX'),function(x){x.onclick=function(e){e.stopPropagation();_docColaQuitar(x.getAttribute('data-k'))}});
   Array.prototype.forEach.call(w.querySelectorAll('._docColaXC'),function(x){x.onclick=function(e){e.stopPropagation();_docColaQuitarCarp(x.getAttribute('data-n'))}});
