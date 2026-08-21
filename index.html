@@ -1912,29 +1912,29 @@ function _wkClave(txt){
   if(dec.length%2)dec+='0';
   var pares=dec.match(/../g)||['00'];
   return String(Math.trunc(f))+'.'+pares.join('.')}
-/* el acumulado del aplicativo por partida, en la unidad del contrato, al corte */
+/* el acumulado del aplicativo por partida al corte: [cantidad, metrado, hh] */
 function _wkAcum(cutISO){
   var out={};
   (DATA.partidas||[]).forEach(function(p){try{
     var m=(typeof metaOf==='function')?metaOf(p.id):null;
+    var hh=0;try{hh=Number(_hhDe(p))||0}catch(e){}
+    var a=0,tot=0;
     var fz=null;try{fz=(typeof _fzDe==='function')?_fzDe(p.id):null}catch(e){}
     if(fz&&(fz.fases||[]).length){
       var f=(fz.fases||[]).filter(function(x){return x.cierra})[0]||fz.fases[fz.fases.length-1];
-      var a=0,con=false;
+      var con=false;
       (f.movs||[]).forEach(function(mv){if(String(mv.f||'')<=cutISO){a+=Number(mv.c)||0;con=true}});
       if(!con&&(Number(f.avance)||0)>0)a=Number(f.avance)||0;
-      if(a>0)out[p.id]=Math.round(a*1e4)/1e4;
-      return}
-    if(!m||m.unidad==='na')return;
-    if(m.unidad==='glb'){
+      tot=Number(f.cantidad)||0;
+    }else if(m&&m.unidad==='glb'){
       var g=partesOf(p.id).filter(function(x){return x.tipo==='glb'&&isFinite(Number(x.pctGlb))&&String(x.fecha||'')<=cutISO})
         .sort(function(a2,b2){return a2.fecha<b2.fecha?-1:a2.fecha>b2.fecha?1:((a2.ts||0)-(b2.ts||0))});
       var pct=g.length?Number(g[g.length-1].pctGlb):(m._baked?(p.ini||0):0);
-      var cant=Math.round(pct/100*(Number(m.total)||0)*1e4)/1e4;
-      if(cant>0)out[p.id]=cant;
-      return}
-    var a2=(typeof acumCantAt==='function')?acumCantAt(p.id,cutISO):0;
-    if(a2>0)out[p.id]=Math.round(a2*1e4)/1e4;
+      tot=Number(m.total)||0;a=Math.round(pct/100*tot*1e4)/1e4;
+    }else if(m&&m.unidad!=='na'){
+      a=(typeof acumCantAt==='function')?acumCantAt(p.id,cutISO):0;tot=Number(m.total)||0;
+    }else return;
+    if(a>0||hh>0)out[p.id]=[Math.round(a*1e4)/1e4,Math.round(tot*1e4)/1e4,Math.round(hh*100)/100];
   }catch(e){}});
   return out}
 /* ---------- zip: leer y rearmar sin librerias ---------- */
@@ -1996,6 +1996,31 @@ function _wkZipArmar(entradas){
   fv.setUint16(8,entradas.length,true);fv.setUint16(10,entradas.length,true);
   fv.setUint32(12,cdlen,true);fv.setUint32(16,cdoff,true);
   return new Blob(locales.concat(centrales,[fin]),{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}
+/* ---------- resolver las hojas por su NOMBRE ---------- */
+function _wkXmlTxt(t){return String(t||'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&')}
+function _wkHojas(wbxml,relsxml){
+  var rel={};String(relsxml||'').replace(/Id="(rId\d+)"[^>]*Target="([^"]+)"/g,function(_t,id,tg){
+    tg=tg.replace(/^\//,'');if(tg.indexOf('xl/')!==0)tg='xl/'+tg;rel[id]=tg;return _t});
+  var out={};String(wbxml||'').replace(/<sheet[^>]*name="([^"]+)"[^>]*r:id="(rId\d+)"[^>]*\/?>/g,function(_t,nom,id){
+    if(rel[id])out[_wkXmlTxt(nom)]=rel[id];return _t});
+  return out}
+/* De QPS: la columna L dice como se agrupan los items en el cronograma */
+function _wkLeerQPS(xml,ss){
+  var items={},grupos={};
+  xml.replace(/<row r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g,function(todo,rs,cuerpo){
+    if(+rs<5)return todo;
+    var A='',L='';
+    cuerpo.replace(/<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g,function(_t,col,attrs,inner){
+      if(col!=='A'&&col!=='L')return _t;
+      inner=inner||'';var vm=inner.match(/<v>([^<]*)<\/v>/);var val=vm?vm[1]:'';
+      if(/t="s"/.test(attrs)&&/^\d+$/.test(val))val=ss[+val]||'';
+      if(col==='A')A=_wkXmlTxt(val);else L=_wkXmlTxt(val).trim();
+      return _t});
+    if(!A)return todo;
+    var k=_wkClave(A);
+    if(L){items[k]={g:L};(grupos[L]=grupos[L]||[]).push(k)}
+    return todo});
+  return {items:items,grupos:grupos}}
 /* ---------- las tres hojas ---------- */
 function _wkOrdenCol(c){return (c.length*100)+c.charCodeAt(0)+(c.length>1?c.charCodeAt(1)/1000:0)}
 function _wkPonCelda(rowxml,rnum,col,valor,estilo){
@@ -2007,10 +2032,12 @@ function _wkPonCelda(rowxml,rnum,col,valor,estilo){
   while((m=re.exec(rowxml))){if(+m[2]===rnum&&_wkOrdenCol(m[1])>_wkOrdenCol(col)){mejor=m.index;break}}
   if(mejor!=null)return rowxml.slice(0,mejor)+nueva+rowxml.slice(mejor);
   return rowxml.replace('</row>',nueva+'</row>')}
-function _wkProcesarP62(xml,ss,semN,acum,topar){
+function _wkProcesarP62(xml,ss,semN,datos,topar,qps){
+  qps=qps||{items:{},grupos:{}};
+  function D(it){var d=datos[it];return d?{a:Number(d[0])||0,tot:Number(d[1])||0,hh:Number(d[2])||0}:null}
   var colSem=WK_COLS[semN-27];
   var pasadas=WK_COLS.slice(0,semN-27);
-  var porItem={},filasXml={};
+  var porItem={};
   xml.replace(/<row r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g,function(todo,rs,cuerpo){
     var r=+rs;if(r<3)return todo;
     var celdas={};
@@ -2027,27 +2054,47 @@ function _wkProcesarP62(xml,ss,semN,acum,topar){
     for(var i=pasadas.length-1;i>=0;i--){var cc=celdas[pasadas[i]];if(cc&&cc.s!=null){est=cc.s;break}}
     (porItem[_wkClave(a)]=porItem[_wkClave(a)]||[]).push({fila:r,lb0:lb0,pas:pas,est:est});
     return todo});
-  var escribir={},resumen=[],avisos=[];
-  Object.keys(acum).sort().forEach(function(it){
-    var fl=porItem[_wkClave(it)];
-    if(!fl){avisos.push(it+': no tiene fila en P6-2 (acum '+acum[it]+' queda sin cargar)');return}
+  /* que grupos tienen fila en el cronograma (su representante esta en porItem) */
+  var grupoFila={};
+  Object.keys(porItem).forEach(function(k){var g=qps.items[k]&&qps.items[k].g;
+    if(g&&(qps.grupos[g]||[]).length>1)grupoFila[g]=k});
+  var escribir={},resumen=[],avisos=[],cubiertos={};
+  Object.keys(porItem).forEach(function(k){cubiertos[k]=1});
+  Object.keys(grupoFila).forEach(function(g){(qps.grupos[g]||[]).forEach(function(mi){cubiertos[mi]=1})});
+  Object.keys(porItem).sort().forEach(function(K){
+    var fl=porItem[K];
     var pas=0,lb0tot=0;fl.forEach(function(f){pas+=f.pas;lb0tot+=f.lb0});
-    /* con tope: lo reportable llega hasta el 100% del LB0 del Excel; el resto es
-       sobremetrado y se deja fuera (queda avisado) */
-    var eff=acum[it],topado=false;
-    if(topar&&lb0tot>0&&eff>lb0tot+1e-9){eff=lb0tot;topado=true}
+    var g=qps.items[K]&&qps.items[K].g;
+    var miembros=(g&&grupoFila[g]===K)?qps.grupos[g]:[K];
+    var eff=0,topado=false,fuera=0;
+    if(miembros.length>1){
+      /* fila agrupada: % ponderado por HH de todos los miembros, en unidades LB0 */
+      var sw=0,sp=0;
+      miembros.forEach(function(mi){var d=D(mi);
+        if(!d||!(d.tot>0)){if(d&&d.a>0)avisos.push(mi+': tiene avance pero sin metrado en la app — no entra al grupo '+g);return}
+        var w=(d.hh>0)?d.hh:1,pct=d.a/d.tot;
+        if(pct>1){if(topar){pct=1;topado=true}}
+        sw+=w;sp+=w*pct});
+      eff=sw>0?Math.round((sp/sw)*lb0tot*1e4)/1e4:0;
+    }else{
+      var d=D(K);eff=d?d.a:0;
+      if(topar&&lb0tot>0&&eff>lb0tot+1e-9){fuera=Math.round((eff-lb0tot)*1e4)/1e4;eff=lb0tot;topado=true}
+    }
     var delta=Math.round((eff-pas)*1e4)/1e4;
-    if(delta<-1e-9){avisos.push(it+': el Excel ya tiene MÁS que el aplicativo ('+(Math.round(pas*1e4)/1e4)+' vs '+acum[it]+') — no se toca');return}
-    if(delta<1e-9){resumen.push({it:it,pas:pas,nuevo:0,topado:topado});return}
+    if(delta<-1e-9){if(eff>0||pas>0)avisos.push(K+(g?' ('+g+')':'')+': el Excel ya tiene MÁS que el aplicativo ('+(Math.round(pas*1e4)/1e4)+' vs '+eff+') — no se toca');return}
+    if(delta<1e-9){if(eff>0)resumen.push({it:K,g:g||'',pas:pas,nuevo:0,topado:topado,fuera:0});return}
     var resto=delta;
-    for(var i=0;i<fl.length;i++){
-      var cap=Math.max(0,Math.round((fl[i].lb0-fl[i].pas)*1e6)/1e6);
-      var pon=(i===fl.length-1&&!topar)?resto:Math.min(resto,cap);
+    for(var i2=0;i2<fl.length;i2++){
+      var cap=Math.max(0,Math.round((fl[i2].lb0-fl[i2].pas)*1e6)/1e6);
+      var pon=(i2===fl.length-1&&!topar)?resto:Math.min(resto,cap);
       pon=Math.round(pon*1e4)/1e4;
-      if(pon>1e-9){escribir[fl[i].fila]={v:pon,s:fl[i].est};resto=Math.round((resto-pon)*1e6)/1e6}
+      if(pon>1e-9){escribir[fl[i2].fila]={v:pon,s:fl[i2].est};resto=Math.round((resto-pon)*1e6)/1e6}
       if(resto<=1e-9)break}
-    resumen.push({it:it,pas:pas,nuevo:delta,topado:topado,
-      fuera:topado?(Math.round((acum[it]-lb0tot)*1e4)/1e4):0})});
+    resumen.push({it:K,g:g||'',pas:pas,nuevo:delta,topado:topado,fuera:fuera})});
+  /* lo del aplicativo que no tiene destino en el cronograma */
+  Object.keys(datos).sort().forEach(function(it){
+    var d=D(it);if(!d||!(d.a>0))return;
+    if(!cubiertos[_wkClave(it)])avisos.push(it+': no tiene fila ni grupo en el cronograma (acum '+d.a+' queda sin cargar)')});
   var x2=xml.replace(/<row r="(\d+)"[^>]*>[\s\S]*?<\/row>/g,function(todo,rs){
     var r=+rs;if(!escribir[r])return todo;
     return _wkPonCelda(todo,r,colSem,escribir[r].v,escribir[r].s)});
@@ -2100,20 +2147,24 @@ function _wkExcel(){
       var corte=_wkISO(_wkSem(semN).fin);
       msg.textContent='Leyendo el libro y calculando lo real al corte '+corte+'…';
       try{if(typeof syncPull==='function')await syncPull()}catch(_e){}
-      var acum=_wkAcum(corte);
+      var datos=_wkAcum(corte);
       var entradas=_wkZipLeer(await file.arrayBuffer());
       var dec=new TextDecoder(),enc=new TextEncoder();
       var mapa={};entradas.forEach(function(en){mapa[en.nombre]=en});
-      var need=['xl/worksheets/sheet20.xml','xl/worksheets/sheet22.xml','xl/workbook.xml','xl/sharedStrings.xml'];
-      for(var i=0;i<need.length;i++)if(!mapa[need[i]])throw new Error('el libro no trae '+need[i]+' — ¿es la plantilla correcta?');
+      if(!mapa['xl/workbook.xml']||!mapa['xl/sharedStrings.xml'])throw new Error('no parece el libro correcto');
       var leer=async function(n){var en=mapa[n];return dec.decode(en.metodo===8?await _wkInflar(en.datos):en.datos)};
+      /* las hojas se buscan por su nombre, no por numero de archivo */
+      var hojas=_wkHojas(await leer('xl/workbook.xml'),mapa['xl/_rels/workbook.xml.rels']?await leer('xl/_rels/workbook.xml.rels'):'');
+      var hP62=hojas['P6-2'],hCar=hojas['Car\u00e1tula (P)'],hQPS=hojas['De QPS'];
+      if(!hP62||!mapa[hP62])throw new Error('el libro no trae la hoja P6-2 — \u00bfes la plantilla correcta?');
+      if(!hCar||!mapa[hCar])throw new Error('el libro no trae la hoja Car\u00e1tula (P)');
       var ss=_wkLeerSS(await leer('xl/sharedStrings.xml'));
-      /* P6-2: confirmar que sheet20 ES P6-2 mirando el titulo de la fila 1 */
-      var x20=await leer('xl/worksheets/sheet20.xml');
+      var qps=(hQPS&&mapa[hQPS])?_wkLeerQPS(await leer(hQPS),ss):{items:{},grupos:{}};
+      var x20=await leer(hP62);
       var topar=((document.getElementById('_wkTope')||{}).value!=='todo');
-      var r=_wkProcesarP62(x20,ss,semN,acum,topar);
+      var r=_wkProcesarP62(x20,ss,semN,datos,topar,qps);
       /* Caratula C17 */
-      var x22=await leer('xl/worksheets/sheet22.xml');
+      var x22=await leer(hCar);
       var c17=x22.match(/<c r="C17"[^>]*>[\s\S]*?<\/c>/);
       if(!c17)throw new Error('no se halló C17 en la Carátula (P)');
       x22=x22.replace(c17[0],c17[0].replace(/<v>[^<]*<\/v>/,'<v>'+semN+'</v>'));
@@ -2122,7 +2173,7 @@ function _wkExcel(){
       if(/<calcPr[^>]*fullCalcOnLoad/.test(wbx)){}
       else if(/<calcPr/.test(wbx))wbx=wbx.replace(/<calcPr([^>]*?)\/>/,'<calcPr$1 fullCalcOnLoad="1"/>');
       else wbx=wbx.replace('</workbook>','<calcPr fullCalcOnLoad="1"/></workbook>');
-      var cambiar={'xl/worksheets/sheet20.xml':r.xml,'xl/worksheets/sheet22.xml':x22,'xl/workbook.xml':wbx};
+      var cambiar={};cambiar[hP62]=r.xml;cambiar[hCar]=x22;cambiar['xl/workbook.xml']=wbx;
       for(var nm in cambiar){
         var u8=enc.encode(cambiar[nm]),en2=mapa[nm];
         en2.crc=_wkCrc32(u8);en2.usz=u8.length;en2.metodo=8;en2.datos=await _wkDeflar(u8)}
@@ -2146,7 +2197,7 @@ function _wkExcel(){
       var H='<div style="background:#EAF3EC;border:1px solid #BFD8C6;border-radius:10px;padding:9px 11px;font-size:12px;color:#0C5132;font-weight:800;margin-bottom:8px">✓ Descargado · S'+semN+' · '+r.escritas+' fila(s) escritas en P6-2 · carátula en '+semN+'</div>';
       var conD=r.resumen.filter(function(x){return x.nuevo>0});
       if(conD.length){H+='<div style="font-size:11.5px;color:#1B2433;line-height:1.7">'+conD.map(function(x){
-        return '<b>'+x.it+'</b>: +'+x.nuevo+(x.topado?(' <span style="color:#7A4B00">(topado al 100%, quedan '+x.fuera+' de sobremetrado fuera)</span>'):'')}).join(' · ')+'</div>'}
+        return '<b>'+x.it+'</b>'+(x.g?(' <span style="color:#5B3A8A;font-weight:800">['+x.g+']</span>'):'')+': +'+x.nuevo+(x.topado?(' <span style="color:#7A4B00">(con sobremetrado topado al 100%'+(x.fuera?(', quedan '+x.fuera+' fuera'):'')+')</span>'):'')}).join(' · ')+'</div>'}
       var top2=r.resumen.filter(function(x){return x.topado&&!(x.nuevo>0)});
       if(top2.length){H+='<div style="font-size:11px;color:#7A4B00;margin-top:6px">Topados sin delta: '+top2.map(function(x){return x.it}).join(', ')+'</div>'}
       if(r.avisos.length){H+='<div style="background:#FCEFD9;border:1px solid #EFC98A;border-radius:10px;padding:8px 10px;font-size:11px;color:#7A4B00;margin-top:8px;line-height:1.6">'+r.avisos.map(function(a2){return '⚠ '+a2}).join('<br>')+'</div>'}
@@ -3220,7 +3271,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260821a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260821a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
