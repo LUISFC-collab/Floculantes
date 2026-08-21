@@ -2919,7 +2919,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260820g5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260820g6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -7694,14 +7694,22 @@ async function _galSubir(cid,files){
 }
 /* --- miniaturas: el bucket es privado, se traen y se muestran como blob --- */
 window._galBlob=window._galBlob||{};
+function _galSinArchivo(img,motivo){try{
+  var d=img&&img.parentElement;if(!d)return;
+  img.style.display='none';
+  if(d.querySelector('._galNoF'))return;
+  var e=document.createElement('span');e.className='_galNoF';
+  e.style.cssText='position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:#F6E9E7;color:#B42318;font-size:9.5px;font-weight:800;text-align:center;padding:7px;line-height:1.35;box-sizing:border-box';
+  e.innerHTML='<span style="font-size:19px">⚠</span>'+esc(motivo||'La foto no está en el almacén');
+  d.appendChild(e)}catch(_e){}}
 async function _galThumb(a,img){
   try{
-    if(window._galBlob[a.id]){img.src=window._galBlob[a.id];return}
+    if(window._galBlob[a.id]){img.src=window._galBlob[a.id];return true}
     var r=await fetch(sbBase()+'/storage/v1/object/documentos/'+encodeURI(a.ruta),{headers:sbHead()});
-    if(!r.ok)return;
+    if(!r.ok){_galSinArchivo(img,r.status===400||r.status===404?'La foto no llegó a subirse':'No se pudo traer');return false}
     var u=URL.createObjectURL(await r.blob());
-    window._galBlob[a.id]=u;img.src=u;
-  }catch(e){}}
+    window._galBlob[a.id]=u;img.src=u;return true;
+  }catch(e){_galSinArchivo(img,'Sin conexión con el almacén');return false}}
 /* fecha y hora de una foto. Lo guardado puede ser el objeto nuevo {dt,src} o,
    de las primeras subidas, un texto suelto; los dos se entienden igual */
 function _galDT(a,F){
