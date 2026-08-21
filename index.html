@@ -1042,7 +1042,7 @@ function _rtOnCambio(tabla){
  if(tabla==='tormenta'){try{if(typeof syncNow==='function')syncNow(true)}catch(e){}try{var _ss=$('scrStorm');if(_ss&&!_ss.classList.contains('hidden')&&typeof renderStorm==='function')setTimeout(renderStorm,900)}catch(e){}return}
   if(tabla==='reportabilidad'){try{if(typeof syncNow==='function')syncNow(true)}catch(e){}return}
   if(tabla==='app_config'){try{if(typeof _mpPoll==='function')_mpPoll()}catch(e){}try{if(typeof _ajPull==='function')_ajPull()}catch(e){}return}
-  if(tabla==='ajustes_create_110826'){try{if(typeof _ajPull==='function')_ajPull()}catch(e){}try{if(typeof _cbPull==='function')_cbPull()}catch(e){}return}
+  if(tabla==='ajustes_create_110826'){try{if(typeof _ajPull==='function')_ajPull()}catch(e){}try{if(typeof _cbPull==='function')_cbPull()}catch(e){}try{if(typeof _galPull==='function')_galPull().then(function(){try{if(document.getElementById('_docOv')&&typeof _docRender==='function')_docRender()}catch(e){}})}catch(e){}return}
   if(tabla==='actividades_create_110826'){try{if(typeof _catPull==='function')_catPull()}catch(e){}return}
   if(tabla==='config_usuario_create_110826'){try{if(typeof _cuPull==='function')_cuPull()}catch(e){}return}
   if(tabla==='crono_cuadrillas_create_090826'){try{if(typeof _ccPull==='function')_ccPull()}catch(e){}return}
@@ -2919,7 +2919,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260820g3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260820g4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -7520,6 +7520,13 @@ function _galSave(cid){try{localStorage.setItem('obf4_gal_'+cid,JSON.stringify(_
 async function _galPush(cid){
   try{
     if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
+    /* unir con lo que ya hay arriba: si dos suben a la misma carpeta a la vez,
+       ninguno borra las fechas del otro */
+    try{
+      var _R=await sbSelect('ajustes_create_110826','select=valor&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&clave=eq.'+encodeURIComponent('gal:'+cid)+'&limit=1');
+      var _srv=((_R&&_R[0]&&_R[0].valor)||{}).fechas||{},_mio=_galFechas(cid),_cam=false;
+      for(var _k in _srv){if(!_mio[_k]){_mio[_k]=_srv[_k];_cam=true}}
+      if(_cam)_galSave(cid)}catch(_em){}
     var t=(typeof nowSrv==='function'?nowSrv():Date.now());
     await sbUpsert('ajustes_create_110826',[{proyecto:DATA.proyecto,clave:'gal:'+cid,
       valor:{carpeta_id:cid,fechas:_galFechas(cid)},descripcion:'Fechas de las fotos de la galeria',
