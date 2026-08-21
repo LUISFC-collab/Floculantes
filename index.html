@@ -2919,7 +2919,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260820g8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260820g9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -7525,6 +7525,7 @@ async function _docRenombrarArchivo(a){
    La marca de galeria va en la columna 'color' de doc_carpetas_create_120826 y
    las fechas en ajustes_create_110826 con clave 'gal:<carpeta>', las dos con
    lapida, ts, trigger de updated_at y tiempo real. */
+var ICAM='📷', ICAL='🗓', LAPZ='✎';
 function _docEsGal(c){return !!c&&String(c.color||'')==='FOTOS'}
 /* El confirm() del navegador no aparece en la app instalada y devolvia false
    sin avisar, asi que el boton de borrar no hacia nada. Esta ventana es de la
@@ -7614,8 +7615,8 @@ function _galFechaDe(file){
     var arma=function(x,src){
       var p=function(n){return (n<10?'0':'')+n};
       return {dt:x.getFullYear()+'-'+p(x.getMonth()+1)+'-'+p(x.getDate())+' '+p(x.getHours())+':'+p(x.getMinutes()),src:src}};
-    var fin=function(d){try{
-      if(d instanceof Date&&!isNaN(d))return res(arma(d,'foto'));
+    var fin=function(d,src){try{
+      if(d instanceof Date&&!isNaN(d))return res(arma(d,src||'foto'));
       return res(arma(new Date(file.lastModified||Date.now()),'archivo'))
     }catch(e){res({dt:'',src:'archivo'})}};
     try{
@@ -7642,11 +7643,17 @@ function _galFechaDe(file){
             if(tag===0x9003||tag===0x9004||tag===0x0132){var vo=tiff+g32(e+8);if(vo>0&&vo+19<n)hall[tag]=texto(vo)}
             else if(tag===0x8769||tag===0x8825)buscar(tiff+g32(e+8),hondo+1)}};
         buscar(tiff+g32(tiff+4),0);
-        var txt=hall[0x9003]||hall[0x9004]||hall[0x0132]||'';
+        /* 0x9003 y 0x9004 son el momento del disparo. 0x0132 es la ultima vez
+           que se TOCO el archivo: los recortadores y compresores lo reescriben,
+           asi que si solo esta ese, la fecha no es de fiar y se marca aparte. */
+        var txt='',cual='foto';
+        if(hall[0x9003])txt=hall[0x9003];
+        else if(hall[0x9004])txt=hall[0x9004];
+        else if(hall[0x0132]){txt=hall[0x0132];cual='modificada'}
         if(!/^\d{4}[:\-]\d{2}[:\-]\d{2}/.test(txt))return fin(null);
         var a=txt.slice(0,10).replace(/:/g,'-').split('-');
         var d=new Date(+a[0],(+a[1])-1,+a[2],+(txt.slice(11,13)||0),+(txt.slice(14,16)||0),+(txt.slice(17,19)||0));
-        return fin(isNaN(d)?null:d)
+        return fin(isNaN(d)?null:d,cual)
       }catch(e){fin(null)}};
       fr.readAsArrayBuffer(file.slice(0,1024*1024));
     }catch(e){fin(null)}})}
@@ -7759,13 +7766,16 @@ function _galHTML(cid){
   var dias=Object.keys(porDia).sort(function(x,y){return String(y).localeCompare(String(x))});
   var H='';
   H+='<div style="font-size:10.5px;color:var(--muted);margin:8px 2px 0;line-height:1.5">'+
-     '\ud83d\udcf7 = d\u00eda y hora en que se tom\u00f3, le\u00eddos de la propia foto'+
-     (sinMatriz?(' \u00b7 \ud83d\uddd3 = la foto no traía esa información, va la fecha del archivo ('+sinMatriz+')'):'')+'</div>';
+     ICAM+' = d\u00eda y hora en que se tom\u00f3, le\u00eddos de la propia foto \u00b7 '+
+     LAPZ+' = puesta a mano'+
+     (sinMatriz?(' \u00b7 '+ICAL+' = la foto lleg\u00f3 sin su fecha real ('+sinMatriz+'): toca el '+LAPZ+' de la foto para corregirla'):'')+'</div>'+
+     (sinMatriz?('<div style="font-size:10.5px;color:#7A4B00;background:#FCEFD9;border:1px solid #EFC98A;border-radius:9px;padding:7px 9px;margin:7px 2px 0;line-height:1.45">Si mandas la foto por el men\u00fa de compartir, el tel\u00e9fono la re-comprime y le borra la fecha. Para que llegue bien, elige la foto desde <b>Archivos</b> o desde la galer\u00eda, sin compartir.</div>'):'');
   dias.forEach(function(d){
     H+='<div style="display:flex;align-items:center;gap:8px;margin:14px 2px 2px">'+
        '<span style="background:#0C5132;color:#fff;border-radius:8px;padding:3px 9px;font-size:11.5px;font-weight:900;text-transform:capitalize">'+esc(_galDiaLbl(d))+'</span>'+
        '<span style="flex:1;height:2px;background:#0C5132;opacity:.18"></span>'+
-       '<span style="font-size:11px;color:var(--muted);font-weight:700">'+porDia[d].length+' foto'+(porDia[d].length===1?'':'s')+'</span></div>';
+       '<span style="font-size:11px;color:var(--muted);font-weight:700">'+porDia[d].length+' foto'+(porDia[d].length===1?'':'s')+'</span>'+
+       '<button class="_galDia" data-d="'+esc(d)+'" title="Mover todo este d\u00eda a otra fecha" style="flex:none;background:#F1ECFA;color:#5B3A8A;border:1px solid #B9A3DE;border-radius:8px;padding:4px 9px;font-size:11px;font-weight:900;cursor:pointer">'+LAPZ+'</button></div>';
     var porH={};
     porDia[d].forEach(function(z){(porH[z.m.h]=porH[z.m.h]||[]).push(z)});
     var horas=Object.keys(porH).sort(function(x,y){return String(y).localeCompare(String(x))});
@@ -7777,9 +7787,10 @@ function _galHTML(cid){
       H+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:7px">';
       porH[h].sort(function(x,y){return String(y.m.ord).localeCompare(String(x.m.ord))}).forEach(function(z){
         var a=z.a;
-        var mk=(z.m.src==='foto')?'\ud83d\udcf7':'\ud83d\uddd3';
+        var mk=(z.m.src==='foto')?ICAM:(z.m.src==='manual'?LAPZ:ICAL);
         H+='<div class="_galIt" data-aid="'+esc(a.id)+'" style="position:relative;border-radius:10px;overflow:hidden;border:1.5px solid var(--line);background:#EEF2F7;cursor:pointer;aspect-ratio:1/1">'+
            '<img class="_galImg" data-aid="'+esc(a.id)+'" style="width:100%;height:100%;object-fit:cover;display:block">'+
+           '<span class="_galFec" data-aid="'+esc(a.id)+'" title="Corregir la fecha" style="position:absolute;top:3px;left:3px;background:rgba(91,58,138,.95);color:#fff;border-radius:9px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;z-index:3;-webkit-tap-highlight-color:transparent">'+LAPZ+'</span>'+
            (z.m.t?('<span style="position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(10,18,32,.78));color:#fff;font-size:10.5px;font-weight:800;padding:12px 6px 4px">'+mk+' '+esc(z.m.t)+'</span>'):'')+
            '<span class="_galDel" data-aid="'+esc(a.id)+'" title="Borrar" style="position:absolute;top:3px;right:3px;background:rgba(180,35,24,.95);color:#fff;border-radius:9px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;z-index:3;-webkit-tap-highlight-color:transparent">\u2715</span></div>'});
       H+='</div>'})});
@@ -7792,6 +7803,15 @@ function _galWire(w,cid){
     if(e.target&&e.target.classList&&e.target.classList.contains('_galDel'))return;
     var a=_docArch().filter(function(z){return z.id===d.getAttribute('data-aid')})[0];
     if(a&&typeof _docAbrirArchivo==='function')_docAbrirArchivo(a)}});
+  Array.prototype.forEach.call(w.querySelectorAll('._galFec'),function(b){
+    var edita=function(e){e.stopPropagation();e.preventDefault();
+      _galFijarFecha(cid,[b.getAttribute('data-aid')],true)};
+    b.onclick=edita;b.addEventListener('touchend',edita,{passive:false})});
+  Array.prototype.forEach.call(w.querySelectorAll('._galDia'),function(b){b.onclick=function(e){
+    e.stopPropagation();
+    var d=b.getAttribute('data-d'),F=_galFechas(cid);
+    var ids=_docArchDe(cid).filter(_galEsFoto).filter(function(a){return _galDT(a,F).d===d}).map(function(a){return a.id});
+    _galFijarFecha(cid,ids,false)}});
   Array.prototype.forEach.call(w.querySelectorAll('._galDel'),function(b){
     var quita=function(e){e.stopPropagation();e.preventDefault();
       var a=_docArch().filter(function(z){return z.id===b.getAttribute('data-aid')})[0];
@@ -7799,6 +7819,49 @@ function _galWire(w,cid){
     b.onclick=quita;
     /* en el celular el toque va antes que el click: asi no se abre la foto */
     b.addEventListener('touchend',quita,{passive:false})});
+}
+/* --- corregir la fecha: cuando la foto llega re-comprimida trae la matriz
+       pisada y no hay forma de recuperar el dia real desde el telefono, asi que
+       se pone a mano. Vale para una foto o para todo un dia de golpe. --- */
+function _galFijarFecha(cid,ids,unaSola){
+  if(!ids||!ids.length)return;
+  var F=_galFechas(cid);
+  var uno=_docArch().filter(function(z){return z.id===ids[0]})[0];
+  var base=uno?_galDT(uno,F):{d:'',t:''};
+  var hoy=(typeof todayISO==='function')?todayISO():'';
+  var ov=document.getElementById('_gfOv');if(ov)ov.remove();
+  ov=document.createElement('div');ov.id='_gfOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483610;background:rgba(10,18,32,.62);display:flex;align-items:flex-end;justify-content:center';
+  ov.innerHTML='<div style="background:#fff;width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:17px 16px;box-sizing:border-box">'+
+    '<div style="font-weight:900;font-size:15.5px;color:#5B3A8A;margin-bottom:5px">'+LAPZ+' '+(unaSola?'Corregir la fecha de la foto':('Mover '+ids.length+' foto'+(ids.length===1?'':'s')+' a otro d\u00eda'))+'</div>'+
+    '<div style="font-size:12px;color:#5C6779;line-height:1.5;margin-bottom:13px">'+
+    (unaSola?'La foto lleg\u00f3 sin su fecha real o con una equivocada. Pon el d\u00eda y la hora en que se tom\u00f3.'
+            :'Se cambia el d\u00eda; cada foto conserva su propia hora.')+'</div>'+
+    '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">D\u00eda en que se tom\u00f3</label>'+
+    '<input type="date" id="_gfD" max="'+esc(hoy)+'" value="'+esc(base.d&&base.d!=='sin fecha'?base.d:hoy)+'" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:15px;font-family:inherit;margin-bottom:11px">'+
+    (unaSola?('<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Hora</label>'+
+      '<input type="time" id="_gfH" value="'+esc(base.t||'08:00')+'" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:15px;font-family:inherit;margin-bottom:11px">'):'')+
+    '<div style="display:flex;gap:9px;margin-top:4px">'+
+    '<button id="_gfNo" style="flex:1;background:#E7EDF5;color:#1B2433;border:0;border-radius:12px;padding:14px;font-weight:800;font-size:13.5px;cursor:pointer">Cancelar</button>'+
+    '<button id="_gfSi" style="flex:1;background:#5B3A8A;color:#fff;border:0;border-radius:12px;padding:14px;font-weight:800;font-size:13.5px;cursor:pointer">Guardar</button></div></div>';
+  document.body.appendChild(ov);
+  ov.onclick=function(e){if(e.target===ov)ov.remove()};
+  document.getElementById('_gfNo').onclick=function(){ov.remove()};
+  document.getElementById('_gfSi').onclick=function(){
+    var d=(document.getElementById('_gfD')||{}).value||'';
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d)){if(typeof toast==='function')toast('Elige el d\u00eda');return}
+    var hUno=(document.getElementById('_gfH')||{}).value||'';
+    ids.forEach(function(id){
+      var a=_docArch().filter(function(z){return z.id===id})[0];if(!a)return;
+      var m=_galDT(a,F);
+      var h=unaSola?(hUno||m.t||'08:00'):(m.t||'08:00');
+      F[id]={dt:d+' '+h,src:'manual'}});
+    _galSave(cid);
+    ov.remove();
+    _docRender();
+    if(typeof toast==='function')toast(LAPZ+' Fecha corregida en '+ids.length+' foto'+(ids.length===1?'':'s'));
+    try{_galPush(cid)}catch(e){}
+  };
 }
 /* --- las fotos borradas de la galeria, para verlas desde Eliminadas --- */
 function _galBorradas(){
@@ -7912,6 +7975,8 @@ function _galPicker(onElegir){
       var a=_docArch().filter(function(z){return z.id===img.getAttribute('data-aid')})[0];
       if(a)_galThumb(a,img)});
     Array.prototype.forEach.call(w.querySelectorAll('._galDel'),function(x){x.remove()});
+    Array.prototype.forEach.call(w.querySelectorAll('._galFec'),function(x){x.remove()});
+    Array.prototype.forEach.call(w.querySelectorAll('._galDia'),function(x){x.remove()});
     Array.prototype.forEach.call(w.querySelectorAll('._galIt'),function(d){
       var id=d.getAttribute('data-aid');
       if(sel[id]){d.style.borderColor='#0C5132';d.style.boxShadow='0 0 0 3px rgba(12,81,50,.25)';
