@@ -2713,7 +2713,7 @@ function _crXlsCel(col,r,v,texto){
                     y los items que la componen.
    Las fechas se pueden poner en ALCANCE o en AGRUPADO; la de AGRUPADO manda y
    se aplica a todas las partidas de esa tarea. */
-function _crXlsArmar(cron,filas,alc,grupoDe,grupos){
+function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas){
   var COLS=['A','B','C','D','E','F','G','H','I','J','K','L','M'];
   grupos=grupos||[];
   var repDe={},nomG={},miemG={};
@@ -2764,57 +2764,129 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos){
     '<col min="13" max="13" width="14" customWidth="1"/></cols>'+
     '<sheetData>'+rows.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>';
-  /* ---------- hoja 2: AGRUPADO ---------- */
-  var codigos=[],vis={};
-  filas.forEach(function(p){
-    var k=codigo(p.id);
-    if(vis[k])return;vis[k]=1;
-    var g=grupoDe[p.id]||'';
-    /* la descripcion y el nombre salen del representante cuando esta agrupada */
-    var rep=g?repDe[g]:p.id;
-    var pr=null;filas.forEach(function(q){if(q.id===rep)pr=q});
-    codigos.push({k:k,g:g,nom:g?(nomG[g]||(pr?pr.nom:k)):p.nom,esp:(pr||p).esp||''})});
-  var CAB2=['CODIGO TAREA','TIPO','DESCRIPCION','AGRUPACION','ESPECIALIDAD','ACTIVIDADES','HH','TOTAL','INICIO','FIN'];
+  /* ---------- hoja 2: AGRUPADO = EL CRONOGRAMA, con su WBS y su nivel ------- */
+  tareas=(tareas||[]).slice().sort(function(x,y){return (x.orden||0)-(y.orden||0)});
+  var porItem={};filas.forEach(function(p){porItem[p.id]=p});
+  var usados={};
+  /* el codigo de la tarea: el del representante si sus partidas van agrupadas,
+     el de la partida si es una sola, y el de la tarea de P6 si no lleva ninguna */
+  function codTarea(t){
+    var ms=(t.items||[]).filter(function(i){return porItem[i]});
+    if(!ms.length)return {cod:t.task_code,tipo:'INFORMATIVA',g:'',ms:[]};
+    var gs={};ms.forEach(function(i){if(grupoDe[i])gs[grupoDe[i]]=1});
+    var gk=Object.keys(gs);
+    if(gk.length===1&&repDe[gk[0]])return {cod:repDe[gk[0]],tipo:'AGRUPADA',g:gk[0],ms:ms};
+    if(ms.length===1)return {cod:ms[0],tipo:'SIMPLE',g:'',ms:ms};
+    var may=ms[0];ms.forEach(function(i){if((porItem[i].hh||0)>(porItem[may].hh||0))may=i});
+    return {cod:may,tipo:'SIMPLE',g:gk[0]||'',ms:ms}}
+  /* pasada 1: el arbol de WBS con sus tareas y el nivel de cada fila */
+  var plan=[],prev=[];
+  tareas.forEach(function(t){
+    var ruta=String(t.wbs||'').split(' / ').filter(function(x){return x});
+    var i=0;while(i<ruta.length&&i<prev.length&&ruta[i]===prev[i])i++;
+    for(var j=i;j<ruta.length;j++)plan.push({q:'wbs',niv:j+1,nom:ruta[j]});
+    prev=ruta;
+    plan.push({q:'t',t:t,k:codTarea(t),niv:ruta.length+1})});
+  var fila0=4;
+  plan.forEach(function(e,i){e.fila=fila0+i});
+  /* cada titulo suma desde su fila hasta antes del siguiente titulo de su nivel o menor */
+  plan.forEach(function(e,i){
+    if(e.q!=='wbs')return;
+    var fin=e.fila,hay=false;
+    for(var j=i+1;j<plan.length;j++){
+      if(plan[j].q==='wbs'&&plan[j].niv<=e.niv)break;
+      if(plan[j].q==='t'){fin=plan[j].fila;hay=true}}
+    e.desde=e.fila+1;e.hasta=fin;e.hay=hay});
+  var CAB2=['CODIGO TAREA','NIVEL','TIPO','DESCRIPCION','AGRUPACION','ESPECIALIDAD',
+            'ACTIVIDADES','HH','TOTAL','INICIO','FIN'];
   var r2=[];
-  r2.push('<row r="1">'+_crXlsCel('A',1,'COMO QUEDA AGRUPADO · '+cron.cron_id+' — una fila por tarea del cronograma, con el código con el que llega',true)+'</row>');
-  r2.push('<row r="2">'+_crXlsCel('A',2,'Actividades, HH y monto salen por fórmula de la hoja ALCANCE. La fecha que pongas aquí se aplica a TODAS las partidas de esa tarea al cargar la plantilla. El detalle de cada agrupación está en la hoja AGRUPACIONES.',true)+'</row>');
+  r2.push('<row r="1">'+_crXlsCel('A',1,'EL CRONOGRAMA · '+cron.cron_id+' — una fila por tarea, con su WBS y en el orden del .xer',true)+'</row>');
+  r2.push('<row r="2">'+_crXlsCel('A',2,'NIVEL dice a qué altura del WBS está cada fila: 1 es el título de más arriba y la actividad va siempre un nivel por debajo del título que la contiene. Las tareas sin partidas (hitos, gestión, cierre) salen como INFORMATIVA con 0 HH a propósito. Actividades, HH y monto son fórmulas contra la hoja ALCANCE. La fecha que pongas aquí se aplica a todas las partidas de esa tarea al cargar.',true)+'</row>');
   var cc='';CAB2.forEach(function(h,i){cc+=_crXlsCel(COLS[i],3,h,true)});
   r2.push('<row r="3">'+cc+'</row>');
-  var m=4;
   function frm(col,r,f){return '<c r="'+col+r+'"><f>'+_wkEsc(f)+'</f></c>'}
-  codigos.forEach(function(x){
-    var ini='',fin='',mismo=true,prim=true;
-    filas.forEach(function(p){
-      if(codigo(p.id)!==x.k)return;
-      var a=alc[p.id]||{};
-      if(prim){ini=a.ini||'';fin=a.fin||'';prim=false}
-      else if((a.ini||'')!==ini||(a.fin||'')!==fin)mismo=false});
-    if(!mismo){ini='';fin=''}
+  function sangria(n2){var s2='';for(var i=0;i<n2;i++)s2+='    ';return s2}
+  var m=fila0,nInfo=0,nTar=0;
+  plan.forEach(function(e){
     var c='';
-    c+=_crXlsCel('A',m,x.k,true);
-    c+=_crXlsCel('B',m,x.g?'AGRUPADA':'SIMPLE',true);
-    c+=_crXlsCel('C',m,x.nom,true);
-    c+=_crXlsCel('D',m,x.g||'',true);
-    c+=_crXlsCel('E',m,x.esp||'',true);
-    c+=frm('F',m,'COUNTIF(ALCANCE!$M:$M,$A'+m+')');
-    c+=frm('G',m,'SUMIF(ALCANCE!$M:$M,$A'+m+',ALCANCE!$H:$H)');
-    c+=frm('H',m,'SUMIF(ALCANCE!$M:$M,$A'+m+',ALCANCE!$G:$G)');
-    c+=_crXlsCel('I',m,ini,true);
-    c+=_crXlsCel('J',m,fin,true);
-    r2.push('<row r="'+m+'">'+c+'</row>');m++});
-  r2.push('<row r="'+m+'">'+_crXlsCel('C',m,'TOTAL',true)+
-    frm('F',m,'SUM(F4:F'+(m-1)+')')+frm('G',m,'SUM(G4:G'+(m-1)+')')+
-    frm('H',m,'SUM(H4:H'+(m-1)+')')+'</row>');
+    if(e.q==='wbs'){
+      c+=_crXlsCel('B',e.fila,e.niv,false);
+      c+=_crXlsCel('C',e.fila,'WBS',true);
+      c+=_crXlsCel('D',e.fila,sangria(e.niv-1)+e.nom.toUpperCase(),true);
+      if(e.hay){
+        c+=frm('G',e.fila,'SUM(G'+e.desde+':G'+e.hasta+')');
+        c+=frm('H',e.fila,'SUM(H'+e.desde+':H'+e.hasta+')');
+        c+=frm('I',e.fila,'SUM(I'+e.desde+':I'+e.hasta+')')}
+      r2.push('<row r="'+e.fila+'">'+c+'</row>');m=e.fila;return}
+    var t=e.t,k=e.k;nTar++;
+    k.ms.forEach(function(i){usados[i]=1});
+    if(k.tipo==='INFORMATIVA')nInfo++;
+    var esp='';
+    if(k.ms.length){var pr=porItem[k.ms[0]];esp=(pr&&pr.esp)||''}
+    var ini=t.ini||'',fin=t.fin||'';
+    if(k.ms.length){
+      var i2='',f2='',mismo=true,prim=true;
+      k.ms.forEach(function(i){var a2=alc[i]||{};
+        if(prim){i2=a2.ini||'';f2=a2.fin||'';prim=false}
+        else if((a2.ini||'')!==i2||(a2.fin||'')!==f2)mismo=false});
+      if(mismo&&(i2||f2)){ini=i2;fin=f2}}
+    c+=_crXlsCel('A',e.fila,k.cod,true);
+    c+=_crXlsCel('B',e.fila,e.niv,false);
+    c+=_crXlsCel('C',e.fila,k.tipo,true);
+    c+=_crXlsCel('D',e.fila,sangria(e.niv-1)+String(t.nombre||''),true);
+    c+=_crXlsCel('E',e.fila,k.g||'',true);
+    c+=_crXlsCel('F',e.fila,esp,true);
+    if(k.tipo==='INFORMATIVA'){
+      c+=_crXlsCel('G',e.fila,0,false);c+=_crXlsCel('H',e.fila,0,false);c+=_crXlsCel('I',e.fila,0,false)}
+    else{
+      c+=frm('G',e.fila,'COUNTIF(ALCANCE!$M:$M,$A'+e.fila+')');
+      c+=frm('H',e.fila,'SUMIF(ALCANCE!$M:$M,$A'+e.fila+',ALCANCE!$H:$H)');
+      c+=frm('I',e.fila,'SUMIF(ALCANCE!$M:$M,$A'+e.fila+',ALCANCE!$G:$G)')}
+    c+=_crXlsCel('J',e.fila,ini,true);
+    c+=_crXlsCel('K',e.fila,fin,true);
+    r2.push('<row r="'+e.fila+'">'+c+'</row>');m=e.fila});
+  m++;
+  var priT=0,ultT=0;
+  plan.forEach(function(e){if(e.q==='t'){if(!priT)priT=e.fila;ultT=e.fila}});
+  r2.push('<row r="'+m+'">'+_crXlsCel('D',m,'TOTAL DEL CRONOGRAMA ('+nTar+' tareas, '+nInfo+' informativas)',true)+
+    (priT?(frm('G',m,'SUM(G'+priT+':G'+ultT+')')+frm('H',m,'SUM(H'+priT+':H'+ultT+')')+
+           frm('I',m,'SUM(I'+priT+':I'+ultT+')')):'')+'</row>');m++;
+  /* lo que no esta en ninguna tarea: que se vea, no que se pierda */
+  var sueltas=filas.filter(function(p){return !usados[p.id]});
+  if(sueltas.length){
+    m++;
+    r2.push('<row r="'+m+'">'+_crXlsCel('C',m,'AVISO',true)+
+      _crXlsCel('D',m,'PARTIDAS QUE NO ESTÁN EN NINGUNA TAREA DEL CRONOGRAMA ('+sueltas.length+')',true)+'</row>');m++;
+    var pri2=m;
+    sueltas.forEach(function(p){
+      var a2=alc[p.id]||{};
+      var c='';
+      c+=_crXlsCel('A',m,p.id,true);
+      c+=_crXlsCel('B',m,'',true);
+      c+=_crXlsCel('C',m,'SIN TAREA',true);
+      c+=_crXlsCel('D',m,sangria(1)+p.nom,true);
+      c+=_crXlsCel('E',m,grupoDe[p.id]||'',true);
+      c+=_crXlsCel('F',m,p.esp||'',true);
+      c+=frm('G',m,'COUNTIF(ALCANCE!$M:$M,$A'+m+')');
+      c+=frm('H',m,'SUMIF(ALCANCE!$M:$M,$A'+m+',ALCANCE!$H:$H)');
+      c+=frm('I',m,'SUMIF(ALCANCE!$M:$M,$A'+m+',ALCANCE!$G:$G)');
+      c+=_crXlsCel('J',m,a2.ini||'',true);
+      c+=_crXlsCel('K',m,a2.fin||'',true);
+      r2.push('<row r="'+m+'">'+c+'</row>');m++});
+    r2.push('<row r="'+m+'">'+_crXlsCel('D',m,'SUBTOTAL SIN TAREA',true)+
+      frm('G',m,'SUM(G'+pri2+':G'+(m-1)+')')+frm('H',m,'SUM(H'+pri2+':H'+(m-1)+')')+
+      frm('I',m,'SUM(I'+pri2+':I'+(m-1)+')')+'</row>')}
   var hoja2='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    '<dimension ref="A1:J'+m+'"/>'+
+    '<dimension ref="A1:K'+m+'"/>'+
     '<sheetViews><sheetView workbookViewId="0">'+
     '<pane ySplit="3" topLeftCell="A4" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'+
     '<sheetFormatPr defaultRowHeight="15"/>'+
-    '<cols><col min="1" max="1" width="15" customWidth="1"/><col min="2" max="2" width="11" customWidth="1"/>'+
-    '<col min="3" max="3" width="54" customWidth="1"/><col min="4" max="4" width="13" customWidth="1"/>'+
-    '<col min="5" max="5" width="14" customWidth="1"/><col min="6" max="6" width="12" customWidth="1"/>'+
-    '<col min="7" max="8" width="14" customWidth="1"/><col min="9" max="10" width="13" customWidth="1"/></cols>'+
+    '<cols><col min="1" max="1" width="15" customWidth="1"/><col min="2" max="2" width="8" customWidth="1"/>'+
+    '<col min="3" max="3" width="13" customWidth="1"/><col min="4" max="4" width="64" customWidth="1"/>'+
+    '<col min="5" max="5" width="13" customWidth="1"/><col min="6" max="6" width="14" customWidth="1"/>'+
+    '<col min="7" max="7" width="12" customWidth="1"/><col min="8" max="9" width="14" customWidth="1"/>'+
+    '<col min="10" max="11" width="13" customWidth="1"/></cols>'+
     '<sheetData>'+r2.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>';
   /* ---------- hoja 3: AGRUPACIONES ---------- */
@@ -2894,7 +2966,8 @@ async function _crXlsExport(cron,alcVista){
   var grupoDe={};
   gs.forEach(function(g){(g.miembros||[]).forEach(function(m){grupoDe[m]=g.grupo_id})});
   var P=_crPartidas();
-  var partes=_crXlsArmar(cron,P,alc,grupoDe,gs);
+  var tareas=await _crTareas(cron.cron_id);
+  var partes=_crXlsArmar(cron,P,alc,grupoDe,gs,tareas);
   var enc=new TextEncoder(),entradas=[];
   for(var i=0;i<partes.length;i++){
     var u8=enc.encode(partes[i][1]);
@@ -6847,7 +6920,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823c6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823c7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
