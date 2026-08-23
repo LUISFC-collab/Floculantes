@@ -2706,14 +2706,56 @@ function _crCarga(tar,items){
       n:(t.items||[]).length})});
   out.sort(function(a,b){return b.hhDia-a.hhDia});
   return out}
-async function _crCurvaUI(c){
+/* Los tramos que alimentan la curva, segun el nivel al que se mire.
+   Devuelve [{ini,fin,peso,q}] — el peso siempre suma el universo elegido. */
+function _crTramos(nivel,tar,alc,u,grupoDe){
+  var pes=_crPesos(tar,u.items,u.hh).pesos;
+  var porTarea=tar.map(function(t,i){
+    return {ini:t.ini,fin:t.fin,peso:pes[i]||0,cod:t.task_code,
+            wbs:String(t.wbs||''),g:(function(){
+              var g='';(t.items||[]).forEach(function(x){if(!g&&grupoDe[x])g=grupoDe[x]});return g})()}});
+  if(nivel==='tarea')return porTarea.filter(function(x){return x.peso>0});
+  if(nivel==='partida'){
+    /* cada partida con SUS fechas; si no tiene, las de su tarea */
+    var deTarea={};
+    tar.forEach(function(t){(t.items||[]).forEach(function(i){
+      if(!deTarea[i])deTarea[i]={ini:t.ini,fin:t.fin}})});
+    var out=[];
+    for(var it in u.items){
+      var a=alc[it]||{},d=deTarea[it]||{};
+      var ini=a.ini||d.ini||'',fin=a.fin||d.fin||'';
+      if(!ini&&!fin)continue;
+      out.push({ini:ini||fin,fin:fin||ini,peso:u.items[it]})}
+    /* lo que no tiene fecha se reparte como en el nivel de tarea */
+    var col=0;out.forEach(function(x){col+=x.peso});
+    var resto=Math.max(0,u.hh-col);
+    if(resto>0){var d2=0;porTarea.forEach(function(x){if(x.ini&&x.fin)d2++});
+      if(d2)porTarea.forEach(function(x){if(x.ini&&x.fin)out.push({ini:x.ini,fin:x.fin,peso:resto/d2})})}
+    return out}
+  /* agrupaciones o wbs: se juntan tramos y se suma su ventana */
+  var clave=function(x){return nivel==='wbs'?(x.wbs||x.cod):(x.g||x.cod)};
+  var m={};
+  porTarea.forEach(function(x){
+    if(!(x.peso>0))return;
+    var k=clave(x),o=m[k];
+    if(!o){m[k]={ini:x.ini,fin:x.fin,peso:x.peso};return}
+    if(x.ini&&(!o.ini||x.ini<o.ini))o.ini=x.ini;
+    if(x.fin&&(!o.fin||x.fin>o.fin))o.fin=x.fin;
+    o.peso+=x.peso});
+  var r=[];for(var k2 in m)r.push(m[k2]);
+  return r}
+async function _crCurvaUI(c,nivel){
+  nivel=nivel||'tarea';
   if(!c)return;
   var tar=await _crTareas(c.cron_id);
   var alc=await _crAlc(c.cron_id);
   var u=_crUniverso(c.cron_id,alc);
   var sem=_crSemDe(tar);
-  var rp=_crPesos(tar,u.items,u.hh);
-  var cur=_crCurva(tar.map(function(t){return {ini:t.ini,fin:t.fin,hh:0,dur_h:0}}),u.hh,sem,rp.pesos);
+  var grupoDe={};
+  try{(await _agDe(c.cron_id)).forEach(function(g){
+    (g.miembros||[]).forEach(function(x){grupoDe[x]=g.grupo_id})})}catch(_eg){}
+  var tramos=_crTramos(nivel,tar,alc,u,grupoDe);
+  var cur=_crCurva(tramos,u.hh,sem,tramos.map(function(x){return x.peso}));
   var carga=_crCarga(tar,u.items);
   /* cuantas personas harian falta, a 9 h por dia */
   function gente(hd){return Math.ceil(hd/9)}
@@ -2747,6 +2789,12 @@ async function _crCurvaUI(c){
     '<b style="font-size:14.5px;color:'+esc(c.color||'#8ECBF5')+'">📈 Curva de '+esc(c.cron_id)+'</b>'+
     '<span style="background:#152436;border:1px solid #1d3550;border-radius:8px;padding:3px 9px;font-size:11.5px;color:#9db4d6">'+
     sem.length+' semanas · '+u.hh+' hh · '+carga.length+' tareas con horas</span>'+
+    '<span style="display:inline-flex;gap:0;border:1px solid #1d3550;border-radius:8px;overflow:hidden">'+
+    [['partida','Partidas'],['tarea','Tareas'],['agr','Agrupaciones'],['wbs','WBS']].map(function(o){
+      return '<button data-niv="'+o[0]+'" style="background:'+(nivel===o[0]?'#1B5E8A':'#0d1117')+
+        ';color:'+(nivel===o[0]?'#fff':'#9db4d6')+';border:0;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer">'+o[1]+'</button>'}).join('')+
+    '</span>'+
+    '<span style="font-size:10.5px;color:#7d8590">'+tramos.length+' tramo(s)</span>'+
     '<button id="_crCurX" style="margin-left:auto;background:#444;color:#fff;border:0;border-radius:8px;padding:8px 12px">✕</button></div>'+
     '<div style="background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:8px;overflow-x:auto">'+
     '<svg width="'+W+'" height="'+H+'" style="display:block">'+ejes+barras+
@@ -2754,11 +2802,16 @@ async function _crCurvaUI(c){
     ptos+etq+
     '<text x="'+mx+'" y="'+(my-5)+'" fill="#7d8590" font-size="9">barras = HH de la semana · línea = % acumulado</text>'+
     '</svg></div>'+
-    (duras.length?('<div style="background:#2a1414;border:1px solid #5A2A2A;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#F0A3A3;line-height:1.6">'+
+    ((duras.length&&nivel==='tarea')?('<div style="background:#2a1414;border:1px solid #5A2A2A;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#F0A3A3;line-height:1.6">'+
       '<b>⚠ '+duras.length+' tarea(s) piden demasiada gente</b> — por eso la curva sale a escalones en vez de en banana. '+
       'A 9 h por persona y día:<br>'+
       duras.slice(0,6).map(function(x){return '<b>'+esc(x.cod)+'</b> '+x.hh+' hh en '+x.dias+' día(s) = <b>'+x.hhDia+' hh/día</b> ≈ '+gente(x.hhDia)+' personas · '+esc(x.nom.slice(0,44))}).join('<br>')+
-      '</div>'):('<div style="background:#0F2419;border:1px solid #1d3a2a;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#9FE8B0">✓ Ninguna tarea pide más de 90 hh/día: el reparto es realista.</div>'))+
+      '</div>'):(nivel!=='tarea'
+        ?('<div style="background:#132435;border:1px solid #1d3550;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#9db4d6;line-height:1.6">'+
+          'Mirando por <b>'+(nivel==='wbs'?'WBS':(nivel==='agr'?'agrupaciones':'partidas'))+'</b>: las horas se reparten en la ventana completa de cada '+
+          (nivel==='wbs'?'nodo del WBS':(nivel==='agr'?'agrupación':'partida'))+
+          ', por eso la curva sale más suave. Cambia a <b>Tareas</b> para ver el detalle real del cronograma.</div>')
+        :'<div style="background:#0F2419;border:1px solid #1d3a2a;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#9FE8B0">✓ Ninguna tarea pide más de 90 hh/día: el reparto es realista.</div>'))+
     '<div style="flex:1;overflow:auto;margin-top:9px;background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:7px">'+
     '<div style="font-size:11px;color:#7d8590;font-weight:700;margin-bottom:5px">CARGA POR TAREA (de más a menos apretada)</div>'+
     carga.slice(0,40).map(function(x){
@@ -2772,6 +2825,8 @@ async function _crCurvaUI(c){
     '</div>';
   document.body.appendChild(ov);
   document.getElementById('_crCurX').onclick=function(){ov.remove()};
+  ov.querySelectorAll('[data-niv]').forEach(function(b){b.onclick=function(){
+    ov.remove();_crCurvaUI(c,b.getAttribute('data-niv'))}});
 }
 
 /* --------- FECHAS por partida dentro de cada cronograma ---------------------
@@ -7140,7 +7195,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823d5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823d6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
