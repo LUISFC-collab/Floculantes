@@ -3545,7 +3545,10 @@ function _crCuadre(hoja1,hoja2){
       var esTarea=!!cod&&d.D!=='WBS'&&d.D!=='AVISO';
       var esSuelta=!cod&&typeof d.D==='string'&&d.D.indexOf('SIN TAREA')===0;
       if(!esTarea&&!esSuelta)return;
-      if(esTarea&&typeof d.B==='string'&&d.B&&d.B!=='(repartida)'){
+      /* dos tareas repartidas comparten codigo a proposito: ninguna lleva
+         suma de base, asi que no duplican nada */
+      var conBase=!!(d.I&&d.I.f&&!/^0(\+|$)/.test(d.I.f));
+      if(esTarea&&conBase&&typeof d.B==='string'&&d.B&&d.B!=='(repartida)'){
         if(vistos[d.B])repes.push(d.B);vistos[d.B]=1}
       var v=(d.I&&d.I.f)?ev(d.I.f):Number(d.I||0);
       if(v!=null&&isFinite(v))hh+=v});
@@ -3613,6 +3616,18 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs){
       base:!!cod,
       tipo:(!propios.length?'REPARTIDA':(ms.length===1?'SIMPLE':'AGRUPADA')),
       g:gk[0]||'',ms:ms,propios:propios,compart:compart}});
+  /* Una agrupacion repartida entre varias tareas: cada mitad se numera para
+     poder distinguirlas, GEN-1 (1) y GEN-1 (2) */
+  var tareasDeG={};
+  _tar0.forEach(function(t){
+    var k=codDeTarea[t.task_code];
+    if(k&&k.g)(tareasDeG[k.g]=tareasDeG[k.g]||[]).push(t.task_code)});
+  function etiquetaG(k){
+    if(!k||!k.g)return '';
+    var l=tareasDeG[k.g]||[];
+    if(l.length<2)return k.g;
+    var i=l.indexOf(k.p6);
+    return k.g+' ('+(i<0?1:i+1)+')'}
   /* La marca de las repartidas no casa con ningun codigo de tarea a proposito:
      esas no las recoge el SUMIFS, se suman aparte con su fraccion */
   var MARCA='(repartida)';
@@ -3738,7 +3753,7 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs){
     c+=_crXlsCel('C',e.fila,e.niv,false);
     c+=_crXlsCel('D',e.fila,k.tipo,true);
     c+=_crXlsCel('E',e.fila,sangria(e.niv-1)+String(t.nombre||''),true);
-    c+=_crXlsCel('F',e.fila,k.g||'',true,est(k.g));
+    c+=_crXlsCel('F',e.fila,etiquetaG(k),true,est(k.g));
     c+=_crXlsCel('G',e.fila,esp,true);
     if(k.tipo==='INFORMATIVA'){
       c+=_crXlsCel('H',e.fila,0,false);c+=_crXlsCel('I',e.fila,0,false);c+=_crXlsCel('J',e.fila,0,false)}
@@ -7996,7 +8011,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823g1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823g2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
