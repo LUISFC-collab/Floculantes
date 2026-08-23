@@ -2463,6 +2463,7 @@ async function _crAlcanceUI(c){
     '<span style="font-size:11px;color:#7d8590;font-weight:700">FECHAS:</span>'+
     '<button id="_crFeXer" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">📅 Tomar del cronograma</button>'+
     '<button id="_crFeExp" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">⬇ Plantilla Excel</button>'+
+    '<button id="_crFeGua" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">⬇ Exportar lo guardado</button>'+
     '<button id="_crFeImp" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">⬆ Cargar plantilla</button>'+
     '<input type="file" id="_crFeFile" accept=".xlsx" style="display:none">'+
     '<span id="_crFeMsg" style="flex:1;min-width:120px;font-size:11px;color:#9db4d6"></span></div>'+
@@ -2535,7 +2536,18 @@ async function _crAlcanceUI(c){
       var vista={};P.forEach(function(p){
         vista[p.id]={inc:!!sel[p.id],ini:fec[p.id].ini,fin:fec[p.id].fin,origen:fec[p.id].origen}});
       var n=await _crXlsExport(c,vista);
-      fmsg('⬇ Plantilla con '+n+' partidas descargada','#9FE8B0');
+      fmsg('⬇ Plantilla con '+n+' partidas descargada (con lo que ves ahora, guardado o no)','#9FE8B0');
+    }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8')}
+    b.disabled=false};
+  document.getElementById('_crFeGua').onclick=async function(){
+    var b=this;b.disabled=true;fmsg('Leyendo lo guardado…');
+    try{
+      /* sin pasarle la vista: _crXlsExport lee el alcance de la base */
+      _crInvalida(c.cron_id);
+      var guardado=await _crAlc(c.cron_id);
+      var n=await _crXlsExport(c,guardado);
+      var cf=0;for(var k in guardado)if(guardado[k].ini||guardado[k].fin)cf++;
+      fmsg('⬇ Descargado lo que hay en la base: '+n+' partidas · '+cf+' con fecha (sin tus cambios sin guardar)','#9FE8B0');
     }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8')}
     b.disabled=false};
   document.getElementById('_crFeImp').onclick=function(){document.getElementById('_crFeFile').click()};
@@ -6835,7 +6847,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823c5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823c6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
