@@ -3636,15 +3636,28 @@ function _crXlsCel(col,r,v,texto,st){
    O sea: le basta la columna B con el codigo de la tarea y las columnas N..AE
    con las HH de cada semana. Aqui se genera esa misma hoja para CUALQUIER
    cronograma, con el mismo formato, para que anadir un LB2 sea solo marcarlo. */
-var _CR_SEMCOL=['N','O','P','Q','R','S','T','U','V','W','X','Y','Z','AA','AB','AC','AD','AE'];
-/* la rejilla del libro: S27 a S44, de viernes a jueves */
-function _crRejilla(){
-  var out=[];
-  for(var n=27;n<=44;n++){
+/* La columna 14 es la N, que es donde el libro pone la S27. De ahi en
+   adelante se generan solas, asi que la rejilla puede pasar de la AE sin
+   mover ni una de las que ya leen las formulas. */
+function _crColLetra(i){
+  var n=14+i,s='';
+  while(n>0){var r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}
+  return s}
+/* La rejilla del libro arranca en la S27 y llega hasta la S44 como minimo.
+   Si algun cronograma termina despues, se alarga: si no, sus ultimas semanas
+   se perderian sin avisar. */
+function _crRejilla(hasta){
+  var fin=Math.max(44,Number(hasta)||0),out=[];
+  for(var n=27;n<=fin;n++){
     var ini=46199+(n-27)*7;
-    out.push({n:n,serIni:ini,serFin:ini+6,
+    out.push({n:n,col:_crColLetra(n-27),serIni:ini,serFin:ini+6,
       ini:_crDeSerial(ini),fin:_crDeSerial(ini+6)})}
   return out}
+/* en que semana del año cae una fecha, con la misma cuenta que el libro */
+function _crSemDeFecha(iso){
+  var ser=_crASerial(iso);
+  if(ser==='')return 0;
+  return 27+Math.floor((ser-46199)/7)}
 function _crDeSerial(n){
   return new Date(Date.UTC(1899,11,30)+Math.round(n)*864e5).toISOString().slice(0,10)}
 function _crASerial(iso){
@@ -3678,8 +3691,10 @@ function _crHojaPlan(cron,filas,semanas){
   var r=[];
   var c1='';
   c1+=_crXlsCel('A',1,'PLAN '+cron.cron_id+' — HH PROGRAMADAS POR SEMANA (generado por el aplicativo). '+
-    'Semanas viernes-jueves, corte jueves.',true);
-  semanas.forEach(function(s,i){c1+=_crXlsCel(_CR_SEMCOL[i],1,'S'+s.n,true)});
+    'Semanas viernes-jueves, corte jueves. La S27 va en la columna N, que es donde la esperan las fórmulas del libro'+
+    ((semanas.length>18)?('; este cronograma llega hasta la S'+semanas[semanas.length-1].n+
+      ', así que hay '+(semanas.length-18)+' semana(s) más allá de la S44 y el libro no las mira: revísalas a mano.'):'.'),true);
+  semanas.forEach(function(s){c1+=_crXlsCel(s.col,1,'S'+s.n,true)});
   r.push('<row r="1">'+c1+'</row>');
   /* fila 2: los encabezados y el jueves de cierre de cada semana. El de la
      primera va en J, como en la plantilla original. */
@@ -3695,7 +3710,7 @@ function _crHojaPlan(cron,filas,semanas){
   c2+=_crXlsCel('J',2,semanas[0].serFin,false);
   semanas.forEach(function(s,i){
     if(i===0)return;
-    c2+=_crXlsCel(_CR_SEMCOL[i],2,s.serFin,false)});
+    c2+=_crXlsCel(s.col,2,s.serFin,false)});
   r.push('<row r="2">'+c2+'</row>');
   var n=3;
   filas.forEach(function(f){
@@ -3706,7 +3721,7 @@ function _crHojaPlan(cron,filas,semanas){
     c+=_crXlsCel('G',n,_crASerial(f.ini),false);
     c+=_crXlsCel('H',n,_crASerial(f.fin),false);
     c+=_crXlsCel('I',n,f.dias||'',false);
-    f.sem.forEach(function(v,i){if(v>0)c+=_crXlsCel(_CR_SEMCOL[i],n,v,false)});
+    f.sem.forEach(function(v,i){if(v>0)c+=_crXlsCel(semanas[i].col,n,v,false)});
     r.push('<row r="'+n+'">'+c+'</row>');n++});
   /* el total, para poder comprobar de un vistazo que no se perdio nada */
   var tot='';
@@ -3714,11 +3729,11 @@ function _crHojaPlan(cron,filas,semanas){
   tot+=_crXlsCel('F',n,Math.round(filas.reduce(function(a,f){return a+f.hh},0)*100)/100,false);
   semanas.forEach(function(s,i){
     var v=filas.reduce(function(a,f){return a+f.sem[i]},0);
-    if(v>0)tot+=_crXlsCel(_CR_SEMCOL[i],n,Math.round(v*1e6)/1e6,false)});
+    if(v>0)tot+=_crXlsCel(s.col,n,Math.round(v*1e6)/1e6,false)});
   r.push('<row r="'+n+'">'+tot+'</row>');
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    '<dimension ref="A1:AE'+n+'"/>'+
+    '<dimension ref="A1:'+semanas[semanas.length-1].col+n+'"/>'+
     '<sheetViews><sheetView workbookViewId="0">'+
     '<pane xSplit="3" ySplit="2" topLeftCell="D3" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
     '<sheetFormatPr defaultRowHeight="15"/>'+
@@ -3726,7 +3741,7 @@ function _crHojaPlan(cron,filas,semanas){
     '<col min="3" max="3" width="49.5703125" customWidth="1"/>'+
     '<col min="6" max="9" width="11" customWidth="1"/>'+
     '<col min="10" max="13" width="11.42578125" hidden="1" customWidth="1"/>'+
-    '<col min="14" max="31" width="9.5703125" customWidth="1"/></cols>'+
+    '<col min="14" max="'+(13+semanas.length)+'" width="9.5703125" customWidth="1"/></cols>'+
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>'}
 /* La red de precedencias tal como esta en el .xer. Sale del TASKPRED del
@@ -4207,8 +4222,10 @@ async function _crXlsExport(cron,alcVista){
      asi un solo archivo sirve para alimentar el libro semanal entero */
   var planes=[];
   try{
-    var sem=_crRejilla();
     var L=await _crPull();
+    var ultima=44;
+    L.forEach(function(z){var w=_crSemDeFecha(z.fin);if(w>ultima)ultima=w});
+    var sem=_crRejilla(ultima);
     for(var _i=0;_i<L.length;_i++){
       var cc=L[_i];
       var tt=(cc.cron_id===cron.cron_id)?tareas:(await _crTareas(cc.cron_id));
@@ -8290,7 +8307,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823h3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823h4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
