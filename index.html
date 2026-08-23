@@ -3508,6 +3508,33 @@ function _crXlsCel(col,r,v,texto,st){
                     y los items que la componen.
    Las fechas se pueden poner en ALCANCE o en AGRUPADO; la de AGRUPADO manda y
    se aplica a todas las partidas de esa tarea. */
+/* La red de precedencias tal como esta en el .xer. Sale del TASKPRED del
+   archivo original, que se guarda entero al cargar el cronograma. */
+async function _crRelDe(cronId){
+  try{
+    var r=await sbSelect(T_CRO,'select=crudo&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+
+      '&cron_id=eq.'+encodeURIComponent(cronId)+'&limit=1');
+    var crudo=(r&&r[0]&&r[0].crudo)||'';
+    if(!crudo)return {};
+    var T=_crXerLeer(crudo);
+    if(!T||!T.TASKPRED||!T.TASK)return {};
+    var cod={};T.TASK.filas.forEach(function(t){cod[t.task_id]=_crTx(t.task_code)});
+    /* el desfase viene en horas; se pasa a dias con la jornada del calendario */
+    var hd=0;try{hd=Number((T.CALENDAR.filas[0]||{}).day_hr_cnt)||0}catch(e){}
+    var TIPO={PR_FS:'FC',PR_SS:'CC',PR_FF:'FF',PR_SF:'CF'};
+    var out={};
+    T.TASKPRED.filas.forEach(function(f){
+      var a=cod[f.task_id],b=cod[f.pred_task_id];
+      if(!a||!b)return;
+      var t=TIPO[f.pred_type]||String(f.pred_type||'').replace('PR_','');
+      var lg=Number(f.lag_hr_cnt)||0;
+      var des='';
+      if(lg)des=(lg>0?'+':'')+(hd?((Math.round(lg/hd*100)/100)+'d'):(lg+'h'));
+      var et=t+des;
+      (out[a]=out[a]||{pre:[],suc:[]}).pre.push(b+' '+et);
+      (out[b]=out[b]||{pre:[],suc:[]}).suc.push(a+' '+et)});
+    return out
+  }catch(e){return {}}}
 /* Evalua de verdad las formulas del libro: recorre ALCANCE como lo haria
    Excel y comprueba que la suma de las tareas cuadra con el alcance marcado. */
 function _crCuadre(hoja1,hoja2){
@@ -3555,8 +3582,8 @@ function _crCuadre(hoja1,hoja2){
     var alcHH=0;A.forEach(function(f){if(f.J==='SI')alcHH+=(Number(f.H)||0)});
     return {tareas:hh,alcance:alcHH,dif:hh-alcHH,repes:repes}
   }catch(e){return null}}
-function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs){
-  nomWbs=nomWbs||{};
+function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs,rel){
+  nomWbs=nomWbs||{};rel=rel||{};
   var cuadre=null;
   /* un relleno por agrupacion, con el mismo color que se ve en el aplicativo */
   var _fills=['<fill><patternFill patternType="none"/></fill>',
@@ -3715,10 +3742,11 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs){
       if(plan[j].q==='t'){fin=plan[j].fila;hay=true}}
     e.desde=e.fila+1;e.hasta=fin;e.hay=hay});
   var CAB2=['COD. P6','CODIGO QPS','NIVEL','TIPO','DESCRIPCION','AGRUPACION','ESPECIALIDAD',
-            'ACTIVIDADES','HH','TOTAL','INICIO','FIN','RUTA WBS','TIPO PARTIDA'];
+            'ACTIVIDADES','HH','TOTAL','INICIO','FIN','RUTA WBS','TIPO PARTIDA',
+            'PREDECESORAS','SUCESORAS'];
   var r2=[];
   r2.push('<row r="1">'+_crXlsCel('A',1,'EL CRONOGRAMA · '+cron.cron_id+' — una fila por tarea, con su WBS y en el orden del .xer',true)+'</row>');
-  r2.push('<row r="2">'+_crXlsCel('A',2,'COD. P6 es el código de la tarea en Primavera y CODIGO QPS el de la partida: son cosas distintas y por eso van en columnas distintas. NIVEL dice a qué altura del WBS está la fila: 1 es el título de más arriba y la actividad va siempre un nivel por debajo del título que la contiene. Las tareas sin partidas (hitos, gestión, cierre) salen como INFORMATIVA con 0 HH a propósito. Actividades, HH y monto son fórmulas contra la hoja ALCANCE, cruzadas por CODIGO QPS y contando SOLO lo que allí tiene INCLUIR = SI; al pie hay una comprobación que lo verifica. La fecha que pongas aquí se aplica a todas las partidas de esa tarea al cargar. Los títulos de WBS se pueden renombrar aquí mismo: escribe el título nuevo en DESCRIPCION y deja la RUTA WBS como está, que es la llave por la que se reconoce. Para meter una partida que no está, añade una fila con su CODIGO QPS, su DESCRIPCION, sus HH y TIPO PARTIDA = ADICIONAL. Cada columna tiene su filtro y la columna TIPO es una lista: lo que pongas ahí es lo que decide si la fila es un título de WBS o una actividad. Si marcas WBS en una fila nueva, el título cuelga del título de nivel inmediatamente superior según la columna NIVEL.',true)+'</row>');
+  r2.push('<row r="2">'+_crXlsCel('A',2,'COD. P6 es el código de la tarea en Primavera y CODIGO QPS el de la partida: son cosas distintas y por eso van en columnas distintas. NIVEL dice a qué altura del WBS está la fila: 1 es el título de más arriba y la actividad va siempre un nivel por debajo del título que la contiene. Las tareas sin partidas (hitos, gestión, cierre) salen como INFORMATIVA con 0 HH a propósito. Actividades, HH y monto son fórmulas contra la hoja ALCANCE, cruzadas por CODIGO QPS y contando SOLO lo que allí tiene INCLUIR = SI; al pie hay una comprobación que lo verifica. La fecha que pongas aquí se aplica a todas las partidas de esa tarea al cargar. Los títulos de WBS se pueden renombrar aquí mismo: escribe el título nuevo en DESCRIPCION y deja la RUTA WBS como está, que es la llave por la que se reconoce. Para meter una partida que no está, añade una fila con su CODIGO QPS, su DESCRIPCION, sus HH y TIPO PARTIDA = ADICIONAL. Cada columna tiene su filtro y la columna TIPO es una lista: lo que pongas ahí es lo que decide si la fila es un título de WBS o una actividad. Si marcas WBS en una fila nueva, el título cuelga del título de nivel inmediatamente superior según la columna NIVEL. PREDECESORAS y SUCESORAS son la red de precedencias tal como está en el .xer, con su tipo (FC fin-comienzo, CC comienzo-comienzo, FF fin-fin, CF comienzo-fin) y su desfase en días; son informativas y no se vuelven a cargar. Si una agrupación se reparte entre varias actividades, cada mitad sale numerada: GEN-1 (1) y GEN-1 (2), y entre las dos suman las HH de la agrupación.',true)+'</row>');
   var cc='';CAB2.forEach(function(h,i){cc+=_crXlsCel(COLS[i],3,h,true)});
   r2.push('<row r="3">'+cc+'</row>');
   function frm(col,r,f){return '<c r="'+col+r+'"><f>'+_wkEsc(f)+'</f></c>'}
@@ -3776,6 +3804,9 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs){
     c+=_crXlsCel('L',e.fila,fin,true);
     c+=_crXlsCel('M',e.fila,'',true);
     c+=_crXlsCel('N',e.fila,(k.qps&&porItem[k.qps]&&porItem[k.qps].nva)?'ADICIONAL':(k.qps?'CONTRACTUAL':''),true);
+    var _rl=rel[k.p6]||{};
+    c+=_crXlsCel('O',e.fila,(_rl.pre||[]).join(', '),true);
+    c+=_crXlsCel('P',e.fila,(_rl.suc||[]).join(', '),true);
     r2.push('<row r="'+e.fila+'">'+c+'</row>');m=e.fila});
   m++;
   var priT=0,ultT=0;
@@ -3830,7 +3861,7 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs){
     frm('J',m,fMon+'-J'+(m-1))+'</row>');
   var hoja2='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    '<dimension ref="A1:N'+m+'"/>'+
+    '<dimension ref="A1:P'+m+'"/>'+
     '<sheetViews><sheetView workbookViewId="0">'+
     '<pane xSplit="2" ySplit="3" topLeftCell="C4" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
     '<sheetFormatPr defaultRowHeight="15"/>'+
@@ -3838,8 +3869,10 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs){
     '<col min="3" max="3" width="8" customWidth="1"/><col min="4" max="4" width="13" customWidth="1"/>'+
     '<col min="5" max="5" width="64" customWidth="1"/><col min="6" max="6" width="13" customWidth="1"/>'+
     '<col min="7" max="7" width="14" customWidth="1"/><col min="8" max="8" width="12" customWidth="1"/>'+
-    '<col min="9" max="10" width="14" customWidth="1"/><col min="11" max="12" width="13" customWidth="1"/></cols>'+
-    '<sheetData>'+r2.join('')+'</sheetData>'+'<autoFilter ref="A3:N'+Math.max(4,filaTot-1)+'"/>'+'<dataValidations count="2">'+'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="0" sqref="D4:D'+(m+400)+'">'+'<formula1>"WBS,ACTIVIDAD,AGRUPADA,SIMPLE,INFORMATIVA"</formula1></dataValidation>'+'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="0" sqref="N4:N'+(m+400)+'">'+'<formula1>"CONTRACTUAL,ADICIONAL"</formula1></dataValidation>'+'</dataValidations>'+
+    '<col min="9" max="10" width="14" customWidth="1"/><col min="11" max="12" width="13" customWidth="1"/>'+
+    '<col min="13" max="13" width="30" customWidth="1"/><col min="14" max="14" width="14" customWidth="1"/>'+
+    '<col min="15" max="16" width="26" customWidth="1"/></cols>'+
+    '<sheetData>'+r2.join('')+'</sheetData>'+'<autoFilter ref="A3:P'+Math.max(4,filaTot-1)+'"/>'+'<dataValidations count="2">'+'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="0" sqref="D4:D'+(m+400)+'">'+'<formula1>"WBS,ACTIVIDAD,AGRUPADA,SIMPLE,INFORMATIVA"</formula1></dataValidation>'+'<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="0" sqref="N4:N'+(m+400)+'">'+'<formula1>"CONTRACTUAL,ADICIONAL"</formula1></dataValidation>'+'</dataValidations>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>';
   /* ---------- hoja 3: AGRUPACIONES ---------- */
   var CAB3=['AGRUPACION','NOMBRE','REPRESENTANTE','ACTIVIDADES','HH','TOTAL','ITEMS QUE LA COMPONEN'];
@@ -3949,7 +3982,8 @@ async function _crXlsExport(cron,alcVista){
   var tareas=await _crTareas(cron.cron_id);
   var wbsBD=[];try{wbsBD=await _crWbsDe(cron.cron_id)}catch(_e){}
   var nomWbs={};wbsBD.forEach(function(w){if(w.nombre)nomWbs[w.ruta]=w.nombre});
-  var partes=_crXlsArmar(cron,P,alc,grupoDe,gs,tareas,nomWbs);
+  var rel={};try{rel=await _crRelDe(cron.cron_id)}catch(_er){}
+  var partes=_crXlsArmar(cron,P,alc,grupoDe,gs,tareas,nomWbs,rel);
   var problemas=[];
   partes.forEach(function(pa){
     if(pa[0].indexOf('xl/worksheets/')===0)
@@ -8011,7 +8045,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823g2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823g3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
