@@ -3187,8 +3187,9 @@ function _wkHojaCron(cronos,actual,semanas){
     '<col min="7" max="7" width="16" customWidth="1"/><col min="8" max="'+(C0+semanas.length)+'" width="11" customWidth="1"/></cols>'+
     '<sheetData>'+filas.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'+
+    '<drawing r:id="rIdDr1"/>'+
     '</worksheet>';
-  return {xml:xml,filaDe:filaDe,ultCol:ult,ultFila:n-1}}
+  return {xml:xml,filaDe:filaDe,ultCol:ult,ultFila:n-1,colIni:C0}}
 /* registrar una hoja nueva AL FINAL del libro */
 async function _wkNuevaHoja(entradas,mapa,leer,nombre,xmlHoja,enc,pkg){
   /* pkg acumula el registro entre altas: si se relee el original, la segunda
@@ -4788,6 +4789,108 @@ async function _mjDatos(semanas){
   return {partidas:partidas,agrupaciones:ags,semanas:semanas}}
 
 var _MJ_DIACR=new RegExp('[' + '\u0300-\u036F' + ']','g');
+/* --------- El gráfico de curvas, en la hoja CRONOGRAMAS ----------------------
+   Se dibuja un grafico NUEVO, entero, en una hoja PLOMA que crea el propio
+   aplicativo. No se opera sobre los graficos de PANEL CONTROL ni de PHYSICAL:
+   esos viven en hojas verdes, donde la regla solo permite cambiar el color de
+   una serie, y editar su XML a mano resulto fragil (inyectar dentro de una
+   etiqueta o de una linea de tendencia, ptCount que no describe su rango,
+   curvas apoyadas en semanas ajenas).
+   Aqui no puede pasar: el rango tiene exactamente tantas celdas como valores,
+   asi que ptCount cuadra por construccion, y las categorias son las de esta
+   misma hoja, que usa la rejilla de semanas de P6-2. */
+function _wkChartXml(nombreHoja, series, etiquetas, filaEtiq, colIni, nSem){
+  var C=function(i){var s='',n=i+1;while(n>0){var r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}return s};
+  var c0=C(colIni),c1=C(colIni+nSem-1);
+  var H=_wkEsc(nombreHoja);
+  var catRef='<c:cat><c:strRef><c:f>'+H+'!$'+c0+'$'+filaEtiq+':$'+c1+'$'+filaEtiq+'</c:f>'+
+    '<c:strCache><c:ptCount val="'+nSem+'"/>'+
+    etiquetas.map(function(t,i){return '<c:pt idx="'+i+'"><c:v>'+_wkEsc(t)+'</c:v></c:pt>'}).join('')+
+    '</c:strCache></c:strRef></c:cat>';
+  var ser='';
+  series.forEach(function(s,i){
+    /* ptCount = celdas del rango, y hay un valor por celda: no hay forma de
+       que el cache deje de describir su propio rango */
+    var vals=s.vals.slice(0,nSem);
+    while(vals.length<nSem)vals.push(null);
+    ser+='<c:ser><c:idx val="'+i+'"/><c:order val="'+i+'"/>'+
+      '<c:tx><c:strRef><c:f>'+H+'!$A$'+s.fila+'</c:f><c:strCache><c:ptCount val="1"/>'+
+      '<c:pt idx="0"><c:v>'+_wkEsc(s.nombre)+'</c:v></c:pt></c:strCache></c:strRef></c:tx>'+
+      '<c:spPr><a:ln w="28575" cap="rnd"><a:solidFill><a:srgbClr val="'+s.color+'"/></a:solidFill>'+
+      (s.guion?'<a:prstDash val="dash"/>':'<a:prstDash val="solid"/>')+'<a:round/></a:ln>'+
+      '<a:effectLst/></c:spPr>'+
+      '<c:marker><c:symbol val="none"/></c:marker>'+
+      catRef+
+      '<c:val><c:numRef><c:f>'+H+'!$'+c0+'$'+s.fila+':$'+c1+'$'+s.fila+'</c:f>'+
+      '<c:numCache><c:formatCode>0.00%</c:formatCode><c:ptCount val="'+nSem+'"/>'+
+      vals.map(function(v,j){return (v==null)?'':('<c:pt idx="'+j+'"><c:v>'+(Math.round(v*1e8)/1e8)+'</c:v></c:pt>')}).join('')+
+      '</c:numCache></c:numRef></c:val><c:smooth val="0"/></c:ser>'});
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" '+
+    'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '+
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
+    '<c:date1904 val="0"/><c:lang val="es-PE"/><c:roundedCorners val="0"/>'+
+    '<c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1300" b="1"/></a:pPr>'+
+    '<a:r><a:rPr lang="es-PE" sz="1300" b="1"/><a:t>Curva de avance — programado por cronograma vs. real</a:t></a:r>'+
+    '</a:p></c:rich></c:tx><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/>'+
+    '<c:plotArea><c:layout/><c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>'+
+    ser+
+    '<c:marker val="1"/><c:axId val="811100001"/><c:axId val="811100002"/></c:lineChart>'+
+    '<c:catAx><c:axId val="811100001"/><c:scaling><c:orientation val="minMax"/></c:scaling>'+
+    '<c:delete val="0"/><c:axPos val="b"/><c:crossAx val="811100002"/><c:crosses val="autoZero"/>'+
+    '<c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>'+
+    '<c:valAx><c:axId val="811100002"/><c:scaling><c:orientation val="minMax"/><c:max val="1"/><c:min val="0"/></c:scaling>'+
+    '<c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/>'+
+    '<c:numFmt formatCode="0%" sourceLinked="0"/><c:majorTickMark val="out"/><c:minorTickMark val="none"/>'+
+    '<c:tickLblPos val="nextTo"/><c:crossAx val="811100001"/><c:crosses val="autoZero"/>'+
+    '<c:crossBetween val="between"/></c:valAx></c:plotArea>'+
+    '<c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend>'+
+    '<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>'}
+function _wkDrawingXml(fila0,fila1){
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" '+
+    'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'+
+    '<xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff>'+
+    '<xdr:row>'+fila0+'</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>'+
+    '<xdr:to><xdr:col>13</xdr:col><xdr:colOff>0</xdr:colOff>'+
+    '<xdr:row>'+fila1+'</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>'+
+    '<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr>'+
+    '<xdr:cNvPr id="2" name="Curvas de avance"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>'+
+    '<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>'+
+    '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">'+
+    '<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" '+
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/>'+
+    '</a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>'}
+/* mete el grafico en una hoja que acabamos de crear nosotros */
+async function _wkPonGrafico(entradas,mapa,pkg,archHoja,chartXml,drawXml,enc){
+  function libre(pat){var u={};entradas.forEach(function(e){
+    var m=e.nombre.match(pat);if(m)u[+m[1]]=1});
+    var k=1;while(u[k])k++;return k}
+  var nCh=libre(/^xl\/charts\/chart(\d+)\.xml$/);
+  var nDr=libre(/^xl\/drawings\/drawing(\d+)\.xml$/);
+  var pCh='xl/charts/chart'+nCh+'.xml';
+  var pDr='xl/drawings/drawing'+nDr+'.xml';
+  var pDrRel='xl/drawings/_rels/drawing'+nDr+'.xml.rels';
+  var nHoja=(archHoja.match(/sheet(\d+)\.xml$/)||[])[1];
+  var pHoRel='xl/worksheets/_rels/sheet'+nHoja+'.xml.rels';
+  async function meter(nombre,texto){
+    var u8=enc.encode(texto);
+    var e={nombre:nombre,metodo:8,tiempo:(entradas[0]&&entradas[0].tiempo)||0,
+      crc:_wkCrc32(u8),usz:u8.length,datos:await _wkDeflar(u8)};
+    entradas.push(e);mapa[nombre]=e}
+  await meter(pCh,chartXml);
+  await meter(pDr,drawXml);
+  await meter(pDrRel,'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart'+nCh+'.xml"/></Relationships>');
+  await meter(pHoRel,'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rIdDr1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing'+nDr+'.xml"/></Relationships>');
+  pkg.ct=pkg.ct.replace('</Types>',
+    '<Override PartName="/'+pCh+'" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>'+
+    '<Override PartName="/'+pDr+'" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
+  return {chart:pCh,drawing:pDr}}
+
 /* ---------- SOLO desde el aplicativo ---------- */
 var _WKCOLSET={};WK_COLS.forEach(function(c){_WKCOLSET[c]=1});
 /* vaciar las celdas de VALOR de las columnas semanales (las formulas se
@@ -5000,7 +5103,20 @@ function _wkExcel(){
           if(cds.length){
             var act=_wkCurvaApp(semanas,!topar);
             var hoja=_wkHojaCron(cds,act,semanas);
-            await _wkNuevaHoja(entradas,mapa,leer,'CRONOGRAMAS',hoja.xml,enc,pkgH);
+            var arch=(await _wkNuevaHoja(entradas,mapa,leer,'CRONOGRAMAS',hoja.xml,enc,pkgH)).archivo;
+            /* el grafico: una curva por cronograma, mas la real del aplicativo */
+            try{
+              var ser=[],etq=semanas.map(function(z){return 'S'+z.n});
+              cds.forEach(function(c){
+                ser.push({nombre:c.id+' — programado',fila:hoja.filaDe[c.id]+1,
+                  color:String(c.color||'#2E86C1').replace('#','').toUpperCase(),
+                  guion:true,vals:c.acum})});
+              ser.push({nombre:'REAL — cargado en el aplicativo',fila:hoja.filaDe['__ACTUAL__']+1,
+                color:'C0392B',guion:false,vals:act.acum});
+              var chx=_wkChartXml('CRONOGRAMAS',ser,etq,4,hoja.colIni,semanas.length);
+              var drx=_wkDrawingXml(hoja.ultFila+1,hoja.ultFila+26);
+              await _wkPonGrafico(entradas,mapa,pkgH,arch,chx,drx,enc);
+            }catch(_eg){r.avisos.push('La hoja CRONOGRAMAS salió sin gráfico: '+String((_eg&&_eg.message)||_eg))}
             cronInfo={ids:cds.map(function(c){return c.id}),n:cds.length};
             cds.forEach(function(c){
               if(c.fuera)r.avisos.push(c.id+': su cronograma termina el '+c.fin+', despues de la ultima semana del libro (S44) — su curva no llega al 100% dentro del cuadro');
@@ -6235,7 +6351,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823b2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
