@@ -2747,8 +2747,28 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas){
     var ms=(g.miembros||[]).slice();
     repDe[g.grupo_id]=g.representante||ms[0]||g.grupo_id;
     nomG[g.grupo_id]=g.nombre||'';miemG[g.grupo_id]=ms});
-  /* el codigo con el que la partida llega al cronograma */
-  function codigo(id){var g=grupoDe[id];return g?(repDe[g]||id):id}
+  /* Quien reclama cada partida y con que codigo llega al cronograma.
+     Manda la TAREA: todas las partidas de una misma tarea comparten codigo,
+     tenga o no tenga agrupacion formal. Si no la reclama nadie, va con el suyo. */
+  var _tar0=(tareas||[]).slice().sort(function(x,y){return (x.orden||0)-(y.orden||0)});
+  var _hh={};(filas||[]).forEach(function(p){_hh[p.id]=p.hh||0});
+  var _existe={};(filas||[]).forEach(function(p){_existe[p.id]=1});
+  var duenoDe={},codDeTarea={};
+  _tar0.forEach(function(t){
+    var ms=(t.items||[]).filter(function(i){return _existe[i]&&!duenoDe[i]});
+    ms.forEach(function(i){duenoDe[i]=t.task_code});
+    if(!ms.length){codDeTarea[t.task_code]={p6:t.task_code,qps:'',tipo:'INFORMATIVA',g:'',ms:[]};return}
+    var gs={};ms.forEach(function(i){if(grupoDe[i])gs[grupoDe[i]]=1});
+    var gk=Object.keys(gs);
+    if(gk.length===1&&repDe[gk[0]]&&_existe[repDe[gk[0]]]){
+      codDeTarea[t.task_code]={p6:t.task_code,qps:repDe[gk[0]],tipo:'AGRUPADA',g:gk[0],ms:ms};return}
+    var may=ms[0];ms.forEach(function(i){if(_hh[i]>_hh[may])may=i});
+    codDeTarea[t.task_code]={p6:t.task_code,qps:may,
+      tipo:(ms.length===1?'SIMPLE':'AGRUPADA'),g:gk[0]||'',ms:ms}});
+  function codigo(id){
+    var t=duenoDe[id];
+    if(t&&codDeTarea[t]&&codDeTarea[t].qps)return codDeTarea[t].qps;
+    var g=grupoDe[id];return g?(repDe[g]||id):id}
   /* ---------- hoja 1: ALCANCE ---------- */
   var CAB=['ITEM','DESCRIPCION','ESPECIALIDAD','UNIDAD','CANTIDAD','PRECIO UNITARIO','TOTAL',
            'HH','AGRUPACION','INCLUIR','INICIO','FIN','CODIGO QPS'];
@@ -2791,21 +2811,11 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas){
     '<sheetData>'+rows.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>';
   /* ---------- hoja 2: AGRUPADO = EL CRONOGRAMA, con su WBS y su nivel ------- */
-  tareas=(tareas||[]).slice().sort(function(x,y){return (x.orden||0)-(y.orden||0)});
+  tareas=_tar0;
   var porItem={};filas.forEach(function(p){porItem[p.id]=p});
   var usados={};
-  /* el codigo de la tarea: el del representante si sus partidas van agrupadas,
-     el de la partida si es una sola, y el de la tarea de P6 si no lleva ninguna */
-  function codTarea(t){
-    var ms=(t.items||[]).filter(function(i){return porItem[i]});
-    /* p6 = el codigo de Primavera; qps = el de la partida. NUNCA en la misma columna */
-    if(!ms.length)return {p6:t.task_code,qps:'',tipo:'INFORMATIVA',g:'',ms:[]};
-    var gs={};ms.forEach(function(i){if(grupoDe[i])gs[grupoDe[i]]=1});
-    var gk=Object.keys(gs);
-    if(gk.length===1&&repDe[gk[0]])return {p6:t.task_code,qps:repDe[gk[0]],tipo:'AGRUPADA',g:gk[0],ms:ms};
-    if(ms.length===1)return {p6:t.task_code,qps:ms[0],tipo:'SIMPLE',g:'',ms:ms};
-    var may=ms[0];ms.forEach(function(i){if((porItem[i].hh||0)>(porItem[may].hh||0))may=i});
-    return {p6:t.task_code,qps:may,tipo:'SIMPLE',g:gk[0]||'',ms:ms}}
+  /* ya esta resuelto arriba: p6 = codigo de Primavera, qps = codigo de partida */
+  function codTarea(t){return codDeTarea[t.task_code]||{p6:t.task_code,qps:'',tipo:'INFORMATIVA',g:'',ms:[]}}
   /* pasada 1: el arbol de WBS con sus tareas y el nivel de cada fila */
   var plan=[],prev=[];
   tareas.forEach(function(t){
@@ -7004,7 +7014,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823d1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823d2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
