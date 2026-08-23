@@ -5135,6 +5135,167 @@ function _wkHojaCron(cronos,actual,semanas){
     '<drawing r:id="rIdDr1"/>'+
     '</worksheet>';
   return {xml:xml,filaDe:filaDe,ultCol:ult,ultFila:n-1,colIni:C0}}
+/* ------------- La semana del Gantt, como hoja del libro ---------------------
+   El Gantt de la app ya calcula, dia a dia, lo PROGRAMADO (del cronograma
+   proyectado), lo EJECUTADO y lo que queda por delante (el forecast). La hoja
+   PPC pide exactamente eso: P..V es el programado de los siete dias de la
+   semana (viernes a jueves), Y..AE el real de esos mismos dias, y G/H/I/J el
+   forecast y el acumulado — hoy escritos a mano.
+   Aqui se vuelca esa misma cuenta a una hoja y se apuntan las formulas de PPC
+   contra ella, para que deje de haber numeros pegados. */
+var _WKG_HOJA='GANTT SEMANA';
+/* las columnas de la hoja nueva, por si cambia el orden */
+var _WKG={item:'A',desc:'B',und:'C',metrado:'D',esp:'E',sis:'F',
+          progSem:'G',realSem:'H',foreCant:'I',foreHH:'J',
+          acumCant:'K',acumPct:'L',hhTot:'M',hhCons:'N',
+          prog1:'O',real1:'V'};   /* O..U los 7 dias programados, V..AB los 7 reales */
+function _wkgCol(base,i){
+  var n=0,c=String(base);
+  for(var k=0;k<c.length;k++)n=n*26+(c.charCodeAt(k)-64);
+  n+=i;var s='';
+  while(n>0){var r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}
+  return s}
+function _wkgDiaPrev(d){
+  return new Date(Date.parse(d+'T00:00:00Z')-864e5).toISOString().slice(0,10)}
+/* Una fila por partida con la cuenta de la semana. semIni/semFin en ISO. */
+function _wkGanttDatos(semIni,semFin,corte){
+  var dias=[],d=semIni;
+  while(d<=semFin){dias.push(d);d=new Date(Date.parse(d+'T00:00:00Z')+864e5).toISOString().slice(0,10)}
+  var todas=[];
+  try{
+    ((typeof DISC!=='undefined'&&DISC.length)?DISC:['Mecanica','Electrica','Civil']).forEach(function(e){
+      ((typeof acts==='function')?acts(e):[]).forEach(function(p){todas.push(p)})})
+  }catch(e){}
+  /* lo programado sale del cronograma proyectado del aplicativo */
+  var prog={};
+  try{
+    Object.keys(state.prog||{}).forEach(function(id){
+      var pr=state.prog[id];if(!pr)return;
+      var occ=(typeof occupiedDays==='function')?occupiedDays(pr.start,pr.dias||1):[];
+      if(occ.length)prog[pr.partida_id]={occ:occ}})
+  }catch(e){}
+  var out=[],vis={};
+  todas.forEach(function(p){
+    if(!p||!p.id||vis[p.id])return;vis[p.id]=1;
+    var m=null;try{m=(typeof metaOf==='function')?metaOf(p.id):null}catch(e){}
+    var und=(m&&m.unidad)||'';
+    var glb=(und==='glb');
+    var tot=glb?100:((m&&m.total>0)?Number(m.total):0);
+    var hh=0;try{hh=Number(_hhDe(p))||0}catch(e){}
+    var porDia=function(dd){
+      try{
+        if(glb)return (pctOfAt(p,dd)||0)-(pctOfAt(p,_wkgDiaPrev(dd))||0);
+        return (acumCantAt(p.id,dd)||0)-(acumCantAt(p.id,_wkgDiaPrev(dd))||0)
+      }catch(e){return 0}};
+    var real=dias.map(porDia);
+    var realSem=real.reduce(function(a,b){return a+b},0);
+    /* el programado del dia: lo que queda repartido entre los dias que faltan */
+    var pj=prog[p.id],pd=dias.map(function(){return 0}),foreCant=0;
+    if(pj){
+      var eje=0;
+      try{eje=glb?(pctOfAt(p,corte)||0):(acumCantAt(p.id,corte)||0)}catch(e){}
+      var resta=Math.max(0,tot-eje);
+      var fut=pj.occ.filter(function(dd){return dd>=corte}).length;
+      var nd=fut>0?fut:(pj.occ.length||1);
+      var diario=resta/nd;
+      foreCant=resta;
+      dias.forEach(function(dd,i){if(pj.occ.indexOf(dd)>=0)pd[i]=diario})}
+    var progSem=pd.reduce(function(a,b){return a+b},0);
+    var acum=0;try{acum=glb?(pctOfAt(p,corte)||0):(acumCantAt(p.id,corte)||0)}catch(e){}
+    var pct=tot>0?Math.min(1,acum/tot):0;
+    out.push({id:p.id,nom:((typeof pNom==='function')?pNom(p):(p.nombre||'')),
+      und:und,tot:tot,esp:p.esp||'',sis:p.sistema||'',
+      progSem:Math.round(progSem*1e6)/1e6,realSem:Math.round(realSem*1e6)/1e6,
+      foreCant:Math.round(foreCant*1e6)/1e6,foreHH:Math.round(hh*(1-pct)*100)/100,
+      acumCant:Math.round(acum*1e6)/1e6,acumPct:Math.round(pct*1e6)/1e6,
+      hhTot:Math.round(hh*100)/100,hhCons:Math.round(hh*pct*100)/100,
+      prog:pd.map(function(v){return Math.round(v*1e6)/1e6}),
+      real:real.map(function(v){return Math.round(v*1e6)/1e6})})});
+  return {dias:dias,filas:out}}
+function _wkHojaGantt(semN,semIni,semFin,corte,datos){
+  var D=datos||_wkGanttDatos(semIni,semFin,corte);
+  var r=[];
+  r.push('<row r="1">'+_crXlsCel('A',1,
+    'SEMANA S'+semN+' ('+semIni+' → '+semFin+') · corte '+corte+
+    ' — programado, ejecutado y forecast tal como los calcula el Gantt del aplicativo. '+
+    'Las hojas PPC y las semanales leen de aquí con BUSCARV por ITEM.',true)+'</row>');
+  var cab=['ITEM','DESCRIPCION','UND','METRADO','ESPECIALIDAD','SISTEMA',
+           'PROG SEMANA','REAL SEMANA','FORECAST CANT','FORECAST HH',
+           'ACUM CANT','ACUM %','HH TOTAL','HH CONSUMIDAS'];
+  var c2='';
+  cab.forEach(function(h,i){c2+=_crXlsCel(_wkgCol('A',i),2,h,true)});
+  D.dias.forEach(function(dd,i){c2+=_crXlsCel(_wkgCol(_WKG.prog1,i),2,'PROG '+dd.slice(5),true)});
+  D.dias.forEach(function(dd,i){c2+=_crXlsCel(_wkgCol(_WKG.real1,i),2,'REAL '+dd.slice(5),true)});
+  r.push('<row r="2">'+c2+'</row>');
+  var n=3;
+  D.filas.forEach(function(f){
+    var c='';
+    c+=_crXlsCel('A',n,f.id,true);
+    c+=_crXlsCel('B',n,f.nom,true);
+    c+=_crXlsCel('C',n,f.und,true);
+    c+=_crXlsCel('D',n,f.tot,false);
+    c+=_crXlsCel('E',n,f.esp,true);
+    c+=_crXlsCel('F',n,f.sis,true);
+    c+=_crXlsCel('G',n,f.progSem,false);
+    c+=_crXlsCel('H',n,f.realSem,false);
+    c+=_crXlsCel('I',n,f.foreCant,false);
+    c+=_crXlsCel('J',n,f.foreHH,false);
+    c+=_crXlsCel('K',n,f.acumCant,false);
+    c+=_crXlsCel('L',n,f.acumPct,false);
+    c+=_crXlsCel('M',n,f.hhTot,false);
+    c+=_crXlsCel('N',n,f.hhCons,false);
+    f.prog.forEach(function(v,i){if(v)c+=_crXlsCel(_wkgCol(_WKG.prog1,i),n,v,false)});
+    f.real.forEach(function(v,i){if(v)c+=_crXlsCel(_wkgCol(_WKG.real1,i),n,v,false)});
+    r.push('<row r="'+n+'">'+c+'</row>');n++});
+  var ult=_wkgCol(_WKG.real1,D.dias.length-1);
+  return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<dimension ref="A1:'+ult+n+'"/>'+
+    '<sheetViews><sheetView workbookViewId="0">'+
+    '<pane xSplit="2" ySplit="2" topLeftCell="C3" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
+    '<sheetFormatPr defaultRowHeight="15"/>'+
+    '<cols><col min="1" max="1" width="13" customWidth="1"/>'+
+    '<col min="2" max="2" width="52" customWidth="1"/>'+
+    '<col min="3" max="14" width="12" customWidth="1"/>'+
+    '<col min="15" max="30" width="10" customWidth="1"/></cols>'+
+    '<sheetData>'+r.join('')+'</sheetData>'+
+    '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
+    filas:D.filas.length, ultima:n-1, dias:D.dias.length}}
+/* PPC deja de tener numeros pegados: cada celda pasa a buscar en la hoja nueva */
+function _wkPPCFormulas(xml,hoja,nDias){
+  var H="'"+hoja+"'";
+  var bv=function(col,fila,idx){
+    return '<f>IFERROR(VLOOKUP($B'+fila+','+H+'!$A:$AB,'+idx+',FALSE),0)</f>'};
+  var cambios=0;
+  var out=String(xml).replace(/<row r="(\d+)"((?:\s[^>]*?)?)(?:\/>|>([\s\S]*?)<\/row>)/g,
+    function(todo,rs,at,cuerpo){
+      if(cuerpo==null)return todo;
+      var fila=+rs;
+      /* solo las filas de actividad: las que sacan su codigo de P6-2 */
+      if(cuerpo.indexOf("'P6-2'!E")<0)return todo;
+      var puesto={};
+      /* G forecast cant, H forecast HH, I avance acumulado, J HH consumidas */
+      puesto['G']=bv('G',fila,9);   /* I de la hoja */
+      puesto['H']=bv('H',fila,10);  /* J */
+      puesto['I']=bv('I',fila,12);  /* L, el % acumulado */
+      puesto['J']=bv('J',fila,14);  /* N, HH consumidas */
+      /* los siete dias: P..V el programado, Y..AE el real */
+      for(var i=0;i<nDias;i++){
+        puesto[_wkgCol('P',i)]=bv('',fila,15+i);
+        puesto[_wkgCol('Y',i)]=bv('',fila,15+nDias+i)}
+      /* los totales de la semana y su % */
+      puesto['X']=bv('X',fila,7);   /* G: programado de la semana */
+      puesto['W']='<f>IFERROR($X'+fila+'/$E'+fila+',0)</f>';
+      puesto['AG']=bv('AG',fila,8); /* H: real de la semana */
+      puesto['AF']='<f>IFERROR($AG'+fila+'/$E'+fila+',0)</f>';
+      var cuerpo2=cuerpo.replace(/<c r="([A-Z]+)(\d+)"((?:\s[^>]*?)?)(\/>|>([\s\S]*?)<\/c>)/g,
+        function(t,col,rr,at2,resto,inner){
+          if(!puesto[col])return t;
+          cambios++;
+          var a2=at2.replace(/\s*t="[^"]*"/,'');
+          return '<c r="'+col+rr+'"'+a2+'>'+puesto[col]+'</c>'});
+      return '<row r="'+rs+'"'+at+'>'+cuerpo2+'</row>'});
+  return {xml:out,n:cambios}}
 /* ---------- Una linea de plan por cronograma en PROGRAMACION ----------------
    La hoja ya viene con DOS filas por actividad: la de 'Prog.' (columna M), que
    lee el plan del alimentador amarillo, y la de 'Actual', que lee lo real de
@@ -7338,6 +7499,25 @@ function _wkExcel(){
               ' y el libro solo mira hasta la S44'):'');
           r.avisos.push('Cronogramas'+_plMsg)}
       }catch(_epl){r.avisos.push('No se pudieron escribir los alimentadores de cronograma: '+String((_epl&&_epl.message)||_epl))}
+      /* ---- la semana del Gantt, y PPC leyendo de ella ----
+         PPC traia el forecast, el acumulado y los siete dias escritos a mano.
+         Ahora sale una hoja con lo que calcula el Gantt y PPC la consulta. */
+      try{
+        var _gIni=_wkISO(_wkSem(semN).ini),_gFin=_wkISO(_wkSem(semN).fin);
+        var _hg=_wkHojaGantt(semN,_gIni,_gFin,corte);
+        await _wkNuevaHoja(entradas,mapa,leer,_WKG_HOJA,_hg.xml,enc,pkgH);
+        var _hPPC=null;
+        for(var _n4 in hojas)if(String(_n4).replace(/\s+$/,'')==='PPC')_hPPC=hojas[_n4];
+        var _nppc=0;
+        if(_hPPC&&mapa[_hPPC]){
+          var _xp=cambiar[_hPPC]||(await leer(_hPPC));
+          var _rp=_wkPPCFormulas(_xp,_WKG_HOJA,_hg.dias);
+          if(_rp.n){cambiar[_hPPC]=_rp.xml;_nppc=_rp.n}}
+        r.avisos.push('Semana del Gantt · hoja «'+_WKG_HOJA+'» con '+_hg.filas+
+          ' partidas y '+_hg.dias+' días ('+_gIni+' → '+_gFin+')'+
+          (_nppc?(' · PPC pasa a leer de ella en '+_nppc+' celdas, antes eran números pegados')
+                :' · ⚠ no se halló la hoja PPC para apuntarla'))
+      }catch(_eg2){r.avisos.push('No se pudo armar la semana del Gantt: '+String((_eg2&&_eg2.message)||_eg2))}
       /* el registro de las hojas nuevas, ya acumulado */
       var wbx=pkgH.wb||await leer('xl/workbook.xml');
       if(pkgH.rels)cambiar['xl/_rels/workbook.xml.rels']=pkgH.rels;
@@ -8512,7 +8692,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823h7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823h8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
