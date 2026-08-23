@@ -2379,6 +2379,7 @@ function _crPinta(){
             '</span>'):'')})()+'</div>'+
       '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'+
       '<button data-alc="'+esc(c.cron_id)+'" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">☑ Alcance (qué HH aplican)</button>'+
+      '<button data-cur="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">📈 Ver curva</button>'+
       '<button data-map="'+esc(c.cron_id)+'" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">🔗 Mapeo tareas ↔ partidas</button>'+
       '<button data-ver="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">👁 Tareas</button>'+
       '<button data-ed="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">✎ Nombre / tipo / color</button>'+
@@ -2387,6 +2388,7 @@ function _crPinta(){
   B.innerHTML=H;
   function elC(id){return _crLista().filter(function(x){return x.cron_id===id})[0]}
   B.querySelectorAll('[data-alc]').forEach(function(b){b.onclick=function(){_crAlcanceUI(elC(b.getAttribute('data-alc')))}});
+  B.querySelectorAll('[data-cur]').forEach(function(b){b.onclick=function(){_crCurvaUI(elC(b.getAttribute('data-cur')))}});
   B.querySelectorAll('[data-map]').forEach(function(b){b.onclick=function(){_crMapeoUI(elC(b.getAttribute('data-map')))}});
   B.querySelectorAll('[data-ver]').forEach(function(b){b.onclick=function(){_crTareasUI(elC(b.getAttribute('data-ver')))}});
   B.querySelectorAll('[data-ed]').forEach(function(b){b.onclick=function(){_crEditarUI(elC(b.getAttribute('data-ed')))}});
@@ -2673,6 +2675,103 @@ function _crEditarUI(c){
         quien:yo,ts:t,cell_at:Date.now()}],'proyecto,cron_id');
       await _crPull();ov.remove();toast('✓ Guardado');_crPinta();
     }catch(e){b.disabled=false;b.textContent='💾 Guardar';toast('⚠ '+((e&&e.message)||e))}};
+}
+
+/* --------- La curva del cronograma, dentro del aplicativo -------------------
+   Dibuja la curva S del cronograma con sus semanas propias, las HH por semana,
+   y — lo mas util — señala las tareas que concentran demasiadas horas en muy
+   pocos dias, que es lo que hace que la curva salga a escalones en vez de en
+   banana. */
+function _crSemDe(tar){
+  var d0='',d1='';
+  tar.forEach(function(t){
+    if(t.ini&&(!d0||t.ini<d0))d0=t.ini;
+    if(t.fin&&(!d1||t.fin>d1))d1=t.fin});
+  if(!d0||!d1)return [];
+  var a=Date.parse(d0+'T00:00:00Z'),b=Date.parse(d1+'T00:00:00Z'),out=[];
+  var n=Math.ceil((b-a)/(7*864e5))+1;
+  for(var i=0;i<n;i++)out.push({n:i+1,
+    ini:new Date(a+i*7*864e5).toISOString().slice(0,10),
+    fin:new Date(a+(i*7+6)*864e5).toISOString().slice(0,10)});
+  return out}
+/* cuantas horas por dia pide cada tarea: el termometro de si es realista */
+function _crCarga(tar,items){
+  var out=[];
+  tar.forEach(function(t){
+    var hh=0;(t.items||[]).forEach(function(i){hh+=(Number(items[i])||0)});
+    if(!(hh>0))return;
+    var d=(t.ini&&t.fin)?(Math.round((Date.parse(t.fin+'T00:00:00Z')-Date.parse(t.ini+'T00:00:00Z'))/864e5)+1):0;
+    out.push({cod:t.task_code,nom:String(t.nombre||''),ini:t.ini,fin:t.fin,
+      dias:d,hh:Math.round(hh*10)/10,hhDia:d?Math.round(hh/d*10)/10:0,
+      n:(t.items||[]).length})});
+  out.sort(function(a,b){return b.hhDia-a.hhDia});
+  return out}
+async function _crCurvaUI(c){
+  if(!c)return;
+  var tar=await _crTareas(c.cron_id);
+  var alc=await _crAlc(c.cron_id);
+  var u=_crUniverso(c.cron_id,alc);
+  var sem=_crSemDe(tar);
+  var rp=_crPesos(tar,u.items,u.hh);
+  var cur=_crCurva(tar.map(function(t){return {ini:t.ini,fin:t.fin,hh:0,dur_h:0}}),u.hh,sem,rp.pesos);
+  var carga=_crCarga(tar,u.items);
+  /* cuantas personas harian falta, a 9 h por dia */
+  function gente(hd){return Math.ceil(hd/9)}
+  var ov=document.createElement('div');ov.id='_crCurOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
+  var W=Math.max(320,Math.min(900,(window.innerWidth||360)-40)),H=260;
+  var mx=44,my=18,gw=W-mx-14,gh=H-my-30;
+  var maxSem=0;cur.porSem.forEach(function(v){if(v>maxSem)maxSem=v});
+  var barras='',linea='',ptos='';
+  sem.forEach(function(s,i){
+    var x=mx+(sem.length>1?(i*gw/(sem.length-1)):gw/2);
+    var hv=maxSem>0?(cur.porSem[i]/maxSem):0;
+    var bw=Math.max(3,gw/Math.max(1,sem.length)*0.55);
+    barras+='<rect x="'+(x-bw/2).toFixed(1)+'" y="'+(my+gh-hv*gh*0.55).toFixed(1)+'" width="'+bw.toFixed(1)+
+      '" height="'+(hv*gh*0.55).toFixed(1)+'" fill="#1d3550"/>';
+    var y=my+gh-cur.acum[i]*gh;
+    linea+=(i?' L':'M')+x.toFixed(1)+' '+y.toFixed(1);
+    ptos+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="2.6" fill="'+esc(c.color||'#2E86C1')+'"/>'});
+  var ejes='';
+  [0,0.25,0.5,0.75,1].forEach(function(p){
+    var y=my+gh-p*gh;
+    ejes+='<line x1="'+mx+'" y1="'+y.toFixed(1)+'" x2="'+(mx+gw)+'" y2="'+y.toFixed(1)+'" stroke="#1a2740" stroke-width="1"/>'+
+      '<text x="'+(mx-6)+'" y="'+(y+3.5).toFixed(1)+'" fill="#7d8590" font-size="9" text-anchor="end">'+(p*100)+'%</text>'});
+  var etq='';
+  sem.forEach(function(s,i){
+    if(sem.length>12&&(i%2))return;
+    var x=mx+(sem.length>1?(i*gw/(sem.length-1)):gw/2);
+    etq+='<text x="'+x.toFixed(1)+'" y="'+(my+gh+13)+'" fill="#7d8590" font-size="8.5" text-anchor="middle">S'+s.n+'</text>'});
+  var duras=carga.filter(function(x){return x.hhDia>90});
+  ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'+
+    '<b style="font-size:14.5px;color:'+esc(c.color||'#8ECBF5')+'">📈 Curva de '+esc(c.cron_id)+'</b>'+
+    '<span style="background:#152436;border:1px solid #1d3550;border-radius:8px;padding:3px 9px;font-size:11.5px;color:#9db4d6">'+
+    sem.length+' semanas · '+u.hh+' hh · '+carga.length+' tareas con horas</span>'+
+    '<button id="_crCurX" style="margin-left:auto;background:#444;color:#fff;border:0;border-radius:8px;padding:8px 12px">✕</button></div>'+
+    '<div style="background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:8px;overflow-x:auto">'+
+    '<svg width="'+W+'" height="'+H+'" style="display:block">'+ejes+barras+
+    '<path d="'+linea+'" fill="none" stroke="'+esc(c.color||'#2E86C1')+'" stroke-width="2.2" stroke-linejoin="round"/>'+
+    ptos+etq+
+    '<text x="'+mx+'" y="'+(my-5)+'" fill="#7d8590" font-size="9">barras = HH de la semana · línea = % acumulado</text>'+
+    '</svg></div>'+
+    (duras.length?('<div style="background:#2a1414;border:1px solid #5A2A2A;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#F0A3A3;line-height:1.6">'+
+      '<b>⚠ '+duras.length+' tarea(s) piden demasiada gente</b> — por eso la curva sale a escalones en vez de en banana. '+
+      'A 9 h por persona y día:<br>'+
+      duras.slice(0,6).map(function(x){return '<b>'+esc(x.cod)+'</b> '+x.hh+' hh en '+x.dias+' día(s) = <b>'+x.hhDia+' hh/día</b> ≈ '+gente(x.hhDia)+' personas · '+esc(x.nom.slice(0,44))}).join('<br>')+
+      '</div>'):('<div style="background:#0F2419;border:1px solid #1d3a2a;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#9FE8B0">✓ Ninguna tarea pide más de 90 hh/día: el reparto es realista.</div>'))+
+    '<div style="flex:1;overflow:auto;margin-top:9px;background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:7px">'+
+    '<div style="font-size:11px;color:#7d8590;font-weight:700;margin-bottom:5px">CARGA POR TAREA (de más a menos apretada)</div>'+
+    carga.slice(0,40).map(function(x){
+      var col=x.hhDia>200?'#F0A3A3':(x.hhDia>90?'#E8C9A0':'#9FE8B0');
+      return '<div style="display:flex;gap:8px;padding:5px 6px;border-bottom:1px solid #16202e;font-size:11px">'+
+        '<b style="color:#8ECBF5;flex:none;width:52px">'+esc(x.cod)+'</b>'+
+        '<span style="flex:1;min-width:0;overflow-wrap:anywhere">'+esc(x.nom.slice(0,52))+'</span>'+
+        '<span style="flex:none;color:#9db4d6">'+x.dias+'d</span>'+
+        '<span style="flex:none;color:#9FE8B0;width:64px;text-align:right">'+x.hh+' hh</span>'+
+        '<span style="flex:none;color:'+col+';font-weight:800;width:74px;text-align:right">'+x.hhDia+' hh/día</span></div>'}).join('')+
+    '</div>';
+  document.body.appendChild(ov);
+  document.getElementById('_crCurX').onclick=function(){ov.remove()};
 }
 
 /* --------- FECHAS por partida dentro de cada cronograma ---------------------
@@ -7041,7 +7140,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823d4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823d5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
