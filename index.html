@@ -1928,10 +1928,13 @@ function _wkAcum(cutISO){
   var out={};
   var todas=(DATA.partidas||[]).concat(state.nuevas||[]);
   var nuevasIds={};(state.nuevas||[]).forEach(function(n){if(n&&n.id)nuevasIds[n.id]=1});
+  var apagadas=[];
   todas.forEach(function(p){try{
     if(!p||!p.id||out[p.id])return;
+    /* HH apagadas por el admin: la actividad queda FUERA del semanal entero */
+    try{if(typeof _hhOff==='function'&&_hhOff(p.id)){apagadas.push(p.id);return}}catch(_eo){}
     var m=(typeof metaOf==='function')?metaOf(p.id):null;
-    var hh=0;try{hh=((typeof _hhOff==='function'&&_hhOff(p.id))?0:(Number(_hhDe(p))||0))}catch(e){}
+    var hh=0;try{hh=Number(_hhDe(p))||0}catch(e){}
     var a=0,tot=0;
     var fz=null;try{fz=(typeof _fzDe==='function')?_fzDe(p.id):null}catch(e){}
     if(fz&&(fz.fases||[]).length){
@@ -1951,6 +1954,7 @@ function _wkAcum(cutISO){
     if(a>0||hh>0)out[p.id]=[Math.round(a*1e4)/1e4,Math.round(tot*1e4)/1e4,Math.round(hh*100)/100,nuevasIds[p.id]?1:0,
       String((m&&m.unidad)||p.unidad||'UND'),String((typeof _nomAct==='function'?_nomAct(p):p.nombre)||p.id).slice(0,90)];
   }catch(e){}});
+  _wkAcum.apagadas=apagadas;
   return out}
 /* el % del proyecto con el universo de la app: hh ganadas / hh totales,
    cada partida topada a su 100% (la misma vara del panel) */
@@ -2105,8 +2109,9 @@ function _wkPonCelda(rowxml,rnum,col,valor,estilo){
   while((m=re.exec(rowxml))){if(+m[2]===rnum&&_wkOrdenCol(m[1])>_wkOrdenCol(col)){mejor=m.index;break}}
   if(mejor!=null)return rowxml.slice(0,mejor)+nueva+rowxml.slice(mejor);
   return rowxml.replace('</row>',nueva+'</row>')}
-function _wkProcesarP62(xml,ss,semN,datos,topar,qps){
+function _wkProcesarP62(xml,ss,semN,datos,topar,qps,apagadas){
   qps=qps||{items:{},grupos:{}};
+  var apagSet={};(apagadas||[]).forEach(function(x){apagSet[_wkClave(x)]=1});
   function D(it){var d=datos[it];return d?{a:Number(d[0])||0,tot:Number(d[1])||0,hh:Number(d[2])||0}:null}
   var colSem=WK_COLS[semN-27];
   var pasadas=WK_COLS.slice(0,semN-27);
@@ -2143,11 +2148,15 @@ function _wkProcesarP62(xml,ss,semN,datos,topar,qps){
     var pas=0,lb0tot=0;fl.forEach(function(f){pas+=f.pas;lb0tot+=f.lb0});
     var g=qps.items[K]&&qps.items[K].g;
     var miembros=(g&&grupoFila[g]===K)?qps.grupos[g]:[K];
+    /* HH apagadas: el miembro sale de la mezcla; la fila solo queda intacta si
+       TODOS sus miembros estan apagados */
+    var vivos=miembros.filter(function(mi){return !apagSet[_wkClave(mi)]});
+    if(!vivos.length)return;
     var eff=0,topado=false,fuera=0;
     if(miembros.length>1){
-      /* fila agrupada: % ponderado por HH de todos los miembros, en unidades LB0 */
+      /* fila agrupada: % ponderado por HH de los miembros VIVOS, en unidades LB0 */
       var sw=0,sp=0;
-      miembros.forEach(function(mi){var d=D(mi);
+      vivos.forEach(function(mi){var d=D(mi);
         if(!d||!(d.tot>0)){if(d&&d.a>0)avisos.push(mi+': tiene avance pero sin metrado en la app — no entra al grupo '+g);return}
         var w=(d.hh>0)?d.hh:1,pct=d.a/d.tot;
         if(pct>1){if(topar){pct=1;topado=true}}
@@ -2263,7 +2272,8 @@ function _wkExcel(){
       var qps=(hQPS&&mapa[hQPS])?_wkLeerQPS(await leer(hQPS),ss):{items:{},grupos:{}};
       var x20=await leer(hP62);
       var topar=((document.getElementById('_wkTope')||{}).value!=='todo');
-      var r=_wkProcesarP62(x20,ss,semN,datos,topar,qps);
+      var r=_wkProcesarP62(x20,ss,semN,datos,topar,qps,_wkAcum.apagadas||[]);
+      if((_wkAcum.apagadas||[]).length)r.avisos.unshift('HH apagadas por el admin — quedan FUERA del semanal (ni cantidades ni %): '+(_wkAcum.apagadas||[]).join(', '));
       /* Caratula C17 */
       var x22=await leer(hCar);
       var c17=x22.match(/<c r="C17"[^>]*>[\s\S]*?<\/c>/);
@@ -3425,7 +3435,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260821c1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260821c2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
