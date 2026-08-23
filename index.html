@@ -2269,6 +2269,7 @@ function _wkProcesarP62(xml,ss,semN,datos,topar,qps,apagadas){
     pasadas.forEach(function(c){pas+=Number((celdas[c]||{}).v)||0});
     var est=null;
     for(var i=pasadas.length-1;i>=0;i--){var cc=celdas[pasadas[i]];if(cc&&cc.s!=null){est=cc.s;break}}
+    if(est==null&&celdas[colSem]&&celdas[colSem].s!=null)est=celdas[colSem].s;
     (porItem[_wkClave(a)]=porItem[_wkClave(a)]||[]).push({fila:r,lb0:lb0,pas:pas,est:est});
     plantilla={fila:r,estilos:{}};
     for(var cst in celdas)plantilla.estilos[cst]=celdas[cst].s;
@@ -2351,6 +2352,35 @@ function _wkLeerSS(xml){
     var tx='';cuerpo.replace(/<t[^>]*>([^<]*)<\/t>/g,function(_t2,t){tx+=t;return _t2});
     ss.push(tx.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&'));return _t});
   return ss}
+/* ---------- SOLO desde el aplicativo ---------- */
+var _WKCOLSET={};WK_COLS.forEach(function(c){_WKCOLSET[c]=1});
+/* vaciar las celdas de VALOR de las columnas semanales (las formulas se
+   respetan salvo que inclFormulas); el estilo queda para heredar el formato */
+function _wkLimpiaVals(xml,filaMin,filas,inclFormulas){
+  return xml.replace(/<row r="(\d+)"[^>]*>[\s\S]*?<\/row>/g,function(todo,rs){
+    var r=+rs;
+    if(filas){if(!filas[r])return todo}
+    else if(r<filaMin)return todo;
+    return todo.replace(/<c r="([A-Z]+)(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g,function(ct,col,rn,attrs,inner){
+      if(!_WKCOLSET[col])return ct;
+      inner=inner||'';
+      if(!/<v>/.test(inner)&&!/<is>/.test(inner))return ct;
+      if(!inclFormulas&&/<f[\s>]/.test(inner))return ct;
+      var sm=attrs.match(/s="(\d+)"/);
+      return '<c r="'+col+rn+'"'+(sm?(' s="'+sm[1]+'"'):'')+'/>'})})}
+/* las filas del % ACTUAL en PHYSICAL, por su texto de la columna C */
+function _wkFilasPct(xml,ss){
+  function filaDe(texto){
+    var out=0;
+    xml.replace(/<row r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g,function(todo,rs,cuerpo){
+      if(out)return todo;
+      var cm=cuerpo.match(/<c r="C\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/);
+      if(cm){var vm=(cm[2]||'').match(/<v>([^<]*)<\/v>/);var v=vm?vm[1]:'';
+        if(/t="s"/.test(cm[1])&&/^\d+$/.test(v))v=ss[+v]||'';
+        if(String(v).trim()===texto)out=+rs}
+      return todo});
+    return out}
+  return {fAc:filaDe('% ACTUAL ACUMULADO'),fSe:filaDe('% ACTUAL SEMANA')}}
 /* ---------- la pantalla ---------- */
 function _wkExcel(){
   if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return}
@@ -2363,7 +2393,7 @@ function _wkExcel(){
   for(var n=27;n<=44;n++)ops+='<option value="'+n+'"'+(n===toca?' selected':'')+'>'+_wkLbl(n)+(n===toca?' · TOCA':'')+'</option>';
   ov.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:17px 16px;box-sizing:border-box;max-height:92vh;overflow:auto">'+
     '<div style="font-weight:900;font-size:15.5px;color:#1F3864;margin-bottom:4px">📊 Excel semanal (Contractor Weekly Report)</div>'+
-    '<div style="font-size:12px;color:#5C6779;line-height:1.5;margin-bottom:12px">Elige la semana y tu Excel plantilla. Se llena la hoja <b>P6-2</b> con lo real del aplicativo (descontando lo ya cargado en semanas pasadas) y la <b>Carátula (P)</b> pasa a esa semana. Nada más se toca.</div>'+
+    '<div style="font-size:12px;color:#5C6779;line-height:1.5;margin-bottom:12px"><b>⚡ Solo desde el aplicativo</b>: el libro se genera solo — TODAS las semanas (S27 → la elegida) se reconstruyen con lo del aplicativo sobre el formato de guía que viaja con la app; no necesitas ningún archivo. <b>📄 Desde tu plantilla</b>: solo se llena la semana elegida y lo ya cargado en tu archivo se respeta.</div>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Semana</label>'+
     '<select id="_wkSel" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:11px">'+ops+'</select>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Corte de datos</label>'+
@@ -2374,13 +2404,15 @@ function _wkExcel(){
     '<select id="_wkTope" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:11px">'+
     '<option value="tope" selected>Solo hasta el 100% del metrado LB0 (topar el sobremetrado)</option>'+
     '<option value="todo">Incluir el sobremetrado (todo lo ejecutado)</option></select>'+
+    '<div id="_wkPrev" style="font-size:12px;color:#1B2433;background:#F4F7FB;border:1px solid #D7E0EC;border-radius:10px;padding:9px 11px;margin-bottom:11px;line-height:1.5">Calculando el avance al corte\u2026</div>'+
+    '<button id="_wkSolo" style="width:100%;background:#0C5132;color:#fff;border:0;border-radius:12px;padding:14px;font-weight:800;font-size:13.5px;cursor:pointer;margin-bottom:9px">⚡ Generar SOLO desde el aplicativo</button>'+
+    '<div style="text-align:center;font-size:10.5px;color:#8A94A6;margin-bottom:9px">— o con un archivo tuyo —</div>'+
     '<button id="_wkPick" style="width:100%;background:#EAF1FB;color:#1F3864;border:1.5px dashed #7FA0F5;border-radius:11px;padding:13px;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:11px">📄 Elegir el Excel plantilla…</button>'+
     '<input type="file" id="_wkFile" accept=".xlsx" style="display:none">'+
-    '<div id="_wkPrev" style="font-size:12px;color:#1B2433;background:#F4F7FB;border:1px solid #D7E0EC;border-radius:10px;padding:9px 11px;margin-bottom:11px;line-height:1.5">Calculando el avance al corte\u2026</div>'+
     '<div id="_wkMsg" style="font-size:12px;color:#5C6779;margin-bottom:11px"></div>'+
     '<div style="display:flex;gap:9px">'+
     '<button id="_wkNo" style="flex:1;background:#E7EDF5;color:#1B2433;border:0;border-radius:12px;padding:14px;font-weight:800;font-size:13.5px;cursor:pointer">Cancelar</button>'+
-    '<button id="_wkGo" disabled style="flex:2;background:#0C5132;color:#fff;border:0;border-radius:12px;padding:14px;font-weight:800;font-size:13.5px;cursor:pointer;opacity:.5">⬇ Generar y descargar</button></div></div>';
+    '<button id="_wkGo" disabled style="flex:2;background:#1F3864;color:#fff;border:0;border-radius:12px;padding:14px;font-weight:800;font-size:13.5px;cursor:pointer;opacity:.5">⬇ Generar desde la plantilla</button></div></div>';
   document.body.appendChild(ov);
   ov.onclick=function(e){if(e.target===ov)ov.remove()};
   document.getElementById('_wkNo').onclick=function(){ov.remove()};
@@ -2408,19 +2440,36 @@ function _wkExcel(){
     file=(e.target.files||[])[0]||null;
     var b=document.getElementById('_wkPick'),g=document.getElementById('_wkGo');
     if(file){b.textContent='📄 '+file.name;b.style.borderStyle='solid';g.disabled=false;g.style.opacity='1'}};
-  document.getElementById('_wkGo').onclick=async function(){
+  document.getElementById('_wkGo').onclick=function(){
     if(!file)return;
-    var g=document.getElementById('_wkGo'),msg=document.getElementById('_wkMsg');
+    file.arrayBuffer().then(function(buf){_armar(buf,'plantilla')})};
+  document.getElementById('_wkSolo').onclick=async function(){
+    var b=document.getElementById('_wkSolo'),msg=document.getElementById('_wkMsg');
+    var t0=b.textContent;b.disabled=true;b.textContent='Trayendo el libro guía…';
+    try{
+      var res=await fetch('plantilla_semanal.xlsx?v='+encodeURIComponent(typeof APP_VER!=='undefined'?APP_VER:''),{cache:'no-store'});
+      if(!res.ok)throw new Error('HTTP '+res.status);
+      var buf=await res.arrayBuffer();
+      b.textContent=t0;
+      await _armar(buf,'solo');
+    }catch(e2){
+      msg.innerHTML='<div style="color:#B42318;font-weight:800">⚠ No se pudo traer el libro guía ('+String((e2&&e2.message)||e2)+'). Sin internet, usa 📄 con tu plantilla.</div>';
+    }
+    b.disabled=false;b.textContent=t0;
+  };
+  async function _armar(buf,modo){
+    var solo=(modo==='solo');
+    var g=document.getElementById(solo?'_wkSolo':'_wkGo'),msg=document.getElementById('_wkMsg');
+    var t0=g.textContent;
     g.disabled=true;g.textContent='Armando…';
     try{
       var semN=+document.getElementById('_wkSel').value;
       var corteJue=_wkISO(_wkSem(semN).fin);
       var hastaHoy=((document.getElementById('_wkCorte')||{}).value!=='jueves');
       var corte=hastaHoy?((typeof todayISO==='function')?todayISO():corteJue):corteJue;
-      msg.textContent='Leyendo el libro y calculando lo real al corte '+corte+'…';
+      msg.textContent=solo?('Armando el libro completo desde el aplicativo (S27 → S'+semN+')…'):('Leyendo el libro y calculando lo real al corte '+corte+'…');
       try{if(typeof syncPull==='function')await syncPull()}catch(_e){}
-      var datos=_wkAcum(corte);
-      var entradas=_wkZipLeer(await file.arrayBuffer());
+      var entradas=_wkZipLeer(buf);
       var dec=new TextDecoder(),enc=new TextEncoder();
       var mapa={};entradas.forEach(function(en){mapa[en.nombre]=en});
       if(!mapa['xl/workbook.xml']||!mapa['xl/sharedStrings.xml'])throw new Error('no parece el libro correcto');
@@ -2441,10 +2490,44 @@ function _wkExcel(){
             it2[_wkClave(mi)]={g:a.grupo_id};(gr2[a.grupo_id]=gr2[a.grupo_id]||[]).push(_wkClave(mi))})});
           qps={items:it2,grupos:gr2}}
       }catch(_ea){}
-      var x20=await leer(hP62);
       var topar=((document.getElementById('_wkTope')||{}).value!=='todo');
-      var r=_wkProcesarP62(x20,ss,semN,datos,topar,qps,_wkAcum.apagadas||[]);
-      if((_wkAcum.apagadas||[]).length)r.avisos.unshift('HH apagadas por el admin — quedan FUERA del semanal (ni cantidades ni %): '+(_wkAcum.apagadas||[]).join(', '));
+      var x20=await leer(hP62);
+      var r,datos,pctA=null,phy=null;
+      if(solo){
+        /* el libro guia trae semanas cargadas: se VACIAN los valores semanales
+           (formulas y formatos quedan) y se reconstruye semana a semana desde la app */
+        x20=_wkLimpiaVals(x20,3,null,false);
+        var xphy=(hPhy&&mapa[hPhy])?await leer(hPhy):null;
+        var fp=xphy?_wkFilasPct(xphy,ss):{fAc:0,fSe:0};
+        if(xphy&&fp.fAc){var ffs={};ffs[fp.fAc]=1;if(fp.fSe)ffs[fp.fSe]=1;xphy=_wkLimpiaVals(xphy,3,ffs,true)}
+        var agregadasTot=[];
+        for(var n2=27;n2<=semN;n2++){
+          var corteN=(n2===semN)?corte:_wkISO(_wkSem(n2).fin);
+          var dN=_wkAcum(corteN);
+          var rN=_wkProcesarP62(x20,ss,n2,dN,topar,qps,_wkAcum.apagadas||[]);
+          x20=rN.xml;
+          (rN.agregadas||[]).forEach(function(x){agregadasTot.push(x)});
+          if(xphy&&fp.fAc){var pN=_wkPctApp(dN,!topar);xphy=_wkPonPct(xphy,ss,n2,pN.pct).xml;
+            if(n2===semN){pctA=pN;phy={xml:xphy,filaAcum:fp.fAc,filaSem:fp.fSe,previo:0}}}
+          if(n2===semN){r=rN;datos=dN;if(!pctA)pctA=_wkPctApp(dN,!topar)}
+        }
+        if(phy&&semN>27){var cp=WK_COLS[semN-28];
+          var mm=phy.xml.match(new RegExp('<c r="'+cp+phy.filaAcum+'"[^>]*?(?:/>|>([\\s\\S]*?)</c>)'));
+          if(mm){var vm3=(mm[1]||'').match(/<v>([^<]*)<\/v>/);if(vm3)phy.previo=Number(vm3[1])||0}}
+        r.agregadas=agregadasTot;
+        if(!phy)r.avisos.push('El libro guía no trae la hoja PHYSICAL % PROGRESS (o su fila de % ACTUAL) — el % no se estampó');
+        if((_wkAcum.apagadas||[]).length)r.avisos.unshift('HH apagadas por el admin — quedan FUERA del semanal (ni cantidades ni %): '+(_wkAcum.apagadas||[]).join(', '));
+      }else{
+        datos=_wkAcum(corte);
+        r=_wkProcesarP62(x20,ss,semN,datos,topar,qps,_wkAcum.apagadas||[]);
+        x20=r.xml;
+        if((_wkAcum.apagadas||[]).length)r.avisos.unshift('HH apagadas por el admin — quedan FUERA del semanal (ni cantidades ni %): '+(_wkAcum.apagadas||[]).join(', '));
+        pctA=_wkPctApp(datos,!topar);
+        if(hPhy&&mapa[hPhy]){
+          try{phy=_wkPonPct(await leer(hPhy),ss,semN,pctA.pct)}
+          catch(_ep){r.avisos.push('No se pudo estampar el % en PHYSICAL % PROGRESS: '+String((_ep&&_ep.message)||_ep))}}
+        else r.avisos.push('El libro no trae la hoja PHYSICAL % PROGRESS — el % del proyecto no se estampo');
+      }
       /* Caratula C17 */
       var x22=await leer(hCar);
       var c17=x22.match(/<c r="C17"[^>]*>[\s\S]*?<\/c>/);
@@ -2455,13 +2538,8 @@ function _wkExcel(){
       if(/<calcPr[^>]*fullCalcOnLoad/.test(wbx)){}
       else if(/<calcPr/.test(wbx))wbx=wbx.replace(/<calcPr([^>]*?)\/>/,'<calcPr$1 fullCalcOnLoad="1"/>');
       else wbx=wbx.replace('</workbook>','<calcPr fullCalcOnLoad="1"/></workbook>');
-      var cambiar={};cambiar[hP62]=r.xml;cambiar[hCar]=x22;cambiar['xl/workbook.xml']=wbx;
-      /* el % final con el universo de la app (todas las partidas + adicionales) */
-      var pctA=_wkPctApp(datos,!topar),phy=null;
-      if(hPhy&&mapa[hPhy]){
-        try{phy=_wkPonPct(await leer(hPhy),ss,semN,pctA.pct);cambiar[hPhy]=phy.xml}
-        catch(_ep){r.avisos.push('No se pudo estampar el % en PHYSICAL % PROGRESS: '+String((_ep&&_ep.message)||_ep))}}
-      else r.avisos.push('El libro no trae la hoja PHYSICAL % PROGRESS — el % del proyecto no se estampo');
+      var cambiar={};cambiar[hP62]=x20;cambiar[hCar]=x22;cambiar['xl/workbook.xml']=wbx;
+      if(phy&&hPhy)cambiar[hPhy]=phy.xml;
       /* las curvas: la serie del Actual crece hasta la semana elegida */
       var curvas=0;
       if(phy){
@@ -2498,15 +2576,17 @@ function _wkExcel(){
       try{
         var t=(typeof nowSrv==='function'?nowSrv():Date.now());
         await sbUpsert('ajustes_create_110826',[{proyecto:DATA.proyecto,clave:'excel_semanal',
-          valor:{semana:semN,corte:corte,corte_modo:hastaHoy?'hoy':'jueves',filas:r.escritas,items:r.resumen.length,avisos:r.avisos.length,tope:topar,
+          valor:{semana:semN,corte:corte,corte_modo:hastaHoy?'hoy':'jueves',modo:solo?'solo_app':'plantilla',filas:r.escritas,items:r.resumen.length,avisos:r.avisos.length,tope:topar,
                  pct_app:Math.round(pctA.pct*1e4)/1e4,hh_app:pctA.hhT,
                  quien:(state.user&&state.user.supervisor)||'',cuando:new Date().toISOString()},
           descripcion:'Ultimo Excel semanal generado',quien:(state.user&&state.user.supervisor)||'',
           ts:t,cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0}],'proyecto,clave');
-        if(typeof logCambio==='function')logCambio('excel','S'+semN,'Excel semanal generado ('+r.escritas+' filas)');
+        if(typeof logCambio==='function')logCambio('excel','S'+semN,'Excel semanal generado '+(solo?'(solo desde la app) ':'')+'('+r.escritas+' filas)');
       }catch(_et){}
       /* resumen visible */
-      var H='<div style="background:#EAF3EC;border:1px solid #BFD8C6;border-radius:10px;padding:9px 11px;font-size:12px;color:#0C5132;font-weight:800;margin-bottom:8px">✓ Descargado · S'+semN+' · '+r.escritas+' fila(s) en P6-2 · carátula en '+semN+
+      var H='<div style="background:#EAF3EC;border:1px solid #BFD8C6;border-radius:10px;padding:9px 11px;font-size:12px;color:#0C5132;font-weight:800;margin-bottom:8px">'+
+        (solo?('⚡ Libro generado SOLO desde el aplicativo — semanas S27 → S'+semN+' reconstruidas con lo de la app'):'✓ Descargado')+
+        ' · S'+semN+' · '+r.escritas+' fila(s) en P6-2'+(solo?' (lo nuevo de S'+semN+')':'')+' · carátula en '+semN+
         (curvas?('<br>Curvas: la serie del Actual se extendio hasta S'+semN+' en '+curvas+' rango(s) de grafico'):'')+
         (phy?('<br>% del proyecto (universo de la app, '+pctA.hhT+' hh): <b>'+(Math.round(pctA.pct*1e4)/100)+'%</b> → estampado en PHYSICAL % PROGRESS · semana: '+(Math.round((pctA.pct-phy.previo)*1e4)/100)+'%'):'')+'</div>';
       var adic=(r.agregadas||[]);
@@ -2518,12 +2598,12 @@ function _wkExcel(){
       if(top2.length){H+='<div style="font-size:11px;color:#7A4B00;margin-top:6px">Topados sin delta: '+top2.map(function(x){return x.it}).join(', ')+'</div>'}
       if(r.avisos.length){H+='<div style="background:#FCEFD9;border:1px solid #EFC98A;border-radius:10px;padding:8px 10px;font-size:11px;color:#7A4B00;margin-top:8px;line-height:1.6">'+r.avisos.map(function(a2){return '⚠ '+a2}).join('<br>')+'</div>'}
       msg.innerHTML=H;
-      g.textContent='✓ Listo — generar otra vez';g.disabled=false;
+      g.textContent=(solo?'⚡':'✓')+' Listo — generar otra vez';g.disabled=false;g.style.opacity='1';
     }catch(e){
       msg.innerHTML='<div style="color:#B42318;font-weight:800">⚠ '+String((e&&e.message)||e)+'</div>';
-      g.textContent='⬇ Generar y descargar';g.disabled=false;g.style.opacity='1';
+      g.textContent=t0;g.disabled=false;g.style.opacity='1';
     }
-  };
+  }
 }
 
 /* Repinta un panel SIN saltos: guarda el scroll del panel y el de cada tabla
@@ -3619,7 +3699,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260822a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260822a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
