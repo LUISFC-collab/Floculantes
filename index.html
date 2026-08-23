@@ -2121,24 +2121,55 @@ async function _crAlc(cronId){
   window._crAl[cronId]=m;return m}
 function _crInvalida(cronId){try{if(window._crTar)delete window._crTar[cronId];if(window._crAl)delete window._crAl[cronId]}catch(e){}}
 
-/* el universo de partidas de la app (las que pueden aportar HH) */
+/* El CATALOGO COMPLETO del contrato: las vivas, las retiradas del alcance y
+   las que tienen las HH apagadas. Cada cronograma decide cuales cuentan.
+   Se cachea; si todavia no llego, se cae a las partidas vivas del aplicativo. */
+async function _crCatPull(){
+  try{
+    var cat=await sbSelect('actividades_create_110826',
+      'select=item,descripcion,especialidad,unidad,cantidad,hh_t,estado_alcance,es_titulo,eliminado,orden'+
+      '&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&order=orden.asc&limit=3000')||[];
+    var vis={},out=[];
+    cat.forEach(function(r){
+      if(r.es_titulo===true)return;                 /* los titulos no son trabajo */
+      var id=String(r.item||'').trim();if(!id||vis[id])return;vis[id]=1;
+      var ret=(r.eliminado===true)||String(r.estado_alcance||'')==='Retirada del alcance';
+      var off=false;try{off=(typeof _hhOff==='function')&&!!_hhOff(id)}catch(e){}
+      out.push({id:id,nom:String(r.descripcion||id),hh:Math.round((Number(r.hh_t)||0)*100)/100,
+        off:off,esp:String(r.especialidad||''),ret:ret,viva:!ret});
+      });
+    /* las adicionales creadas en la app que aun no estan en el catalogo */
+    (state.nuevas||[]).forEach(function(p){
+      if(!p||!p.id||vis[p.id])return;vis[p.id]=1;
+      var hh=0;try{hh=Number(_hhDe(p))||0}catch(e){}
+      var off=false;try{off=(typeof _hhOff==='function')&&!!_hhOff(p.id)}catch(e){}
+      var nom='';try{nom=(typeof _nomAct==='function'?_nomAct(p):p.nombre)||p.id}catch(e){nom=p.id}
+      out.push({id:p.id,nom:String(nom),hh:Math.round(hh*100)/100,off:off,
+        esp:p.esp||'',ret:false,viva:true})});
+    out.sort(function(a,b){return a.id<b.id?-1:a.id>b.id?1:0});
+    window._crCat=out;
+  }catch(e){}
+  return window._crCat||null}
 function _crPartidas(){
+  if(window._crCat&&window._crCat.length)return window._crCat;
   var todas=(DATA.partidas||[]).concat(state.nuevas||[]),vis={},out=[];
   todas.forEach(function(p){
     if(!p||!p.id||vis[p.id])return;vis[p.id]=1;
     var hh=0;try{hh=Number(_hhDe(p))||0}catch(e){}
     var off=false;try{off=(typeof _hhOff==='function')&&!!_hhOff(p.id)}catch(e){}
     var nom='';try{nom=(typeof _nomAct==='function'?_nomAct(p):p.nombre)||p.id}catch(e){nom=p.id}
-    out.push({id:p.id,nom:String(nom),hh:Math.round(hh*100)/100,off:off,esp:p.esp||''})});
+    out.push({id:p.id,nom:String(nom),hh:Math.round(hh*100)/100,off:off,esp:p.esp||'',ret:false,viva:true})});
   out.sort(function(a,b){return a.id<b.id?-1:a.id>b.id?1:0});
   return out}
+/* lo que entra por defecto: viva, en alcance y con HH encendidas */
+function _crPorDefecto(p){return !p.off&&!p.ret}
 /* las HH que aplican a un cronograma segun su lista checkable */
 function _crUniverso(cronId,alc){
   alc=alc||(window._crAl&&window._crAl[cronId])||{};
   var hhT=0,n=0,items={};
   _crPartidas().forEach(function(p){
     var a=alc[p.id];
-    var inc=a?a.inc:!p.off;              /* por defecto: entra si aporta HH */
+    var inc=a?a.inc:_crPorDefecto(p);
     if(!inc)return;
     var hh=(a&&a.hh!=null)?a.hh:p.hh;
     if(!(hh>0))return;
@@ -2258,7 +2289,7 @@ function _crShow(){
   document.getElementById('_crFile').onchange=function(e){
     var f=(e.target.files||[])[0];e.target.value='';
     if(f)_crCargarUI(f)};
-  _crPull().then(_crPinta);
+  _crPull().then(function(){return _crCatPull()}).then(_crPinta);
 }
 function _crPinta(){
   var B=document.getElementById('_crBody');if(!B)return;
@@ -2360,25 +2391,27 @@ async function _crCargarUI(file){
 async function _crAlcanceUI(c){
   if(!c)return;
   var alc=await _crAlc(c.cron_id);
+  try{await _crCatPull()}catch(_ec){}
   var ov=document.createElement('div');ov.id='_crAlcOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
   ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'+
     '<b style="font-size:14.5px;color:#8ECBF5">☑ Alcance de '+esc(c.cron_id)+'</b>'+
     '<span id="_crSum" style="background:#14261d;border:1px solid #1d3a2a;border-radius:8px;padding:3px 9px;font-size:11.5px;font-weight:800;color:#9FE8B0">—</span>'+
     '<button id="_crAlcX" style="margin-left:auto;background:#444;color:#fff;border:0;border-radius:8px;padding:8px 12px">✕</button></div>'+
-    '<div style="font-size:11.5px;color:#9db4d6;margin-bottom:8px;line-height:1.5">Marca las partidas cuyas HH deben contar para este cronograma. Las que el admin tiene <b>apagadas</b> vienen desmarcadas.</div>'+
+    '<div style="font-size:11.5px;color:#9db4d6;margin-bottom:8px;line-height:1.5">Marca las partidas cuyas HH deben contar para este cronograma. Está el <b>catálogo completo</b>: también las <b>retiradas del alcance</b> y las que tienen las <b>HH apagadas</b>, porque una línea base como el LB0 se firmó con ellas dentro. Por defecto entran solo las vivas en alcance.</div>'+
     '<div style="display:flex;gap:7px;margin-bottom:8px;flex-wrap:wrap">'+
     '<input id="_crBus" placeholder="Buscar partida…" style="flex:1;min-width:140px;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:9px;padding:9px 11px;font-size:13px">'+
-    '<button id="_crTodas" style="background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:8px 12px;font-weight:800;font-size:11.5px">Todas</button>'+
+    '<button id="_crTodas" style="background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:8px 12px;font-weight:800;font-size:11.5px">Todas (con retiradas)</button>'+
+    '<button id="_crVivas" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:8px 12px;font-weight:800;font-size:11.5px">Solo en alcance</button>'+
     '<button id="_crNing" style="background:#5A1F1F;color:#FFD9D4;border:0;border-radius:8px;padding:8px 12px;font-weight:800;font-size:11.5px">Ninguna</button></div>'+
     '<div id="_crAlcBody" style="flex:1;overflow:auto;background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:7px;-webkit-overflow-scrolling:touch"></div>'+
     '<button id="_crAlcOk" style="margin-top:9px;background:#1B5E8A;color:#fff;border:0;border-radius:10px;padding:13px;font-weight:800;font-size:13.5px">💾 Guardar alcance</button>';
   document.body.appendChild(ov);
   var P=_crPartidas(),sel={};
-  P.forEach(function(p){var a=alc[p.id];sel[p.id]=a?a.inc:!p.off});
+  P.forEach(function(p){var a=alc[p.id];sel[p.id]=a?a.inc:_crPorDefecto(p)});
   function suma(){
-    var hh=0,n=0;P.forEach(function(p){if(sel[p.id]&&p.hh>0){hh+=p.hh;n++}});
-    document.getElementById('_crSum').textContent=n+' partidas · '+(Math.round(hh*100)/100)+' hh'}
+    var hh=0,n=0,nr=0;P.forEach(function(p){if(sel[p.id]&&p.hh>0){hh+=p.hh;n++;if(p.ret)nr++}});
+    document.getElementById('_crSum').textContent=n+' partidas'+(nr?(' ('+nr+' retiradas)'):'')+' · '+(Math.round(hh*100)/100)+' hh'}
   function pinta(){
     var q=_crNrm(document.getElementById('_crBus').value||'');
     var H='';
@@ -2389,6 +2422,7 @@ async function _crAlcanceUI(c){
         '<span style="flex:none;width:19px;height:19px;border-radius:5px;border:2px solid '+(on?'#3FD592':'#33415c')+';background:'+(on?'#1E7A46':'transparent')+';color:#fff;font-size:12px;font-weight:900;text-align:center;line-height:16px">'+(on?'✓':'')+'</span>'+
         '<span style="flex:1;min-width:0"><b style="color:#8ECBF5;font-size:11.5px">'+esc(p.id)+'</b> '+
         '<span style="color:#cfe3ff;font-size:11.5px;overflow-wrap:anywhere">'+esc(p.nom.slice(0,90))+'</span>'+
+        (p.ret?'<span style="color:#F0A3A3;font-size:10.5px;font-weight:800"> · retirada del alcance</span>':'')+
         (p.off?'<span style="color:#E8C9A0;font-size:10.5px"> · HH apagadas</span>':'')+'</span>'+
         '<span style="flex:none;color:#9FE8B0;font-size:11px;font-weight:800">'+p.hh+' hh</span></div>'});
     var B=document.getElementById('_crAlcBody');
@@ -2399,6 +2433,7 @@ async function _crAlcanceUI(c){
   document.getElementById('_crAlcX').onclick=function(){ov.remove()};
   document.getElementById('_crBus').oninput=pinta;
   document.getElementById('_crTodas').onclick=function(){P.forEach(function(p){sel[p.id]=true});pinta()};
+  document.getElementById('_crVivas').onclick=function(){P.forEach(function(p){sel[p.id]=_crPorDefecto(p)});pinta()};
   document.getElementById('_crNing').onclick=function(){P.forEach(function(p){sel[p.id]=false});pinta()};
   document.getElementById('_crAlcOk').onclick=async function(){
     var b=this;b.disabled=true;b.textContent='Guardando…';
@@ -2406,7 +2441,7 @@ async function _crAlcanceUI(c){
       var t=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'';
       var filas=[];
       P.forEach(function(p){
-        var porDefecto=!p.off;
+        var porDefecto=_crPorDefecto(p);
         var actual=!!sel[p.id];
         var yaEsta=alc[p.id]!==undefined;
         if(actual===porDefecto&&!yaEsta)return;      /* solo se guardan las desviaciones */
@@ -6351,7 +6386,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823b4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823b5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
