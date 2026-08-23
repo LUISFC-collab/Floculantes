@@ -2280,6 +2280,7 @@ function _crPinta(){
       ' · <b style="color:#9FE8B0">alcance: '+u.n+' partidas · '+u.hh+' hh</b></div>'+
       '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'+
       '<button data-alc="'+esc(c.cron_id)+'" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">☑ Alcance (qué HH aplican)</button>'+
+      '<button data-map="'+esc(c.cron_id)+'" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">🔗 Mapeo tareas ↔ partidas</button>'+
       '<button data-ver="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">👁 Tareas</button>'+
       '<button data-ed="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">✎ Nombre / tipo / color</button>'+
       '<button data-del="'+esc(c.cron_id)+'" style="margin-left:auto;background:#5A1F1F;color:#FFD9D4;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">🗑</button>'+
@@ -2287,6 +2288,7 @@ function _crPinta(){
   B.innerHTML=H;
   function elC(id){return _crLista().filter(function(x){return x.cron_id===id})[0]}
   B.querySelectorAll('[data-alc]').forEach(function(b){b.onclick=function(){_crAlcanceUI(elC(b.getAttribute('data-alc')))}});
+  B.querySelectorAll('[data-map]').forEach(function(b){b.onclick=function(){_crMapeoUI(elC(b.getAttribute('data-map')))}});
   B.querySelectorAll('[data-ver]').forEach(function(b){b.onclick=function(){_crTareasUI(elC(b.getAttribute('data-ver')))}});
   B.querySelectorAll('[data-ed]').forEach(function(b){b.onclick=function(){_crEditarUI(elC(b.getAttribute('data-ed')))}});
   B.querySelectorAll('[data-del]').forEach(function(b){b.onclick=function(){
@@ -2477,6 +2479,126 @@ function _crEditarUI(c){
     }catch(e){b.disabled=false;b.textContent='💾 Guardar';toast('⚠ '+((e&&e.message)||e))}};
 }
 
+/* --------- MAPEO tarea del cronograma -> partidas del aplicativo ------------
+   Los nombres de P6 no siempre coinciden con los del QPS (y algunas tareas son
+   hitos que no tienen partida). Aqui se deja atado, tarea por tarea, que
+   partidas del aplicativo le corresponden. Se guarda en cron_tareas.items.
+   Con el mapeo puesto: el avance real viaja al .xer y las HH del alcance se
+   reparten por las fechas de la tarea que de verdad les toca. */
+function _crHHTarea(t,items){
+  var ms=t.items||[];
+  if(ms.length){var h=0;ms.forEach(function(i){h+=(Number(items[i])||0)});return h}
+  return Number(t.hh)||0}
+async function _crGuardaMapeo(cronId,cambios){
+  if(!cambios.length)return;
+  var t=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'';
+  for(var i=0;i<cambios.length;i+=120){
+    await sbUpsert(T_CRT,cambios.slice(i,i+120).map(function(x){
+      return {proyecto:DATA.proyecto,cron_id:cronId,task_code:x.task_code,items:x.items||[],
+        quien:yo,ts:t,cell_at:Date.now()}}),'proyecto,cron_id,task_code')}
+  if(typeof logCambio==='function')logCambio('cronograma',cronId,'mapeo actualizado ('+cambios.length+' tareas)');
+  try{if(window._crTar)delete window._crTar[cronId]}catch(e){}}
+
+async function _crMapeoUI(c){
+  if(!c)return;
+  try{await _agPull()}catch(e){}
+  var tar=(await _crTareas(c.cron_id)).map(function(t){return Object.assign({},t,{items:(t.items||[]).slice()})});
+  var P=_crPartidas(),porId={};P.forEach(function(p){porId[p.id]=p});
+  var ov=document.createElement('div');ov.id='_crMapOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
+  ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'+
+    '<b style="font-size:14.5px;color:#8ECBF5">🔗 Mapeo de '+esc(c.cron_id)+'</b>'+
+    '<span id="_crMapN" style="background:#152436;border:1px solid #1d3550;border-radius:8px;padding:3px 9px;font-size:11.5px;font-weight:800;color:#9db4d6">—</span>'+
+    '<button id="_crMapAuto" style="background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:8px 12px;font-weight:800;font-size:11.5px">⚡ Auto por nombre</button>'+
+    '<button id="_crMapX" style="margin-left:auto;background:#444;color:#fff;border:0;border-radius:8px;padding:8px 12px">✕</button></div>'+
+    '<div style="font-size:11.5px;color:#9db4d6;margin-bottom:8px;line-height:1.5">Cada tarea del cronograma se ata a las partidas del aplicativo que la componen. Los hitos (KOM, PMAS…) se quedan sin mapear a propósito.</div>'+
+    '<input id="_crMapBus" placeholder="Buscar tarea…" style="background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:9px;padding:9px 11px;font-size:13px;margin-bottom:8px">'+
+    '<div id="_crMapBody" style="flex:1;overflow:auto;background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:7px;-webkit-overflow-scrolling:touch"></div>'+
+    '<button id="_crMapOk" style="margin-top:9px;background:#1B5E8A;color:#fff;border:0;border-radius:10px;padding:13px;font-weight:800;font-size:13.5px">💾 Guardar mapeo</button>';
+  document.body.appendChild(ov);
+  var sucios={};
+  function hhDe(t){var h=0;(t.items||[]).forEach(function(i){h+=(porId[i]?porId[i].hh:0)});return Math.round(h*100)/100}
+  function cuenta(){
+    var n=tar.filter(function(t){return (t.items||[]).length}).length;
+    document.getElementById('_crMapN').textContent=n+' de '+tar.length+' mapeadas'}
+  function pinta(){
+    var q=_crNrm(document.getElementById('_crMapBus').value||'');
+    var H='';
+    tar.forEach(function(t,i){
+      if(q&&_crNrm(t.task_code+' '+t.nombre).indexOf(q)<0)return;
+      var n=(t.items||[]).length;
+      H+='<div class="_crMt" data-i="'+i+'" style="display:flex;gap:9px;align-items:flex-start;padding:8px;border-bottom:1px solid #16202e;cursor:pointer">'+
+        '<span style="flex:1;min-width:0"><b style="color:#8ECBF5;font-size:11.5px">'+esc(t.task_code)+'</b> '+
+        '<span style="color:#cfe3ff;font-size:11.5px;overflow-wrap:anywhere">'+esc(String(t.nombre).slice(0,72))+'</span><br>'+
+        (n?('<span style="color:#9FE8B0;font-size:10.5px;font-weight:800">'+n+' partida(s) · '+hhDe(t)+' hh</span>')
+          :('<span style="color:#7d8590;font-size:10.5px">sin mapear'+((Number(t.hh)||0)>0?(' · '+t.hh+' hh propias del .xer'):'')+'</span>'))+
+        '</span><span style="flex:none;color:#8ECBF5;font-size:15px">✎</span></div>'});
+    var B=document.getElementById('_crMapBody');
+    B.innerHTML=H||'<div style="padding:14px;color:#7d8590;text-align:center">Sin coincidencias</div>';
+    B.querySelectorAll('._crMt').forEach(function(d){d.onclick=function(){
+      _crMapPick(tar[+d.getAttribute('data-i')],P,porId,function(){sucios[tar[+d.getAttribute('data-i')].task_code]=1;pinta();cuenta()})}});
+    cuenta()}
+  document.getElementById('_crMapX').onclick=function(){ov.remove()};
+  document.getElementById('_crMapBus').oninput=pinta;
+  document.getElementById('_crMapAuto').onclick=function(){
+    var idx=_crCasar(),n=0,amb=0;
+    tar.forEach(function(t){
+      if((t.items||[]).length)return;
+      var m=_crBuscaItems(t.nombre,idx);
+      if(!m){return}
+      if(m.ambigua){amb++;return}
+      t.items=(m.items||[]).slice();sucios[t.task_code]=1;n++});
+    pinta();toast(n?('⚡ '+n+' tarea(s) emparejadas'+(amb?(' · '+amb+' ambiguas sin tocar'):'')):'No se pudo emparejar ninguna más')};
+  document.getElementById('_crMapOk').onclick=async function(){
+    var b=this;b.disabled=true;b.textContent='Guardando…';
+    try{
+      var cambios=tar.filter(function(t){return sucios[t.task_code]});
+      await _crGuardaMapeo(c.cron_id,cambios);
+      ov.remove();toast('✓ Mapeo guardado ('+cambios.length+' tareas)');_crPinta();
+    }catch(e){b.disabled=false;b.textContent='💾 Guardar mapeo';toast('⚠ '+((e&&e.message)||e))}};
+  pinta();
+}
+function _crMapPick(t,P,porId,onOk){
+  var sel={};(t.items||[]).forEach(function(i){sel[i]=1});
+  var ov=document.createElement('div');ov.id='_crPickOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
+  ov.innerHTML='<div style="margin-bottom:7px"><b style="color:#8ECBF5;font-size:13px">'+esc(t.task_code)+'</b> '+
+    '<span style="font-size:12px">'+esc(String(t.nombre).slice(0,80))+'</span></div>'+
+    '<div style="display:flex;gap:7px;margin-bottom:8px;flex-wrap:wrap">'+
+    '<input id="_crPkBus" placeholder="Buscar partida…" style="flex:1;min-width:140px;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:9px;padding:9px 11px;font-size:13px">'+
+    '<span id="_crPkSum" style="background:#14261d;border:1px solid #1d3a2a;border-radius:8px;padding:7px 10px;font-size:11.5px;font-weight:800;color:#9FE8B0">—</span></div>'+
+    '<div id="_crPkBody" style="flex:1;overflow:auto;background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:7px"></div>'+
+    '<div style="display:flex;gap:8px;margin-top:9px">'+
+    '<button id="_crPkNo" style="flex:1;background:#333;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:800">Cancelar</button>'+
+    '<button id="_crPkOk" style="flex:2;background:#1B5E8A;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:800">✓ Usar estas partidas</button></div>';
+  document.body.appendChild(ov);
+  function suma(){
+    var hh=0,n=0;for(var k in sel)if(sel[k]&&porId[k]){hh+=porId[k].hh;n++}
+    document.getElementById('_crPkSum').textContent=n+' · '+(Math.round(hh*100)/100)+' hh'}
+  function pinta(){
+    var q=_crNrm(document.getElementById('_crPkBus').value||'');
+    var H='';
+    P.forEach(function(p){
+      if(q&&_crNrm(p.id+' '+p.nom).indexOf(q)<0)return;
+      var on=!!sel[p.id];
+      H+='<div class="_crPk" data-id="'+esc(p.id)+'" style="display:flex;gap:9px;align-items:flex-start;padding:7px 8px;border-bottom:1px solid #16202e;cursor:pointer">'+
+        '<span style="flex:none;width:19px;height:19px;border-radius:5px;border:2px solid '+(on?'#3FD592':'#33415c')+';background:'+(on?'#1E7A46':'transparent')+';color:#fff;font-size:12px;font-weight:900;text-align:center;line-height:16px">'+(on?'✓':'')+'</span>'+
+        '<span style="flex:1;min-width:0"><b style="color:#8ECBF5;font-size:11.5px">'+esc(p.id)+'</b> '+
+        '<span style="font-size:11.5px;overflow-wrap:anywhere">'+esc(p.nom.slice(0,84))+'</span></span>'+
+        '<span style="flex:none;color:#9FE8B0;font-size:11px;font-weight:800">'+p.hh+'</span></div>'});
+    var B=document.getElementById('_crPkBody');
+    B.innerHTML=H||'<div style="padding:14px;color:#7d8590;text-align:center">Sin coincidencias</div>';
+    B.querySelectorAll('._crPk').forEach(function(d){d.onclick=function(){
+      var id=d.getAttribute('data-id');if(sel[id])delete sel[id];else sel[id]=1;pinta();suma()}});
+    suma()}
+  document.getElementById('_crPkBus').oninput=pinta;
+  document.getElementById('_crPkNo').onclick=function(){ov.remove()};
+  document.getElementById('_crPkOk').onclick=function(){
+    t.items=Object.keys(sel).filter(function(k){return sel[k]}).sort();
+    ov.remove();if(onOk)onOk()};
+  pinta();
+}
+
 /* --------- Exportar a Primavera: el .xer CORRIDO con el avance del aplicativo
    Se parte del .xer original (guardado tal cual al cargarlo) y se reescriben
    SOLO los campos de avance de cada tarea: fechas reales, % fisico, estado y
@@ -2535,6 +2657,9 @@ async function _crExportar(c,corte){
      son una agrupacion entera, no una partida suelta */
   try{await _agPull()}catch(_ea){}
   var idx=_crCasar();
+  /* el mapeo guardado a mano manda sobre el emparejamiento por nombre */
+  var mapeo={};
+  try{(await _crTareas(c.cron_id)).forEach(function(t){if((t.items||[]).length)mapeo[t.task_code]=t.items})}catch(_em){}
   var lineas=crudo.split(/\r?\n/);
   var enTask=false,campos=null,col={},tocadas=0,sinMatch=0,detalle=[],faltan=[];
   function ci(n){return col[n]===undefined?-1:col[n]}
@@ -2547,7 +2672,8 @@ async function _crExportar(c,corte){
     if(ln.indexOf('%R')!==0||!enTask||!campos)continue;
     var v=ln.split('\t'),d=v.slice(1);
     var nom=_crTx(d[ci('task_name')]);
-    var m=_crBuscaItems(nom,idx);
+    var cod0=_crTx(d[ci('task_code')]);
+    var m=mapeo[cod0]?{items:mapeo[cod0]}:_crBuscaItems(nom,idx);
     if(!m||m.ambigua){sinMatch++;
       if(faltan.length<60)faltan.push({cod:_crTx(d[ci('task_code')]),nom:nom.slice(0,70),
         por:(m&&m.ambigua)?('ambiguo: casa con '+m.n+' partidas'):'sin partida parecida'});
@@ -2977,7 +3103,9 @@ async function _wkCronDatos(ids,semanas){
     var tar=await _crTareas(c.cron_id);
     var alc=await _crAlc(c.cron_id);
     var u=_crUniverso(c.cron_id,alc);
-    var cur=_crCurva(tar.map(function(t){return {ini:t.ini,fin:t.fin,hh:Number(t.hh)||0,dur_h:Number(t.dur_h)||0}}),u.hh,semanas);
+    var cur=_crCurva(tar.map(function(t){return {ini:t.ini,fin:t.fin,
+      hh:((typeof _crHHTarea==='function')?_crHHTarea(t,u.items):(Number(t.hh)||0)),
+      dur_h:Number(t.dur_h)||0}}),u.hh,semanas);
     var fuera=(c.fin&&semanas.length&&c.fin>semanas[semanas.length-1].fin);
     out.push({id:c.cron_id,nombre:c.nombre||'',tipo:c.tipo||'LB',color:c.color||'#2E86C1',
       fecha_datos:c.fecha_datos||'',inicio:c.inicio||'',fin:c.fin||'',
@@ -4448,7 +4576,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823a5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
