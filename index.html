@@ -2236,6 +2236,10 @@ function _wkExcel(){
     '<div style="font-size:12px;color:#5C6779;line-height:1.5;margin-bottom:12px">Elige la semana y tu Excel plantilla. Se llena la hoja <b>P6-2</b> con lo real del aplicativo (descontando lo ya cargado en semanas pasadas) y la <b>Carátula (P)</b> pasa a esa semana. Nada más se toca.</div>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Semana</label>'+
     '<select id="_wkSel" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:11px">'+ops+'</select>'+
+    '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Corte de datos</label>'+
+    '<select id="_wkCorte" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:11px">'+
+    '<option value="hoy" selected>Hasta HOY — todo lo cargado hasta este momento</option>'+
+    '<option value="jueves">Al jueves de la semana elegida (corte clásico)</option></select>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Sobremetrados</label>'+
     '<select id="_wkTope" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:11px">'+
     '<option value="tope" selected>Solo hasta el 100% del metrado LB0 (topar el sobremetrado)</option>'+
@@ -2256,15 +2260,19 @@ function _wkExcel(){
     var n2=+document.getElementById('_wkSel').value;
     var corte2=_wkISO(_wkSem(n2).fin);
     var topar2=((document.getElementById('_wkTope')||{}).value!=='todo');
+    var hoySel=((document.getElementById('_wkCorte')||{}).value!=='jueves');
     var pC=_wkPctApp(_wkAcum(corte2),!topar2);
     var pH=_wkPctApp(_wkAcum((typeof todayISO==='function')?todayISO():corte2),!topar2);
+    var bH='<b style="color:'+(hoySel?'#0C5132':'#5C6779')+'">'+(Math.round(pH.pct*1e4)/100)+'%</b>';
+    var bC='<b style="color:'+(hoySel?'#5C6779':'#0C5132')+'">'+(Math.round(pC.pct*1e4)/100)+'%</b>';
     var el=document.getElementById('_wkPrev');
-    if(el)el.innerHTML='Avance al corte de S'+n2+' (jue '+corte2.slice(8,10)+'/'+corte2.slice(5,7)+'): <b style="color:#0C5132">'+(Math.round(pC.pct*1e4)/100)+'%</b>'+
-      ' · hoy: <b>'+(Math.round(pH.pct*1e4)/100)+'%</b><br><span style="color:var(--muted)">Lo cargado despu\u00e9s del corte entra a la semana siguiente.</span>';
+    if(el)el.innerHTML='Hasta hoy: '+bH+' · al jueves de corte ('+corte2.slice(8,10)+'/'+corte2.slice(5,7)+'): '+bC+
+      '<br><span style="color:var(--muted)">Va a salir el marcado en verde, según el corte elegido.</span>';
   }catch(_e){}};
   setTimeout(previa,50);
   document.getElementById('_wkSel').onchange=previa;
   var _tp=document.getElementById('_wkTope');if(_tp)_tp.addEventListener('change',previa);
+  var _tc=document.getElementById('_wkCorte');if(_tc)_tc.addEventListener('change',previa);
   document.getElementById('_wkPick').onclick=function(){document.getElementById('_wkFile').click()};
   document.getElementById('_wkFile').onchange=function(e){
     file=(e.target.files||[])[0]||null;
@@ -2276,7 +2284,9 @@ function _wkExcel(){
     g.disabled=true;g.textContent='Armando…';
     try{
       var semN=+document.getElementById('_wkSel').value;
-      var corte=_wkISO(_wkSem(semN).fin);
+      var corteJue=_wkISO(_wkSem(semN).fin);
+      var hastaHoy=((document.getElementById('_wkCorte')||{}).value!=='jueves');
+      var corte=hastaHoy?((typeof todayISO==='function')?todayISO():corteJue):corteJue;
       msg.textContent='Leyendo el libro y calculando lo real al corte '+corte+'…';
       try{if(typeof syncPull==='function')await syncPull()}catch(_e){}
       var datos=_wkAcum(corte);
@@ -2349,7 +2359,7 @@ function _wkExcel(){
       try{
         var t=(typeof nowSrv==='function'?nowSrv():Date.now());
         await sbUpsert('ajustes_create_110826',[{proyecto:DATA.proyecto,clave:'excel_semanal',
-          valor:{semana:semN,corte:corte,filas:r.escritas,items:r.resumen.length,avisos:r.avisos.length,tope:topar,
+          valor:{semana:semN,corte:corte,corte_modo:hastaHoy?'hoy':'jueves',filas:r.escritas,items:r.resumen.length,avisos:r.avisos.length,tope:topar,
                  pct_app:Math.round(pctA.pct*1e4)/1e4,hh_app:pctA.hhT,
                  quien:(state.user&&state.user.supervisor)||'',cuando:new Date().toISOString()},
           descripcion:'Ultimo Excel semanal generado',quien:(state.user&&state.user.supervisor)||'',
@@ -3470,7 +3480,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260821c8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260821c9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
