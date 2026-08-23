@@ -3210,6 +3210,1582 @@ async function _wkNuevaHoja(entradas,mapa,leer,nombre,xmlHoja,enc){
   entradas.push(nueva);mapa[arch]=nueva;
   return {rels:rels2,wb:wb2,ct:ct2,archivo:arch}}
 
+/* ===========================================================================
+   mejoras.js — port a JavaScript de navegador (ES5, sin librerias) de las
+   mejoras OOXML ya verificadas en builders/mejorar_reporte.py.
+
+   Cuatro funciones globales:
+
+     _mjEstilos(stylesXml, coloresAgr)
+        -> {xml, fillPorGrupo, xfEstado, xfPct, xfPctSem, xfNum, xfTexto,
+            xfCab, numFmtPct, y mas}  (ademas: metodos clon/fillSolido/emitir)
+
+     _mjDeQPS(xml, ss, grupoPorItem, estadoPorItem, ids)      -> xml
+     _mjParaCrono(xml, ss, grupoPorFila, ids)                 -> xml
+     _mjHojaAvance(datos, semanas, ids)                       -> {xml, filas}
+
+   REGLA QUE GOBIERNA TODO: SOLO APPEND. No se inserta, borra ni reordena nada
+   (ni un <fill>, ni un <xf>, ni un <numFmt>, ni una fila de datos existente).
+
+   IMPORTANTE sobre el orden de llamada: _mjDeQPS / _mjParaCrono / _mjHojaAvance
+   dan de alta cellXfs nuevos (clonan el s= real de cada celda, que solo se
+   conoce al recorrer la hoja). Por eso cada una vuelve a emitir styles.xml y
+   refresca ids.xml. El styles.xml definitivo es SIEMPRE ids.xml despues de la
+   ultima llamada (o ids.emitir()).
+
+   Manipulacion por regex/strings, igual que el Python. Nada de DOMParser.
+   Las hojas VERDES y AZULES no se tocan: solo De QPS, Para cronograma 2-1 y la
+   hoja nueva.
+   ========================================================================= */
+
+/* --------------------------------------------------------------------------
+   0. Paletas y textos (DISENO_FINAL §2)
+   ----------------------------------------------------------------------- */
+var _MJ_PALETA = ['FF5AF696', 'FF8DD6ED', 'FFED7EF0', 'FFF8C199', 'FF88A1E3', 'FFD4E7A1',
+                  'FFC79AFA', 'FF97E282', 'FFEAA8B8', 'FFF5ED74', 'FF7AE9DC', 'FFF385C6'];
+
+var _MJ_FILL_ESTADO = {
+  'Eliminada':            'FFAFAFAF',
+  'Retirada del alcance': 'FFC08A80',
+  'Sin HH':               'FFBEB183'
+};
+
+var _MJ_TXT_RETIRADA  = 'Retirada del alcance';
+var _MJ_TXT_ELIMINADA = 'Eliminada del aplicativo';
+var _MJ_TXT_SINHH     = 'Sin HH · no aporta al avance';
+
+var _MJ_EPOCA_MS = Date.UTC(1899, 11, 30);
+
+/* --------------------------------------------------------------------------
+   1. Color: HSL, contraste WCAG y dE76 (para generar mas alla del color 12)
+   ----------------------------------------------------------------------- */
+function _mjHex2(v) {
+  var s = Math.max(0, Math.min(255, Math.round(v))).toString(16).toUpperCase();
+  return s.length < 2 ? '0' + s : s;
+}
+
+function _mjHslRgb8(h, s, l) {
+  var c = (1.0 - Math.abs(2.0 * l - 1.0)) * s;
+  var hp = ((h % 360) + 360) % 360 / 60.0;
+  var x = c * (1.0 - Math.abs((hp % 2) - 1.0));
+  var r, g, b;
+  if (hp < 1)      { r = c; g = x; b = 0; }
+  else if (hp < 2) { r = x; g = c; b = 0; }
+  else if (hp < 3) { r = 0; g = c; b = x; }
+  else if (hp < 4) { r = 0; g = x; b = c; }
+  else if (hp < 5) { r = x; g = 0; b = c; }
+  else             { r = c; g = 0; b = x; }
+  var m = l - c / 2.0;
+  return 'FF' + _mjHex2((r + m) * 255) + _mjHex2((g + m) * 255) + _mjHex2((b + m) * 255);
+}
+
+function _mjRgb3(rgb8) {
+  return [parseInt(rgb8.substr(2, 2), 16), parseInt(rgb8.substr(4, 2), 16),
+          parseInt(rgb8.substr(6, 2), 16)];
+}
+
+function _mjLum(rgb8) {
+  var c = _mjRgb3(rgb8), o = [], i, v;
+  for (i = 0; i < 3; i++) {
+    v = c[i] / 255.0;
+    o.push(v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  }
+  return 0.2126 * o[0] + 0.7152 * o[1] + 0.0722 * o[2];
+}
+
+function _mjContrasteNegro(rgb8) { return (_mjLum(rgb8) + 0.05) / 0.05; }
+
+function _mjLab(rgb8) {
+  var c = _mjRgb3(rgb8), o = [], i, v;
+  for (i = 0; i < 3; i++) {
+    v = c[i] / 255.0;
+    o.push(v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  }
+  var x = (0.4124 * o[0] + 0.3576 * o[1] + 0.1805 * o[2]) / 0.95047;
+  var y = (0.2126 * o[0] + 0.7152 * o[1] + 0.0722 * o[2]);
+  var z = (0.0193 * o[0] + 0.1192 * o[1] + 0.9505 * o[2]) / 1.08883;
+  var f = function (t) { return t > 0.008856 ? Math.pow(t, 1 / 3) : (7.787 * t + 16.0 / 116.0); };
+  var fx = f(x), fy = f(y), fz = f(z);
+  return [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)];
+}
+
+function _mjDE76(a, b) {
+  var la = _mjLab(a), lb = _mjLab(b);
+  return Math.sqrt((la[0] - lb[0]) * (la[0] - lb[0]) +
+                   (la[1] - lb[1]) * (la[1] - lb[1]) +
+                   (la[2] - lb[2]) * (la[2] - lb[2]));
+}
+
+/* n colores DISTINTOS entre si y legibles con texto negro. Los 12 primeros son
+   la paleta validada; del 13 en adelante se generan por angulo aureo. La
+   paleta NO cicla con modulo: dos agrupaciones distintas nunca comparten
+   relleno. Determinista: el color i solo depende de i. */
+function _mjPaleta(n) {
+  var estados = [], k, cols = [], i;
+  for (k in _MJ_FILL_ESTADO) {
+    if (Object.prototype.hasOwnProperty.call(_MJ_FILL_ESTADO, k)) {
+      estados.push(_MJ_FILL_ESTADO[k].toUpperCase());
+    }
+  }
+  for (i = 0; i < Math.min(n, _MJ_PALETA.length); i++) cols.push(_MJ_PALETA[i]);
+  if (n <= _MJ_PALETA.length) return cols;
+
+  var umbrales = [16.0, 12.0, 9.0, 6.0, 3.0, 0.0], u, j, h, banda, l, s, c, ok, t;
+  for (u = 0; u < umbrales.length; u++) {
+    j = 0;
+    while (cols.length < n && j < 4000) {
+      h = (23.0 + 137.508 * (j + 1)) % 360.0;
+      banda = Math.floor(j / 7) % 4;
+      l = 0.82 - 0.055 * banda;
+      s = 0.52 + 0.14 * (Math.floor(j / 3) % 3);
+      j++;
+      c = _mjHslRgb8(h, s, l);
+      if (_mjContrasteNegro(c) < 4.5) continue;
+      if (cols.indexOf(c) >= 0 || estados.indexOf(c) >= 0) continue;
+      ok = true;
+      if (umbrales[u] > 0) {
+        t = cols.concat(estados);
+        for (i = 0; i < t.length; i++) { if (_mjDE76(c, t[i]) < umbrales[u]) { ok = false; break; } }
+      }
+      if (ok) cols.push(c);
+    }
+    if (cols.length >= n) break;
+  }
+  var v = 0;
+  while (cols.length < n && v < 0xFFFFFF) {           /* red de seguridad */
+    c = 'FF' + ('000000' + v.toString(16).toUpperCase()).slice(-6);
+    v += 2731;
+    if (cols.indexOf(c) < 0 && estados.indexOf(c) < 0 && _mjContrasteNegro(c) >= 4.5) cols.push(c);
+  }
+  return cols;
+}
+
+/* --------------------------------------------------------------------------
+   2. Helpers OOXML (traducidos de gen_qps.py / mejorar_reporte.py)
+   ----------------------------------------------------------------------- */
+function _mjClave(txt) {
+  var t = String(txt == null ? '' : txt).replace(/^\s+|\s+$/g, '');
+  if (t === '') return '';
+  if (/^\d+(\.\d+){2,}$/.test(t)) return t;
+  var f = Number(t);
+  if (!isFinite(f)) return t;
+  f = Math.round(f * 1e6) / 1e6;
+  var dec = f.toFixed(6).split('.')[1].replace(/0+$/, '');
+  if (!dec.length) return String(Math.floor(Math.abs(f)) * (f < 0 ? -1 : 1)) + '.00';
+  if (dec.length % 2) dec += '0';
+  var pares = dec.match(/../g) || ['00'];
+  var ent = f < 0 ? Math.ceil(f) : Math.floor(f);
+  return String(ent) + '.' + pares.join('.');
+}
+
+/* Todo lo que XML 1.0 no admite ni como &#nn; (controles salvo TAB/LF/CR,
+   surrogates sueltos y los dos no-caracteres del BMP). */
+function _mjEsc(s) {
+  /* Todo lo que XML 1.0 no admite ni como &#nn;: controles (salvo TAB/LF/CR),
+     los dos no-caracteres del BMP y los surrogates sueltos. */
+  var t = String(s == null ? '' : s)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '')
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')
+    .replace(/([^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]/g, function (m, p) { return p; });
+  return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function _mjEscAttr(s) { return _mjEsc(s).replace(/"/g, '&quot;'); }
+
+function _mjTxtXml(t) {
+  return String(t == null ? '' : t).replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+}
+
+function _mjColLetra(i) {
+  var s = '', r;
+  while (i > 0) { r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); }
+  return s;
+}
+
+function _mjColIdx(c) {
+  var n = 0, i;
+  for (i = 0; i < c.length; i++) n = n * 26 + (c.charCodeAt(i) - 64);
+  return n;
+}
+
+/* Orden de columnas de OOXML: primero por longitud, despues alfabetico. */
+function _mjCmpCol(a, b) {
+  if (a.length !== b.length) return a.length - b.length;
+  return a < b ? -1 : (a > b ? 1 : 0);
+}
+
+function _mjNum(v, dec) {
+  if (typeof v === 'string') return v;
+  var x = Number(v);
+  if (!isFinite(x)) x = 0;
+  var s = x.toFixed(dec == null ? 6 : dec);
+  if (s === '-0' || /^-0\.0*$/.test(s)) s = s.replace('-', '');
+  return s;
+}
+
+function _mjCelda(col, rn, s, valor, texto) {
+  var st = (s === null || s === undefined) ? '' : (' s="' + s + '"');
+  if (valor === null || valor === undefined) return '<c r="' + col + rn + '"' + st + '/>';
+  if (texto) {
+    return '<c r="' + col + rn + '"' + st + ' t="inlineStr"><is><t xml:space="preserve">' +
+           _mjEsc(valor) + '</t></is></c>';
+  }
+  return '<c r="' + col + rn + '"' + st + '><v>' + valor + '</v></c>';
+}
+
+function _mjPatCelda(col, rn) {
+  return new RegExp('<c r="' + col + rn + '"(?:\\s[^>]*?)?(?:/>|>[\\s\\S]*?</c>)');
+}
+
+/* Escribe/reemplaza una celda respetando el orden ascendente de columnas. */
+function _mjSetCelda(cuerpo, rn, col, s, valor, texto) {
+  var nueva = _mjCelda(col, rn, s, valor, texto);
+  var pat = _mjPatCelda(col, rn);
+  var m = pat.exec(cuerpo);
+  if (m) return cuerpo.slice(0, m.index) + nueva + cuerpo.slice(m.index + m[0].length);
+  var re = new RegExp('<c r="([A-Z]+)' + rn + '"', 'g'), mm;
+  while ((mm = re.exec(cuerpo)) !== null) {
+    if (_mjCmpCol(mm[1], col) > 0) return cuerpo.slice(0, mm.index) + nueva + cuerpo.slice(mm.index);
+  }
+  return cuerpo + nueva;
+}
+
+function _mjGetS(cuerpo, rn, col) {
+  var m = _mjPatCelda(col, rn).exec(cuerpo);
+  if (!m) return null;
+  var ms = /\ss="(\d+)"/.exec(m[0]);
+  return ms ? parseInt(ms[1], 10) : null;
+}
+
+function _mjFixSpans(head, cuerpo) {
+  var cols = cuerpo.match(/<c r="([A-Z]+)\d+"/g);
+  if (!cols || !cols.length) return head;
+  var mx = 0, i, c;
+  for (i = 0; i < cols.length; i++) {
+    c = /<c r="([A-Z]+)/.exec(cols[i])[1];
+    mx = Math.max(mx, _mjColIdx(c));
+  }
+  if (/\sspans="[^"]*"/.test(head)) return head.replace(/\sspans="[^"]*"/, ' spans="1:' + mx + '"');
+  return head.replace('<row', '<row spans="1:' + mx + '"');
+}
+
+function _mjValorCelda(txtCelda, ss) {
+  var attrs = txtCelda.slice(0, txtCelda.indexOf('>') + 1);
+  var tm = /\st="([^"]+)"/.exec(attrs);
+  var tipo = tm ? tm[1] : 'n';
+  var out, re, m;
+  if (tipo === 'inlineStr') {
+    out = '';
+    re = /<t[^>]*>([^<]*)<\/t>/g;
+    while ((m = re.exec(txtCelda)) !== null) out += m[1];
+    return _mjTxtXml(out);
+  }
+  var vm = /<v>([^<]*)<\/v>/.exec(txtCelda);
+  if (!vm) return '';
+  var v = _mjTxtXml(vm[1]);
+  if (tipo === 's') {
+    var i = parseInt(v, 10);
+    return (ss && /^\d+$/.test(v) && i < ss.length) ? ss[i] : '';
+  }
+  return v;
+}
+
+function _mjCeldasDeFila(body, ss) {
+  var out = {}, re = /<c r="([A-Z]+)(\d+)"(?:\s[^>]*?)?(?:\/>|>[\s\S]*?<\/c>)/g, m;
+  while ((m = re.exec(body)) !== null) out[m[1]] = _mjValorCelda(m[0], ss);
+  return out;
+}
+
+function _mjBlk(xml, tag) {
+  var m = new RegExp('<' + tag + '\\b[^>]*?>').exec(xml);
+  if (!m || m[0].slice(-2) === '/>') return null;
+  var ini = m.index + m[0].length;
+  var fin = xml.indexOf('</' + tag + '>', ini);
+  if (fin < 0) return null;
+  return [ini, fin, m[0]];
+}
+
+/* --------------------------------------------------------------------------
+   3. Hoja: worksheet partido en cabecera / filas / cola, editable fila a fila
+   ----------------------------------------------------------------------- */
+function _MjHoja(xml) {
+  this.xml = String(xml);
+  var m = /<sheetData\s*\/>/.exec(this.xml), cuerpo, i, j;
+  if (m) {
+    this.pre = this.xml.slice(0, m.index) + '<sheetData>';
+    this.post = '</sheetData>' + this.xml.slice(m.index + m[0].length);
+    cuerpo = '';
+  } else {
+    i = this.xml.indexOf('<sheetData');
+    i = this.xml.indexOf('>', i) + 1;
+    j = this.xml.indexOf('</sheetData>');
+    this.pre = this.xml.slice(0, i);
+    this.post = this.xml.slice(j);
+    cuerpo = this.xml.slice(i, j);
+  }
+  this.filas = {};
+  this.orden = [];
+  var re = /<row\b[^>]*?\/>|<row\b[^>]*?>[\s\S]*?<\/row>/g, mm, t, rn, k, head, body;
+  while ((mm = re.exec(cuerpo)) !== null) {
+    t = mm[0];
+    rn = parseInt(/\sr="(\d+)"/.exec(t)[1], 10);
+    if (t.slice(-2) === '/>') { head = t.slice(0, -2) + '>'; body = ''; }
+    else { k = t.indexOf('>') + 1; head = t.slice(0, k); body = t.slice(k, t.length - 6); }
+    this.filas[rn] = [head, body];
+    this.orden.push(rn);
+  }
+}
+
+_MjHoja.prototype.rows = function () {
+  var out = [], k;
+  for (k in this.filas) { if (Object.prototype.hasOwnProperty.call(this.filas, k)) out.push(parseInt(k, 10)); }
+  out.sort(function (a, b) { return a - b; });
+  return out;
+};
+
+_MjHoja.prototype.maxFila = function () {
+  var r = this.rows();
+  return r.length ? r[r.length - 1] : 0;
+};
+
+_MjHoja.prototype.fila = function (rn, spans) {
+  if (!this.filas[rn]) {
+    this.filas[rn] = ['<row r="' + rn + '"' + (spans ? (' spans="' + spans + '"') : '') + '>', ''];
+    this.orden.push(rn);
+  }
+  return this.filas[rn];
+};
+
+_MjHoja.prototype.set = function (rn, col, s, valor, texto, spans) {
+  var f = this.fila(rn, spans);
+  f[1] = _mjSetCelda(f[1], rn, col, s, valor, texto);
+};
+
+_MjHoja.prototype.getS = function (rn, col) {
+  if (!this.filas[rn]) return null;
+  return _mjGetS(this.filas[rn][1], rn, col);
+};
+
+_MjHoja.prototype.recalculaSpans = function (filas) {
+  var i, rn, f;
+  for (i = 0; i < filas.length; i++) {
+    rn = filas[i];
+    if (this.filas[rn]) { f = this.filas[rn]; f[0] = _mjFixSpans(f[0], f[1]); }
+  }
+};
+
+_MjHoja.prototype.setDimension = function (ref) {
+  if (/<dimension ref="[^"]*"\s*\/>/.test(this.pre)) {
+    this.pre = this.pre.replace(/<dimension ref="[^"]*"\s*\/>/, '<dimension ref="' + ref + '"/>');
+  }
+};
+
+_MjHoja.prototype.appendCol = function (xmlCol) {
+  if (this.pre.indexOf('<cols>') >= 0) {
+    this.pre = this.pre.replace('</cols>', xmlCol + '</cols>');
+  } else {
+    var i = this.pre.lastIndexOf('<sheetData');
+    this.pre = this.pre.slice(0, i) + '<cols>' + xmlCol + '</cols>' + this.pre.slice(i);
+  }
+};
+
+/* Borra el pie escrito por una corrida anterior (ANEXO + LEYENDA): marca
+   inequivoca = celda A con t="inlineStr" cuyo texto es 'LEYENDA' o empieza por
+   'ANEXO'. Las hojas originales no tienen NI UNA celda inlineStr. Esto hace la
+   corrida idempotente. */
+_MjHoja.prototype.purgarLeyenda = function (ss) {
+  var r = this.rows(), i, rn, m, t, v, marca = null;
+  for (i = 0; i < r.length; i++) {
+    rn = r[i];
+    m = _mjPatCelda('A', rn).exec(this.filas[rn][1]);
+    if (!m) continue;
+    t = m[0];
+    if (t.slice(0, t.indexOf('>') + 1).indexOf('t="inlineStr"') < 0) continue;
+    v = _mjValorCelda(t, ss || []);
+    if (v === 'LEYENDA' || v.indexOf('ANEXO') === 0) { marca = rn; break; }
+  }
+  if (marca === null) return 0;
+  var n = 0, nuevas = [];
+  for (i = 0; i < r.length; i++) {
+    if (r[i] >= marca) { delete this.filas[r[i]]; n++; } else nuevas.push(r[i]);
+  }
+  this.orden = nuevas;
+  return n;
+};
+
+_MjHoja.prototype.emitir = function () {
+  var partes = [this.pre], r = this.rows(), i, f;
+  for (i = 0; i < r.length; i++) { f = this.filas[r[i]]; partes.push(f[0] + f[1] + '</row>'); }
+  partes.push(this.post);
+  return partes.join('');
+};
+
+/* --------------------------------------------------------------------------
+   4. Estado: (texto, clave de relleno) segun DISENO_FINAL §2.3
+   ----------------------------------------------------------------------- */
+function _mjEstadoTxt(v) {
+  if (v === null || v === undefined) return { txt: '', fk: null };
+  var e, sh, ad, t, fk;
+  if (typeof v === 'string') {
+    t = v.replace(/^\s+|\s+$/g, '');
+    if (t === '' || t === 'En alcance') return { txt: '', fk: null };
+    if (t.indexOf('Sin HH') === 0)   return { txt: _MJ_TXT_SINHH, fk: 'Sin HH' };
+    if (t.indexOf('Eliminada') === 0) return { txt: _MJ_TXT_ELIMINADA, fk: 'Eliminada' };
+    if (t.indexOf('Retirada') === 0)  return { txt: _MJ_TXT_RETIRADA, fk: 'Retirada del alcance' };
+    return { txt: t, fk: null };
+  }
+  e  = v.estado || 'En alcance';
+  sh = !!(v.sin_hh === undefined || v.sin_hh === null ? v.apag : v.sin_hh);
+  ad = !!v.adicional;
+  if (e === 'Eliminada')                  { t = _MJ_TXT_ELIMINADA + (sh ? ' · sin HH' : ''); fk = 'Eliminada'; }
+  else if (e === 'Retirada del alcance')  { t = _MJ_TXT_RETIRADA + (sh ? ' · sin HH' : '');  fk = 'Retirada del alcance'; }
+  else if (sh)                            { t = _MJ_TXT_SINHH; fk = 'Sin HH'; }
+  else return { txt: '', fk: null };
+  if (ad) t += ' · adicional';
+  return { txt: t, fk: fk };
+}
+
+/* --------------------------------------------------------------------------
+   5. Aritmetica (la vara _wkPctApp de wkexcel.js, literal)
+   ----------------------------------------------------------------------- */
+function _mjPeso(p) {
+  if (p.estado !== 'En alcance' || p.sin_hh) return 0.0;
+  return p.hh > 0 ? p.hh : 0.0;
+}
+
+function _mjFr(p, w) {
+  if (w === null || w === undefined) return 0.0;
+  var v = p.pct_sem[w];
+  if (v === null || v === undefined) return 0.0;
+  return Math.min(1.0, v / 100.0);
+}
+
+function _mjPctGrupo(lista, w) {
+  var den = 0, num = 0, i;
+  for (i = 0; i < lista.length; i++) { den += _mjPeso(lista[i]); }
+  if (den <= 0) return null;
+  for (i = 0; i < lista.length; i++) { num += _mjPeso(lista[i]) * _mjFr(lista[i], w); }
+  return num / den;
+}
+
+function _mjHhGan(lista, w) {
+  var s = 0, i;
+  for (i = 0; i < lista.length; i++) s += _mjPeso(lista[i]) * _mjFr(lista[i], w);
+  return s;
+}
+
+function _mjMiles(v) {
+  var s = Number(v).toFixed(2), p = s.split('.');
+  return p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + p[1];
+}
+
+/* ==========================================================================
+   6. _mjEstilos — cirugia de xl/styles.xml (SOLO APPEND)
+   ========================================================================== */
+function _mjAddAttr(xf, attr) {
+  var k = attr.split('=')[0] + '=';
+  if (xf.indexOf(k) >= 0) return xf;
+  if (xf.slice(-2) === '/>') return xf.slice(0, -2) + ' ' + attr + '/>';
+  var i = xf.indexOf('>');
+  return xf.slice(0, i) + ' ' + attr + xf.slice(i);
+}
+
+/* Normaliza coloresAgr: array de grupo_ids, array de objetos {grupo_id|grupo,
+   nombre, miembros, representante, hh, color} o mapa {grupo_id: 'FFRRGGBB'}. */
+function _mjNormGrupos(coloresAgr) {
+  var grupos = [], i, g, k, keys;
+  if (!coloresAgr) return grupos;
+  if (Object.prototype.toString.call(coloresAgr) === '[object Array]') {
+    for (i = 0; i < coloresAgr.length; i++) {
+      g = coloresAgr[i];
+      if (typeof g === 'string') grupos.push({ grupo_id: g, nombre: '', miembros: [], representante: '', color: null, orden: i + 1 });
+      else {
+        grupos.push({
+          grupo_id: String(g.grupo_id || g.grupo || ''),
+          nombre: g.nombre || '',
+          miembros: g.miembros || [],
+          representante: g.representante || '',
+          hh: (g.hh === undefined ? null : g.hh),
+          color: (g.color && /^FF[0-9A-Fa-f]{6}$/.test(g.color)) ? g.color.toUpperCase() : null,
+          orden: (g.orden === undefined || g.orden === null) ? i + 1 : g.orden
+        });
+      }
+    }
+  } else {
+    keys = [];
+    for (k in coloresAgr) { if (Object.prototype.hasOwnProperty.call(coloresAgr, k)) keys.push(k); }
+    keys.sort();
+    for (i = 0; i < keys.length; i++) {
+      grupos.push({
+        grupo_id: keys[i], nombre: '', miembros: [], representante: '', hh: null,
+        color: /^FF[0-9A-Fa-f]{6}$/.test(String(coloresAgr[keys[i]])) ? String(coloresAgr[keys[i]]).toUpperCase() : null,
+        orden: i + 1
+      });
+    }
+  }
+  grupos.sort(function (a, b) {
+    if (a.orden !== b.orden) return a.orden - b.orden;
+    return a.grupo_id < b.grupo_id ? -1 : (a.grupo_id > b.grupo_id ? 1 : 0);
+  });
+  var vistos = {}, out = [];
+  for (i = 0; i < grupos.length; i++) {
+    if (!grupos[i].grupo_id || vistos[grupos[i].grupo_id]) continue;
+    vistos[grupos[i].grupo_id] = 1;
+    out.push(grupos[i]);
+  }
+  return out;
+}
+
+function _mjEstilos(stylesXml, coloresAgr) {
+  var st = String(stylesXml);
+  var fb = _mjBlk(st, 'fills'), xb = _mjBlk(st, 'cellXfs');
+  if (!fb || !xb) throw new Error('ABORTO: styles.xml sin bloque <fills> o <cellXfs>');
+  if (!(xb[0] > fb[1])) throw new Error('ABORTO: <cellXfs> no viene despues de <fills>');
+
+  /* Trampas verificadas: <fill> aparece tambien dentro de <dxfs>, y <xf
+     dentro de <cellStyleXfs>. SIEMPRE acotar al bloque. */
+  var fills = st.slice(fb[0], fb[1]).match(/<fill>[\s\S]*?<\/fill>|<fill\/>/g) || [];
+  var xfs   = st.slice(xb[0], xb[1]).match(/<xf\b[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g) || [];
+
+  var cf = /count="(\d+)"/.exec(fb[2]), cx = /count="(\d+)"/.exec(xb[2]);
+  if (!cf || parseInt(cf[1], 10) !== fills.length) {
+    throw new Error('ABORTO: fills count=' + (cf && cf[1]) + ' pero hay ' + fills.length + ' hijos');
+  }
+  if (!cx || parseInt(cx[1], 10) !== xfs.length) {
+    throw new Error('ABORTO: cellXfs count=' + (cx && cx[1]) + ' pero hay ' + xfs.length + ' hijos');
+  }
+  var fob = _mjBlk(st, 'fonts');
+  if (fob) {
+    var fonts = st.slice(fob[0], fob[1]).match(/<font>[\s\S]*?<\/font>|<font\/>/g) || [];
+    var cfo = /count="(\d+)"/.exec(fob[2]);
+    if (cfo && parseInt(cfo[1], 10) !== fonts.length) {
+      throw new Error('ABORTO: fonts count=' + cfo[1] + ' pero hay ' + fonts.length + ' hijos');
+    }
+  }
+
+  var api = {};
+  api.st = st;
+  api.fills = fills;
+  api.xfs = xfs;
+  api.nFills0 = fills.length;
+  api.nXfs0 = xfs.length;
+  api.numfmts = {};
+  var mnf = st.match(/<numFmt numFmtId="(\d+)"/g) || [], i;
+  for (i = 0; i < mnf.length; i++) api.numfmts[/(\d+)/.exec(mnf[i])[1]] = 1;
+
+  api.existe = function (s) {
+    return typeof s === 'number' && isFinite(s) && s >= 0 && s < api.xfs.length;
+  };
+  api.base = function (s, alt) { return api.existe(s) ? s : (alt || 0); };
+  api.fillDe = function (s) {
+    if (!api.existe(s)) return 0;
+    var m = /\bfillId="(\d+)"/.exec(api.xfs[s]);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  api.numFmtDe = function (s) {
+    if (!api.existe(s)) return 0;
+    var m = /\bnumFmtId="(\d+)"/.exec(api.xfs[s]);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+
+  /* fill solido idempotente por comparacion exacta de string */
+  api.fillSolido = function (rgb8) {
+    var nuevo = '<fill><patternFill patternType="solid"><fgColor rgb="' + String(rgb8).toUpperCase() +
+                '"/><bgColor indexed="64"/></patternFill></fill>';
+    var k;
+    for (k = 0; k < api.fills.length; k++) { if (api.fills[k] === nuevo) return k; }
+    api.fills.push(nuevo);
+    return api.fills.length - 1;
+  };
+
+  /* clona cellXfs[sBase] cambiando SOLO fillId y/o numFmtId. Idempotente.
+     fontId, borderId, xfId y el <alignment> hijo se copian intactos.
+     applyFill="1" / applyNumberFormat="1" son OBLIGATORIOS. */
+  api.clon = function (sBase, fillId, numFmtId) {
+    var n = api.xfs[api.base(sBase, 0)], k;
+    if (fillId !== null && fillId !== undefined) {
+      if (/\bfillId="\d+"/.test(n)) n = n.replace(/\bfillId="\d+"/, 'fillId="' + fillId + '"');
+      else n = n.replace(/(<xf\b)/, function (m) { return m + ' fillId="' + fillId + '"'; });
+      n = n.replace(/applyFill="0"/, 'applyFill="1"');
+      n = _mjAddAttr(n, 'applyFill="1"');
+    }
+    if (numFmtId !== null && numFmtId !== undefined) {
+      if (/\bnumFmtId="\d+"/.test(n)) n = n.replace(/\bnumFmtId="\d+"/, 'numFmtId="' + numFmtId + '"');
+      else n = n.replace(/(<xf\b)/, function (m) { return m + ' numFmtId="' + numFmtId + '"'; });
+      n = n.replace(/applyNumberFormat="0"/, 'applyNumberFormat="1"');
+      n = _mjAddAttr(n, 'applyNumberFormat="1"');
+    }
+    for (k = 0; k < api.xfs.length; k++) { if (api.xfs[k] === n) return k; }
+    api.xfs.push(n);
+    return api.xfs.length - 1;
+  };
+
+  api.altaNumFmt = function (nid, code) {
+    if (api.numfmts[nid]) return nid;
+    var b = _mjBlk(api.st, 'numFmts');
+    var nuevo = '<numFmt numFmtId="' + nid + '" formatCode="' + code + '"/>';
+    if (!b) {
+      var j = api.st.indexOf('>', api.st.indexOf('<styleSheet')) + 1;
+      api.st = api.st.slice(0, j) + '<numFmts count="1">' + nuevo + '</numFmts>' + api.st.slice(j);
+    } else {
+      var hijos = api.st.slice(b[0], b[1]).match(/<numFmt\b[^>]*\/>/g) || [];
+      api.st = api.st.slice(0, b[1]) + nuevo + api.st.slice(b[1]);
+      var decl2 = b[2].replace(/count="\d+"/, 'count="' + (hijos.length + 1) + '"');
+      api.st = api.st.replace(b[2], decl2);
+    }
+    api.numfmts[nid] = 1;
+    return nid;
+  };
+
+  /* numFmtId cuyo formatCode es EXACTAMENTE el pedido, dandolo de alta si falta.
+     NUNCA se toca el 219 existente ('0.00%;;\-'): lo comparten 41 xfs. */
+  api.numfmtCode = function (code, preferido) {
+    var tags = api.st.match(/<numFmt\b[^>]*\/>/g) || [], k, mi, mc;
+    for (k = 0; k < tags.length; k++) {
+      mi = /\bnumFmtId="(\d+)"/.exec(tags[k]);
+      mc = /\bformatCode="([^"]*)"/.exec(tags[k]);
+      if (mi && mc && mc[1] === code) return parseInt(mi[1], 10);
+    }
+    var nid = Math.max(164, preferido == null ? 220 : preferido);
+    while (api.numfmts[nid]) nid++;
+    if (nid > 65535) throw new Error('ABORTO: no queda numFmtId libre');
+    return api.altaNumFmt(nid, code);
+  };
+
+  /* reescribir cellXfs PRIMERO (offset mayor) y fills despues */
+  api.emitir = function () {
+    var x = api.st, b;
+    b = _mjBlk(x, 'cellXfs');
+    x = x.slice(0, b[0]) + api.xfs.join('') + x.slice(b[1]);
+    x = x.replace(b[2], b[2].replace(/count="\d+"/, 'count="' + api.xfs.length + '"'));
+    b = _mjBlk(x, 'fills');
+    x = x.slice(0, b[0]) + api.fills.join('') + x.slice(b[1]);
+    x = x.replace(b[2], b[2].replace(/count="\d+"/, 'count="' + api.fills.length + '"'));
+    api.xml = x;
+    return x;
+  };
+
+  /* ---- colores de agrupacion ------------------------------------------ */
+  var grupos = _mjNormGrupos(coloresAgr);
+  var cols = _mjPaleta(grupos.length);
+  api.grupos = grupos;
+  api.color = {};
+  api.fillIdPorGrupo = {};
+  api.fillPorGrupo = {};        /* cellXf del chip centrado (AVANCE SEMANAL!G) */
+  api.xfGrupoQPS = {};          /* cellXf sobre base 995  (De QPS!L) */
+  api.xfGrupoCrono = {};        /* cellXf sobre base 2664 (Para crono!L y !O) */
+  api.grupoDe = {};
+  api.hhGrupo = {};
+  api.miembrosDe = {};
+
+  var s0 = api.base(0, 0), s1 = api.base(1, 0), s11 = api.base(11, 0);
+  var s672 = api.base(672, 0), s700 = api.base(700, 0), s718 = api.base(718, 0);
+  var s905 = api.base(905, 0), s917 = api.base(917, 0), s995 = api.base(995, 0);
+  var s1043 = api.base(1043, 0), s1085 = api.base(1085, 0);
+  var s1423 = api.base(1423, 0), s1430 = api.base(1430, 0), s1641 = api.base(1641, 0);
+  var s2664 = api.base(2664, 0);
+
+  var g, gid, rgb, fid, j;
+  for (i = 0; i < grupos.length; i++) {
+    g = grupos[i];
+    gid = g.grupo_id;
+    rgb = g.color || cols[i];
+    fid = api.fillSolido(rgb);
+    api.color[gid] = rgb;
+    api.fillIdPorGrupo[gid] = fid;
+    api.fillPorGrupo[gid] = api.clon(s1, fid, null);
+    api.xfGrupoQPS[gid] = api.clon(s995, fid, null);
+    api.xfGrupoCrono[gid] = api.clon(s2664, fid, null);
+    api.miembrosDe[gid] = g.miembros || [];
+    if (g.hh !== null && g.hh !== undefined) api.hhGrupo[gid] = Number(g.hh);
+    for (j = 0; j < api.miembrosDe[gid].length; j++) {
+      api.grupoDe[_mjClave(api.miembrosDe[gid][j])] = gid;
+    }
+  }
+  /* contrato: agrupaciones DISTINTAS obligan a rellenos DISTINTOS */
+  var inv = {}, choques = [];
+  for (gid in api.fillIdPorGrupo) {
+    if (!Object.prototype.hasOwnProperty.call(api.fillIdPorGrupo, gid)) continue;
+    fid = api.fillIdPorGrupo[gid];
+    if (inv[fid]) { choques.push(inv[fid] + '/' + gid); } else inv[fid] = gid;
+  }
+  if (choques.length) throw new Error('ABORTO: colision de color entre agrupaciones distintas: ' + choques.join(', '));
+
+  /* ---- rellenos de estado --------------------------------------------- */
+  api.fillIdEstado = {
+    'Eliminada':            api.fillSolido(_MJ_FILL_ESTADO['Eliminada']),
+    'Retirada del alcance': api.fillSolido(_MJ_FILL_ESTADO['Retirada del alcance']),
+    'Sin HH':               api.fillSolido(_MJ_FILL_ESTADO['Sin HH'])
+  };
+  api.xfEstado = {                                   /* base 0: AVANCE SEMANAL!H */
+    eliminada: api.clon(s0, api.fillIdEstado['Eliminada'], null),
+    retirada:  api.clon(s0, api.fillIdEstado['Retirada del alcance'], null),
+    sinhh:     api.clon(s0, api.fillIdEstado['Sin HH'], null)
+  };
+  api.xfEstadoQPS = {                                /* base 917: De QPS!M */
+    eliminada: api.clon(s917, api.fillIdEstado['Eliminada'], null),
+    retirada:  api.clon(s917, api.fillIdEstado['Retirada del alcance'], null),
+    sinhh:     api.clon(s917, api.fillIdEstado['Sin HH'], null)
+  };
+  api.claveEstado = { 'Eliminada': 'eliminada', 'Retirada del alcance': 'retirada', 'Sin HH': 'sinhh' };
+
+  /* ---- numFmt de % (NUEVO; el 219 del libro NO se toca ni se usa) ------ */
+  api.numFmtPct = api.numfmtCode('0.00%;-0.00%;\\-', 220);
+
+  /* ---- estilos de uso general ----------------------------------------- */
+  api.xfTexto  = s0;
+  api.xfCentro = s1;
+  api.xfCab    = s905;
+  api.xfNum    = s672;
+  api.xfCant   = s1043;
+  api.xfWrap   = s700;
+  api.xfBold   = s718;
+  api.xfMini   = s11;
+  api.xfSerial = s1423;
+  api.xfBanda  = s1085;
+  api.xfCabCol = s1641;
+  api.xfTxtQPS = s917;
+  api.xfTxtCrono = s2664;
+  api.xfPct    = api.clon(s718, null, api.numFmtPct);
+  api.xfPctSem = api.clon(s1430, null, api.numFmtPct);
+  api.xfDelta  = api.clon(s11, null, 10);
+
+  /* rellenos existentes reaprovechados (0 fills nuevos por estos) */
+  api.fillTotal = 55 < api.fills.length ? 55 : api.fillSolido('FFD9D9D9');
+  api.fillBanda = 64 < api.fills.length ? 64 : api.fillSolido('FFDCE6F1');
+
+  api.emitir();
+  return api;
+}
+
+/* ==========================================================================
+   7. _mjDeQPS — columna L (agrupacion) + columna M (estado) + leyenda
+   ========================================================================== */
+function _mjDeQPS(xml, ss, grupoPorItem, estadoPorItem, ids) {
+  var h = new _MjHoja(xml);
+  h.purgarLeyenda(ss);
+  grupoPorItem = grupoPorItem || {};
+  estadoPorItem = estadoPorItem || {};
+
+  var r = h.rows(), i, rn, cs, a, filaIt = {}, filasCs = {}, orden = [];
+  for (i = 0; i < r.length; i++) {
+    rn = r[i];
+    if (rn <= 4) continue;
+    cs = _mjCeldasDeFila(h.filas[rn][1], ss);
+    filasCs[rn] = cs;
+    orden.push(rn);
+    a = String(cs.A == null ? '' : cs.A).replace(/^\s+|\s+$/g, '');
+    if (a) filaIt[rn] = _mjClave(a);
+  }
+  var ult = h.maxFila();
+  var tocadas = {}, marcar = function (n) { tocadas[n] = 1; };
+
+  /* --- L: agrupacion, refrescada in situ ------------------------------- */
+  var pintadas = {}, pintadasRn = {}, gid, sCel, base, s;
+  for (i = 0; i < orden.length; i++) {
+    rn = orden[i];
+    if (!filaIt[rn]) continue;
+    gid = grupoPorItem[filaIt[rn]];
+    if (!gid || ids.fillIdPorGrupo[gid] === undefined) continue;
+    sCel = h.getS(rn, 'L');
+    base = ids.existe(sCel) ? sCel : ids.base(995, 0);
+    s = ids.clon(base, ids.fillIdPorGrupo[gid], null);
+    h.set(rn, 'L', s, gid, true);
+    if (!pintadas[gid]) pintadas[gid] = [];
+    pintadas[gid].push(rn);
+    pintadasRn[rn] = 1;
+    marcar(rn);
+  }
+
+  /* --- L: barrido de rotulos RANCIOS del libro de entrada -------------- */
+  var vivos = {}, k;
+  for (k in ids.fillIdPorGrupo) {
+    if (Object.prototype.hasOwnProperty.call(ids.fillIdPorGrupo, k)) vivos[ids.fillIdPorGrupo[k]] = 1;
+  }
+  var rancias = 0, txtL, heredado;
+  for (i = 0; i < orden.length; i++) {
+    rn = orden[i];
+    if (pintadasRn[rn]) continue;
+    sCel = h.getS(rn, 'L');
+    txtL = String(filasCs[rn].L == null ? '' : filasCs[rn].L).replace(/^\s+|\s+$/g, '');
+    heredado = /^(AGR|GEN)-\d+$/.test(txtL);
+    if (heredado || (sCel !== null && vivos[ids.fillDe(sCel)])) {
+      base = ids.existe(sCel) ? sCel : 0;
+      h.set(rn, 'L', ids.clon(base, 0, null), null, false);
+      marcar(rn);
+      if (heredado) rancias++;
+    }
+  }
+
+  /* --- M: estado ------------------------------------------------------- */
+  h.set(4, 'M', ids.base(905, 0), 'Estado (app)', true);
+  marcar(4);
+  var marcasM = {}, cuenta = { 'Eliminada': 0, 'Retirada del alcance': 0, 'Sin HH': 0 }, est;
+  var presentes = {};
+  for (i = 0; i < orden.length; i++) {
+    rn = orden[i];
+    if (!filaIt[rn]) continue;
+    presentes[filaIt[rn]] = 1;
+    est = _mjEstadoTxt(estadoPorItem[filaIt[rn]]);
+    if (!est.txt) continue;
+    s = est.fk ? ids.xfEstadoQPS[ids.claveEstado[est.fk]] : ids.base(917, 0);
+    h.set(rn, 'M', s, est.txt, true);
+    marcasM[rn] = est.fk;
+    if (est.fk) cuenta[est.fk]++;
+    marcar(rn);
+  }
+
+  /* --- ANEXO: las partidas marcables que la hoja de entrada NO trae ----- */
+  var faltan = [], it, v;
+  for (it in estadoPorItem) {
+    if (!Object.prototype.hasOwnProperty.call(estadoPorItem, it)) continue;
+    if (presentes[_mjClave(it)]) continue;
+    if (!_mjEstadoTxt(estadoPorItem[it]).txt) continue;
+    faltan.push(_mjClave(it));
+  }
+  faltan.sort(function (x, y) { return _mjCmpIt(x, y); });
+
+  var sTxt = ids.base(917, 0), sCab = ids.base(718, 0);
+  var sNum = ids.clon(sTxt, null, 4), sCant = ids.clon(sTxt, null, 2);
+  var ultAnexo = ult, nAnexo = 0;
+  if (faltan.length) {
+    var L0a = ult + 2;
+    h.set(L0a, 'A', sCab, 'ANEXO · PARTIDAS DEL APLICATIVO QUE NO TIENEN FILA EN ESTA HOJA', true, '1:13');
+    h.set(L0a + 1, 'A', sTxt,
+      'El cuadro de arriba excluye las partidas marcadas "Retirada del alcance" en QPS!Q (ver A2). ' +
+      'Estas ' + faltan.length + ' se anexan aquí para que la columna M cubra TODAS las partidas del ' +
+      'aplicativo: mismo texto y mismo color de estado, y en L el color de su agrupación. ' +
+      'No computan en ningún total.', true, '1:13');
+    var cabs = [['A', 'Ítem'], ['B', 'Descripción'], ['C', 'Especialidad'],
+                ['D', 'Cantidad'], ['E', 'Unidad Básica'], ['H', 'hh']];
+    for (i = 0; i < cabs.length; i++) h.set(L0a + 2, cabs[i][0], sCab, cabs[i][1], true, '1:13');
+    rn = L0a + 2;
+    for (i = 0; i < faltan.length; i++) {
+      rn++;
+      it = faltan[i];
+      v = estadoPorItem[it];
+      if (typeof v === 'string') v = {};
+      h.set(rn, 'A', sTxt, it, true, '1:13');
+      if (v.nombre || v.nom) h.set(rn, 'B', sTxt, v.nombre || v.nom, true);
+      if (v.esp) h.set(rn, 'C', sTxt, v.esp, true);
+      if (v.lb0 !== undefined && v.lb0 !== null) h.set(rn, 'D', sCant, _mjNum(v.lb0, 4), false);
+      else if (v.cant !== undefined && v.cant !== null) h.set(rn, 'D', sCant, _mjNum(v.cant, 4), false);
+      if (v.und) h.set(rn, 'E', sTxt, v.und, true);
+      if (v.hh !== undefined && v.hh !== null) h.set(rn, 'H', sNum, _mjNum(v.hh, 2), false);
+      gid = grupoPorItem[it];
+      if (gid && ids.fillIdPorGrupo[gid] !== undefined) {
+        h.set(rn, 'L', ids.clon(sTxt, ids.fillIdPorGrupo[gid], null), gid, true);
+        if (!pintadas[gid]) pintadas[gid] = [];
+        pintadas[gid].push(rn);
+      }
+      est = _mjEstadoTxt(estadoPorItem[it]);
+      h.set(rn, 'M', est.fk ? ids.clon(sTxt, ids.fillIdEstado[est.fk], null) : sTxt, est.txt, true);
+      marcasM[rn] = est.fk;
+      if (est.fk) cuenta[est.fk]++;
+      marcar(rn);
+      nAnexo++;
+    }
+    ultAnexo = rn;
+    for (i = L0a; i <= ultAnexo; i++) marcar(i);
+  }
+
+  /* --- leyenda al pie --------------------------------------------------- */
+  var L0 = ultAnexo + 2, G = ids.grupos || [], ultima = ultAnexo;
+  h.set(L0, 'A', sCab, 'LEYENDA', true, '1:5');
+  h.set(L0 + 1, 'A', sTxt,
+    'Color = agrupación (fuente: agrupaciones_create_220826). El texto AGR-n manda sobre el color: ' +
+    'la paleta validada tiene ' + _MJ_PALETA.length + ' colores y más allá se generan nuevos, nunca repetidos.',
+    true, '1:5');
+  var cab5 = ['grupo', 'nombre', 'ítems', 'HH', 'rep.'], LET = ['A', 'B', 'C', 'D', 'E'];
+  for (i = 0; i < 5; i++) h.set(L0 + 2, LET[i], sCab, cab5[i], true, '1:5');
+  for (i = 0; i < G.length; i++) {
+    rn = L0 + 3 + i;
+    gid = G[i].grupo_id;
+    h.set(rn, 'A', ids.clon(sTxt, ids.fillIdPorGrupo[gid], null), gid, true, '1:5');
+    h.set(rn, 'B', sTxt, String(G[i].nombre || '').slice(0, 80), true);
+    h.set(rn, 'C', ids.clon(sTxt, null, 1), String((G[i].miembros || []).length), false);
+    if (ids.hhGrupo[gid] !== undefined) h.set(rn, 'D', ids.clon(sTxt, null, 4), _mjNum(ids.hhGrupo[gid], 2), false);
+    h.set(rn, 'E', sTxt, G[i].representante || '', true);
+  }
+  var b = L0 + 4 + G.length;
+  h.set(b, 'A', sCab, 'Estado (columna M)', true, '1:5');
+  var pares = [[_MJ_TXT_RETIRADA, 'Retirada del alcance', 'partida retirada del alcance en el aplicativo: no computa'],
+               [_MJ_TXT_ELIMINADA, 'Eliminada', 'partida borrada del aplicativo: no computa'],
+               [_MJ_TXT_SINHH, 'Sin HH', 'el admin apagó sus HH: no computa en el % semanal']];
+  var n;
+  for (i = 0; i < pares.length; i++) {
+    rn = b + 1 + i;
+    h.set(rn, 'A', ids.clon(sTxt, ids.fillIdEstado[pares[i][1]], null), pares[i][0], true, '1:5');
+    h.set(rn, 'B', sTxt, pares[i][2], true);
+    n = cuenta[pares[i][1]] || 0;
+    h.set(rn, 'C', sTxt, n ? (n + ' partida' + (n === 1 ? '' : 's') + ' en M') : 'ninguna en este libro', true);
+  }
+  h.set(b + 4, 'A', sTxt, '(celda vacía en M) = en alcance y con HH', true, '1:5');
+  h.set(b + 4, 'B', sTxt, 'computa en todos los ponderados', true);
+  h.set(b + 5, 'A', sTxt, nAnexo
+    ? ('Las ' + nAnexo + ' partidas retiradas/eliminadas o sin HH que el cuadro de arriba no trae están ' +
+       'en el ANEXO (justo encima de esta leyenda) y, con sus % semanales, en AVANCE SEMANAL.')
+    : ('Todas las partidas del aplicativo tienen fila en esta hoja; sus % semanales están en AVANCE SEMANAL.'),
+    true, '1:5');
+  ultima = b + 5;
+
+  /* --- estructura ------------------------------------------------------- */
+  var lista = [];
+  for (k in tocadas) { if (Object.prototype.hasOwnProperty.call(tocadas, k)) lista.push(parseInt(k, 10)); }
+  h.recalculaSpans(lista);
+  h.setDimension('A1:M' + Math.max(ultima, ult));
+  if (!/<col min="13"/.test(h.pre)) h.appendCol('<col min="13" max="13" width="26.5" customWidth="1"/>');
+  h.pre = h.pre.replace('<col min="12" max="12" width="9.5703125" customWidth="1"/>',
+                        '<col min="12" max="12" width="11.5" customWidth="1"/>');
+
+  ids.infoQPS = { filasL: 0, celdasM: 0, anexadas: nAnexo, rancias: rancias,
+                  ultimaFila: Math.max(ultima, ult), pintadas: pintadas, marcasM: marcasM };
+  for (k in pintadas) { if (Object.prototype.hasOwnProperty.call(pintadas, k)) ids.infoQPS.filasL += pintadas[k].length; }
+  for (k in marcasM) { if (Object.prototype.hasOwnProperty.call(marcasM, k)) ids.infoQPS.celdasM++; }
+  ids.emitir();
+  return h.emitir();
+}
+
+/* orden natural de un codigo de item ('4.03.10' > '4.03.9') */
+function _mjCmpIt(a, b) {
+  var pa = String(a).split('.'), pb = String(b).split('.'), i, x, y, nx, ny;
+  for (i = 0; i < Math.max(pa.length, pb.length); i++) {
+    x = pa[i]; y = pb[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    nx = /^\d+$/.test(x); ny = /^\d+$/.test(y);
+    if (nx && ny) { if (+x !== +y) return (+x) - (+y); }
+    else if (nx !== ny) return nx ? -1 : 1;
+    else if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+
+/* ==========================================================================
+   8. _mjParaCrono — columna L (mismo color que en De QPS) + columna O
+   ========================================================================== */
+function _mjParaCrono(xml, ss, grupoPorFila, ids) {
+  var h = new _MjHoja(xml);
+  h.purgarLeyenda(ss);
+  grupoPorFila = grupoPorFila || {};
+
+  var r = h.rows(), i, k, rn, cs, filasCs = {}, orden = [];
+  for (i = 0; i < r.length; i++) {
+    rn = r[i];
+    if (rn < 3) continue;
+    filasCs[rn] = _mjCeldasDeFila(h.filas[rn][1], ss);
+    orden.push(rn);
+  }
+  var ult = h.maxFila();
+  var tocadas = {}, marcar = function (n) { tocadas[n] = 1; };
+
+  /* filas por grupo (solo las que el llamador respalda con el datos de HOY) */
+  var gidFila = {}, gid, pintadasRn = {};
+  for (k in grupoPorFila) {
+    if (!Object.prototype.hasOwnProperty.call(grupoPorFila, k)) continue;
+    gid = grupoPorFila[k];
+    rn = parseInt(k, 10);
+    if (!gid || ids.fillIdPorGrupo[gid] === undefined || !isFinite(rn)) continue;
+    if (!gidFila[gid]) gidFila[gid] = [];
+    gidFila[gid].push(rn);
+    pintadasRn[rn] = 1;
+  }
+
+  /* --- L y O: barrido de rotulos RANCIOS del libro de entrada ---------- */
+  var vivos = {}, rancias = 0, cols2 = ['L', 'O'], c, sCel, txt, heredado, base;
+  for (k in ids.fillIdPorGrupo) {
+    if (Object.prototype.hasOwnProperty.call(ids.fillIdPorGrupo, k)) vivos[ids.fillIdPorGrupo[k]] = 1;
+  }
+  for (i = 0; i < orden.length; i++) {
+    rn = orden[i];
+    if (pintadasRn[rn]) continue;
+    for (c = 0; c < 2; c++) {
+      sCel = h.getS(rn, cols2[c]);
+      txt = String(filasCs[rn][cols2[c]] == null ? '' : filasCs[rn][cols2[c]]).replace(/^\s+|\s+$/g, '');
+      heredado = /^(AGR|GEN)-\d+( ·|$)/.test(txt);
+      if (heredado || (sCel !== null && vivos[ids.fillDe(sCel)])) {
+        base = ids.existe(sCel) ? sCel : 0;
+        h.set(rn, cols2[c], ids.clon(base, 0, null), null, false);
+        marcar(rn);
+        if (heredado) rancias++;
+      }
+    }
+  }
+
+  /* --- L (grupo_id) y O (detalle) --------------------------------------- */
+  var sO = ids.base(2664, 0), filas, nIt, det, j, sL, baseL;
+  for (gid in gidFila) {
+    if (!Object.prototype.hasOwnProperty.call(gidFila, gid)) continue;
+    filas = gidFila[gid];
+    filas.sort(function (a, b2) { return a - b2; });
+    nIt = (ids.miembrosDe[gid] || []).length;
+    for (j = 0; j < filas.length; j++) {
+      rn = filas[j];
+      sL = h.getS(rn, 'L');
+      baseL = ids.existe(sL) ? sL : sO;
+      h.set(rn, 'L', ids.clon(baseL, ids.fillIdPorGrupo[gid], null), gid, true);
+      det = gid + ' · ' + nIt + ' ítem' + (nIt === 1 ? '' : 's');
+      if (filas.length > 1) det += ' (tarea ' + (j + 1) + ' de ' + filas.length + ')';
+      h.set(rn, 'O', ids.clon(sO, ids.fillIdPorGrupo[gid], null), det, true);
+      marcar(rn);
+    }
+  }
+  h.set(2, 'O', ids.base(905, 0), 'Agrupación (detalle)', true);
+  marcar(2);
+
+  /* --- ANEXO: agrupaciones sin tarea propia en esta hoja ---------------- */
+  var G = ids.grupos || [], sinTarea = [], sTxt = sO, sCab = ids.base(718, 0);
+  for (i = 0; i < G.length; i++) { if (!gidFila[G[i].grupo_id]) sinTarea.push(G[i]); }
+  var anexo = {}, ultAnexo = ult;
+  if (sinTarea.length) {
+    var L0a = ult + 2;
+    h.set(L0a, 'A', sCab, 'ANEXO · AGRUPACIONES SIN TAREA PROPIA EN ESTE CRONOGRAMA', true, '1:15');
+    h.set(L0a + 1, 'A', sTxt,
+      'Ninguna fila del cuadro de arriba corresponde a estas ' + sinTarea.length + ' agrupaciones ' +
+      '(sus ítems no están fundidos en una tarea de esta hoja). Se listan con su color para que el ' +
+      'color identifique la misma agrupación en las tres hojas.', true, '1:15');
+    var cabsA = [['A', 'Grupo'], ['B', 'Descripción'], ['H', 'hh']];
+    for (i = 0; i < cabsA.length; i++) h.set(L0a + 2, cabsA[i][0], sCab, cabsA[i][1], true, '1:15');
+    rn = L0a + 2;
+    var sNumA = ids.clon(sTxt, null, 4);
+    for (i = 0; i < sinTarea.length; i++) {
+      rn++;
+      gid = sinTarea[i].grupo_id;
+      nIt = (sinTarea[i].miembros || []).length;
+      h.set(rn, 'A', sTxt, gid, true, '1:15');
+      h.set(rn, 'B', sTxt, String(sinTarea[i].nombre || '').slice(0, 120), true);
+      if (ids.hhGrupo[gid] !== undefined) h.set(rn, 'H', sNumA, _mjNum(ids.hhGrupo[gid], 2), false);
+      h.set(rn, 'L', ids.clon(sTxt, ids.fillIdPorGrupo[gid], null), gid, true);
+      h.set(rn, 'O', ids.clon(sTxt, ids.fillIdPorGrupo[gid], null),
+            gid + ' · ' + nIt + ' ítem' + (nIt === 1 ? '' : 's') + ' (sin tarea en el cronograma)', true);
+      anexo[gid] = rn;
+      marcar(rn);
+    }
+    ultAnexo = rn;
+    for (i = L0a; i <= ultAnexo; i++) marcar(i);
+  }
+
+  /* --- leyenda al pie --------------------------------------------------- */
+  var L0 = ultAnexo + 2, LET = ['A', 'B', 'C', 'D', 'E'];
+  h.set(L0, 'A', sCab, 'LEYENDA', true, '1:5');
+  h.set(L0 + 1, 'A', sTxt, 'Color = agrupación (mismo color que en De QPS y AVANCE SEMANAL).', true, '1:5');
+  var cab5 = ['grupo', 'nombre', 'ítems', 'HH', 'rep.'];
+  for (i = 0; i < 5; i++) h.set(L0 + 2, LET[i], sCab, cab5[i], true, '1:5');
+  for (i = 0; i < G.length; i++) {
+    rn = L0 + 3 + i;
+    gid = G[i].grupo_id;
+    h.set(rn, 'A', ids.clon(sTxt, ids.fillIdPorGrupo[gid], null), gid, true, '1:5');
+    h.set(rn, 'B', sTxt, String(G[i].nombre || '').slice(0, 80), true);
+    h.set(rn, 'C', ids.clon(sTxt, null, 1), String((G[i].miembros || []).length), false);
+    if (ids.hhGrupo[gid] !== undefined) h.set(rn, 'D', ids.clon(sTxt, null, 4), _mjNum(ids.hhGrupo[gid], 2), false);
+    h.set(rn, 'E', sTxt, G[i].representante || '', true);
+  }
+  var b = L0 + 4 + G.length;
+  h.set(b, 'A', sTxt, 'L = grupo_id · O = detalle (grupo + nº de ítems fundidos)', true, '1:5');
+  var nn = b + 1, gs = [];
+  for (gid in gidFila) { if (Object.prototype.hasOwnProperty.call(gidFila, gid)) gs.push(gid); }
+  gs.sort();
+  for (i = 0; i < gs.length; i++) {
+    if (gidFila[gs[i]].length > 1) {
+      h.set(nn, 'A', sTxt, gs[i] + ' aparece en ' + gidFila[gs[i]].length + ' tareas: filas ' +
+            gidFila[gs[i]].join(', ') + '.', true, '1:5');
+      nn++;
+    }
+  }
+  var an = [];
+  for (gid in anexo) { if (Object.prototype.hasOwnProperty.call(anexo, gid)) an.push(gid); }
+  if (an.length) {
+    an.sort();
+    var fr = [];
+    for (i = 0; i < an.length; i++) fr.push(anexo[an[i]]);
+    h.set(nn, 'A', sTxt, an.join(', ') + ' no funden ninguna tarea de esta hoja: van en el ANEXO de ' +
+          'arriba (filas ' + fr.join(', ') + '), con su color.', true, '1:5');
+    nn++;
+  }
+  h.set(nn, 'A', sTxt, 'Las partidas retiradas o eliminadas del aplicativo se listan completas en AVANCE SEMANAL.', true, '1:5');
+
+  /* --- estructura ------------------------------------------------------- */
+  var lista = [];
+  for (k in tocadas) { if (Object.prototype.hasOwnProperty.call(tocadas, k)) lista.push(parseInt(k, 10)); }
+  h.recalculaSpans(lista);
+  h.setDimension('A2:O' + Math.max(nn, ult));
+  if (!/<col min="15"/.test(h.pre)) h.appendCol('<col min="15" max="15" width="24" customWidth="1"/>');
+
+  var npin = 0;
+  for (gid in gidFila) { if (Object.prototype.hasOwnProperty.call(gidFila, gid)) npin += gidFila[gid].length; }
+  ids.infoCrono = { filasPintadas: npin, rancias: rancias, anexo: anexo, ultimaFila: Math.max(nn, ult), filas: gidFila };
+  ids.emitir();
+  return h.emitir();
+}
+
+/* ==========================================================================
+   9. _mjHojaAvance — la hoja nueva AVANCE SEMANAL, completa
+   ========================================================================== */
+function _mjNormPartidas(datos) {
+  var out = [], src = (datos && datos.partidas) || [], i, p, q, k, pct, cant, lb0, hh, sh;
+  for (i = 0; i < src.length; i++) {
+    p = src[i];
+    if (p.it === undefined || p.it === null || String(p.it).replace(/^\s+|\s+$/g, '') === '') {
+      throw new Error('ABORTO: partida sin "it" (indice ' + i + ')');
+    }
+    pct = {};
+    if (p.pct_sem) {
+      for (k in p.pct_sem) {
+        if (!Object.prototype.hasOwnProperty.call(p.pct_sem, k)) continue;
+        if (!isFinite(parseInt(k, 10)) || !isFinite(Number(p.pct_sem[k]))) continue;
+        pct[parseInt(k, 10)] = Number(p.pct_sem[k]);
+      }
+    }
+    cant = {};
+    if (p.cant_sem) {
+      for (k in p.cant_sem) {
+        if (!Object.prototype.hasOwnProperty.call(p.cant_sem, k)) continue;
+        if (!isFinite(parseInt(k, 10)) || !isFinite(Number(p.cant_sem[k]))) continue;
+        cant[parseInt(k, 10)] = Number(p.cant_sem[k]);
+      }
+    }
+    lb0 = (p.lb0 === undefined || p.lb0 === null) ? p.cant : p.lb0;
+    hh = (p.hh === undefined || p.hh === null) ? 0 : Number(p.hh);
+    sh = (p.sin_hh === undefined || p.sin_hh === null) ? !!p.apag : !!p.sin_hh;
+    q = {
+      it: _mjClave(p.it),
+      nombre: (p.nombre === undefined || p.nombre === null) ? (p.nom || '') : p.nombre,
+      esp: p.esp || p.especialidad || '(SIN ESPECIALIDAD)',
+      und: p.und || '',
+      lb0: (lb0 === undefined || lb0 === null || lb0 === '') ? null : Number(lb0),
+      hh: isFinite(hh) ? hh : 0,
+      estado: p.estado || 'En alcance',
+      sin_hh: sh,
+      tit: p.tit ? 1 : 0,
+      o: (p.orden === undefined || p.orden === null) ? ((p.o === undefined || p.o === null) ? i + 1 : p.o) : p.orden,
+      adicional: !!p.adicional,
+      pct_sem: pct,
+      cant_sem: cant,
+      pct: (p.pct === undefined || p.pct === null) ? null : Number(p.pct),
+      hhg: (p.hhg === undefined || p.hhg === null) ? null : Number(p.hhg),
+      _i: i
+    };
+    if (q.estado !== 'En alcance' && q.estado !== 'Retirada del alcance' && q.estado !== 'Eliminada') {
+      throw new Error('ABORTO: estado invalido "' + q.estado + '" en la partida ' + q.it);
+    }
+    out.push(q);
+  }
+  out.sort(function (a, b) {
+    if (a.o !== b.o) return a.o - b.o;
+    return a._i - b._i;
+  });
+  return out;
+}
+
+function _mjSerialISO(anio, n) {
+  /* jueves de la semana ISO n: mismo resultado que date.fromisocalendar(a,n,4) */
+  var e = Date.UTC(anio, 0, 4);
+  var dow = new Date(e).getUTCDay() || 7;              /* 1..7, lunes=1 */
+  var lunes1 = e - (dow - 1) * 86400000;
+  var jue = lunes1 + ((n - 1) * 7 + 3) * 86400000;
+  return Math.round((jue - _MJ_EPOCA_MS) / 86400000);
+}
+
+function _mjFechaDe(serial) {
+  var d = new Date(_MJ_EPOCA_MS + serial * 86400000);
+  var p2 = function (x) { return (x < 10 ? '0' : '') + x; };
+  return p2(d.getUTCDate()) + '-' + p2(d.getUTCMonth() + 1) + '-' + d.getUTCFullYear();
+}
+
+function _mjHojaAvance(datos, semanas, ids) {
+  var d = datos || {}, e = ids, i, j, k, w, p;
+  var partidas = _mjNormPartidas(d);
+
+  /* ---- semanas y seriales ---------------------------------------------- */
+  var sems = semanas || d.semanas || [];
+  var anio = d.anio_semanas || 2026;
+  var lista = [], seriales = {}, vis = {}, n, ser;
+  for (i = 0; i < sems.length; i++) {
+    w = sems[i];
+    if (typeof w === 'number') { n = w; ser = null; }
+    else { n = parseInt(w.n === undefined ? w.sem : w.n, 10); ser = (w.serial === undefined ? null : w.serial); }
+    if (!isFinite(n) || vis[n]) continue;
+    vis[n] = 1;
+    lista.push(n);
+    seriales[n] = (ser === null || ser === undefined) ? _mjSerialISO(anio, n) : parseInt(ser, 10);
+  }
+  if (!lista.length) {                     /* fallback: las claves de pct_sem */
+    for (i = 0; i < partidas.length; i++) {
+      for (k in partidas[i].pct_sem) {
+        if (!Object.prototype.hasOwnProperty.call(partidas[i].pct_sem, k)) continue;
+        n = parseInt(k, 10);
+        if (!vis[n]) { vis[n] = 1; lista.push(n); seriales[n] = _mjSerialISO(anio, n); }
+      }
+    }
+  }
+  lista.sort(function (a, b) { return a - b; });
+  if (!lista.length) throw new Error('ABORTO: no hay semanas que emitir');
+
+  var corte = d.semana_corte;
+  if (corte === undefined || corte === null) corte = lista[lista.length - 1];
+  corte = parseInt(corte, 10);
+  if (vis[corte] !== 1) {
+    var men = [];
+    for (i = 0; i < lista.length; i++) { if (lista[i] <= corte) men.push(lista[i]); }
+    corte = men.length ? men[men.length - 1] : lista[lista.length - 1];
+  }
+  var iCorte = lista.indexOf(corte);
+  var prev = iCorte > 0 ? lista[iCorte - 1] : null;
+
+  var sem = lista, nSem = sem.length;
+  var C_SEM0 = 13, C_AE = 13 + nSem, L_AE = _mjColLetra(C_AE), spans = '1:' + C_AE;
+
+  /* ---- grupo por item --------------------------------------------------- */
+  var grupoDe = {}, G = (d.agrupaciones && d.agrupaciones.length) ? _mjNormGrupos(d.agrupaciones) : (e.grupos || []);
+  for (i = 0; i < G.length; i++) {
+    for (j = 0; j < (G[i].miembros || []).length; j++) grupoDe[_mjClave(G[i].miembros[j])] = G[i].grupo_id;
+  }
+  var porIt = {};
+  for (i = 0; i < partidas.length; i++) porIt[partidas[i].it] = partidas[i];
+
+  /* ---- estilos ---------------------------------------------------------- */
+  var s0 = e.xfTexto, s1 = e.xfCentro, s11 = e.xfMini, sHH = e.xfNum, sCant = e.xfCant;
+  var s700 = e.xfWrap, s718 = e.xfBold, s1085 = e.xfBanda, s1423 = e.xfSerial, s1641 = e.xfCabCol;
+  var NF = e.numFmtPct;
+  var sPct = e.xfPct, sPctSem = e.xfPctSem, sDelta = e.xfDelta;
+  var sB_txt = s1085, sB_hh = e.clon(s1085, null, 4), sB_pct = e.clon(s1085, null, NF), sB_del = e.clon(s1085, null, 10);
+  var F_TOT = e.fillTotal, F_BAN = e.fillBanda;
+  var sT_txt = e.clon(s718, F_TOT, null), sT_hh = e.clon(sHH, F_TOT, null),
+      sT_pct = e.clon(s718, F_TOT, NF), sT_del = e.clon(s718, F_TOT, 10);
+  var sN_txt = e.clon(s718, F_BAN, null), sN_hh = e.clon(sHH, F_BAN, null),
+      sN_pct = e.clon(s718, F_BAN, NF), sN_del = e.clon(s718, F_BAN, 10);
+
+  function pc(v) { return (Math.round(v * 100 * 100) / 100 / 100).toFixed(4); }
+  function dpc(v, vp) {
+    return pc((Math.round(v * 100 * 100) / 100 - Math.round((vp || 0) * 100 * 100) / 100) / 100);
+  }
+
+  /* ---- bloques por especialidad (orden de primera aparicion) ------------ */
+  var bloques = {}, ordenEsp = [];
+  for (i = 0; i < partidas.length; i++) {
+    p = partidas[i];
+    if (!bloques[p.esp]) { bloques[p.esp] = []; ordenEsp.push(p.esp); }
+    bloques[p.esp].push(p);
+  }
+  var nEsp = ordenEsp.length;
+  var todas = [];
+  for (i = 0; i < partidas.length; i++) { if (!partidas[i].tit) todas.push(partidas[i]); }
+
+  var filas = [], celdasV = {};
+  function R(rn, cells, attrs) { filas.push([rn, cells, attrs || '']); }
+
+  /* ---- fila 1 ----------------------------------------------------------- */
+  var tit1 = 'AVANCE SEMANAL POR PARTIDA — % ACUMULADO (LB0) · fuente: aplicativo QPS · corte S' +
+             corte + ' (' + _mjFechaDe(seriales[corte]) + ')';
+  if (d.proyecto) tit1 = d.proyecto + ' — ' + tit1;
+  var c1 = [[1, s718, tit1, true],
+            [12, s11, prev !== null ? ('Δ vs S' + prev) : 'Δ vs inicio', true]];
+  for (i = 0; i < nSem; i++) c1.push([C_SEM0 + i, s11, 'S' + sem[i], true]);
+  R(1, c1);
+
+  /* ---- fila 2 ----------------------------------------------------------- */
+  var cabeceras = ['ITEM QPS', 'PARTIDA', 'ESPECIALIDAD', 'UND', 'CANT. LB0', 'HH LB0',
+                   'AGRUPACIÓN', 'ESTADO (app)', '% ACTUAL', 'HH GANADAS', 'CANT. EJEC.', 'Δ SEM'];
+  var c2 = [];
+  for (i = 0; i < cabeceras.length; i++) c2.push([i + 1, s1641, cabeceras[i], true]);
+  for (i = 0; i < nSem; i++) c2.push([C_SEM0 + i, s1423, String(seriales[sem[i]]), false]);
+  c2.push([C_AE, s1641, 'HH EFEC.', true]);
+  R(2, c2, ' ht="25.5" customHeight="1"');
+
+  /* ---- helpers de bloque ------------------------------------------------ */
+  function camposBloque(lst, sTxt, sH, sP, sD, aTxt, bTxt) {
+    var cs = [[1, sTxt, aTxt, true], [2, sTxt, bTxt, true]], t = 0, q, v, vp, vw, z;
+    for (q = 0; q < lst.length; q++) t += lst[q].hh;
+    cs.push([6, sH, _mjNum(t, 2), false]);
+    v = _mjPctGrupo(lst, corte);
+    if (v !== null) cs.push([9, sP, pc(v), false]);
+    cs.push([10, sH, _mjNum(_mjHhGan(lst, corte), 2), false]);
+    if (v !== null) {
+      vp = prev !== null ? _mjPctGrupo(lst, prev) : 0.0;
+      cs.push([12, sD, dpc(v, vp), false]);
+    }
+    for (z = 0; z < nSem; z++) {
+      if (sem[z] > corte) continue;
+      vw = _mjPctGrupo(lst, sem[z]);
+      if (vw === null) continue;
+      cs.push([C_SEM0 + z, sP, pc(vw), false]);
+    }
+    t = 0;
+    for (q = 0; q < lst.length; q++) t += _mjPeso(lst[q]);
+    cs.push([C_AE, sH, _mjNum(t, 2), false]);
+    return cs;
+  }
+
+  function resumenTxt(lst) {
+    var nf = lst.length, npd = 0, nc = 0, q;
+    for (q = 0; q < lst.length; q++) { if (!lst[q].tit) npd++; if (_mjPeso(lst[q]) > 0) nc++; }
+    return nf + ' filas · ' + npd + ' partidas · ' + nc + ' computan';
+  }
+
+  function noTit(lst) { var o = [], q; for (q = 0; q < lst.length; q++) { if (!lst[q].tit) o.push(lst[q]); } return o; }
+
+  /* ---- bloque RESUMEN congelado ----------------------------------------- */
+  R(3, camposBloque(todas, sB_txt, sB_hh, sB_pct, sB_del, 'TOTAL PROYECTO',
+      'Ponderado por HH efectivas · no computan retiradas, eliminadas ni HH apagadas'));
+  for (i = 0; i < nEsp; i++) {
+    R(4 + i, camposBloque(noTit(bloques[ordenEsp[i]]), sT_txt, sT_hh, sT_pct, sT_del,
+        'TOTAL ' + ordenEsp[i].toUpperCase(), resumenTxt(bloques[ordenEsp[i]])));
+  }
+
+  /* ---- cuerpo ------------------------------------------------------------ */
+  var cursor = 5 + nEsp, ultimoTotal = cursor, lst, hijasDe, rn, cs, gid, est, v, vp, vw, pcorte, cej, ant, hijas;
+  for (i = 0; i < nEsp; i++) {
+    lst = bloques[ordenEsp[i]];
+    hijasDe = {};
+    for (j = 0; j < lst.length; j++) {
+      if (!lst[j].tit) continue;
+      hijasDe[lst[j].it] = [];
+      for (k = 0; k < lst.length; k++) {
+        if (!lst[k].tit && lst[k].it.indexOf(lst[j].it + '.') === 0) hijasDe[lst[j].it].push(lst[k]);
+      }
+    }
+    R(cursor, camposBloque(noTit(lst), sN_txt, sN_hh, sN_pct, sN_del,
+        ordenEsp[i].toUpperCase(), resumenTxt(lst)));
+    rn = cursor;
+    for (j = 0; j < lst.length; j++) {
+      p = lst[j];
+      rn++;
+      if (p.tit) {
+        hijas = hijasDe[p.it] || [];
+        cs = [[1, s718, p.it, true], [2, s718, p.nombre, true]];
+        v = 0;
+        for (k = 0; k < hijas.length; k++) v += hijas[k].hh;
+        cs.push([6, sHH, _mjNum(v, 2), false]);
+        if (p.estado !== 'En alcance') {
+          est = _mjEstadoTxt(p);
+          if (est.txt) cs.push([8, est.fk ? e.clon(s718, e.fillIdEstado[est.fk], null) : s718, est.txt, true]);
+        }
+        v = _mjPctGrupo(hijas, corte);
+        if (v !== null) cs.push([9, sPct, pc(v), false]);
+        cs.push([10, sHH, _mjNum(_mjHhGan(hijas, corte), 2), false]);
+        if (v !== null) {
+          vp = prev !== null ? _mjPctGrupo(hijas, prev) : 0.0;
+          cs.push([12, sDelta, dpc(v, vp), false]);
+        }
+        for (k = 0; k < nSem; k++) {
+          if (sem[k] > corte) continue;
+          vw = _mjPctGrupo(hijas, sem[k]);
+          if (vw === null) continue;
+          cs.push([C_SEM0 + k, sPctSem, pc(vw), false]);
+        }
+        v = 0;
+        for (k = 0; k < hijas.length; k++) v += _mjPeso(hijas[k]);
+        cs.push([C_AE, sHH, _mjNum(v, 2), false]);
+        R(rn, cs);
+        continue;
+      }
+      gid = grupoDe[p.it];
+      est = _mjEstadoTxt(p);
+      cs = [[1, s0, p.it, true], [2, s700, p.nombre, true], [3, s0, p.esp, true], [4, s1, p.und, true]];
+      if (p.lb0 !== null) cs.push([5, sCant, _mjNum(p.lb0, 4), false]);
+      cs.push([6, sHH, _mjNum(p.hh, 2), false]);
+      if (gid && e.fillIdPorGrupo[gid] !== undefined) cs.push([7, e.fillPorGrupo[gid], gid, true]);
+      if (est.txt) cs.push([8, est.fk ? e.xfEstado[e.claveEstado[est.fk]] : s0, est.txt, true]);
+      pcorte = p.pct_sem[corte];
+      if (pcorte === undefined) pcorte = null;
+      /* SIN tope: el tope al 100% vive solo en HH GANADAS y en los ponderados */
+      if (pcorte !== null) cs.push([9, sPct, pc(pcorte / 100.0), false]);
+      cs.push([10, sHH, _mjNum(_mjPeso(p) * _mjFr(p, corte), 2), false]);
+      cej = p.cant_sem[corte];
+      if (cej === undefined) cej = null;
+      if (cej === null && p.lb0 !== null && pcorte !== null) cej = p.lb0 * pcorte / 100.0;
+      if (cej !== null) cs.push([11, sCant, _mjNum(cej, 4), false]);
+      if (pcorte !== null) {
+        ant = (prev !== null && p.pct_sem[prev] !== undefined) ? p.pct_sem[prev] : 0.0;
+        cs.push([12, sDelta, dpc(pcorte / 100.0, ant / 100.0), false]);
+      }
+      for (k = 0; k < nSem; k++) {
+        if (sem[k] > corte) continue;
+        v = p.pct_sem[sem[k]];
+        if (v === undefined) v = 0.0;
+        cs.push([C_SEM0 + k, sPctSem, pc(v / 100.0), false]);
+        celdasV[rn + '|' + _mjColLetra(C_SEM0 + k)] = v;
+      }
+      cs.push([C_AE, sHH, _mjNum(_mjPeso(p), 2), false]);
+      R(rn, cs);
+    }
+    rn++;
+    R(rn, camposBloque(noTit(lst), sT_txt, sT_hh, sT_pct, sT_del,
+        'TOTAL ' + ordenEsp[i].toUpperCase(), resumenTxt(lst)));
+    ultimoTotal = rn;
+    cursor = rn + 1;
+  }
+
+  /* ---- leyendas al pie (los TRES renders explicados) --------------------- */
+  var T = ultimoTotal, ultima = T, b, hhEf = 0, hhLb0 = 0, det = [], gsum;
+  R(T + 2, [[1, sN_txt, 'LEYENDA · AGRUPACIONES', true]]);
+  for (i = 0; i < G.length; i++) {
+    gid = G[i].grupo_id;
+    rn = T + 3 + i;
+    var mem = [], hhg = 0;
+    for (j = 0; j < (G[i].miembros || []).length; j++) {
+      p = porIt[_mjClave(G[i].miembros[j])];
+      if (p) { mem.push(p); hhg += p.hh; }
+    }
+    e.hhGrupo[gid] = hhg;
+    cs = [[1, e.fillPorGrupo[gid], gid, true],
+          [2, s0, String(G[i].nombre || '').slice(0, 80), true],
+          [3, e.clon(s0, null, 1), String((G[i].miembros || []).length), false],
+          [4, sHH, _mjNum(hhg, 2), false],
+          [5, s0, G[i].representante || '', true]];
+    v = _mjPctGrupo(mem, corte);
+    if (v !== null) cs.push([9, sPct, pc(v), false]);
+    R(rn, cs);
+  }
+  b = T + 4 + G.length;
+  R(b, [[1, sN_txt, 'LEYENDA · ESTADO (columna H)', true]]);
+  var pares = [[_MJ_TXT_RETIRADA, 'Retirada del alcance', 'partida retirada del alcance en el aplicativo: no computa'],
+               [_MJ_TXT_ELIMINADA, 'Eliminada', 'partida borrada del aplicativo: no computa'],
+               [_MJ_TXT_SINHH, 'Sin HH', 'el admin apagó sus HH: no computa en el % semanal']];
+  for (i = 0; i < pares.length; i++) {
+    R(b + 1 + i, [[1, e.xfEstado[e.claveEstado[pares[i][1]]], pares[i][0], true], [2, s0, pares[i][2], true]]);
+  }
+  R(b + 4, [[1, s0, '(celda vacía) = en alcance y con HH', true],
+            [2, s0, 'computa en todos los ponderados', true]]);
+  R(b + 5, [[1, s0, 'En las filas de TÍTULO el estado se rotula solo si el título está retirado o ' +
+                    'eliminado: los títulos en alcance van sin marca.', true]]);
+  for (i = 0; i < todas.length; i++) { hhEf += _mjPeso(todas[i]); hhLb0 += todas[i].hh; }
+  for (i = 0; i < nEsp; i++) {
+    gsum = 0;
+    lst = bloques[ordenEsp[i]];
+    for (j = 0; j < lst.length; j++) { if (!lst[j].tit) gsum += _mjPeso(lst[j]); }
+    det.push(ordenEsp[i] + ' ' + _mjMiles(gsum));
+  }
+  R(b + 6, [[1, s718, 'Las columnas S' + sem[0] + '…S' + sem[nSem - 1] + ' llevan el % ACUMULADO al ' +
+    'jueves de esa semana. "-" = 0.00%; un % negativo se muestra con su signo (corrección a la baja ' +
+    'del aplicativo). Celda vacía = semana futura, o fila de TÍTULO/TOTAL sin ponderado posible porque ' +
+    'ninguna de sus partidas aporta HH (todas retiradas, eliminadas o con las HH apagadas: HH EFEC. = 0); ' +
+    'sus partidas sí muestran su % una a una.', true]]);
+  R(b + 7, [[1, s718, 'Los totales se ponderan por HH LB0 efectivas (columna oculta HH EFEC.): ' +
+    'retiradas, eliminadas y partidas con HH apagadas pesan 0.', true]]);
+  R(b + 8, [[1, s718, 'HH que computan: ' + _mjMiles(hhEf) + ' de ' + _mjMiles(hhLb0) + ' (' + det.join(' · ') + ').', true]]);
+  R(b + 9, [[1, s718, 'Δ SEM = % acumulado del corte menos el de la semana anterior (S' + corte + ' ' +
+    (prev !== null ? ('− S' + prev) : 'vs inicio') + '), restando los dos valores YA redondeados a 2 ' +
+    'decimales: el Δ cuadra exactamente con las dos celdas semanales que se ven. Un valor negativo es ' +
+    'una corrección a la baja del aplicativo.', true]]);
+  R(b + 10, [[1, s718, '% ACTUAL y la parrilla semanal muestran el % tal cual lo reporta el aplicativo, ' +
+    'sin tope: si una partida pasa de 100% se ve. El tope al 100% se aplica solo a HH GANADAS y a los ' +
+    'ponderados (TOTAL …), para que un exceso puntual no infle el avance del proyecto.', true]]);
+  ultima = b + 10;
+
+  /* ---- emision XML -------------------------------------------------------- */
+  var out = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+             '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
+             '<sheetPr><tabColor rgb="FF1F4E78"/></sheetPr>',
+             '<dimension ref="A1:' + L_AE + ultima + '"/>',
+             '<sheetViews><sheetView zoomScale="85" workbookViewId="0">' +
+             '<pane xSplit="2" ySplit="' + (4 + nEsp) + '" topLeftCell="C' + (5 + nEsp) + '" ' +
+             'activePane="bottomRight" state="frozen"/><selection pane="bottomRight" activeCell="C' +
+             (5 + nEsp) + '" sqref="C' + (5 + nEsp) + '"/></sheetView></sheetViews>',
+             '<sheetFormatPr baseColWidth="10" defaultRowHeight="12.75"/>',
+             '<cols>'];
+  var anchos = ['11', '49.5703125', '12.5', '6.5', '11.5', '10.5', '14', '26.5', '10', '11.5', '11.5', '9'];
+  for (i = 0; i < anchos.length; i++) {
+    out.push('<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + anchos[i] + '" customWidth="1"/>');
+  }
+  out.push('<col min="' + C_SEM0 + '" max="' + (C_SEM0 + nSem - 1) + '" width="9" customWidth="1"/>');
+  out.push('<col min="' + C_AE + '" max="' + C_AE + '" width="10.5" customWidth="1" hidden="1"/>');
+  out.push('</cols><sheetData>');
+  filas.sort(function (a, b2) { return a[0] - b2[0]; });
+  for (i = 0; i < filas.length; i++) {
+    cs = filas[i][1].slice(0);
+    cs.sort(function (a, b2) { return a[0] - b2[0]; });
+    out.push('<row r="' + filas[i][0] + '" spans="' + spans + '"' + filas[i][2] + '>');
+    for (j = 0; j < cs.length; j++) out.push(_mjCelda(_mjColLetra(cs[j][0]), filas[i][0], cs[j][1], cs[j][2], cs[j][3]));
+    out.push('</row>');
+  }
+  out.push('</sheetData><pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>');
+
+  /* filas de la hoja en las que cada agrupacion pinta su chip (para V2) */
+  e.avGrupoFila = {};
+  for (i = 0; i < filas.length; i++) {
+    cs = filas[i][1];
+    for (j = 0; j < cs.length; j++) {
+      if (cs[j][0] === 7 && typeof cs[j][2] === 'string' && e.fillIdPorGrupo[cs[j][2]] !== undefined) {
+        if (!e.avGrupoFila[cs[j][2]]) e.avGrupoFila[cs[j][2]] = [];
+        e.avGrupoFila[cs[j][2]].push(filas[i][0]);
+      }
+    }
+  }
+  e.infoAvance = { nSem: nSem, corte: corte, prev: prev, nEsp: nEsp, ultima: ultima,
+                   ultimoTotal: T, filas: filas.length, seriales: seriales, semanas: sem,
+                   celdasV: celdasV, dimension: 'A1:' + L_AE + ultima };
+  e.emitir();
+  return { xml: out.join(''), filas: filas.length, ultima: ultima, ultimoTotal: T,
+           nSem: nSem, nEsp: nEsp, corte: corte, prev: prev,
+           dimension: 'A1:' + L_AE + ultima, seriales: seriales, semanas: sem };
+}
+
+/* --- export opcional (Node); en el navegador quedan como globales ---------- */
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    _mjEstilos: _mjEstilos, _mjDeQPS: _mjDeQPS, _mjParaCrono: _mjParaCrono,
+    _mjHojaAvance: _mjHojaAvance, _mjClave: _mjClave, _mjPaleta: _mjPaleta,
+    _mjColLetra: _mjColLetra, _mjColIdx: _mjColIdx, _mjEstadoTxt: _mjEstadoTxt,
+    _mjPeso: _mjPeso, _mjPctGrupo: _mjPctGrupo, _mjSerialISO: _mjSerialISO,
+    _MjHoja: _MjHoja, _mjCeldasDeFila: _mjCeldasDeFila, _mjBlk: _mjBlk
+  };
+}
+
+/* --------- Los datos que alimentan las mejoras del libro ---------------------
+   Sale TODO del aplicativo: el catalogo completo (con las retiradas del alcance
+   y los titulos, que en la lista normal no aparecen), las agrupaciones de su
+   tabla, y el % de avance de cada partida al jueves de cada semana con la misma
+   vara del panel. Si manana se borra data y se carga otra, esto la refleja. */
+async function _mjDatos(semanas){
+  var cat=[];
+  try{cat=await sbSelect('actividades_create_110826',
+    'select=item,descripcion,especialidad,unidad,cantidad,hh_t,oferta_total,estado_alcance,es_titulo,eliminado,orden,sistema'+
+    '&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&order=orden.asc&limit=3000')||[]}catch(e){cat=[]}
+  var ags=[];
+  try{ags=(await _agPull()).map(function(g){
+    return {grupo_id:g.grupo_id,nombre:g.nombre||'',miembros:(g.miembros||[]).slice()}})}catch(e){}
+  /* las partidas vivas del aplicativo, por item, para sacarles el avance */
+  var vivas={};
+  (DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id&&!vivas[p.id])vivas[p.id]=p});
+  var enCat={};cat.forEach(function(r){if(r.item)enCat[String(r.item).trim()]=1});
+  function pctEn(p,iso){
+    try{return Math.round((Number(pctOfAt(p,iso))||0)*100)/100}catch(e){return 0}}
+  function fila(it,nom,esp,und,lb0,hh,estado,tit,orden){
+    var p=vivas[it];
+    var apag=false;try{apag=(typeof _hhOff==='function')&&!!_hhOff(it)}catch(e){}
+    var ps={},ult=0;
+    if(p&&!tit){
+      for(var i=0;i<semanas.length;i++){
+        var v=pctEn(p,semanas[i].fin);
+        ps[String(semanas[i].n)]=v;ult=v}}
+    var hhg=0;
+    if(!apag&&hh>0&&estado==='En alcance')hhg=Math.round(hh*Math.min(100,ult)/100*100)/100;
+    var cant=0;
+    if(p&&!tit){try{cant=Math.round((Number(acumCantAt(it,semanas[semanas.length-1].fin))||0)*100)/100}catch(e){}}
+    return {it:it,nom:nom,esp:esp,und:und,lb0:lb0,hh:hh,estado:estado,sin_hh:apag,tit:!!tit,
+      orden:orden,pct_sem:ps,pct:ult,hhg:hhg,cant:cant}}
+  var partidas=[];
+  cat.forEach(function(r){
+    var it=String(r.item||'').trim();if(!it)return;
+    var retirada=(r.eliminado===true)||String(r.estado_alcance||'')==='Retirada del alcance';
+    partidas.push(fila(it,String(r.descripcion||''),String(r.especialidad||''),String(r.unidad||''),
+      Number(r.cantidad)||0,Number(r.hh_t)||0,
+      retirada?'Retirada del alcance':'En alcance',
+      r.es_titulo===true,Number(r.orden)||0))});
+  /* las adicionales creadas en la app que todavia no estan en el catalogo */
+  (state.nuevas||[]).forEach(function(p){
+    if(!p||!p.id||enCat[p.id])return;
+    var m=null;try{m=metaOf(p.id)}catch(e){}
+    var hh=0;try{hh=Number(_hhDe(p))||0}catch(e){}
+    var nom='';try{nom=(typeof _nomAct==='function'?_nomAct(p):p.nombre)||p.id}catch(e){nom=p.id}
+    partidas.push(fila(p.id,String(nom),String(p.esp||''),String((m&&m.unidad)||p.unidad||'UND'),
+      Number(m&&m.total)||0,hh,'En alcance',false,9000+partidas.length))});
+  return {partidas:partidas,agrupaciones:ags,semanas:semanas}}
+
+var _MJ_DIACR=new RegExp('[' + '\u0300-\u036F' + ']','g');
 /* ---------- SOLO desde el aplicativo ---------- */
 var _WKCOLSET={};WK_COLS.forEach(function(c){_WKCOLSET[c]=1});
 /* vaciar las celdas de VALOR de las columnas semanales (las formulas se
@@ -3262,6 +4838,10 @@ function _wkExcel(){
     '<select id="_wkTope" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:11px">'+
     '<option value="tope" selected>Solo hasta el 100% del metrado LB0 (topar el sobremetrado)</option>'+
     '<option value="todo">Incluir el sobremetrado (todo lo ejecutado)</option></select>'+
+    '<label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#1B2433;background:#F4F7FB;border:1px solid #D7E0EC;border-radius:11px;padding:10px 11px;margin-bottom:11px;cursor:pointer">'+
+    '<input type="checkbox" id="_wkMej" checked style="margin-top:2px">'+
+    '<span><b>Colores por agrupación, estados y hoja AVANCE SEMANAL</b><br>'+
+    '<span style="font-size:11px;color:#5C6779">Pinta cada agrupación de su color en <i>De QPS</i> y en <i>Para cronograma 2-1</i>, marca las retiradas y las que no aportan HH, y agrega una hoja con todas las partidas y su % semana a semana.</span></span></label>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Cronogramas a incluir</label>'+
     '<div id="_wkCronBox" style="border:1.5px solid #C7D2E0;border-radius:11px;padding:9px 11px;margin-bottom:11px;background:#fff;font-size:12px;color:#5C6779">Buscando cronogramas\u2026</div>'+
     '<div id="_wkPrev" style="font-size:12px;color:#1B2433;background:#F4F7FB;border:1px solid #D7E0EC;border-radius:10px;padding:9px 11px;margin-bottom:11px;line-height:1.5">Calculando el avance al corte\u2026</div>'+
@@ -3429,6 +5009,66 @@ function _wkExcel(){
               else if(c.resto>0)r.avisos.push(c.id+': '+c.resto+' hh del alcance no están atadas a ninguna tarea y no quedan tareas sin mapear — se reparten entre todas');
               else if(!c.conHH)r.avisos.push(c.id+': el .xer no trae horas — su curva se reparte por duración, con las '+c.hh+' hh que marcaste en Alcance')})}}
       }catch(_ecr){r.avisos.push('No se pudo agregar la hoja CRONOGRAMAS: '+String((_ecr&&_ecr.message)||_ecr))}
+      /* colores por agrupacion, estados y la hoja AVANCE SEMANAL */
+      var mejInfo=null;
+      try{
+        var quiereMej=((document.getElementById('_wkMej')||{}).checked!==false);
+        if(quiereMej&&typeof _mjEstilos==='function'){
+          var semM=_wkSemanas();
+          var dm=await _mjDatos(semM);
+          var hDQ=hojas['De QPS'],hPC=hojas['Para cronograma 2-1'];
+          var ids=_mjEstilos(await leer('xl/styles.xml'),dm.agrupaciones);
+          var grupoPorItem={},estadoPorItem={};
+          dm.agrupaciones.forEach(function(g){(g.miembros||[]).forEach(function(m){
+            grupoPorItem[_mjClave(m)]=g.grupo_id})});
+          dm.partidas.forEach(function(q){estadoPorItem[_mjClave(q.it)]=q});
+          var qps0=(hDQ&&mapa[hDQ])?await leer(hDQ):null;
+          if(qps0)cambiar[hDQ]=_mjDeQPS(qps0,ss,grupoPorItem,estadoPorItem,ids);
+          /* que fila de 'Para cronograma 2-1' es cada agrupacion: por la columna K
+             (fila del QPS), por el item de la A, o por el nombre del grupo */
+          if(hPC&&mapa[hPC]&&qps0){
+            var cro0=await leer(hPC);
+            var hq=new _MjHoja(qps0),kAit={};
+            hq.rows().forEach(function(rn){
+              if(rn<5)return;
+              var cs=_mjCeldasDeFila(hq.filas[rn][1],ss);
+              var a=String(cs.A||'').trim(),k=String(cs.K||'').trim();
+              if(a&&/^\d+$/.test(k))kAit[+k]=_mjClave(a)});
+            var norm=function(t){
+              t=String(t||'');
+              try{t=t.normalize('NFKD').replace(_MJ_DIACR,'')}catch(_en){}
+              return t.replace(/\s+/g,' ').trim().toLowerCase()};
+            var nomGrupo=[];
+            dm.agrupaciones.forEach(function(g){
+              var nb=norm(g.nombre);if(nb.length>=15)nomGrupo.push([nb,g.grupo_id])});
+            var hc=new _MjHoja(cro0),grupoPorFila={};
+            hc.rows().forEach(function(rn){
+              if(rn<3)return;
+              var cs=_mjCeldasDeFila(hc.filas[rn][1],ss),gid=null;
+              var k=String(cs.K||'').trim();
+              if(/^\d+$/.test(k)&&kAit[+k])gid=grupoPorItem[kAit[+k]]||null;
+              if(!gid&&String(cs.A||'').trim())gid=grupoPorItem[_mjClave(cs.A)]||null;
+              if(!gid){
+                var nb=norm(cs.B);
+                if(nb.length>=15){
+                  var cand=[];
+                  nomGrupo.forEach(function(x){if(x[0]===nb&&cand.indexOf(x[1])<0)cand.push(x[1])});
+                  if(!cand.length)nomGrupo.forEach(function(x){
+                    if((nb.indexOf(x[0])===0||x[0].indexOf(nb)===0)&&cand.indexOf(x[1])<0)cand.push(x[1])});
+                  if(cand.length===1)gid=cand[0]}}
+              if(gid)grupoPorFila[rn]=gid});
+            cambiar[hPC]=_mjParaCrono(cro0,ss,grupoPorFila,ids)}
+          var av=_mjHojaAvance(dm,semM,ids);
+          var nh2=await _wkNuevaHoja(entradas,mapa,leer,'AVANCE SEMANAL',av.xml,enc);
+          cambiar['xl/_rels/workbook.xml.rels']=nh2.rels;
+          cambiar['[Content_Types].xml']=nh2.ct;
+          wbx=nh2.wb;
+          /* el styles.xml definitivo es el de DESPUES de la ultima llamada */
+          cambiar['xl/styles.xml']=ids.xml;
+          mejInfo={filas:av.filas,grupos:dm.agrupaciones.length,partidas:dm.partidas.length,
+            retiradas:dm.partidas.filter(function(q){return q.estado==='Retirada del alcance'}).length,
+            sinHH:dm.partidas.filter(function(q){return q.sin_hh}).length}}
+      }catch(_emj){r.avisos.push('No se pudieron aplicar los colores y la hoja AVANCE SEMANAL: '+String((_emj&&_emj.message)||_emj))}
       /* recalcular todo al abrir */
       if(/<calcPr[^>]*fullCalcOnLoad/.test(wbx)){}
       else if(/<calcPr/.test(wbx))wbx=wbx.replace(/<calcPr([^>]*?)\/>/,'<calcPr$1 fullCalcOnLoad="1"/>');
@@ -3483,6 +5123,7 @@ function _wkExcel(){
         ' · S'+semN+' · '+r.escritas+' fila(s) en P6-2'+(solo?' (lo nuevo de S'+semN+')':'')+' · carátula en '+semN+
         (curvas?('<br>Curvas: la serie del Actual se extendio hasta S'+semN+' en '+curvas+' rango(s) de grafico'):'')+
         (cronInfo?('<br>Hoja <b>CRONOGRAMAS</b> agregada con '+cronInfo.n+' cronograma(s): '+cronInfo.ids.join(' · ')+' + la curva real de la app'):'')+
+        (mejInfo?('<br>Hoja <b>AVANCE SEMANAL</b> con '+mejInfo.partidas+' partidas · '+mejInfo.grupos+' agrupaciones con color propio · '+mejInfo.retiradas+' retiradas y '+mejInfo.sinHH+' sin HH marcadas'):'')+
         (phy?('<br>% del proyecto (universo de la app, '+pctA.hhT+' hh): <b>'+(Math.round(pctA.pct*1e4)/100)+'%</b> → estampado en PHYSICAL % PROGRESS · semana: '+(Math.round((pctA.pct-phy.previo)*1e4)/100)+'%'):'')+'</div>';
       var adic=(r.agregadas||[]);
       if(adic.length){H+='<div style="background:#F1ECFA;border:1px solid #B9A3DE;border-radius:10px;padding:8px 10px;font-size:11.5px;color:#5B3A8A;margin-bottom:8px;line-height:1.6">\u2795 '+adic.length+' partida(s) ADICIONAL(es) agregadas al final de P6-2 (con su formato): '+adic.map(function(x){return '<b>'+x.it+'</b> fila '+x.fila}).join(' \u00b7 ')+'</div>'}
@@ -4594,7 +6235,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823a7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823b1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
