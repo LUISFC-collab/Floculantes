@@ -5169,11 +5169,16 @@ function _wkRemapSelf(f,fn){
 /* Reescribe las referencias a PROGRAMACION que hace OTRA hoja */
 function _wkRemapProg(xml,mapa){
   var n=0;
-  var out=String(xml).replace(/('PROGRAMACION'|PROGRAMACION)!(\$?)([A-Z]{1,2})(\$?)(\d+)/g,
-    function(t,h,d1,col,d2,fila){
-      var nf=mapa[+fila];
-      if(nf==null||nf===+fila)return t;
-      n++;return h+'!'+d1+col+d2+nf});
+  var out=String(xml).replace(
+    /('PROGRAMACION'|PROGRAMACION)!(\$?)([A-Z]{1,2})(\$?)(\d+)(?::(\$?)([A-Z]{1,2})(\$?)(\d+))?/g,
+    function(t,h,d1,c1,d2,r1,d3,c2,d4,r2){
+      var n1=mapa[+r1],n2=(r2!==undefined)?mapa[+r2]:null;
+      var cam=(n1!=null&&n1!==+r1)||(n2!=null&&n2!==+r2);
+      if(!cam)return t;
+      n++;
+      var q=h+'!'+d1+c1+d2+(n1==null?r1:n1);
+      if(r2!==undefined)q+=':'+d3+c2+d4+(n2==null?r2:n2);
+      return q});
   return {xml:out,n:n}}
 function _wkPartirFilas(xml){
   var ini=xml.indexOf('<sheetData>'),fin=xml.indexOf('</sheetData>');
@@ -7278,7 +7283,7 @@ function _wkExcel(){
          un SUMIF por codigo de tarea. Aqui se escribe esa hoja para cada
          cronograma elegido y se apunta PROGRAMACION al que corresponde: no
          se toca ni una formula de las verdes, solo de donde leen. */
-      var _plMsg='';
+      var _plMsg='',_mapa3=null;
       try{
         var _eleg=[].slice.call(document.querySelectorAll('._wkCk:checked')).map(function(k){return k.value});
         var _Lc=(await _crPull()).filter(function(z){return _eleg.indexOf(z.cron_id)>=0});
@@ -7313,12 +7318,13 @@ function _wkExcel(){
               var _t3=_wkTresLineas(_xpr,_Lc);
               if(_t3.mapa){
                 cambiar[_hPr]=_t3.xml;
-                /* las hojas que citan a PROGRAMACION por fila */
-                var _dep=['METRADO','COSTO','PHYSICAL % PROGRESS','PPC','PANEL CONTROL','PPC ANALISIS','3WLA','Dashboard'];
+                /* TODAS las hojas, no una lista: la de PPC se llama 'PPC ' con un
+                   espacio al final y cualquier lista escrita a mano la deja fuera */
+                _mapa3=_t3.mapa;
                 var _reap=0;
-                for(var _di=0;_di<_dep.length;_di++){
-                  var _hd=hojas[_dep[_di]];
-                  if(!_hd||!mapa[_hd])continue;
+                for(var _nh in hojas){
+                  var _hd=hojas[_nh];
+                  if(_nh==='PROGRAMACION'||!_hd||!mapa[_hd])continue;
                   var _xd=cambiar[_hd]||(await leer(_hd));
                   var _rr=_wkRemapProg(_xd,_t3.mapa);
                   if(_rr.n){cambiar[_hd]=_rr.xml;_reap+=_rr.n}}
@@ -7341,6 +7347,10 @@ function _wkExcel(){
       else if(/<calcPr/.test(wbx))wbx=wbx.replace(/<calcPr([^>]*?)\/>/,'<calcPr$1 fullCalcOnLoad="1"/>');
       else wbx=wbx.replace('</workbook>','<calcPr fullCalcOnLoad="1"/></workbook>');
       cambiar['xl/workbook.xml']=wbx;
+      /* los definedName tambien apuntan por fila: el del autofiltro se quedaba
+         diciendo la fila vieja */
+      if(_mapa3){var _rw=_wkRemapProg(cambiar['xl/workbook.xml'],_mapa3);
+        if(_rw.n)cambiar['xl/workbook.xml']=_rw.xml}
       /* las curvas: la serie del Actual crece hasta la semana elegida */
       var curvas=0;
       if(phy){
@@ -8502,7 +8512,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823h6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823h7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
