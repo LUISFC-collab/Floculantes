@@ -5297,11 +5297,13 @@ function _wkPanel(xml,crons,filas){
           return '<c r="'+col+fila+'"'+at.replace(/\s*t="[^"]*"/,'')+
             ' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(txt)+'</t></is></c>'});
       return a+cu2+b})};
-  out=pon(out,18,'AC',crons[0].cron_id);
-  if(crons.length>1)out=pon(out,19,'AC',crons[1].cron_id);
-  /* los dos rotulos que nombran el cronograma de referencia */
-  out=out.replace(/RESPECTO AL CRONOGRAMA LB0/g,function(){n++;
-    return 'RESPECTO AL CRONOGRAMA '+crons[0].cron_id});
+  var _id=function(c){return (c&&(c.id||c.cron_id))||''};
+  out=pon(out,18,'AC',_id(crons[0]));
+  if(crons.length>1)out=pon(out,19,'AC',_id(crons[1]));
+  /* Los rotulos son cadenas COMPARTIDAS: cambiar el texto en el XML de la
+     hoja no hace nada, hay que reescribir la celda como texto propio. */
+  [20,32].forEach(function(fx){
+    out=pon(out,fx,'AC','RESPECTO AL CRONOGRAMA '+_id(crons[0]))});
   /* la fila 19, con las mismas formulas que la 18 pero contra las filas del
      segundo cronograma */
   if(crons.length>1&&filas&&filas.length>1){
@@ -5315,7 +5317,7 @@ function _wkPanel(xml,crons,filas){
         .replace(/P218:AG218/g,'P'+ac+':AG'+ac)
         .replace(/P219:AG219/g,'P219:AG219')
         .replace(/<c r="AC19"((?:\s[^>]*?)?)(?:\/>|>[\s\S]*?<\/c>)/,
-          '<c r="AC19"$1 t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(crons[1].cron_id)+'</t></is></c>');
+          '<c r="AC19"$1 t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(_id(crons[1]))+'</t></is></c>');
       var nueva='<row r="19"'+f18[1]+'>'+cuerpo+'</row>';
       var re19=/<row r="19"(?:\s[^>]*?)?(?:\/>|>[\s\S]*?<\/row>)/;
       if(re19.test(out)){out=out.replace(re19,nueva);n++}
@@ -8945,7 +8947,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823j3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823j4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
