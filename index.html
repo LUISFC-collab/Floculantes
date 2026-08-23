@@ -1063,7 +1063,7 @@ function _rtOnCambio(tabla){
     return}
   if(tabla==='cronogramas_create_230826'||tabla==='cron_tareas_create_230826'||tabla==='cron_alcance_create_230826'){
     try{if(window._crTar)window._crTar={};
-        _crPull().then(function(){return _crAlcTodos()}).then(function(){
+        _crPull().then(function(){return _crAlcTodos()}).then(function(){return _crConteos()}).then(function(){
           if(document.getElementById('_crOv'))_crPinta()})}catch(e){}return}
  if(tabla==='nuevas'){try{if(typeof syncNow==='function')syncNow()}catch(e){}}
 }
@@ -2374,9 +2374,26 @@ function _crShow(){
       var L=_crLista(),ps=[];
       L.forEach(function(c){ps.push(_crHuerfanas(c.cron_id,(window._crAl||{})[c.cron_id]||{})
         .then(function(r){window._crHu[c.cron_id]=r}))});
+      ps.push(_crConteos());
       return Promise.all(ps)})
     .then(_crPinta);
 }
+/* Cuantas tareas tiene HOY cada cronograma. La cabecera guarda el numero de
+   cuando se cargo el .xer, y despues se anaden o se quitan tareas. */
+async function _crConteos(){
+  window._crNT=window._crNT||{};
+  var L=_crLista();
+  for(var i=0;i<L.length;i++){
+    var c=L[i];
+    try{
+      var tar=await _crTareas(c.cron_id);
+      var u=_crUniverso(c.cron_id,(window._crAl||{})[c.cron_id]);
+      var car=_crCarga(tar,u.items);
+      window._crNT[c.cron_id]={n:tar.length,
+        conHoras:car.filter(function(x){return !x.info}).length,
+        info:car.filter(function(x){return x.info}).length}
+    }catch(e){}}
+  return true}
 function _crPinta(){
   var B=document.getElementById('_crBody');if(!B)return;
   var L=_crLista();
@@ -2392,15 +2409,21 @@ function _crPinta(){
       '<span style="flex:1;min-width:150px;color:#cfe3ff;font-weight:700;font-size:12px;overflow-wrap:anywhere">'+esc(c.nombre||c.proj_nombre||'')+'</span>'+
       '</div>'+
       '<div style="font-size:11px;color:#9db4d6;margin-top:5px;line-height:1.6">'+
-      (c.n_tareas||0)+' tareas · '+((c.hh_total>0)?((Math.round(c.hh_total*10)/10)+' hh propias'):'sin horas propias')+
+      (function(){
+        var nt=(window._crNT||{})[c.cron_id];
+        var n=nt?nt.n:(c.n_tareas||0);
+        return n+' tareas'+(nt?(' · '+nt.conHoras+' con horas · '+nt.info+' informativas'):'')})()+
       ' · fecha de datos '+esc(c.fecha_datos||'—')+'<br>'+
       'rango '+esc(c.inicio||'—')+' → '+esc(c.fin||'—')+
-      ' · <b style="color:#9FE8B0">alcance: '+u.n+' partidas · '+u.hh+' hh</b>'+
+      ' · <b style="color:#9FE8B0">'+u.n+' partidas · '+u.hh+' hh</b>'+
       (function(){var mm=(window._crAl||{})[c.cron_id]||{},cf=0;
         for(var k in mm)if(mm[k].ini||mm[k].fin)cf++;
         var hu=(window._crHu||{})[c.cron_id];
         return '<br><span style="color:'+(cf?'#8ECBF5':'#7d8590')+'">fechas por partida: '+
-          (cf?(cf+' de '+u.n):'ninguna todavía')+'</span>'+
+          (cf?(cf+' de '+u.n):'ninguna todavía')+
+          ((c.hh_total>0&&Math.abs(c.hh_total-u.hh)>0.5)
+            ? (' · el .xer traía '+(Math.round(c.hh_total*10)/10)+' hh suyas, pero las que cuentan son las del alcance')
+            : '')+'</span>'+
           (hu?('<br><span style="color:'+(hu.n?'#F0A3A3':'#9FE8B0')+';font-weight:800">'+
             (hu.n?('⚠ '+hu.n+' partida(s) con HH incluidas SIN tarea · '+hu.hh+' hh'):'✓ toda partida con HH incluida está en una tarea')+
             '</span>'):'')})()+'</div>'+
@@ -8135,7 +8158,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823g7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823g8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
