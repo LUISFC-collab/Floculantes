@@ -6772,15 +6772,26 @@ function _wkExcel(){
   document.getElementById('_wkNo').onclick=function(){ov.remove()};
   var file=null;
   /* los cronogramas cargados: se marcan los que deben salir en el reporte */
-  (function(){try{_crPull().then(function(L){
+  (function(){try{(async function(){
+    var L=await _crPull();
+    try{if(typeof _crAlcTodos==='function')await _crAlcTodos()}catch(_e){}
+    try{if(typeof _crConteos==='function')await _crConteos()}catch(_e){}
+    return L})()
+    .then(function(L){
     var B=document.getElementById('_wkCronBox');if(!B)return;
     if(!L.length){B.innerHTML='No hay cronogramas cargados. Cárgalos en <b>📅 Cronogramas</b> (dentro de Reporte semanal) para que sus curvas salgan en el Excel.';return}
+    B.style.overflowX='hidden';
     B.innerHTML=L.map(function(c){
-      return '<label style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;cursor:pointer">'+
-        '<input type="checkbox" class="_wkCk" value="'+esc(c.cron_id)+'"'+(c.activo!==false?' checked':'')+' style="margin-top:2px">'+
-        '<span style="flex:1;min-width:0"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:'+esc(c.color||'#2E86C1')+';margin-right:5px"></span>'+
-        '<b style="color:#1F3864">'+esc(c.cron_id)+'</b> <span style="color:#5C6779">'+esc(String(c.nombre||'').slice(0,42))+'</span>'+
-        '<br><span style="font-size:10.5px;color:#8A94A6">'+(c.n_tareas||0)+' tareas · '+esc(c.inicio||'—')+' → '+esc(c.fin||'—')+'</span></span></label>'}).join('')})}catch(e){}})();
+      var nt=(window._crNT||{})[c.cron_id];
+      var n=nt?nt.n:(c.n_tareas||0);
+      return '<label style="display:flex;gap:7px;align-items:center;padding:3px 0;cursor:pointer;line-height:1.35">'+
+        '<input type="checkbox" class="_wkCk" value="'+esc(c.cron_id)+'"'+(c.activo!==false?' checked':'')+' style="flex:none;margin:0">'+
+        '<span style="flex:none;width:9px;height:9px;border-radius:2px;background:'+esc(c.color||'#2E86C1')+'"></span>'+
+        '<b style="flex:none;color:#1F3864">'+esc(c.cron_id)+'</b>'+
+        '<span style="flex:1;min-width:0;color:#5C6779;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
+          esc(String(c.nombre||''))+'</span>'+
+        '<span style="flex:none;font-size:10.5px;color:#8A94A6;white-space:nowrap">'+n+' tar · '+
+          esc(String(c.inicio||'').slice(5))+'→'+esc(String(c.fin||'').slice(5))+'</span></label>'}).join('')})}catch(e){}})();
   /* la vista previa del corte: que el % de la semana no parezca error */
   var previa=function(){try{
     var n2=+document.getElementById('_wkSel').value;
@@ -8160,7 +8171,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823g9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823h1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
