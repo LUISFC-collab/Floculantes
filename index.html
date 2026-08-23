@@ -3311,6 +3311,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
           '<b style="color:#8ECBF5;flex:none;width:52px">'+esc(x.cod)+'</b>'+
           '<span style="flex:1;min-width:0;overflow-wrap:anywhere;color:'+(x.info?'#9db4d6':'inherit')+'">'+esc(x.nom)+'</span>'+
           (x.info?chip('SIN HH','#8DD6ED','#0e1c28'):'')+
+          (x.part?chip('REPARTIDA','#C39BD3','#1a1526'):'')+
           (g?chip(g,colG(g),'#101a24'):'')+
           '<span style="flex:none;color:#9db4d6">'+x.dias+'d</span>'+
           '<span style="flex:none;color:'+(x.info?'#5C6779':'#9FE8B0')+';width:60px;text-align:right;white-space:nowrap">'+x.hh+' hh</span>'+
@@ -4167,7 +4168,9 @@ async function _crMapeoUI(c){
     var B=document.getElementById('_crMapBody');
     B.innerHTML=H||'<div style="padding:14px;color:#7d8590;text-align:center">Sin coincidencias</div>';
     B.querySelectorAll('._crMt').forEach(function(d){d.onclick=function(){
-      _crMapPick(tar[+d.getAttribute('data-i')],P,porId,function(){sucios[tar[+d.getAttribute('data-i')].task_code]=1;pinta();cuenta()})}});
+      var _otros={};
+      tar.forEach(function(t2){(t2.items||[]).forEach(function(i){(_otros[i]=_otros[i]||[]).push(t2.task_code)})});
+      _crMapPick(tar[+d.getAttribute('data-i')],P,porId,function(){sucios[tar[+d.getAttribute('data-i')].task_code]=1;pinta();cuenta()},_otros)}});
     cuenta()}
   document.getElementById('_crMapFalta').onclick=async function(){
     var hu=await _crHuerfanas(c.cron_id);
@@ -4206,7 +4209,8 @@ async function _crMapeoUI(c){
     }catch(e){b.disabled=false;b.textContent='💾 Guardar mapeo';toast('⚠ '+((e&&e.message)||e))}};
   pinta();
 }
-function _crMapPick(t,P,porId,onOk){
+function _crMapPick(t,P,porId,onOk,otros){
+  otros=otros||{};
   var sel={};(t.items||[]).forEach(function(i){sel[i]=1});
   var ov=document.createElement('div');ov.id='_crPickOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
@@ -4232,7 +4236,15 @@ function _crMapPick(t,P,porId,onOk){
       H+='<div class="_crPk" data-id="'+esc(p.id)+'" style="display:flex;gap:9px;align-items:flex-start;padding:7px 8px;border-bottom:1px solid #16202e;cursor:pointer">'+
         '<span style="flex:none;width:19px;height:19px;border-radius:5px;border:2px solid '+(on?'#3FD592':'#33415c')+';background:'+(on?'#1E7A46':'transparent')+';color:#fff;font-size:12px;font-weight:900;text-align:center;line-height:16px">'+(on?'✓':'')+'</span>'+
         '<span style="flex:1;min-width:0"><b style="color:#8ECBF5;font-size:11.5px">'+esc(p.id)+'</b> '+
-        '<span style="font-size:11.5px;overflow-wrap:anywhere">'+esc(p.nom)+'</span></span>'+
+        '<span style="font-size:11.5px;overflow-wrap:anywhere">'+esc(p.nom)+'</span>'+
+        (function(){
+          var ot=(otros[p.id]||[]).filter(function(x){return x!==t.task_code});
+          if(!ot.length)return '';
+          var n=ot.length+(on?1:0);
+          return '<br><span style="color:#C39BD3;font-size:10.5px;font-weight:800">ya está en '+
+            esc(ot.join(', '))+(on?(' · se reparte entre '+n+': '+(Math.round(p.hh/n*100)/100)+' hh a cada una'):
+            ' · si la marcas aquí, sus HH se repartirán')+'</span>'})()+
+        '</span>'+
         '<span style="flex:none;color:#9FE8B0;font-size:11px;font-weight:800">'+p.hh+'</span></div>'});
     var B=document.getElementById('_crPkBody');
     B.innerHTML=H||'<div style="padding:14px;color:#7d8590;text-align:center">Sin coincidencias</div>';
@@ -7984,7 +7996,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823f9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823g1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
