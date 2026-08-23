@@ -5144,6 +5144,72 @@ function _wkHojaCron(cronos,actual,semanas){
     '<drawing r:id="rIdDr1"/>'+
     '</worksheet>';
   return {xml:xml,filaDe:filaDe,ultCol:ult,ultFila:n-1,colIni:C0}}
+/* ---------------- Una hoja P6 por cronograma, hecha por la app -------------
+   La plantilla trae UNA hoja 'P6-2' con la lista de actividades, y esa lista
+   no sale del aplicativo: son formulas contra la hoja 'Partidas', que viene
+   congelada en el archivo. De ahi que el libro siguiera mostrando actividades
+   viejas por mucho que se cargaran cronogramas nuevos.
+
+   Aqui se genera 'P6-LB0', 'P6-LB1'... una por cronograma marcado, con el
+   mismo reparto de columnas que la original, para que las hojas verdes lean
+   de la que les toca:
+     A ITEM QPS   B CANT   C UND   D HH   E ITEM (codigo P6)
+     F PARTIDA    G DURAC. (d)     H INICIO    I FIN
+   Las semanas P..AG se dejan como estan: ahi va lo REAL ejecutado, que es
+   comun a todos los cronogramas y lo escribe el aplicativo aparte. */
+function _wkHojaP6(cron,tareas,uItems,semanas){
+  var rp=_crReparto(tareas);
+  var filas=(tareas||[]).slice().sort(function(a,b){return (a.orden||0)-(b.orden||0)});
+  var r=[];
+  var c1=_crXlsCel('A',1,'ACTIVIDADES DE '+cron.cron_id+' — generado por el aplicativo. '+
+    'Una fila por tarea del cronograma, en su orden. Las hojas del reporte leen de aquí.',true);
+  (semanas||[]).forEach(function(s,i){
+    c1+=_crXlsCel(_wkgCol('P',i),1,'S'+s.n,true)});
+  r.push('<row r="1">'+c1+'</row>');
+  var cab=['ITEM QPS','CANT.','UND','HH','ITEM','PARTIDA','DURAC. (d)','INICIO','FIN'];
+  var c2='';
+  cab.forEach(function(h,i){c2+=_crXlsCel(String.fromCharCode(65+i),2,h,true)});
+  (semanas||[]).forEach(function(s,i){
+    c2+=_crXlsCel(_wkgCol('P',i),2,s.serFin,false)});
+  r.push('<row r="2">'+c2+'</row>');
+  var porId={};_crPartidas().forEach(function(p){porId[p.id]=p});
+  var n=3,nAct=0;
+  filas.forEach(function(t){
+    var ms=(t.items||[]).filter(function(i){return uItems[i]!=null});
+    var hh=0;ms.forEach(function(i){hh+=(Number(uItems[i])||0)/_crVeces(rp,i)});
+    /* la cantidad y la unidad solo tienen sentido si la tarea es UNA partida */
+    var cant='',und='',qps='';
+    if(ms.length===1&&porId[ms[0]]){
+      var pp=porId[ms[0]];
+      cant=(pp.cant===''||pp.cant==null)?'':pp.cant;und=pp.und||'';qps=pp.id}
+    else if(ms.length>1)qps='('+ms.length+' partidas)';
+    var d=(t.ini&&t.fin)?(Math.round((Date.parse(t.fin+'T00:00:00Z')-Date.parse(t.ini+'T00:00:00Z'))/864e5)+1):0;
+    var c='';
+    c+=_crXlsCel('A',n,qps,true);
+    c+=_crXlsCel('B',n,cant,false);
+    c+=_crXlsCel('C',n,und,true);
+    c+=_crXlsCel('D',n,Math.round(hh*100)/100,false);
+    c+=_crXlsCel('E',n,String(t.task_code||''),true);
+    c+=_crXlsCel('F',n,String(t.nombre||''),true);
+    c+=_crXlsCel('G',n,d||'',false);
+    c+=_crXlsCel('H',n,_crASerial(t.ini),false);
+    c+=_crXlsCel('I',n,_crASerial(t.fin),false);
+    r.push('<row r="'+n+'">'+c+'</row>');n++;nAct++});
+  var ultCol=(semanas&&semanas.length)?_wkgCol('P',semanas.length-1):'I';
+  return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<dimension ref="A1:'+ultCol+(n-1)+'"/>'+
+    '<sheetViews><sheetView workbookViewId="0">'+
+    '<pane xSplit="6" ySplit="2" topLeftCell="G3" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
+    '<sheetFormatPr defaultRowHeight="15"/>'+
+    '<cols><col min="1" max="1" width="13" customWidth="1"/>'+
+    '<col min="2" max="4" width="11" customWidth="1"/>'+
+    '<col min="5" max="5" width="11" customWidth="1"/>'+
+    '<col min="6" max="6" width="52" customWidth="1"/>'+
+    '<col min="7" max="9" width="12" customWidth="1"/></cols>'+
+    '<sheetData>'+r.join('')+'</sheetData>'+
+    '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
+    actividades:nAct, ultima:n-1}}
 /* ---------------- Las curvas de la hoja PHYSICAL % PROGRESS ----------------
    Ahi viven las series que dibujan los graficos:
      fila 218  % PROGRAMADO ACUMULADO (LB0)   <- valores pegados de la plantilla
@@ -5551,7 +5617,7 @@ function _wkArmaCelda(c){
   return '<c r="'+c.col+c.r+'"'+c.at+'>'+c.inner+'</c>'}
 /* crons: [{cron_id,...}] en el orden en que deben salir. La primera se queda
    con la fila que ya existe; las demas son clones nuevos. */
-function _wkTresLineas(xml,crons){
+function _wkTresLineas(xml,crons,p6s){
   var res={xml:xml,mapa:null,clones:0,ultima:0,aviso:''};
   if(!crons||crons.length<2)return res;
   var P=_wkPartirFilas(xml);
@@ -5571,6 +5637,7 @@ function _wkTresLineas(xml,crons){
   res.mapa=mapa;res.ultima=nuevo;res.clones=nPlan*(crons.length-1);
   /* 3) reescribir */
   var esSem=function(col){return _wkColNum(col)>=_WK_SEM1};
+  var _p6base=(p6s&&p6s[0])?p6s[0].hoja:'';
   var fnNorm=function(fila){return mapa[fila]==null?null:mapa[fila]};
   var partes=[];
   orden.forEach(function(o){
@@ -5580,6 +5647,8 @@ function _wkTresLineas(xml,crons){
       var cs=_wkCeldas(f.cuerpo).map(function(c){
         c.r=o.r;
         if(c.inner)c.inner=c.inner.replace(/<f>([\s\S]*?)<\/f>/,function(_t,ff){
+          /* la fila que ya estaba pasa a leer la lista del primer cronograma */
+          if(_p6base&&esPlan[f.r])ff=ff.split("'P6-2'!").join("'"+_p6base+"'!");
           return '<f>'+_wkRemapSelf(ff,fnNorm)+'</f>'});
         /* la etiqueta de la linea: la de plan pasa a decir de que cronograma es */
         if(c.col==='M'&&esPlan[f.r]){
@@ -5592,6 +5661,8 @@ function _wkTresLineas(xml,crons){
     var fnClon=function(fila,col){
       if(fila===b.r)return esSem(col)?o.r:base;
       return mapa[fila]==null?null:mapa[fila]};
+    var _p6c=(p6s&&p6s[o.i])?p6s[o.i].hoja:'';
+    var _p6b=(p6s&&p6s[0])?p6s[0].hoja:'';
     var cc=_wkCeldas(b.cuerpo).map(function(c0){
       var c={col:c0.col,r:o.r,at:c0.at,inner:c0.inner};
       if(c.col==='M'){
@@ -5602,6 +5673,7 @@ function _wkTresLineas(xml,crons){
       if(!esSem(c.col)){c.at=c.at.replace(/\s*t="[^"]*"/,'');c.inner=null;return _wkArmaCelda(c)}
       if(c.inner)c.inner=c.inner.replace(/<f>([\s\S]*?)<\/f>/,function(_t,ff){
         ff=ff.split("ACTIVITI_PLAN ("+crons[0].cron_id+")").join("ACTIVITI_PLAN ("+cid+")");
+        if(_p6c)ff=ff.split("'P6-2'!").join("'"+_p6c+"'!");
         return '<f>'+_wkRemapSelf(ff,fnClon)+'</f>'});
       /* el valor viejo ya no vale: lo recalcula Excel al abrir */
       if(c.inner)c.inner=c.inner.replace(/<v>[\s\S]*?<\/v>/,'');
@@ -7638,7 +7710,7 @@ function _wkExcel(){
          un SUMIF por codigo de tarea. Aqui se escribe esa hoja para cada
          cronograma elegido y se apunta PROGRAMACION al que corresponde: no
          se toca ni una formula de las verdes, solo de donde leen. */
-      var _plMsg='',_mapa3=null,_curvasCron=[];
+      var _plMsg='',_mapa3=null,_curvasCron=[],_p6s=[];
       try{
         var _eleg=[].slice.call(document.querySelectorAll('._wkCk:checked')).map(function(k){return k.value});
         var _Lc=(await _crPull()).filter(function(z){return _eleg.indexOf(z.cron_id)>=0});
@@ -7655,7 +7727,14 @@ function _wkExcel(){
             var _xmlP=_crHojaPlan(_cc,_fil,_rej);
             var _nomP='ACTIVITI_PLAN ('+_cc.cron_id+')';
             if(hojas[_nomP]&&mapa[hojas[_nomP]])cambiar[hojas[_nomP]]=_xmlP;
-            else{await _wkNuevaHoja(entradas,mapa,leer,_nomP,_xmlP,enc,pkgH);_nuev++}}
+            else{await _wkNuevaHoja(entradas,mapa,leer,_nomP,_xmlP,enc,pkgH);_nuev++}
+            /* y su lista de actividades, que es lo que hasta ahora venia
+               congelado en la hoja Partidas de la plantilla */
+            var _p6=_wkHojaP6(_cc,_tt,_uu.items,_rej);
+            var _nomP6='P6-'+_cc.cron_id;
+            if(hojas[_nomP6]&&mapa[hojas[_nomP6]])cambiar[hojas[_nomP6]]=_p6.xml;
+            else{await _wkNuevaHoja(entradas,mapa,leer,_nomP6,_p6.xml,enc,pkgH);_nuev++}
+            _p6s.push({id:_cc.cron_id,hoja:_nomP6,n:_p6.actividades})}
           var _hPr=hojas['PROGRAMACION'];
           var _cam=0,_lin='';
           if(_hPr&&mapa[_hPr]){
@@ -7666,12 +7745,14 @@ function _wkExcel(){
               if(_el!=='LB0'){
                 _cam=(_xpr.match(/ACTIVITI_PLAN \(LB0\)/g)||[]).length;
                 if(_cam)_xpr=_xpr.split('ACTIVITI_PLAN (LB0)').join('ACTIVITI_PLAN ('+_el+')')}
+              /* y su lista de actividades */
+              if(_p6s.length)_xpr=_xpr.split("'P6-2'!").join("'P6-"+_el+"'!");
               cambiar[_hPr]=_xpr;
               _lin=_cam?(' · PROGRAMACIÓN toma el plan de '+_el+' en '+_cam+' fórmulas')
                        :(' · PROGRAMACIÓN sigue con el plan de LB0')}
             else{
               /* dos o mas: una fila de plan por cronograma, y a correr las de abajo */
-              var _t3=_wkTresLineas(_xpr,_Lc);
+              var _t3=_wkTresLineas(_xpr,_Lc,_p6s);
               if(_t3.mapa){
                 cambiar[_hPr]=_t3.xml;
                 /* TODAS las hojas, no una lista: la de PPC se llama 'PPC ' con un
@@ -7689,6 +7770,8 @@ function _wkExcel(){
                   _t3.clones+' filas nuevas y '+_reap+' referencias reapuntadas en las hojas que la citan'}
               else _lin=' · ⚠ no se pudieron poner las líneas por cronograma: '+(_t3.aviso||'motivo desconocido')}}
           _plMsg=' · alimentadores: '+_Lc.map(function(z){return z.cron_id+' '+_tot[z.cron_id]+' hh'}).join(' | ')+
+            (_p6s.length?(' · listas de actividades: '+_p6s.map(function(z){
+              return z.hoja+' ('+z.n+')'}).join(', ')):'')+
             (_nuev?(' ('+_nuev+' hoja(s) nueva(s))'):'')+_lin+
             ((Object.keys(_pleg).length)?(' · plegado en la S'+_rej[_rej.length-1].n+': '+
               Object.keys(_pleg).map(function(k){return k+' '+_pleg[k]+' hh'}).join(', ')+
@@ -8952,7 +9035,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823j5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823j6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
