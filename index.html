@@ -2733,7 +2733,10 @@ function _crTramos(nivel,tar,alc,u,grupoDe){
       if(d2)porTarea.forEach(function(x){if(x.ini&&x.fin)out.push({ini:x.ini,fin:x.fin,peso:resto/d2})})}
     return out}
   /* agrupaciones o wbs: se juntan tramos y se suma su ventana */
-  var clave=function(x){return nivel==='wbs'?(x.wbs||x.cod):(x.g||x.cod)};
+  var clave=function(x){
+    if(nivel==='wbs')return x.wbs||x.cod;
+    /* agrupacion si la tiene; si no, con las de su mismo nivel de WBS */
+    return x.g||('wbs:'+(x.wbs||x.cod))};
   var m={};
   porTarea.forEach(function(x){
     if(!(x.peso>0))return;
@@ -2761,19 +2764,30 @@ async function _crCurvaUI(c,nivel){
   function gente(hd){return Math.ceil(hd/9)}
   var ov=document.createElement('div');ov.id='_crCurOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
-  var W=Math.max(320,Math.min(900,(window.innerWidth||360)-40)),H=260;
-  var mx=44,my=18,gw=W-mx-14,gh=H-my-30;
+  var W=Math.max(320,Math.min(900,(window.innerWidth||360)-40)),H=310;
+  var mx=44,my=30,gw=W-mx-14,gh=H-my-42;
   var maxSem=0;cur.porSem.forEach(function(v){if(v>maxSem)maxSem=v});
   var barras='',linea='',ptos='';
+  var pocas=sem.length<=16;
   sem.forEach(function(s,i){
     var x=mx+(sem.length>1?(i*gw/(sem.length-1)):gw/2);
     var hv=maxSem>0?(cur.porSem[i]/maxSem):0;
     var bw=Math.max(3,gw/Math.max(1,sem.length)*0.55);
-    barras+='<rect x="'+(x-bw/2).toFixed(1)+'" y="'+(my+gh-hv*gh*0.55).toFixed(1)+'" width="'+bw.toFixed(1)+
+    var by=my+gh-hv*gh*0.55;
+    barras+='<rect x="'+(x-bw/2).toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bw.toFixed(1)+
       '" height="'+(hv*gh*0.55).toFixed(1)+'" fill="#1d3550"/>';
+    /* el % que toca hacer esa semana, sobre su barra */
+    var pw=cur.porSem[i]/(cur.pesoTot||1);
+    if(pw>0.001&&(pocas||!(i%2)))
+      barras+='<text x="'+x.toFixed(1)+'" y="'+(by-3).toFixed(1)+'" fill="#7FB3D5" font-size="8" text-anchor="middle">'+
+        (Math.round(pw*1000)/10)+'%</text>';
     var y=my+gh-cur.acum[i]*gh;
     linea+=(i?' L':'M')+x.toFixed(1)+' '+y.toFixed(1);
-    ptos+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="2.6" fill="'+esc(c.color||'#2E86C1')+'"/>'});
+    ptos+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="2.6" fill="'+esc(c.color||'#2E86C1')+'"/>';
+    /* el acumulado, sobre el punto de la curva */
+    if(pocas||!(i%2)||i===sem.length-1)
+      ptos+='<text x="'+x.toFixed(1)+'" y="'+(y-7).toFixed(1)+'" fill="#CFE3FF" font-size="8.5" font-weight="700" text-anchor="middle">'+
+        (Math.round(cur.acum[i]*1000)/10)+'%</text>'});
   var ejes='';
   [0,0.25,0.5,0.75,1].forEach(function(p){
     var y=my+gh-p*gh;
@@ -2800,7 +2814,7 @@ async function _crCurvaUI(c,nivel){
     '<svg width="'+W+'" height="'+H+'" style="display:block">'+ejes+barras+
     '<path d="'+linea+'" fill="none" stroke="'+esc(c.color||'#2E86C1')+'" stroke-width="2.2" stroke-linejoin="round"/>'+
     ptos+etq+
-    '<text x="'+mx+'" y="'+(my-5)+'" fill="#7d8590" font-size="9">barras = HH de la semana · línea = % acumulado</text>'+
+    '<text x="'+mx+'" y="'+(my-16)+'" fill="#7d8590" font-size="9">barras = % que toca hacer esa semana · línea y números en blanco = % acumulado</text>'+
     '</svg></div>'+
     ((duras.length&&nivel==='tarea')?('<div style="background:#2a1414;border:1px solid #5A2A2A;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#F0A3A3;line-height:1.6">'+
       '<b>⚠ '+duras.length+' tarea(s) piden demasiada gente</b> — por eso la curva sale a escalones en vez de en banana. '+
@@ -7195,7 +7209,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823d6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823d7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
