@@ -2499,10 +2499,9 @@ async function _crAlcanceUI(c){
     var b=this;b.disabled=true;fmsg('Armando la plantilla…');
     try{
       /* se exporta lo que se ve ahora, no lo guardado */
-      var vista={};P.forEach(function(p){vista[p.id]={inc:!!sel[p.id],ini:fec[p.id].ini,fin:fec[p.id].fin}});
-      var guardado=alc;alc=vista;
-      var n=await _crXlsExport(c);
-      alc=guardado;
+      var vista={};P.forEach(function(p){
+        vista[p.id]={inc:!!sel[p.id],ini:fec[p.id].ini,fin:fec[p.id].fin,origen:fec[p.id].origen}});
+      var n=await _crXlsExport(c,vista);
       fmsg('⬇ Plantilla con '+n+' partidas descargada','#9FE8B0');
     }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8')}
     b.disabled=false};
@@ -2722,9 +2721,11 @@ function _crXlsArmar(cron,filas,alc,grupoDe){
       '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'],
     ['xl/worksheets/sheet1.xml',hoja]];
   return partes}
-async function _crXlsExport(cron){
+async function _crXlsExport(cron,alcVista){
   await _crCatPull();
-  var alc=await _crAlc(cron.cron_id);
+  /* si la pantalla pasa su vista, se exporta ESO: lo que el usuario ve, con las
+     fechas que acaba de poner aunque todavia no las haya guardado */
+  var alc=alcVista||(await _crAlc(cron.cron_id));
   try{await _agPull()}catch(e){}
   var grupoDe={};
   try{(_agLista()||[]).forEach(function(g){(g.miembros||[]).forEach(function(m){grupoDe[m]=g.grupo_id})})}catch(e){}
@@ -6653,7 +6654,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823c1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823c2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
