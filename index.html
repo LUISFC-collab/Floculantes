@@ -3643,11 +3643,12 @@ function _crColLetra(i){
   var n=14+i,s='';
   while(n>0){var r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}
   return s}
-/* La rejilla del libro arranca en la S27 y llega hasta la S44 como minimo.
-   Si algun cronograma termina despues, se alarga: si no, sus ultimas semanas
-   se perderian sin avisar. */
+/* La rejilla del reporte: S27 a S44, las 18 semanas del formato. Lo que caiga
+   fuera no se tira ni alarga el cuadro: se pliega en la columna del extremo
+   (ver _crPlanSemanal). Se admite un final distinto por si algun dia hace
+   falta, pero por defecto manda el formato. */
 function _crRejilla(hasta){
-  var fin=Math.max(44,Number(hasta)||0),out=[];
+  var fin=Number(hasta)||44,out=[];
   for(var n=27;n<=fin;n++){
     var ini=46199+(n-27)*7;
     out.push({n:n,col:_crColLetra(n-27),serIni:ini,serFin:ini+6,
@@ -3669,10 +3670,12 @@ function _crASerial(iso){
    partida repartida entre varias tareas aporta a cada una su fraccion. */
 function _crPlanSemanal(tar,uItems,semanas){
   var rp=_crReparto(tar),out=[];
+  var ultW=semanas.length-1;
+  var plegadoFin=0,plegadoIni=0;
   (tar||[]).forEach(function(t){
     var hh=0;(t.items||[]).forEach(function(i){hh+=(Number(uItems[i])||0)/_crVeces(rp,i)});
     hh=Math.round(hh*1e6)/1e6;
-    var sem=semanas.map(function(){return 0}),nd=0;
+    var sem=semanas.map(function(){return 0}),nd=0,pleg=0;
     if(t.ini&&t.fin){
       var d0=Date.parse(t.ini+'T00:00:00Z'),d1=Date.parse(t.fin+'T00:00:00Z');
       nd=Math.max(1,Math.round((d1-d0)/864e5)+1);
@@ -3680,20 +3683,28 @@ function _crPlanSemanal(tar,uItems,semanas){
         var porDia=hh/nd;
         for(var k=0;k<nd;k++){
           var dia=_crDeSerial(_crASerial(t.ini)+k);
+          /* fuera del cuadro no se tira: se pliega en la columna del extremo */
+          if(dia>semanas[ultW].fin){sem[ultW]+=porDia;plegadoFin+=porDia;pleg+=porDia;continue}
+          if(dia<semanas[0].ini){sem[0]+=porDia;plegadoIni+=porDia;pleg+=porDia;continue}
           for(var w=0;w<semanas.length;w++)
             if(dia>=semanas[w].ini&&dia<=semanas[w].fin){sem[w]+=porDia;break}}}}
     out.push({cod:String(t.task_code||''),nom:String(t.nombre||''),
       hh:hh,ini:t.ini||'',fin:t.fin||'',dias:nd,
+      pleg:Math.round(pleg*100)/100,
       sem:sem.map(function(v){return Math.round(v*1e6)/1e6})})});
+  out.plegadoFin=Math.round(plegadoFin*100)/100;
+  out.plegadoIni=Math.round(plegadoIni*100)/100;
   return out}
 /* La hoja, clavada al formato de la que ya trae la plantilla. */
 function _crHojaPlan(cron,filas,semanas){
   var r=[];
   var c1='';
   c1+=_crXlsCel('A',1,'PLAN '+cron.cron_id+' — HH PROGRAMADAS POR SEMANA (generado por el aplicativo). '+
-    'Semanas viernes-jueves, corte jueves. La S27 va en la columna N, que es donde la esperan las fórmulas del libro'+
-    ((semanas.length>18)?('; este cronograma llega hasta la S'+semanas[semanas.length-1].n+
-      ', así que hay '+(semanas.length-18)+' semana(s) más allá de la S44 y el libro no las mira: revísalas a mano.'):'.'),true);
+    'Semanas viernes-jueves, corte jueves. La S27 va en la columna N, que es donde la esperan las fórmulas del libro.'+
+    ((filas.plegadoFin>0)?(' PLEGADO: '+filas.plegadoFin+' hh programadas después de la S'+
+      semanas[semanas.length-1].n+' se sumaron a esa última columna, para que la curva cierre dentro del cuadro del reporte.'):'')+
+    ((filas.plegadoIni>0)?(' Y '+filas.plegadoIni+' hh anteriores a la S'+semanas[0].n+
+      ' se sumaron a la primera.'):''),true);
   semanas.forEach(function(s){c1+=_crXlsCel(s.col,1,'S'+s.n,true)});
   r.push('<row r="1">'+c1+'</row>');
   /* fila 2: los encabezados y el jueves de cierre de cada semana. El de la
@@ -4223,9 +4234,7 @@ async function _crXlsExport(cron,alcVista){
   var planes=[];
   try{
     var L=await _crPull();
-    var ultima=44;
-    L.forEach(function(z){var w=_crSemDeFecha(z.fin);if(w>ultima)ultima=w});
-    var sem=_crRejilla(ultima);
+    var sem=_crRejilla();
     for(var _i=0;_i<L.length;_i++){
       var cc=L[_i];
       var tt=(cc.cron_id===cron.cron_id)?tareas:(await _crTareas(cc.cron_id));
@@ -7449,14 +7458,14 @@ function _wkExcel(){
         var _eleg=[].slice.call(document.querySelectorAll('._wkCk:checked')).map(function(k){return k.value});
         var _Lc=(await _crPull()).filter(function(z){return _eleg.indexOf(z.cron_id)>=0});
         if(_Lc.length&&typeof _crHojaPlan==='function'){
-          var _ult=44;_Lc.forEach(function(z){var w=_crSemDeFecha(z.fin);if(w>_ult)_ult=w});
-          var _rej=_crRejilla(_ult),_nuev=0,_tot={};
+          var _rej=_crRejilla(),_nuev=0,_tot={},_pleg={};
           for(var _ci=0;_ci<_Lc.length;_ci++){
             var _cc=_Lc[_ci];
             var _tt=await _crTareas(_cc.cron_id),_aa=await _crAlc(_cc.cron_id);
             var _uu=_crUniverso(_cc.cron_id,_aa);
             var _fil=_crPlanSemanal(_tt,_uu.items,_rej);
             _tot[_cc.cron_id]=Math.round(_fil.reduce(function(a,f){return a+f.hh},0)*100)/100;
+            if(_fil.plegadoFin>0)_pleg[_cc.cron_id]=_fil.plegadoFin;
             var _xmlP=_crHojaPlan(_cc,_fil,_rej);
             var _nomP='ACTIVITI_PLAN ('+_cc.cron_id+')';
             if(hojas[_nomP]&&mapa[hojas[_nomP]])cambiar[hojas[_nomP]]=_xmlP;
@@ -7495,8 +7504,9 @@ function _wkExcel(){
               else _lin=' · ⚠ no se pudieron poner las líneas por cronograma: '+(_t3.aviso||'motivo desconocido')}}
           _plMsg=' · alimentadores: '+_Lc.map(function(z){return z.cron_id+' '+_tot[z.cron_id]+' hh'}).join(' | ')+
             (_nuev?(' ('+_nuev+' hoja(s) nueva(s))'):'')+_lin+
-            ((_rej.length>18)?(' · ojo: la rejilla llega a la S'+_rej[_rej.length-1].n+
-              ' y el libro solo mira hasta la S44'):'');
+            ((Object.keys(_pleg).length)?(' · plegado en la S'+_rej[_rej.length-1].n+': '+
+              Object.keys(_pleg).map(function(k){return k+' '+_pleg[k]+' hh'}).join(', ')+
+              ' que caían después del cuadro'):'');
           r.avisos.push('Cronogramas'+_plMsg)}
       }catch(_epl){r.avisos.push('No se pudieron escribir los alimentadores de cronograma: '+String((_epl&&_epl.message)||_epl))}
       /* ---- la semana del Gantt, y PPC leyendo de ella ----
@@ -8692,7 +8702,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823h8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823h9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
