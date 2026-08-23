@@ -2242,6 +2242,7 @@ function _wkExcel(){
     '<option value="todo">Incluir el sobremetrado (todo lo ejecutado)</option></select>'+
     '<button id="_wkPick" style="width:100%;background:#EAF1FB;color:#1F3864;border:1.5px dashed #7FA0F5;border-radius:11px;padding:13px;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:11px">📄 Elegir el Excel plantilla…</button>'+
     '<input type="file" id="_wkFile" accept=".xlsx" style="display:none">'+
+    '<div id="_wkPrev" style="font-size:12px;color:#1B2433;background:#F4F7FB;border:1px solid #D7E0EC;border-radius:10px;padding:9px 11px;margin-bottom:11px;line-height:1.5">Calculando el avance al corte\u2026</div>'+
     '<div id="_wkMsg" style="font-size:12px;color:#5C6779;margin-bottom:11px"></div>'+
     '<div style="display:flex;gap:9px">'+
     '<button id="_wkNo" style="flex:1;background:#E7EDF5;color:#1B2433;border:0;border-radius:12px;padding:14px;font-weight:800;font-size:13.5px;cursor:pointer">Cancelar</button>'+
@@ -2250,6 +2251,20 @@ function _wkExcel(){
   ov.onclick=function(e){if(e.target===ov)ov.remove()};
   document.getElementById('_wkNo').onclick=function(){ov.remove()};
   var file=null;
+  /* la vista previa del corte: que el % de la semana no parezca error */
+  var previa=function(){try{
+    var n2=+document.getElementById('_wkSel').value;
+    var corte2=_wkISO(_wkSem(n2).fin);
+    var topar2=((document.getElementById('_wkTope')||{}).value!=='todo');
+    var pC=_wkPctApp(_wkAcum(corte2),!topar2);
+    var pH=_wkPctApp(_wkAcum((typeof todayISO==='function')?todayISO():corte2),!topar2);
+    var el=document.getElementById('_wkPrev');
+    if(el)el.innerHTML='Avance al corte de S'+n2+' (jue '+corte2.slice(8,10)+'/'+corte2.slice(5,7)+'): <b style="color:#0C5132">'+(Math.round(pC.pct*1e4)/100)+'%</b>'+
+      ' · hoy: <b>'+(Math.round(pH.pct*1e4)/100)+'%</b><br><span style="color:var(--muted)">Lo cargado despu\u00e9s del corte entra a la semana siguiente.</span>';
+  }catch(_e){}};
+  setTimeout(previa,50);
+  document.getElementById('_wkSel').onchange=previa;
+  var _tp=document.getElementById('_wkTope');if(_tp)_tp.addEventListener('change',previa);
   document.getElementById('_wkPick').onclick=function(){document.getElementById('_wkFile').click()};
   document.getElementById('_wkFile').onchange=function(e){
     file=(e.target.files||[])[0]||null;
@@ -3442,7 +3457,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260821c5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260821c6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
