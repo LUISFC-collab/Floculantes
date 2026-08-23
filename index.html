@@ -5135,6 +5135,142 @@ function _wkHojaCron(cronos,actual,semanas){
     '<drawing r:id="rIdDr1"/>'+
     '</worksheet>';
   return {xml:xml,filaDe:filaDe,ultCol:ult,ultFila:n-1,colIni:C0}}
+/* ---------- Una linea de plan por cronograma en PROGRAMACION ----------------
+   La hoja ya viene con DOS filas por actividad: la de 'Prog.' (columna M), que
+   lee el plan del alimentador amarillo, y la de 'Actual', que lee lo real de
+   METRADO. Aqui se clona la de plan una vez por cronograma marcado, asi que
+   con LB0 y LB1 quedan tres: 'Prog. LB0', 'Prog. LB1' y 'Actual'.
+
+   Lo delicado es que al meter filas se corren todas las de abajo, y a
+   PROGRAMACION la citan METRADO, COSTO, PHYSICAL % PROGRESS, PPC y PANEL
+   CONTROL unas 10 000 veces. Por eso se construye un mapa fila vieja -> fila
+   nueva y se reescriben:
+     · dentro de PROGRAMACION, las referencias SIN prefijo de hoja
+     · en las demas hojas, las que empiezan por PROGRAMACION!
+   Las referencias a otras hojas desde PROGRAMACION se dejan como estan, porque
+   esas hojas no se tocan. */
+var _WK_SEM1=14;      /* columna N: la semilla de la acumulacion semanal.
+                         De aqui en adelante la fila se acumula sobre si misma;
+                         antes de aqui esta la identidad, que sale una sola vez. */
+function _wkColNum(c){var n=0;for(var i=0;i<c.length;i++)n=n*26+(c.charCodeAt(i)-64);return n}
+/* Reescribe las referencias propias de una formula. fn(fila,col) devuelve la
+   fila nueva, o null para dejarla. Las de otras hojas se apartan antes para
+   que no las toque: si no, el segundo extremo de un rango como
+   'P6-2'!$E$3:$I$90 se tomaria por propio. */
+function _wkRemapSelf(f,fn){
+  var g=[];
+  f=String(f).replace(/('[^']*'|[A-Za-z0-9_.À-ſ%]+)!(\$?[A-Z]{1,2}\$?\d+(?::\$?[A-Z]{1,2}\$?\d+)?|\$?[A-Z]{1,2}:\$?[A-Z]{1,2})/g,
+    function(t){g.push(t);return '\u0001'+(g.length-1)+'\u0002'});
+  f=f.replace(/(^|[^A-Za-z0-9_$\u0001])(\$?)([A-Z]{1,2})(\$?)(\d+)/g,
+    function(t,pre,d1,col,d2,fila){
+      var nf=fn(+fila,col);
+      return pre+d1+col+d2+(nf==null?fila:nf)});
+  return f.replace(/\u0001(\d+)\u0002/g,function(_t,i){return g[+i]})}
+/* Reescribe las referencias a PROGRAMACION que hace OTRA hoja */
+function _wkRemapProg(xml,mapa){
+  var n=0;
+  var out=String(xml).replace(/('PROGRAMACION'|PROGRAMACION)!(\$?)([A-Z]{1,2})(\$?)(\d+)/g,
+    function(t,h,d1,col,d2,fila){
+      var nf=mapa[+fila];
+      if(nf==null||nf===+fila)return t;
+      n++;return h+'!'+d1+col+d2+nf});
+  return {xml:out,n:n}}
+function _wkPartirFilas(xml){
+  var ini=xml.indexOf('<sheetData>'),fin=xml.indexOf('</sheetData>');
+  if(ini<0||fin<0)return null;
+  var cab=xml.slice(0,ini+11),pie=xml.slice(fin),cuerpo=xml.slice(ini+11,fin);
+  var filas=[],re1=/<row r="(\d+)"((?:\s[^>]*?)?)(?:\/>|>([\s\S]*?)<\/row>)/g,m;
+  while((m=re1.exec(cuerpo)))filas.push({r:+m[1],at:m[2],cuerpo:(m[3]===undefined?null:m[3])});
+  return {cab:cab,pie:pie,filas:filas}}
+function _wkCeldas(cuerpo){
+  var out=[],re1=/<c r="([A-Z]+)(\d+)"((?:\s[^>]*?)?)(?:\/>|>([\s\S]*?)<\/c>)/g,m;
+  while((m=re1.exec(cuerpo)))out.push({col:m[1],r:+m[2],at:m[3],inner:(m[4]===undefined?null:m[4])});
+  return out}
+function _wkArmaCelda(c){
+  if(c.inner==null||c.inner==='')return '<c r="'+c.col+c.r+'"'+c.at+'/>';
+  return '<c r="'+c.col+c.r+'"'+c.at+'>'+c.inner+'</c>'}
+/* crons: [{cron_id,...}] en el orden en que deben salir. La primera se queda
+   con la fila que ya existe; las demas son clones nuevos. */
+function _wkTresLineas(xml,crons){
+  var res={xml:xml,mapa:null,clones:0,ultima:0,aviso:''};
+  if(!crons||crons.length<2)return res;
+  var P=_wkPartirFilas(xml);
+  if(!P){res.aviso='no se pudo leer el sheetData de PROGRAMACION';return res}
+  /* 1) que filas son de plan */
+  var esPlan={};
+  P.filas.forEach(function(f){if(f.cuerpo&&f.cuerpo.indexOf('ACTIVITI_PLAN')>=0)esPlan[f.r]=1});
+  var nPlan=0;for(var k in esPlan)nPlan++;
+  if(!nPlan){res.aviso='PROGRAMACION no tiene filas de plan que clonar';return res}
+  /* 2) el orden nuevo y el mapa */
+  var mapa={},plan=[],nuevo=0,orden=[];
+  P.filas.forEach(function(f){
+    nuevo++;mapa[f.r]=nuevo;orden.push({tipo:'orig',f:f,r:nuevo});
+    if(esPlan[f.r]){
+      for(var i=1;i<crons.length;i++){nuevo++;orden.push({tipo:'clon',base:f,i:i,r:nuevo})}
+      plan.push(f.r)}});
+  res.mapa=mapa;res.ultima=nuevo;res.clones=nPlan*(crons.length-1);
+  /* 3) reescribir */
+  var esSem=function(col){return _wkColNum(col)>=_WK_SEM1};
+  var fnNorm=function(fila){return mapa[fila]==null?null:mapa[fila]};
+  var partes=[];
+  orden.forEach(function(o){
+    if(o.tipo==='orig'){
+      var f=o.f;
+      if(f.cuerpo==null){partes.push('<row r="'+o.r+'"'+f.at+'/>');return}
+      var cs=_wkCeldas(f.cuerpo).map(function(c){
+        c.r=o.r;
+        if(c.inner)c.inner=c.inner.replace(/<f>([\s\S]*?)<\/f>/,function(_t,ff){
+          return '<f>'+_wkRemapSelf(ff,fnNorm)+'</f>'});
+        /* la etiqueta de la linea: la de plan pasa a decir de que cronograma es */
+        if(c.col==='M'&&esPlan[f.r]){
+          c.at=c.at.replace(/\s*t="[^"]*"/,'')+' t="inlineStr"';
+          c.inner='<is><t xml:space="preserve">Prog. '+_wkEsc(crons[0].cron_id)+'</t></is>'}
+        return _wkArmaCelda(c)}).join('');
+      partes.push('<row r="'+o.r+'"'+f.at+'>'+cs+'</row>');return}
+    /* un clon: mismo formato, otro alimentador */
+    var b=o.base,base=mapa[b.r],cid=crons[o.i].cron_id;
+    var fnClon=function(fila,col){
+      if(fila===b.r)return esSem(col)?o.r:base;
+      return mapa[fila]==null?null:mapa[fila]};
+    var cc=_wkCeldas(b.cuerpo).map(function(c0){
+      var c={col:c0.col,r:o.r,at:c0.at,inner:c0.inner};
+      if(c.col==='M'){
+        c.at=c.at.replace(/\s*t="[^"]*"/,'')+' t="inlineStr"';
+        c.inner='<is><t xml:space="preserve">Prog. '+_wkEsc(cid)+'</t></is>';
+        return _wkArmaCelda(c)}
+      /* la identidad sale una sola vez: en el clon se deja el formato y nada mas */
+      if(!esSem(c.col)){c.at=c.at.replace(/\s*t="[^"]*"/,'');c.inner=null;return _wkArmaCelda(c)}
+      if(c.inner)c.inner=c.inner.replace(/<f>([\s\S]*?)<\/f>/,function(_t,ff){
+        ff=ff.split("ACTIVITI_PLAN ("+crons[0].cron_id+")").join("ACTIVITI_PLAN ("+cid+")");
+        return '<f>'+_wkRemapSelf(ff,fnClon)+'</f>'});
+      /* el valor viejo ya no vale: lo recalcula Excel al abrir */
+      if(c.inner)c.inner=c.inner.replace(/<v>[\s\S]*?<\/v>/,'');
+      return _wkArmaCelda(c)}).join('');
+    partes.push('<row r="'+o.r+'"'+b.at+'>'+cc+'</row>')});
+  /* Una fila que no existe en la hoja no esta en el mapa, pero si cae dentro
+     del rango hay que correrla igual: se le aplica el desplazamiento que
+     llevan las que tiene justo encima. La ultima fila de la hoja marca el
+     limite; de ahi para abajo el desplazamiento es el total. */
+  var _ex=[];for(var _k2 in mapa)_ex.push(+_k2);
+  _ex.sort(function(a,b){return a-b});
+  function _mapFila(r){
+    if(mapa[r]!=null)return mapa[r];
+    if(r>=1048576)return r;
+    var d=0;
+    for(var i=0;i<_ex.length;i++){if(_ex[i]>r)break;d=mapa[_ex[i]]-_ex[i]}
+    return r+d}
+  var x=P.cab+partes.join('')+P.pie;
+  /* 4) los rangos de la hoja que iban por fila */
+  x=x.replace(/<dimension ref="([A-Z]+)\d+:([A-Z]+)(\d+)"\/>/,
+    function(t,c1,c2,r2){return '<dimension ref="'+c1+'1:'+c2+Math.max(+r2,res.ultima)+'"/>'});
+  x=x.replace(/<autoFilter ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"/,
+    function(t,c1,r1,c2,r2){
+      return '<autoFilter ref="'+c1+_mapFila(+r1)+':'+c2+_mapFila(+r2)+'"'});
+  x=x.replace(/<conditionalFormatting sqref="([^"]*)"/g,function(t,sq){
+    return '<conditionalFormatting sqref="'+sq.replace(/([A-Z]+)(\d+)/g,function(t2,c,r){
+      return c+_mapFila(+r)})+'"'});
+  res.xml=x;
+  return res}
 /* registrar una hoja nueva AL FINAL del libro */
 async function _wkNuevaHoja(entradas,mapa,leer,nombre,xmlHoja,enc,pkg){
   /* pkg acumula el registro entre altas: si se relee el original, la segunda
@@ -7159,20 +7295,39 @@ function _wkExcel(){
             var _nomP='ACTIVITI_PLAN ('+_cc.cron_id+')';
             if(hojas[_nomP]&&mapa[hojas[_nomP]])cambiar[hojas[_nomP]]=_xmlP;
             else{await _wkNuevaHoja(entradas,mapa,leer,_nomP,_xmlP,enc,pkgH);_nuev++}}
-          /* el ultimo marcado es el mas vigente: es el que manda en el plan */
-          var _el=_Lc[_Lc.length-1].cron_id;
           var _hPr=hojas['PROGRAMACION'];
-          var _cam=0;
-          if(_hPr&&mapa[_hPr]&&_el!=='LB0'){
+          var _cam=0,_lin='';
+          if(_hPr&&mapa[_hPr]){
             var _xpr=cambiar[_hPr]||(await leer(_hPr));
-            _cam=(_xpr.match(/ACTIVITI_PLAN \(LB0\)/g)||[]).length;
-            if(_cam){
-              _xpr=_xpr.split('ACTIVITI_PLAN (LB0)').join('ACTIVITI_PLAN ('+_el+')');
-              cambiar[_hPr]=_xpr}}
+            if(_Lc.length===1){
+              /* uno solo: la fila de plan que ya existe cambia de alimentador */
+              var _el=_Lc[0].cron_id;
+              if(_el!=='LB0'){
+                _cam=(_xpr.match(/ACTIVITI_PLAN \(LB0\)/g)||[]).length;
+                if(_cam)_xpr=_xpr.split('ACTIVITI_PLAN (LB0)').join('ACTIVITI_PLAN ('+_el+')')}
+              cambiar[_hPr]=_xpr;
+              _lin=_cam?(' · PROGRAMACIÓN toma el plan de '+_el+' en '+_cam+' fórmulas')
+                       :(' · PROGRAMACIÓN sigue con el plan de LB0')}
+            else{
+              /* dos o mas: una fila de plan por cronograma, y a correr las de abajo */
+              var _t3=_wkTresLineas(_xpr,_Lc);
+              if(_t3.mapa){
+                cambiar[_hPr]=_t3.xml;
+                /* las hojas que citan a PROGRAMACION por fila */
+                var _dep=['METRADO','COSTO','PHYSICAL % PROGRESS','PPC','PANEL CONTROL','PPC ANALISIS','3WLA','Dashboard'];
+                var _reap=0;
+                for(var _di=0;_di<_dep.length;_di++){
+                  var _hd=hojas[_dep[_di]];
+                  if(!_hd||!mapa[_hd])continue;
+                  var _xd=cambiar[_hd]||(await leer(_hd));
+                  var _rr=_wkRemapProg(_xd,_t3.mapa);
+                  if(_rr.n){cambiar[_hd]=_rr.xml;_reap+=_rr.n}}
+                _lin=' · PROGRAMACIÓN con '+_Lc.length+' líneas de plan por actividad ('+
+                  _Lc.map(function(z){return z.cron_id}).join(' + ')+' + Actual): '+
+                  _t3.clones+' filas nuevas y '+_reap+' referencias reapuntadas en las hojas que la citan'}
+              else _lin=' · ⚠ no se pudieron poner las líneas por cronograma: '+(_t3.aviso||'motivo desconocido')}}
           _plMsg=' · alimentadores: '+_Lc.map(function(z){return z.cron_id+' '+_tot[z.cron_id]+' hh'}).join(' | ')+
-            (_nuev?(' ('+_nuev+' hoja(s) nueva(s))'):'')+
-            (_cam?(' · PROGRAMACIÓN toma el plan de '+_el+' en '+_cam+' fórmulas'):
-                  (' · PROGRAMACIÓN sigue con el plan de LB0'))+
+            (_nuev?(' ('+_nuev+' hoja(s) nueva(s))'):'')+_lin+
             ((_rej.length>18)?(' · ojo: la rejilla llega a la S'+_rej[_rej.length-1].n+
               ' y el libro solo mira hasta la S44'):'');
           r.avisos.push('Cronogramas'+_plMsg)}
@@ -8347,7 +8502,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823h5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823h6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
