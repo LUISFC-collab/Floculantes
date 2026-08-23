@@ -3187,9 +3187,39 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
           var mejor='',n=-1;
           for(var w in votos[sis])if(votos[sis][w]>n){n=votos[sis][w];mejor=w}
           rutaSis[sis]=mejor});
+        /* el tronco comun de un puñado de ramas */
+        var comun=function(rutas){
+          if(!rutas.length)return '';
+          var base=rutas[0].split(' / ');
+          rutas.forEach(function(r){
+            var t=r.split(' / '),i=0;
+            while(i<base.length&&i<t.length&&base[i]===t[i])i++;
+            base=base.slice(0,i)});
+          return base.join(' / ')};
+        /* por capitulo del QPS: 4.02.02 -> 4.02 -> 4 */
+        var mapeadas=Pw.filter(function(z){return !!duenoW[z.id]});
+        var porCap={};
+        var pref=function(id,n){return String(id).split('.').slice(0,n).join('.')};
+        [3,2,1].forEach(function(n){
+          var acc={};
+          mapeadas.forEach(function(z){
+            var k=n+'|'+pref(z.id,n);
+            (acc[k]=acc[k]||[]).push(duenoW[z.id])});
+          for(var k in acc)porCap[k]=comun(acc[k])});
+        var capDe=function(z){
+          for(var n=3;n>=1;n--){
+            var r=porCap[n+'|'+pref(z.id,n)];
+            if(r)return r}
+          return ''};
         var rutaDe=function(z){
-          return duenoW[z.id]||rutaSis[z.sis||'']||''};
-        var heredada=function(z){return !duenoW[z.id]&&!!rutaSis[z.sis||'']};
+          if(duenoW[z.id])return duenoW[z.id];
+          return rutaSis[z.sis||'']||capDe(z)||''};
+        /* como se coloco: por su titulo del QPS, por su capitulo, o nada */
+        var comoDe=function(z){
+          if(duenoW[z.id])return '';
+          if(rutaSis[z.sis||''])return 'titulo';
+          if(capDe(z))return 'capitulo';
+          return ''};
         /* las ramas en el orden del cronograma, y dentro de cada una el orden del QPS */
         var lista=Pw.slice().sort(function(x,y){
           var wx=rutaDe(x),wy=rutaDe(y);
@@ -3198,7 +3228,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
           if(wx!==wy)return wx<wy?-1:1;
           return (x.orden||0)-(y.orden||0)});
         var rutaTxt=function(z){var w=rutaDe(z);return w||SINW};
-        var Hw='',prevW=[],nHer=0;
+        var Hw='',prevW=[],nHer=0,nCap=0;
         lista.forEach(function(pp){
           var ruta=rutaTxt(pp).split(' / ').filter(function(z){return z});
           var i=0;while(i<ruta.length&&i<prevW.length&&ruta[i]===prevW[i])i++;
@@ -3214,7 +3244,8 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
               '<span style="flex:none;color:#9FE8B0;white-space:nowrap">'+ns+' act · '+(Math.round(hs*10)/10)+' hh</span></div>'}
           prevW=ruta;
           var g=grupoDe[pp.id]||'';
-          if(heredada(pp))nHer++;
+          var como=comoDe(pp);
+          if(como==='titulo')nHer++;else if(como==='capitulo')nCap++;
           Hw+='<div style="display:flex;gap:7px;align-items:stretch;padding:4px 6px 4px '+(10+ruta.length*14)+'px;'+
             'border-bottom:1px solid #131c28;font-size:10.5px;'+(pp.ret?'background:#2a1414;':'')+'">'+
             '<span style="flex:none;width:4px;align-self:stretch;border-radius:2px;background:'+(g?colG(g):'#243b55')+'"></span>'+
@@ -3223,11 +3254,15 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
             (pp.ret?chip('RETIRADA','#F0A3A3','#3a1a1a'):'')+
             (pp.off?chip('SIN HH','#E8C9A0','#2a2415'):'')+
             (g?chip(g,colG(g),'#101a24'):chip('SIN AGRUPACIÓN','#8A94A6','#1a2130'))+
-            (heredada(pp)?chip('ubicada por su título QPS','#7FA6C9','#101a24'):'')+
+            (como==='titulo'?chip('ubicada por su título QPS','#7FA6C9','#101a24'):'')+
+            (como==='capitulo'?chip('ubicada por su capítulo QPS','#8A94A6','#161d28'):'')+
             '<span style="flex:none;width:58px;text-align:right;color:#9FE8B0">'+pp.hh+' hh</span></div>'});
         return '<div style="font-size:11px;color:#7d8590;font-weight:700;margin-bottom:5px">'+
           'PARTIDAS bajo los títulos de WBS de '+esc(c.cron_id)+' ('+lista.length+') — dentro de cada rama, en el orden del QPS'+
-          (nHer?('<br><span style="font-weight:400">'+nHer+' no las reclama ninguna tarea (retiradas, sobre todo): se colocan donde están sus hermanas del mismo título del QPS</span>'):'')+
+          ((nHer||nCap)?('<br><span style="font-weight:400">'+(nHer+nCap)+
+            ' no las reclama ninguna tarea (retiradas, sobre todo): '+nHer+
+            ' se colocan donde están sus hermanas del mismo título del QPS y '+nCap+
+            ' en el tronco común de su capítulo, que es lo más lejos que se puede afinar sin inventar</span>'):'')+
           '</div>'+Hw}
       /* ---------- nivel AGRUPACIONES: el grupo y sus partidas ---------- */
       if(nivel==='agr'&&!conWbs){
@@ -8075,7 +8110,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823g4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823g5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
