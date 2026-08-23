@@ -2719,15 +2719,33 @@ async function _crWbsDe(cronId){
   try{return await sbSelect(T_WBS,'select=ruta,nombre,nivel,padre,orden,color&proyecto=eq.'+
     encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(cronId)+
     '&eliminado=is.false&order=orden.asc&limit=500')||[]}catch(e){return []}}
+/* Un aviso que se puede cerrar. Queda cerrado tambien la proxima vez, y
+   deja un boton chico por si se quiere volver a mirar. */
+function _crNotaOculta(k){try{return localStorage.getItem('obra_nota_'+k)==='0'}catch(e){return false}}
+function _crNota(k,titulo,estilo,cuerpo){
+  if(_crNotaOculta(k))
+    return '<button class="_crNotaVer" data-k="'+esc(k)+'" style="background:#111c28;border:1px dashed #2a3f5c;'+
+      'color:#7d8590;border-radius:8px;padding:4px 9px;font-size:10.5px;font-weight:700;margin-bottom:8px;'+
+      'cursor:pointer;align-self:flex-start">👁 '+esc(titulo)+'</button>';
+  return '<div style="position:relative;'+estilo+'">'+
+    '<button class="_crNotaX" data-k="'+esc(k)+'" title="Ocultar este aviso" style="position:absolute;top:5px;right:6px;'+
+    'background:#00000055;border:1px solid #ffffff22;color:inherit;border-radius:6px;width:20px;height:20px;'+
+    'line-height:1;font-size:12px;font-weight:900;cursor:pointer;padding:0">✕</button>'+
+    '<div style="padding-right:24px">'+cuerpo+'</div></div>'}
 function _crCarga(tar,items){
   var out=[];
   tar.forEach(function(t){
     var hh=0;(t.items||[]).forEach(function(i){hh+=(Number(items[i])||0)});
-    if(!(hh>0))return;
+    /* las que no tienen ninguna partida detras son informativas del cronograma
+       (KOM, movilizacion, ingenieria): van sin horas pero tienen que verse.
+       Las que si tienen partidas pero suman cero es que el filtro las dejo
+       fuera, y esas no van. */
+    var info=!((t.items||[]).length);
+    if(!(hh>0)&&!info)return;
     var d=(t.ini&&t.fin)?(Math.round((Date.parse(t.fin+'T00:00:00Z')-Date.parse(t.ini+'T00:00:00Z'))/864e5)+1):0;
     out.push({cod:t.task_code,nom:String(t.nombre||''),ini:t.ini,fin:t.fin,
-      dias:d,hh:Math.round(hh*10)/10,hhDia:d?Math.round(hh/d*10)/10:0,
-      n:(t.items||[]).length})});
+      dias:d,hh:Math.round(hh*10)/10,hhDia:(d&&hh>0)?Math.round(hh/d*10)/10:0,
+      n:(t.items||[]).length,info:info,orden:t.orden||0})});
   out.sort(function(a,b){return b.hhDia-a.hhDia});
   return out}
 /* Los tramos que alimentan la curva, segun el nivel al que se mire.
@@ -2915,11 +2933,14 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     var xr=mx+i*casilla;
     etq+='<line x1="'+xr.toFixed(1)+'" y1="'+my+'" x2="'+xr.toFixed(1)+'" y2="'+(my+gh)+'" stroke="#141f33" stroke-width="1"/>'});
   var duras=carga.filter(function(x){return x.hhDia>90});
+  var conHoras=carga.filter(function(x){return !x.info});
+  var infos=carga.filter(function(x){return x.info});
   ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'+
     '<b style="font-size:14.5px;color:'+esc(c.color||'#8ECBF5')+'">📈 Curva de '+esc(c.cron_id)+
       (esp?(' · <span style="color:#C39BD3">'+esc(esp)+'</span>'):'')+'</b>'+
     '<span style="background:#152436;border:1px solid #1d3550;border-radius:8px;padding:3px 9px;font-size:11.5px;color:#9db4d6">'+
-    sem.length+' semanas · '+u.hh+' hh · '+carga.length+' tareas con horas</span>'+
+    sem.length+' semanas · '+u.hh+' hh · '+conHoras.length+' tareas con horas'+
+      (infos.length?(' · '+infos.length+' informativas'):'')+'</span>'+
     '<span style="display:inline-flex;gap:0;border:1px solid #1d3550;border-radius:8px;overflow:hidden">'+
     [['partida','Partidas'],['tarea','Tareas'],['agr','Agrupaciones']].map(function(o){
       return '<button data-niv="'+o[0]+'" style="background:'+(nivel===o[0]?'#1B5E8A':'#0d1117')+
@@ -2946,12 +2967,13 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
       if(realHoy&&Math.abs(realHoy.v-re)>0.0005)
         hoyTxt='<br><span style="color:#F0A3A3">Hoy ('+esc(hoy)+') el real ya va en <b>'+
           (Math.round(realHoy.v*1000)/10)+'%</b> — entre el jueves y hoy se cargó avance.</span>';
-      return '<div style="background:'+(d>=0?'#0F2419':'#2a1414')+';border:1px solid '+(d>=0?'#1d3a2a':'#5A2A2A')+
-        ';border-radius:10px;padding:9px 11px;margin-bottom:9px;font-size:12px;color:'+col+';font-weight:800">'+
+      return _crNota('cierre','Ver el avance al cierre de semana',
+        'background:'+(d>=0?'#0F2419':'#2a1414')+';border:1px solid '+(d>=0?'#1d3a2a':'#5A2A2A')+
+        ';border-radius:10px;padding:9px 11px;margin-bottom:9px;font-size:12px;color:'+col+';font-weight:800',
         'Al cierre de la S'+sem[iHoy].n+' ('+esc(sem[iHoy].fin)+'): programado <b>'+(Math.round(pr*1000)/10)+'%</b> · '+
         'real <b>'+(Math.round(re*1000)/10)+'%</b> · '+(d>=0?'adelanto':'atraso')+' de <b>'+
         (Math.round(Math.abs(d)*1000)/10)+' puntos</b>'+hoyTxt+
-        '<br><span style="font-weight:400;color:#9db4d6;font-size:11px">medido sobre las '+real.hh+' hh del alcance de este cronograma</span></div>'})():'')+
+        '<br><span style="font-weight:400;color:#9db4d6;font-size:11px">medido sobre las '+real.hh+' hh del alcance de este cronograma</span>')})():'')+
     '<div id="_crGraf" style="background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:8px;overflow-x:auto">'+
     '<svg width="'+W+'" height="'+H+'" style="display:block">'+ejes+barras+
     '<path d="'+linea+'" fill="none" stroke="'+esc(c.color||'#2E86C1')+'" stroke-width="2.2" stroke-linejoin="round"/>'+
@@ -2975,19 +2997,23 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     '<rect x="'+(mx+90)+'" y="'+(my-13)+'" width="16" height="2.5" fill="#C0392B"/>'+
     '<text x="'+(mx+110)+'" y="'+(my-9)+'" fill="#F0A3A3" font-size="9">real del aplicativo</text>'+
     '</svg></div>'+
-    ((duras.length&&nivel==='tarea')?('<div style="background:#2a1414;border:1px solid #5A2A2A;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#F0A3A3;line-height:1.6">'+
+    ((duras.length&&nivel==='tarea')?_crNota('duras','Ver las tareas que piden demasiada gente',
+      'background:#2a1414;border:1px solid #5A2A2A;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#F0A3A3;line-height:1.6',
       '<b>⚠ '+duras.length+' tarea(s) piden demasiada gente</b> — por eso la curva sale a escalones en vez de en banana. '+
       'A 9 h por persona y día:<br>'+
-      duras.slice(0,6).map(function(x){return '<b>'+esc(x.cod)+'</b> '+x.hh+' hh en '+x.dias+' día(s) = <b>'+x.hhDia+' hh/día</b> ≈ '+gente(x.hhDia)+' personas · '+esc(x.nom)}).join('<br>')+
-      '</div>'):(nivel!=='tarea'
-        ?('<div style="background:#132435;border:1px solid #1d3550;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#9db4d6;line-height:1.6">'+
+      duras.slice(0,6).map(function(x){return '<b>'+esc(x.cod)+'</b> '+x.hh+' hh en '+x.dias+' día(s) = <b>'+x.hhDia+' hh/día</b> ≈ '+gente(x.hhDia)+' personas · '+esc(x.nom)}).join('<br>')
+      ):(nivel!=='tarea'
+        ?_crNota('nivel','Ver la nota del nivel',
+          'background:#132435;border:1px solid #1d3550;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#9db4d6;line-height:1.6',
           (conWbs
             ?'Con <b>WBS</b> marcado la curva se mira a la altura de los títulos del cronograma, y el listado los usa para agrupar lo que estés viendo (ahora: <b>'+
               (nivel==='agr'?'agrupaciones':(nivel==='partida'?'partidas':'tareas'))+'</b>).'
             :'Mirando por <b>'+(nivel==='agr'?'agrupaciones':'partidas')+'</b>: las horas se reparten en la ventana completa de cada '+
               (nivel==='agr'?'agrupación':'partida')+', por eso la curva sale más suave.')+
-          ' Cambia a <b>Tareas</b> sin WBS para ver el detalle real del cronograma.</div>')
-        :'<div style="background:#0F2419;border:1px solid #1d3a2a;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#9FE8B0">✓ Ninguna tarea pide más de 90 hh/día: el reparto es realista.</div>'))+
+          ' Cambia a <b>Tareas</b> sin WBS para ver el detalle real del cronograma.')
+        :_crNota('holgado','Ver la nota del reparto',
+          'background:#0F2419;border:1px solid #1d3a2a;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#9FE8B0',
+          '✓ Ninguna tarea pide más de 90 hh/día: el reparto es realista.')))+
     '<div style="flex:1;overflow:auto;margin-top:9px;background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:7px">'+
     (function(){
       var wbsDe={},ordenDe={},grupoTarea={};
@@ -3123,6 +3149,20 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
               '<span style="flex:1;min-width:0;overflow-wrap:anywhere;color:#9db4d6">'+esc(pp.nom)+'</span>'+
               (pp.ret?'<span style="flex:none;color:#F0A3A3;font-size:9.5px">RETIRADA</span>':'')+
               '<span style="flex:none;width:58px;text-align:right;color:#9FE8B0">'+pp.hh+' hh</span></div>'})}
+        if(infos.length){
+          H2+='<div class="_crGCab" data-g="__INFO__" style="display:flex;gap:7px;align-items:center;padding:6px;'+
+            'border-bottom:1px solid #16202e;background:#111a24;font-size:11px;cursor:pointer;color:#8DD6ED;font-weight:700">'+
+            '<span class="_crGFle" data-g="__INFO__" style="flex:none;width:12px;font-size:10px">▸</span>'+
+            '<span style="flex:1;min-width:0;overflow-wrap:anywhere">ACTIVIDADES INFORMATIVAS — '+infos.length+
+            ' del cronograma que no llevan HH (KOM, movilización, ingeniería)</span>'+
+            '<span style="flex:none;color:#5C6779;font-weight:800;white-space:nowrap">0 hh</span></div>';
+          infos.slice().sort(function(a2,b2){return (a2.orden||0)-(b2.orden||0)}).forEach(function(x){
+            H2+='<div class="_crMiem" data-g="__INFO__" style="display:none;gap:7px;align-items:stretch;padding:4px 6px 4px 14px;'+
+              'border-bottom:1px solid #131c28;font-size:10.5px">'+
+              '<span style="flex:none;width:4px;align-self:stretch;border-radius:2px;background:#1d3550"></span>'+
+              '<span style="flex:none;width:66px;color:#8ECBF5">'+esc(x.cod)+'</span>'+
+              '<span style="flex:1;min-width:0;overflow-wrap:anywhere;color:#9db4d6">'+esc(x.nom)+'</span>'+
+              '<span style="flex:none;color:#5C6779;white-space:nowrap">'+esc(x.ini||'')+(x.fin?(' → '+esc(x.fin)):'')+'</span></div>'})}
         return '<div style="font-size:11px;color:#7d8590;font-weight:700;margin-bottom:5px">AGRUPACIONES Y SUS PARTIDAS</div>'+H2}
       /* ---------- AGRUPACIONES + WBS: tal cual el cronograma ---------- */
       if(nivel==='agr'&&conWbs){
@@ -3159,29 +3199,34 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
               '<span style="flex:none;width:64px;text-align:right;color:#9FE8B0;font-weight:800">'+(Math.round(hhG*10)/10)+' hh</span></div>';
             return}
           H3+='<div style="display:flex;gap:7px;align-items:stretch;padding:5px 6px 5px '+(6+ruta.length*14)+'px;'+
-            'border-bottom:1px solid #16202e;font-size:11px">'+
+            'border-bottom:1px solid #16202e;font-size:11px;'+(x.info?'background:#111a24;':'')+'">'+
             '<span style="flex:none;width:4px;align-self:stretch;border-radius:2px;background:#243b55"></span>'+
             '<b style="flex:none;width:62px;color:#8ECBF5">'+esc(x.cod)+'</b>'+
-            '<span style="flex:1;min-width:0;overflow-wrap:anywhere">'+esc(x.nom)+'</span>'+
+            '<span style="flex:1;min-width:0;overflow-wrap:anywhere;color:'+(x.info?'#9db4d6':'inherit')+'">'+esc(x.nom)+'</span>'+
+            (x.info?'<span style="flex:none;background:#0e1c28;border:1px solid #8DD6ED;color:#8DD6ED;border-radius:6px;padding:1px 6px;font-size:9.5px;font-weight:800">INFORMATIVA</span>':'')+
             '<span style="flex:none;color:#9db4d6">'+x.dias+'d</span>'+
-            '<span style="flex:none;width:64px;text-align:right;color:#9FE8B0;font-weight:800">'+x.hh+' hh</span></div>'});
+            '<span style="flex:none;width:64px;text-align:right;color:'+(x.info?'#5C6779':'#9FE8B0')+';font-weight:800">'+x.hh+' hh</span></div>'});
         return '<div style="font-size:11px;color:#7d8590;font-weight:700;margin-bottom:5px">'+
           'EL CRONOGRAMA — títulos de WBS de '+esc(c.cron_id)+' con sus agrupaciones y tareas</div>'+H3}
       /* ---------- nivel TAREAS (y con WBS) ---------- */
       function linea(x){
         var col=x.hhDia>200?'#F0A3A3':(x.hhDia>90?'#E8C9A0':'#9FE8B0');
         var g=grupoTarea[x.cod]||'';
-        return '<div style="display:flex;gap:7px;align-items:stretch;padding:5px 6px;border-bottom:1px solid #16202e;font-size:11px">'+
+        return '<div style="display:flex;gap:7px;align-items:stretch;padding:5px 6px;border-bottom:1px solid #16202e;font-size:11px;'+
+          (x.info?'background:#111a24;':'')+'">'+
           tira(g)+
           '<b style="color:#8ECBF5;flex:none;width:52px">'+esc(x.cod)+'</b>'+
-          '<span style="flex:1;min-width:0;overflow-wrap:anywhere">'+esc(x.nom)+'</span>'+
+          '<span style="flex:1;min-width:0;overflow-wrap:anywhere;color:'+(x.info?'#9db4d6':'inherit')+'">'+esc(x.nom)+'</span>'+
+          (x.info?chip('INFORMATIVA','#8DD6ED','#0e1c28'):'')+
           (g?chip(g,colG(g),'#101a24'):'')+
           '<span style="flex:none;color:#9db4d6">'+x.dias+'d</span>'+
-          '<span style="flex:none;color:#9FE8B0;width:60px;text-align:right;white-space:nowrap">'+x.hh+' hh</span>'+
-          '<span style="flex:none;color:'+col+';font-weight:800;width:70px;text-align:right;white-space:nowrap">'+x.hhDia+' hh/día</span></div>'}
+          '<span style="flex:none;color:'+(x.info?'#5C6779':'#9FE8B0')+';width:60px;text-align:right;white-space:nowrap">'+x.hh+' hh</span>'+
+          '<span style="flex:none;color:'+(x.info?'#5C6779':col)+';font-weight:800;width:70px;text-align:right;white-space:nowrap">'+
+            (x.info?'—':(x.hhDia+' hh/día'))+'</span></div>'}
       tit='CARGA POR TAREA '+(conWbs?'(en el orden del cronograma, bajo sus títulos de WBS)':'(de más a menos apretada)');
       var cab='<div style="font-size:11px;color:#7d8590;font-weight:700;margin-bottom:5px">'+tit+'</div>';
-      if(!conWbs)return cab+carga.slice(0,60).map(linea).join('');
+      if(!conWbs)return cab+conHoras.slice(0,60).map(linea).join('')+
+        infos.slice().sort(function(a2,b2){return (a2.orden||0)-(b2.orden||0)}).map(linea).join('');
       var orden=carga.slice().sort(function(a2,b2){return (ordenDe[a2.cod]||0)-(ordenDe[b2.cod]||0)});
       var H='',prev=[];
       orden.forEach(function(x){
@@ -3206,6 +3251,13 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     var oculto=(g.style.display==='none');
     g.style.display=oculto?'block':'none';
     this.textContent=oculto?'▾ Ocultar curva':'▸ Ver curva'};
+  ov.querySelectorAll('._crNotaX').forEach(function(b){b.onclick=function(ev){
+    ev.stopPropagation();
+    try{localStorage.setItem('obra_nota_'+b.getAttribute('data-k'),'0')}catch(e){}
+    ov.remove();_crCurvaUI(c,nivel,conWbs,esp)}});
+  ov.querySelectorAll('._crNotaVer').forEach(function(b){b.onclick=function(){
+    try{localStorage.removeItem('obra_nota_'+b.getAttribute('data-k'))}catch(e){}
+    ov.remove();_crCurvaUI(c,nivel,conWbs,esp)}});
   ov.querySelectorAll('._crGCab').forEach(function(cab){cab.onclick=function(){
     var g=cab.getAttribute('data-g'),abierto=false;
     ov.querySelectorAll('._crMiem[data-g="'+(g||'').replace(/"/g,'')+'"]').forEach(function(d){
@@ -7604,7 +7656,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823e8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823e9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
