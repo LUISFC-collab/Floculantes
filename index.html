@@ -3626,6 +3626,109 @@ function _crXlsCel(col,r,v,texto,st){
                     y los items que la componen.
    Las fechas se pueden poner en ALCANCE o en AGRUPADO; la de AGRUPADO manda y
    se aplica a todas las partidas de esa tarea. */
+/* ---------------- El alimentador amarillo de cada cronograma ----------------
+   El libro semanal no lleva datos en sus hojas verdes: lleva formulas que leen
+   de una hoja amarilla por linea base. La del LB0 ya viene en la plantilla y
+   PROGRAMACION la consume asi:
+
+     IFERROR(SUMIF('ACTIVITI_PLAN (LB0)'!$B:$B,$C14,'ACTIVITI_PLAN (LB0)'!N:N)/$K14+N14,0)
+
+   O sea: le basta la columna B con el codigo de la tarea y las columnas N..AE
+   con las HH de cada semana. Aqui se genera esa misma hoja para CUALQUIER
+   cronograma, con el mismo formato, para que anadir un LB2 sea solo marcarlo. */
+var _CR_SEMCOL=['N','O','P','Q','R','S','T','U','V','W','X','Y','Z','AA','AB','AC','AD','AE'];
+/* la rejilla del libro: S27 a S44, de viernes a jueves */
+function _crRejilla(){
+  var out=[];
+  for(var n=27;n<=44;n++){
+    var ini=46199+(n-27)*7;
+    out.push({n:n,serIni:ini,serFin:ini+6,
+      ini:_crDeSerial(ini),fin:_crDeSerial(ini+6)})}
+  return out}
+function _crDeSerial(n){
+  return new Date(Date.UTC(1899,11,30)+Math.round(n)*864e5).toISOString().slice(0,10)}
+function _crASerial(iso){
+  if(!iso)return '';
+  var t=Date.parse(String(iso).slice(0,10)+'T00:00:00Z');
+  if(isNaN(t))return '';
+  return Math.round((t-Date.UTC(1899,11,30))/864e5)}
+/* Las HH de cada tarea repartidas dia a dia y agregadas por semana. Una
+   partida repartida entre varias tareas aporta a cada una su fraccion. */
+function _crPlanSemanal(tar,uItems,semanas){
+  var rp=_crReparto(tar),out=[];
+  (tar||[]).forEach(function(t){
+    var hh=0;(t.items||[]).forEach(function(i){hh+=(Number(uItems[i])||0)/_crVeces(rp,i)});
+    hh=Math.round(hh*1e6)/1e6;
+    var sem=semanas.map(function(){return 0}),nd=0;
+    if(t.ini&&t.fin){
+      var d0=Date.parse(t.ini+'T00:00:00Z'),d1=Date.parse(t.fin+'T00:00:00Z');
+      nd=Math.max(1,Math.round((d1-d0)/864e5)+1);
+      if(hh>0){
+        var porDia=hh/nd;
+        for(var k=0;k<nd;k++){
+          var dia=_crDeSerial(_crASerial(t.ini)+k);
+          for(var w=0;w<semanas.length;w++)
+            if(dia>=semanas[w].ini&&dia<=semanas[w].fin){sem[w]+=porDia;break}}}}
+    out.push({cod:String(t.task_code||''),nom:String(t.nombre||''),
+      hh:hh,ini:t.ini||'',fin:t.fin||'',dias:nd,
+      sem:sem.map(function(v){return Math.round(v*1e6)/1e6})})});
+  return out}
+/* La hoja, clavada al formato de la que ya trae la plantilla. */
+function _crHojaPlan(cron,filas,semanas){
+  var r=[];
+  var c1='';
+  c1+=_crXlsCel('A',1,'PLAN '+cron.cron_id+' — HH PROGRAMADAS POR SEMANA (generado por el aplicativo). '+
+    'Semanas viernes-jueves, corte jueves.',true);
+  semanas.forEach(function(s,i){c1+=_crXlsCel(_CR_SEMCOL[i],1,'S'+s.n,true)});
+  r.push('<row r="1">'+c1+'</row>');
+  /* fila 2: los encabezados y el jueves de cierre de cada semana. El de la
+     primera va en J, como en la plantilla original. */
+  var c2='';
+  c2+=_crXlsCel('A',2,filas.length,false);
+  c2+=_crXlsCel('C',2,'PARTIDA',true);
+  c2+=_crXlsCel('D',2,'CANT.',true);
+  c2+=_crXlsCel('E',2,'UND',true);
+  c2+=_crXlsCel('F',2,'HH',true);
+  c2+=_crXlsCel('G',2,'INICIO',true);
+  c2+=_crXlsCel('H',2,'FIN',true);
+  c2+=_crXlsCel('I',2,'DURAC. (d)',true);
+  c2+=_crXlsCel('J',2,semanas[0].serFin,false);
+  semanas.forEach(function(s,i){
+    if(i===0)return;
+    c2+=_crXlsCel(_CR_SEMCOL[i],2,s.serFin,false)});
+  r.push('<row r="2">'+c2+'</row>');
+  var n=3;
+  filas.forEach(function(f){
+    var c='';
+    c+=_crXlsCel('B',n,f.cod,true);
+    c+=_crXlsCel('C',n,f.nom,true);
+    c+=_crXlsCel('F',n,f.hh,false);
+    c+=_crXlsCel('G',n,_crASerial(f.ini),false);
+    c+=_crXlsCel('H',n,_crASerial(f.fin),false);
+    c+=_crXlsCel('I',n,f.dias||'',false);
+    f.sem.forEach(function(v,i){if(v>0)c+=_crXlsCel(_CR_SEMCOL[i],n,v,false)});
+    r.push('<row r="'+n+'">'+c+'</row>');n++});
+  /* el total, para poder comprobar de un vistazo que no se perdio nada */
+  var tot='';
+  tot+=_crXlsCel('C',n,'TOTAL '+cron.cron_id,true);
+  tot+=_crXlsCel('F',n,Math.round(filas.reduce(function(a,f){return a+f.hh},0)*100)/100,false);
+  semanas.forEach(function(s,i){
+    var v=filas.reduce(function(a,f){return a+f.sem[i]},0);
+    if(v>0)tot+=_crXlsCel(_CR_SEMCOL[i],n,Math.round(v*1e6)/1e6,false)});
+  r.push('<row r="'+n+'">'+tot+'</row>');
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<dimension ref="A1:AE'+n+'"/>'+
+    '<sheetViews><sheetView workbookViewId="0">'+
+    '<pane xSplit="3" ySplit="2" topLeftCell="D3" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
+    '<sheetFormatPr defaultRowHeight="15"/>'+
+    '<cols><col min="2" max="2" width="11" customWidth="1"/>'+
+    '<col min="3" max="3" width="49.5703125" customWidth="1"/>'+
+    '<col min="6" max="9" width="11" customWidth="1"/>'+
+    '<col min="10" max="13" width="11.42578125" hidden="1" customWidth="1"/>'+
+    '<col min="14" max="31" width="9.5703125" customWidth="1"/></cols>'+
+    '<sheetData>'+r.join('')+'</sheetData>'+
+    '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>'}
 /* La red de precedencias tal como esta en el .xer. Sale del TASKPRED del
    archivo original, que se guarda entero al cargar el cronograma. */
 async function _crRelDe(cronId){
@@ -3700,8 +3803,8 @@ function _crCuadre(hoja1,hoja2){
     var alcHH=0;A.forEach(function(f){if(f.J==='SI')alcHH+=(Number(f.H)||0)});
     return {tareas:hh,alcance:alcHH,dif:hh-alcHH,repes:repes}
   }catch(e){return null}}
-function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs,rel){
-  nomWbs=nomWbs||{};rel=rel||{};
+function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs,rel,planes){
+  nomWbs=nomWbs||{};rel=rel||{};planes=planes||[];
   var cuadre=null;
   /* un relleno por agrupacion, con el mismo color que se ve en el aplicativo */
   var _fills=['<fill><patternFill patternType="none"/></fill>',
@@ -4039,13 +4142,16 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs,rel){
     throw new Error('el libro no cuadra: las tareas suman '+cuadre.tareas.toFixed(2)+
       ' hh y el alcance marcado son '+cuadre.alcance.toFixed(2)+' hh (sobran '+cuadre.dif.toFixed(2)+
       ')'+(cuadre.repes.length?(' — código QPS repetido en '+cuadre.repes.slice(0,3).join(', ')):''));
+  /* las hojas del libro: las tres de siempre y un alimentador por cronograma */
+  var HOJAS=[['ALCANCE',hoja1],['AGRUPADO',hoja2],['AGRUPACIONES',hoja3]];
+  (planes||[]).forEach(function(pl){HOJAS.push([pl.nombre,pl.xml])});
   var partesZip=[
     ['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
       '<Default Extension="xml" ContentType="application/xml"/>'+
       '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+
-      ov(1)+ov(2)+ov(3)+
+      HOJAS.map(function(_h,i){return ov(i+1)}).join('')+
       '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
     ['_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
@@ -4053,16 +4159,14 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs,rel){
     ['xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '+
       'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
-      '<sheets><sheet name="ALCANCE" sheetId="1" r:id="rId1"/>'+
-      '<sheet name="AGRUPADO" sheetId="2" r:id="rId2"/>'+
-      '<sheet name="AGRUPACIONES" sheetId="3" r:id="rId3"/></sheets>'+
+      '<sheets>'+HOJAS.map(function(h,i){
+        return '<sheet name="'+_wkEsc(h[0])+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>'}).join('')+'</sheets>'+
       '<calcPr calcId="0" fullCalcOnLoad="1"/></workbook>'],
     ['xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
-      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'+
-      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>'+
-      '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>'+
-      '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+      HOJAS.map(function(_h,i){
+        return '<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>'}).join('')+
+      '<Relationship Id="rId'+(HOJAS.length+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
     ['xl/styles.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
       '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>'+
@@ -4070,10 +4174,8 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs,rel){
       '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'+
       '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
       '<cellXfs count="'+_xfs.length+'">'+_xfs.join('')+'</cellXfs>'+
-      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'],
-    ['xl/worksheets/sheet1.xml',hoja1],
-    ['xl/worksheets/sheet2.xml',hoja2],
-    ['xl/worksheets/sheet3.xml',hoja3]];
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>']];
+  HOJAS.forEach(function(h,i){partesZip.push(['xl/worksheets/sheet'+(i+1)+'.xml',h[1]])});
   return partesZip}
 /* Antes de entregar nada: toda fila con sus celdas en orden y sin repetir.
    Si algo no cuadra, se avisa en vez de dar un archivo que Excel querra reparar. */
@@ -4101,7 +4203,21 @@ async function _crXlsExport(cron,alcVista){
   var wbsBD=[];try{wbsBD=await _crWbsDe(cron.cron_id)}catch(_e){}
   var nomWbs={};wbsBD.forEach(function(w){if(w.nombre)nomWbs[w.ruta]=w.nombre});
   var rel={};try{rel=await _crRelDe(cron.cron_id)}catch(_er){}
-  var partes=_crXlsArmar(cron,P,alc,grupoDe,gs,tareas,nomWbs,rel);
+  /* un alimentador por cronograma, no solo por el que se esta exportando:
+     asi un solo archivo sirve para alimentar el libro semanal entero */
+  var planes=[];
+  try{
+    var sem=_crRejilla();
+    var L=await _crPull();
+    for(var _i=0;_i<L.length;_i++){
+      var cc=L[_i];
+      var tt=(cc.cron_id===cron.cron_id)?tareas:(await _crTareas(cc.cron_id));
+      var aa=(cc.cron_id===cron.cron_id)?alc:(await _crAlc(cc.cron_id));
+      var uu=_crUniverso(cc.cron_id,aa);
+      var fil=_crPlanSemanal(tt,uu.items,sem);
+      planes.push({nombre:'ACTIVITI_PLAN ('+cc.cron_id+')',xml:_crHojaPlan(cc,fil,sem)})}
+  }catch(_ep){}
+  var partes=_crXlsArmar(cron,P,alc,grupoDe,gs,tareas,nomWbs,rel,planes);
   var problemas=[];
   partes.forEach(function(pa){
     if(pa[0].indexOf('xl/worksheets/')===0)
@@ -8174,7 +8290,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823h2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823h3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
