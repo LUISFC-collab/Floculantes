@@ -2173,7 +2173,7 @@ function _crInvalida(cronId){try{if(window._crTar)delete window._crTar[cronId];i
 async function _crCatPull(){
   try{
     var cat=await sbSelect('actividades_create_110826',
-      'select=item,descripcion,especialidad,unidad,cantidad,precio_unitario,oferta_total,hh_t,estado_alcance,es_titulo,eliminado,orden'+
+      'select=item,descripcion,especialidad,unidad,cantidad,precio_unitario,oferta_total,hh_t,estado_alcance,es_titulo,eliminado,orden,sistema'+
       '&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&order=orden.asc&limit=3000')||[];
     var vis={},out=[];
     cat.forEach(function(r){
@@ -2185,7 +2185,8 @@ async function _crCatPull(){
         off:off,esp:String(r.especialidad||''),ret:ret,viva:!ret,
         und:String(r.unidad||''),cant:(r.cantidad==null?'':Number(r.cantidad)),
         pu:(r.precio_unitario==null?'':Number(r.precio_unitario)),
-        tot:(r.oferta_total==null?'':Number(r.oferta_total))});
+        tot:(r.oferta_total==null?'':Number(r.oferta_total)),
+        sis:String(r.sistema||''),orden:Number(r.orden)||0});
       });
     /* las adicionales creadas en la app que aun no estan en el catalogo */
     (state.nuevas||[]).forEach(function(p){
@@ -2934,6 +2935,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
       ';border:1px solid #1d3550;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;color:'+(conWbs?'#fff':'#9db4d6')+';cursor:pointer">'+
       '<input type="checkbox" id="_crCurWbs"'+(conWbs?' checked':'')+'> con WBS</label>'+
     '<span style="font-size:10.5px;color:#7d8590">'+tramos.length+' tramo(s)</span>'+
+    '<button id="_crVerCur" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">▾ Ocultar curva</button>'+
     '<button id="_crPlanGo" style="background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">💾 Guardar como PLAN</button>'+
     '<span id="_crPlanMsg" style="font-size:10.5px;color:#7d8590"></span>'+
     '<button id="_crCurX" style="margin-left:auto;background:#444;color:#fff;border:0;border-radius:8px;padding:8px 12px">✕</button></div>'+
@@ -2950,7 +2952,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
         'real <b>'+(Math.round(re*1000)/10)+'%</b> · '+(d>=0?'adelanto':'atraso')+' de <b>'+
         (Math.round(Math.abs(d)*1000)/10)+' puntos</b>'+hoyTxt+
         '<br><span style="font-weight:400;color:#9db4d6;font-size:11px">medido sobre las '+real.hh+' hh del alcance de este cronograma</span></div>'})():'')+
-    '<div style="background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:8px;overflow-x:auto">'+
+    '<div id="_crGraf" style="background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:8px;overflow-x:auto">'+
     '<svg width="'+W+'" height="'+H+'" style="display:block">'+ejes+barras+
     '<path d="'+linea+'" fill="none" stroke="'+esc(c.color||'#2E86C1')+'" stroke-width="2.2" stroke-linejoin="round"/>'+
     (lreal?('<path d="'+lreal+'" fill="none" stroke="#C0392B" stroke-width="2.4" stroke-linejoin="round"/>'):'')+
@@ -3004,9 +3006,22 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
       if(nivel==='partida'&&!conWbs){
         var P2=_crPartidas().filter(function(pp){return !esp||String(pp.esp||'(sin especialidad)')===esp});
         var dueno2={};tar.forEach(function(t){(t.items||[]).forEach(function(i){if(!dueno2[i])dueno2[i]=t.task_code})});
-        tit='TODAS LAS PARTIDAS ('+P2.length+') — las retiradas se muestran en rojo';
+        tit='TODAS LAS PARTIDAS ('+P2.length+') bajo sus títulos del QPS — las retiradas en rojo';
+        /* en el orden del QPS y agrupadas por su sistema, como en el presupuesto */
+        P2=P2.slice().sort(function(a2,b2){return (a2.orden||0)-(b2.orden||0)});
+        var sisPrev=null;
         return '<div style="font-size:11px;color:#7d8590;font-weight:700;margin-bottom:5px">'+tit+'</div>'+
           P2.map(function(pp){
+            var cab2='';
+            var sis=pp.sis||'(sin título)';
+            if(sis!==sisPrev){
+              sisPrev=sis;
+              var hhS=0,nS=0;
+              P2.forEach(function(z){if((z.sis||'(sin título)')===sis){hhS+=z.hh;nS++}});
+              cab2='<div style="padding:6px;border-bottom:1px solid #16202e;background:#0f1a26;font-size:11px;'+
+                'color:#8ECBF5;font-weight:800">'+esc(sis.toUpperCase().slice(0,62))+
+                '<span style="float:right;color:#9FE8B0">'+nS+' act · '+(Math.round(hhS*10)/10)+' hh</span></div>'}
+            return cab2+(function(pp){
             var g=grupoDe[pp.id]||'';
             var a2=alc[pp.id]||{};
             var fuera=pp.ret||pp.off||!(pp.hh>0);
@@ -3022,7 +3037,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
               (pp.off?chip('SIN HH','#E8C9A0','#2a2415'):'')+
               (!pp.ret&&!pp.off&&!(pp.hh>0)?chip('0 hh','#8A94A6','#1a2130'):'')+
               (g?chip(g,colG(g),'#101a24'):(dueno2[pp.id]?'':chip('sin tarea','#8A94A6','#1a2130')))+
-              '<span style="flex:none;width:60px;text-align:right;color:#9FE8B0;font-weight:800">'+pp.hh+' hh</span></div>'}).join('')}
+              '<span style="flex:none;width:60px;text-align:right;color:#9FE8B0;font-weight:800">'+pp.hh+' hh</span></div>'})(pp)}).join('')}
       /* ---------- nivel AGRUPACIONES: el grupo y sus partidas ---------- */
       if(nivel==='agr'&&!conWbs){
         var usadas={};
@@ -3066,6 +3081,48 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
               (pp.ret?'<span style="flex:none;color:#F0A3A3;font-size:9.5px">RETIRADA</span>':'')+
               '<span style="flex:none;width:58px;text-align:right;color:#9FE8B0">'+pp.hh+' hh</span></div>'})}
         return '<div style="font-size:11px;color:#7d8590;font-weight:700;margin-bottom:5px">AGRUPACIONES Y SUS PARTIDAS</div>'+H2}
+      /* ---------- AGRUPACIONES + WBS: tal cual el cronograma ---------- */
+      if(nivel==='agr'&&conWbs){
+        var orden3=carga.slice().sort(function(a2,b2){return (ordenDe[a2.cod]||0)-(ordenDe[b2.cod]||0)});
+        var H3='',prev3=[],vistoG={};
+        orden3.forEach(function(x){
+          var ruta=(wbsDe[x.cod]||'').split(' / ').filter(function(z){return z});
+          var i=0;while(i<ruta.length&&i<prev3.length&&ruta[i]===prev3[i])i++;
+          for(var j=i;j<ruta.length;j++){
+            var rutaJ=ruta.slice(0,j+1).join(' / ');
+            var suma=0;orden3.forEach(function(y){
+              var r2=(wbsDe[y.cod]||'').split(' / ').filter(function(z){return z});
+              if(r2.length>j&&r2[j]===ruta[j]&&r2.slice(0,j).join('/')===ruta.slice(0,j).join('/'))suma+=y.hh});
+            H3+='<div style="padding:6px 6px 4px '+(6+j*14)+'px;border-bottom:1px solid #16202e;font-size:11px;'+
+              'color:#8ECBF5;font-weight:800;background:#0f1a26">'+esc(String(nomWbs[rutaJ]||ruta[j]).toUpperCase())+
+              '<span style="float:right;color:#9FE8B0">'+(Math.round(suma*10)/10)+' hh</span></div>'}
+          prev3=ruta;
+          var g=grupoTarea[x.cod]||'';
+          var cG=g?colG(g):'';
+          /* una agrupacion sale UNA vez, con todas sus horas */
+          if(g){
+            if(vistoG[g])return;
+            vistoG[g]=1;
+            var hhG=0,nG=0;
+            (gs.filter(function(z){return z.grupo_id===g})[0]||{miembros:[]}).miembros.forEach(function(i2){
+              if(u.items[i2]!=null){hhG+=u.items[i2];nG++}});
+            H3+='<div style="display:flex;gap:7px;align-items:stretch;padding:5px 6px 5px '+(6+ruta.length*14)+'px;'+
+              'border-bottom:1px solid #16202e;font-size:11px">'+
+              '<span style="flex:none;width:4px;align-self:stretch;border-radius:2px;background:'+cG+'"></span>'+
+              '<b style="flex:none;width:62px;color:'+cG+'">'+esc(g)+'</b>'+
+              '<span style="flex:1;min-width:0;overflow-wrap:anywhere;color:#cfe3ff">'+esc(String(nomG2[g]||x.nom).slice(0,48))+'</span>'+
+              '<span style="flex:none;color:#9db4d6">'+nG+' act</span>'+
+              '<span style="flex:none;width:64px;text-align:right;color:#9FE8B0;font-weight:800">'+(Math.round(hhG*10)/10)+' hh</span></div>';
+            return}
+          H3+='<div style="display:flex;gap:7px;align-items:stretch;padding:5px 6px 5px '+(6+ruta.length*14)+'px;'+
+            'border-bottom:1px solid #16202e;font-size:11px">'+
+            '<span style="flex:none;width:4px;align-self:stretch;border-radius:2px;background:#243b55"></span>'+
+            '<b style="flex:none;width:62px;color:#8ECBF5">'+esc(x.cod)+'</b>'+
+            '<span style="flex:1;min-width:0;overflow-wrap:anywhere">'+esc(x.nom.slice(0,48))+'</span>'+
+            '<span style="flex:none;color:#9db4d6">'+x.dias+'d</span>'+
+            '<span style="flex:none;width:64px;text-align:right;color:#9FE8B0;font-weight:800">'+x.hh+' hh</span></div>'});
+        return '<div style="font-size:11px;color:#7d8590;font-weight:700;margin-bottom:5px">'+
+          'EL CRONOGRAMA — títulos de WBS de '+esc(c.cron_id)+' con sus agrupaciones y tareas</div>'+H3}
       /* ---------- nivel TAREAS (y con WBS) ---------- */
       function linea(x){
         var col=x.hhDia>200?'#F0A3A3':(x.hhDia>90?'#E8C9A0':'#9FE8B0');
@@ -3099,6 +3156,11 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
       return cab+H})()+
     '</div>';
   document.body.appendChild(ov);
+  document.getElementById('_crVerCur').onclick=function(){
+    var g=document.getElementById('_crGraf');if(!g)return;
+    var oculto=(g.style.display==='none');
+    g.style.display=oculto?'block':'none';
+    this.textContent=oculto?'▾ Ocultar curva':'▸ Ver curva'};
   ov.querySelectorAll('._crGCab').forEach(function(cab){cab.onclick=function(){
     var g=cab.getAttribute('data-g'),abierto=false;
     ov.querySelectorAll('._crMiem[data-g="'+(g||'').replace(/"/g,'')+'"]').forEach(function(d){
@@ -7497,7 +7559,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823e6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823e7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
