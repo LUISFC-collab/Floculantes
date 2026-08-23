@@ -2143,7 +2143,7 @@ function _crInvalida(cronId){try{if(window._crTar)delete window._crTar[cronId];i
 async function _crCatPull(){
   try{
     var cat=await sbSelect('actividades_create_110826',
-      'select=item,descripcion,especialidad,unidad,cantidad,hh_t,estado_alcance,es_titulo,eliminado,orden'+
+      'select=item,descripcion,especialidad,unidad,cantidad,precio_unitario,oferta_total,hh_t,estado_alcance,es_titulo,eliminado,orden'+
       '&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&order=orden.asc&limit=3000')||[];
     var vis={},out=[];
     cat.forEach(function(r){
@@ -2153,7 +2153,9 @@ async function _crCatPull(){
       var off=false;try{off=(typeof _hhOff==='function')&&!!_hhOff(id)}catch(e){}
       out.push({id:id,nom:String(r.descripcion||id),hh:Math.round((Number(r.hh_t)||0)*100)/100,
         off:off,esp:String(r.especialidad||''),ret:ret,viva:!ret,
-        und:String(r.unidad||''),cant:(r.cantidad==null?'':Number(r.cantidad))});
+        und:String(r.unidad||''),cant:(r.cantidad==null?'':Number(r.cantidad)),
+        pu:(r.precio_unitario==null?'':Number(r.precio_unitario)),
+        tot:(r.oferta_total==null?'':Number(r.oferta_total))});
       });
     /* las adicionales creadas en la app que aun no estan en el catalogo */
     (state.nuevas||[]).forEach(function(p){
@@ -2163,7 +2165,8 @@ async function _crCatPull(){
       var nom='';try{nom=(typeof _nomAct==='function'?_nomAct(p):p.nombre)||p.id}catch(e){nom=p.id}
       out.push({id:p.id,nom:String(nom),hh:Math.round(hh*100)/100,off:off,
         esp:p.esp||'',ret:false,viva:true,
-        und:String((m&&m.unidad)||p.unidad||''),cant:(m&&m.total!=null?Number(m.total):'')})});
+        und:String((m&&m.unidad)||p.unidad||''),cant:(m&&m.total!=null?Number(m.total):''),
+        pu:(p.pu!=null?Number(p.pu):''),tot:(p.total_oferta!=null?Number(p.total_oferta):'')})});
     out.sort(function(a,b){return a.id<b.id?-1:a.id>b.id?1:0});
     window._crCat=out;
   }catch(e){}
@@ -2176,7 +2179,8 @@ function _crPartidas(){
     var hh=0;try{hh=Number(_hhDe(p))||0}catch(e){}
     var off=false;try{off=(typeof _hhOff==='function')&&!!_hhOff(p.id)}catch(e){}
     var nom='';try{nom=(typeof _nomAct==='function'?_nomAct(p):p.nombre)||p.id}catch(e){nom=p.id}
-    out.push({id:p.id,nom:String(nom),hh:Math.round(hh*100)/100,off:off,esp:p.esp||'',ret:false,viva:true})});
+    out.push({id:p.id,nom:String(nom),hh:Math.round(hh*100)/100,off:off,esp:p.esp||'',
+      ret:false,viva:true,und:p.unidad||'',cant:'',pu:'',tot:''})});
   out.sort(function(a,b){return a.id<b.id?-1:a.id>b.id?1:0});
   return out}
 /* lo que entra por defecto: viva, en alcance y con HH encendidas */
@@ -2657,11 +2661,11 @@ function _crXlsCel(col,r,v,texto){
   if(v===''||v==null)return '';
   return '<c r="'+col+r+'"><v>'+v+'</v></c>'}
 function _crXlsArmar(cron,filas,alc,grupoDe){
-  var COLS=['A','B','C','D','E','F','G','H','I','J'];
-  var CAB=['ITEM','DESCRIPCION','ESPECIALIDAD','UNIDAD','CANTIDAD','HH','AGRUPACION','INCLUIR','INICIO','FIN'];
+  var COLS=['A','B','C','D','E','F','G','H','I','J','K','L'];
+  var CAB=['ITEM','DESCRIPCION','ESPECIALIDAD','UNIDAD','CANTIDAD','PRECIO UNITARIO','TOTAL','HH','AGRUPACION','INCLUIR','INICIO','FIN'];
   var rows=[];
   rows.push('<row r="1">'+_crXlsCel('A',1,'ALCANCE Y FECHAS · '+cron.cron_id+' — '+(cron.nombre||''),true)+'</row>');
-  rows.push('<row r="2">'+_crXlsCel('A',2,'Escribe las fechas como AAAA-MM-DD (o formato de fecha de Excel). INCLUIR: SI o NO. No cambies la columna ITEM.',true)+'</row>');
+  rows.push('<row r="2">'+_crXlsCel('A',2,'Escribe las fechas como AAAA-MM-DD (o formato de fecha de Excel). INCLUIR: SI o NO. No cambies la columna ITEM ni el nombre de los encabezados: por ahí se reconocen las columnas.',true)+'</row>');
   var c3='';CAB.forEach(function(h,i){c3+=_crXlsCel(COLS[i],3,h,true)});
   rows.push('<row r="3">'+c3+'</row>');
   var n=4;
@@ -2674,22 +2678,25 @@ function _crXlsArmar(cron,filas,alc,grupoDe){
     c+=_crXlsCel('C',n,p.esp||'',true);
     c+=_crXlsCel('D',n,p.und||'',true);
     c+=_crXlsCel('E',n,(p.cant!=null?p.cant:''),false);
-    c+=_crXlsCel('F',n,p.hh,false);
-    c+=_crXlsCel('G',n,grupoDe[p.id]||'',true);
-    c+=_crXlsCel('H',n,inc?'SI':'NO',true);
-    c+=_crXlsCel('I',n,a.ini||'',true);
-    c+=_crXlsCel('J',n,a.fin||'',true);
+    c+=_crXlsCel('F',n,(p.pu!=null?p.pu:''),false);
+    c+=_crXlsCel('G',n,(p.tot!=null?p.tot:''),false);
+    c+=_crXlsCel('H',n,p.hh,false);
+    c+=_crXlsCel('I',n,grupoDe[p.id]||'',true);
+    c+=_crXlsCel('J',n,inc?'SI':'NO',true);
+    c+=_crXlsCel('K',n,a.ini||'',true);
+    c+=_crXlsCel('L',n,a.fin||'',true);
     rows.push('<row r="'+n+'">'+c+'</row>');n++});
   var hoja='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    '<dimension ref="A1:J'+(n-1)+'"/>'+
+    '<dimension ref="A1:L'+(n-1)+'"/>'+
     '<sheetViews><sheetView tabSelected="1" workbookViewId="0">'+
     '<pane ySplit="3" topLeftCell="A4" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'+
     '<sheetFormatPr defaultRowHeight="15"/>'+
     '<cols><col min="1" max="1" width="13" customWidth="1"/><col min="2" max="2" width="52" customWidth="1"/>'+
     '<col min="3" max="3" width="14" customWidth="1"/><col min="4" max="4" width="9" customWidth="1"/>'+
-    '<col min="5" max="6" width="11" customWidth="1"/><col min="7" max="7" width="13" customWidth="1"/>'+
-    '<col min="8" max="8" width="9" customWidth="1"/><col min="9" max="10" width="13" customWidth="1"/></cols>'+
+    '<col min="5" max="5" width="11" customWidth="1"/><col min="6" max="7" width="14" customWidth="1"/>'+
+    '<col min="8" max="8" width="10" customWidth="1"/><col min="9" max="9" width="13" customWidth="1"/>'+
+    '<col min="10" max="10" width="9" customWidth="1"/><col min="11" max="12" width="13" customWidth="1"/></cols>'+
     '<sheetData>'+rows.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>';
   var partes=[
@@ -2753,7 +2760,10 @@ async function _crXlsImport(cron,file){
   if(!arch){for(var k in hojas){arch=hojas[k];break}}
   if(!arch||!mapa[arch])throw new Error('el archivo no trae la hoja ALCANCE');
   var ss=mapa['xl/sharedStrings.xml']?_wkLeerSS(await leer('xl/sharedStrings.xml')):[];
-  var x=await leer(arch),filas={},cabFila=0;
+  var x=await leer(arch),filas={},cabFila=0,COL={};
+  function _cab(t){t=String(t||'').trim().toUpperCase();
+    try{t=t.normalize('NFD').replace(_MJ_DIACR,'')}catch(e){}
+    return t.replace(/[^A-Z]+/g,' ').trim()}
   x.replace(/<row r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g,function(_t,rs,cuerpo){
     var r=+rs,d={};
     cuerpo.replace(/<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g,function(_c,col,at,inner){
@@ -2762,20 +2772,24 @@ async function _crXlsImport(cron,file){
       if(/t="s"/.test(at)&&/^\d+$/.test(v))v=ss[+v]||'';
       var im=inner.match(/<is>[\s\S]*?<t[^>]*>([^<]*)<\/t>/);if(im)v=im[1];
       d[col]=_wkXmlTxt(v);return _c});
-    if(!cabFila&&String(d.A||'').trim().toUpperCase()==='ITEM'){cabFila=r;return _t}
-    if(cabFila&&r>cabFila&&String(d.A||'').trim())filas[r]=d;
+    if(!cabFila&&_cab(d.A)==='ITEM'){
+      cabFila=r;
+      for(var cc in d){var h=_cab(d[cc]);if(h)COL[h]=cc}
+      return _t}
+    if(cabFila&&r>cabFila&&String(d[COL['ITEM']||'A']||'').trim())filas[r]=d;
     return _t});
   if(!cabFila)throw new Error('no se halló la fila de encabezados (ITEM en la columna A)');
   var alc=await _crAlc(cron.cron_id);
   var P={},lista=_crPartidas();lista.forEach(function(p){P[p.id]=p});
   var out=[],desconocidas=[],conFecha=0,malas=[];
   for(var rr in filas){
-    var d=filas[rr],it=String(d.A||'').trim();
+    var d=filas[rr],it=String(d[COL['ITEM']||'A']||'').trim();
     if(!P[it]){desconocidas.push(it);continue}
-    var ini=_crISO(d.I),fin=_crISO(d.J);
-    if((String(d.I||'').trim()&&!ini)||(String(d.J||'').trim()&&!fin))malas.push(it);
+    var cIni=COL['INICIO']||'K',cFin=COL['FIN']||'L',cInc=COL['INCLUIR']||'J';
+    var ini=_crISO(d[cIni]),fin=_crISO(d[cFin]);
+    if((String(d[cIni]||'').trim()&&!ini)||(String(d[cFin]||'').trim()&&!fin))malas.push(it);
     if(ini||fin)conFecha++;
-    var inc=String(d.H||'').trim().toUpperCase();
+    var inc=String(d[cInc]||'').trim().toUpperCase();
     var incluir=(inc==='SI'||inc==='SÍ'||inc==='1'||inc==='X'||inc==='TRUE')?true
       :((inc==='NO'||inc==='0'||inc==='FALSE')?false:(alc[it]?alc[it].inc:_crPorDefecto(P[it])));
     if(ini&&fin&&fin<ini){malas.push(it+' (fin antes del inicio)');continue}
@@ -6654,7 +6668,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823c2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823c3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
