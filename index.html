@@ -3744,6 +3744,7 @@ function _crHojaPlan(cron,filas,semanas){
   r.push('<row r="'+n+'">'+tot+'</row>');
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    _wkTab(_WK_AMARILLO)+
     '<dimension ref="A1:'+semanas[semanas.length-1].col+n+'"/>'+
     '<sheetViews><sheetView workbookViewId="0">'+
     '<pane xSplit="3" ySplit="2" topLeftCell="D3" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
@@ -5149,6 +5150,9 @@ function _wkHojaCron(cronos,actual,semanas){
    bordes, sin porcentajes y con las fechas como numeros sueltos. Aqui se
    define una hoja de estilos con los colores del reporte y se deja un mapa
    con los indices, para no andar contandolos a mano. */
+/* el color de la pestana: amarillo los alimentadores, verde las del reporte */
+function _wkTab(c){return c?('<sheetPr><tabColor rgb="'+c+'"/></sheetPr>'):''}
+var _WK_AMARILLO='FFFFFF00', _WK_VERDE='FF00B050';
 var _WKS={
   normal:0, titulo:1, subtitulo:2, cab:3, cabSem:4,
   texto:5, num:6, pct:7, fecha:8, ent:9,
@@ -5275,48 +5279,93 @@ function _wkSumaItems(porItem,items,semanas){
 function _wkAcumDe(sem,total){
   var a=0;return sem.map(function(v){a+=v;return total>0?Math.min(1,a/total):0})}
 
-/* ---------------------------- la carátula --------------------------------- */
+/* ---------------------------- la carátula ----------------------------------
+   Copia de la que trae la plantilla, con la misma disposicion y las mismas
+   formulas. La celda que manda es C17, SEMANA DE ANÁLISIS: de ahi salen por
+   BUSCARV el inicio y el fin de la semana contra la tabla L11:N28, y de esos
+   el nombre del documento, el codigo de reporte y la fecha. Cambiando ese
+   numero corre el libro entero, que es como funcionaba la original. */
 function _wkCaratulaApp(info){
-  var r=[],n=1,S=_WKS;
-  var fila=function(cs){r.push('<row r="'+n+'">'+cs+'</row>');n++};
-  fila(_crXlsCel('B',n,'CONTRACTOR WEEKLY REPORT',true,S.titulo));
-  fila(_crXlsCel('B',n,info.proyecto||'',true,S.etiq));
-  n++;
-  fila(_crXlsCel('B',n,'Semana',true,S.etiq)+_crXlsCel('D',n,'S'+info.sem,true,S.texto));
-  fila(_crXlsCel('B',n,'Del',true,S.etiq)+_crXlsCel('D',n,_crASerial(info.semIni),false,S.fecha));
-  fila(_crXlsCel('B',n,'Al',true,S.etiq)+_crXlsCel('D',n,_crASerial(info.semFin),false,S.fecha));
-  fila(_crXlsCel('B',n,'Corte de datos',true,S.etiq)+_crXlsCel('D',n,_crASerial(info.corte),false,S.fecha));
-  fila(_crXlsCel('B',n,'Generado',true,S.etiq)+_crXlsCel('D',n,_crASerial(info.hoy),false,S.fecha));
-  n++;
-  fila(_crXlsCel('B',n,'CRONOGRAMAS INCLUIDOS',true,S.titulo));
-  fila(['CÓDIGO','NOMBRE','ACTIVIDADES','HH','INICIO','FIN'].map(function(h,i){
-    return _crXlsCel(String.fromCharCode(66+i),n,h,true,S.cab)}).join(''));
+  var S=_WKS,r=[],n=0;
+  var F=function(col,fila,f,est){return '<c r="'+col+fila+'" s="'+est+'"><f>'+_wkEsc(f)+'</f></c>'};
+  var filas={};
+  var pon=function(fila,cs){filas[fila]=(filas[fila]||'')+cs};
+  /* la cabecera */
+  pon(1,_crXlsCel('B',1,'LOOKAHEAD',true,S.titulo)+
+        _crXlsCel('M',1,'WR-CW156993-CH-SEM',true,S.chico));
+  pon(2,_crXlsCel('M',2,'LOOKAHEAD-SEMANA ',true,S.chico));
+  pon(3,F('B',3,'C10',S.etiq)+_crXlsCel('M',3,' -CW156993',true,S.chico));
+  /* los datos del documento */
+  var dato=function(fila,et,val,txt,est){
+    pon(fila,_crXlsCel('A',fila,et,true,S.etiq)+
+      (txt?_crXlsCel('C',fila,val,true,est||S.texto)
+          :_crXlsCel('C',fila,val,false,est||S.texto)))};
+  dato(6,'DOCUMENTO:','PANEL CONTROL',true);
+  pon(6,_crXlsCel('M',6,'Del',true,S.cab)+_crXlsCel('N',6,'Al',true,S.cab));
+  dato(7,'N° CONTRATO:','CW156993',true);
+  pon(8,_crXlsCel('A',8,'NOMBRE DEL DOCUMENTO:',true,S.etiq)+
+        F('C',8,'CONCATENATE(M2,C17,M3)',S.texto));
+  pon(9,_crXlsCel('A',9,'CÓDIGO DE REPORTE:',true,S.etiq)+
+        F('C',9,'CONCATENATE(M1," ",C17)',S.texto)+
+        _crXlsCel('E',9,'Rev 00',true,S.texto));
+  dato(10,'NOMBRE DE PROYECTO :',info.proyectoNombre||info.proyecto||'',true);
+  dato(12,'CONTRATISTA:',info.contratista||'CONSORCIO CPQ COLUMBITO',true);
+  dato(14,'DIA DE CORTE :','JUEVES',true);
+  dato(15,'INICIO DE SEMANA :','VIERNES',true);
+  /* LA celda que manda */
+  pon(17,_crXlsCel('A',17,'SEMANA DE ANÁLISIS :',true,S.etiq)+
+        _crXlsCel('C',17,info.sem,false,S.cabSem));
+  pon(18,_crXlsCel('B',18,'del',true,S.etiq)+
+        F('C',18,'VLOOKUP($C$17,$L$11:$N$28,2,FALSE)',S.fecha)+
+        _crXlsCel('D',18,'al',true,S.etiq)+
+        F('E',18,'VLOOKUP($C$17,$L$11:$N$28,3,FALSE)',S.fecha));
+  pon(20,_crXlsCel('A',20,'FECHA DE REPORTE :',true,S.etiq)+F('C',20,'E18+1',S.fecha));
+  pon(22,F('B',22,'C20',S.fecha)+_crXlsCel('C',22,'Emitido para su revisión ',true,S.texto));
+  pon(23,_crXlsCel('B',23,'FECHA',true,S.cab)+_crXlsCel('C',23,'EMITIDO PARA',true,S.cab)+
+        _crXlsCel('E',23,'Elaborado',true,S.cab)+_crXlsCel('F',23,'Revisado',true,S.cab)+
+        _crXlsCel('G',23,'Gerente de Proyecto',true,S.cab));
+  /* la tabla de semanas: es la que consulta el BUSCARV */
+  (info.semanas||[]).forEach(function(s,i){
+    var fila=11+i;
+    pon(fila,_crXlsCel('L',fila,s.n,false,S.ent)+
+      _crXlsCel('M',fila,s.serIni,false,S.fecha)+
+      _crXlsCel('N',fila,s.serFin,false,S.fecha))});
+  /* el resumen de lo que trae el libro, debajo del bloque de firmas */
+  var base=26;
+  pon(base,_crXlsCel('A',base,'CRONOGRAMAS DEL REPORTE',true,S.titulo));
+  pon(base+1,['CÓDIGO','NOMBRE','ACTIVIDADES','HH','INICIO','FIN'].map(function(h,i){
+    return _crXlsCel(String.fromCharCode(65+i),base+1,h,true,S.cab)}).join(''));
   (info.crons||[]).forEach(function(c,i){
-    var e=_wkEstLinea(i);
-    fila(_crXlsCel('B',n,c.id,true,e.et)+_crXlsCel('C',n,c.nombre||'',true,S.texto)+
-      _crXlsCel('D',n,c.nAct,false,S.ent)+_crXlsCel('E',n,c.hh,false,e.num)+
-      _crXlsCel('F',n,_crASerial(c.ini),false,e.fecha)+_crXlsCel('G',n,_crASerial(c.fin),false,e.fecha))});
-  n++;
-  fila(_crXlsCel('B',n,'AVANCE AL CORTE',true,S.titulo));
-  fila(_crXlsCel('B',n,'% real del aplicativo',true,S.etiq)+_crXlsCel('D',n,info.pctReal,false,S.pctActual));
-  fila(_crXlsCel('B',n,'HH del alcance',true,S.etiq)+_crXlsCel('D',n,info.hhAlcance,false,S.num));
-  n++;
-  fila(_crXlsCel('B',n,'Las hojas de este libro las arma el aplicativo: hay tantas filas como '+
-    'actividades tenga el cronograma, y por cada una sale una línea por cada línea base marcada '+
-    'más la del avance real.',true,S.subtitulo));
+    var fila=base+2+i,e=_wkEstLinea(i);
+    pon(fila,_crXlsCel('A',fila,c.id,true,e.et)+_crXlsCel('B',fila,c.nombre||'',true,S.texto)+
+      _crXlsCel('C',fila,c.nAct,false,S.ent)+_crXlsCel('D',fila,c.hh,false,e.num)+
+      _crXlsCel('E',fila,_crASerial(c.ini),false,e.fecha)+
+      _crXlsCel('F',fila,_crASerial(c.fin),false,e.fecha))});
+  var fin=base+2+(info.crons||[]).length+1;
+  pon(fin,_crXlsCel('A',fin,'% real al corte',true,S.etiq)+
+    _crXlsCel('C',fin,info.pctReal,false,S.pctActual)+
+    _crXlsCel('D',fin,'HH del alcance',true,S.etiq)+
+    _crXlsCel('E',fin,info.hhAlcance,false,S.num));
+  pon(fin+2,_crXlsCel('A',fin+2,'Cambia la SEMANA DE ANÁLISIS (C17) y el resto del libro se recalcula solo.',
+    true,S.subtitulo));
+  var ult=0;
+  Object.keys(filas).map(Number).sort(function(a,b){return a-b}).forEach(function(f){
+    r.push('<row r="'+f+'">'+filas[f]+'</row>');ult=f});
   return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    '<dimension ref="A1:G'+(n-1)+'"/>'+
+    _wkTab(_WK_VERDE)+
+    '<dimension ref="A1:N'+ult+'"/>'+
     '<sheetViews><sheetView tabSelected="1" showGridLines="0" workbookViewId="0"/></sheetViews>'+
     '<sheetFormatPr defaultRowHeight="15"/>'+
-    '<cols><col min="1" max="1" width="3" customWidth="1"/>'+
-    '<col min="2" max="2" width="26" customWidth="1"/>'+
+    '<cols><col min="1" max="1" width="24" customWidth="1"/>'+
+    '<col min="2" max="2" width="14" customWidth="1"/>'+
     '<col min="3" max="3" width="46" customWidth="1"/>'+
-    '<col min="4" max="7" width="15" customWidth="1"/></cols>'+
+    '<col min="4" max="7" width="15" customWidth="1"/>'+
+    '<col min="8" max="11" width="10" customWidth="1"/>'+
+    '<col min="12" max="14" width="12" customWidth="1"/></cols>'+
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
-    ultima:n-1}}
-
+    ultima:ult, celdaSemana:'C17'}}
 /* ------------------------- PROGRAMACION ----------------------------------- */
 function _wkProgApp(P){
   var S=_WKS;
@@ -5328,8 +5377,15 @@ function _wkProgApp(P){
   var r=[],n=1;
   r.push('<row r="1" ht="21" customHeight="1">'+_crXlsCel('A',1,'PROGRAMACIÓN',true,S.titulo)+'</row>');
   r.push('<row r="2" ht="28" customHeight="1">'+_crXlsCel('A',2,
-    P.espina.id+' · '+P.crons.length+' línea(s) base y el avance real · semana S'+P.sem+
-    ' · corte '+P.corte+'. Hay tantas filas como actividades tenga el cronograma.',true,S.subtitulo)+'</row>');
+    P.espina.id+' · '+P.crons.length+' línea(s) base y el avance real. '+
+    'Hay tantas filas como actividades tenga el cronograma.',true,S.subtitulo)+
+    _crXlsCel('E',2,'SEMANA',true,S.etiq)+
+    '<c r="F2" s="'+S.cabSem+'"><f>\'Carátula\'!$C$17</f></c>'+
+    _crXlsCel('G',2,'del',true,S.etiq)+
+    '<c r="H2" s="'+S.fecha+'"><f>\'Carátula\'!$C$18</f></c>'+
+    _crXlsCel('I',2,'al',true,S.etiq)+
+    '<c r="J2" s="'+S.fecha+'"><f>\'Carátula\'!$E$18</f></c>'+
+    '</row>');
   var c3='',c4='';
   CAB.forEach(function(h,i){c3+=_crXlsCel(COLS[i],3,h,true,S.cab)});
   c3+=_crXlsCel('M',3,'S0',true,S.cabSem);
@@ -5405,6 +5461,7 @@ function _wkProgApp(P){
   var ultCol=col(nS);
   return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    _wkTab(_WK_VERDE)+
     '<dimension ref="A1:'+ultCol+n+'"/>'+
     '<sheetViews><sheetView showGridLines="0" workbookViewId="0">'+
     '<pane xSplit="4" ySplit="4" topLeftCell="E5" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
@@ -5493,7 +5550,7 @@ async function _wkLibroApp(semN,corte,ids){
   var pctReal=0,hhAlc=D.esp.u.hh;
   D.filas.forEach(function(f){pctReal+=f.hhReal});
   pctReal=hhAlc>0?(pctReal/hhAlc):0;
-  var car=_wkCaratulaApp({proyecto:DATA.proyecto,sem:semN,
+  var car=_wkCaratulaApp({proyecto:DATA.proyecto,sem:semN,semanas:sem,
     semIni:sem[D.iSem-1].ini,semFin:sem[D.iSem-1].fin,corte:corte,
     hoy:(typeof todayISO==='function')?todayISO():'',
     crons:D.C.map(function(c){return {id:c.id,nombre:c.nombre,nAct:c.tar.length,
@@ -5502,12 +5559,17 @@ async function _wkLibroApp(semN,corte,ids){
   var prog=_wkProgApp({espina:{id:D.esp.id},crons:D.C.map(function(c){return {id:c.id}}),
     semanas:sem,sem:semN,corte:corte,iSem:D.iSem,filas:D.filas,
     nomWbs:D.esp.nomWbs,hhTot:D.hhTot});
-  var hojas=[['Carátula',car.xml],['PROGRAMACION',prog.xml]];
+  /* el orden que pide el reporte: primero los alimentadores, luego las
+     listas de actividades, y al final la caratula y la programacion */
+  var hojas=[];
   D.C.forEach(function(c){
     var fil=_crPlanSemanal(c.tar,c.u.items,sem);
     hojas.push(['ACTIVITY_PLAN ('+c.id+')',
-      _crHojaPlan({cron_id:c.id,nombre:c.nombre},fil,sem)]);
+      _crHojaPlan({cron_id:c.id,nombre:c.nombre},fil,sem)])});
+  D.C.forEach(function(c){
     hojas.push(['P6-'+c.id,_wkHojaP6({cron_id:c.id},c.tar,c.u.items,sem).xml])});
+  hojas.push(['Carátula',car.xml]);
+  hojas.push(['PROGRAMACION',prog.xml]);
   return {hojas:hojas,info:{actividades:prog.actividades,
     crons:D.C.map(function(c){return c.id}),espina:D.esp.id,
     pctReal:Math.round(pctReal*1000)/10}}}
@@ -5594,6 +5656,7 @@ function _wkHojaP6(cron,tareas,uItems,semanas){
   var ultCol=(semanas&&semanas.length)?_wkgCol('P',semanas.length-1):'I';
   return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    _wkTab(_WK_AMARILLO)+
     '<dimension ref="A1:'+ultCol+(n-1)+'"/>'+
     '<sheetViews><sheetView workbookViewId="0">'+
     '<pane xSplit="6" ySplit="2" topLeftCell="G3" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
@@ -9452,7 +9515,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823k2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823k3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
