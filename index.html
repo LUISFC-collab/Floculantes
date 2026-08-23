@@ -5144,6 +5144,85 @@ function _wkHojaCron(cronos,actual,semanas){
     '<drawing r:id="rIdDr1"/>'+
     '</worksheet>';
   return {xml:xml,filaDe:filaDe,ultCol:ult,ultFila:n-1,colIni:C0}}
+/* ---------------- Las curvas de la hoja PHYSICAL % PROGRESS ----------------
+   Ahi viven las series que dibujan los graficos:
+     fila 218  % PROGRAMADO ACUMULADO (LB0)   <- valores pegados de la plantilla
+     fila 219  % ACTUAL ACUMULADO             <- lo escribe el aplicativo
+     fila 220/221  los semanales, que se derivan de las dos de arriba
+   Las semanas van en P..AG (S27 a S44) y O es la casilla de arranque en cero.
+
+   Lo que faltaba: una curva por cronograma marcado. Con LB0 y LB1 quedan dos
+   curvas largas, hasta la S44, y la del avance real, que se corta en la semana
+   del reporte: de ahi para adelante se deja VACIO, no en cero, para que la
+   linea termine en vez de desplomarse hasta el eje. */
+var _WKC_COLS=['P','Q','R','S','T','U','V','W','X','Y','Z','AA','AB','AC','AD','AE','AF','AG'];
+var _WKC_LB0=218, _WKC_ACT=219, _WKC_EXTRA=222;
+var _WKC_COLORES=['2E86C1','E67E22','8E44AD','16A085','C0392B'];
+/* El acumulado semanal de un cronograma, en fraccion de 0 a 1 */
+function _wkCurvaDe(filas,semanas){
+  var tot=0;filas.forEach(function(f){tot+=f.hh});
+  var acum=0,out=[];
+  semanas.forEach(function(s,i){
+    var v=0;filas.forEach(function(f){v+=f.sem[i]});
+    acum+=v;
+    out.push(tot>0?Math.min(1,Math.round(acum/tot*1e10)/1e10):0)});
+  return out}
+/* Los estilos de una fila, para que la nueva se vea igual que sus vecinas */
+function _wkEstilosDe(xml,fila){
+  var est={},at='';
+  var m=xml.match(new RegExp('<row r="'+fila+'"((?:\\s[^>]*?)?)>([\\s\\S]*?)</row>'));
+  if(m){at=m[1];
+    m[2].replace(/<c r="([A-Z]+)\d+"((?:\s[^>]*?)?)/g,function(t,c,a){
+      var s=(a.match(/s="(\d+)"/)||[])[1];if(s)est[c]=s;return t})}
+  return {est:est,at:at}}
+/* Escribe (o crea) una fila de curva. hasta = ultima semana con dato, 1..18;
+   de ahi en adelante la celda queda vacia. */
+function _wkPonCurva(xml,fila,titulo,vals,hasta,filaRef){
+  var R=_wkEstilosDe(xml,filaRef||fila);
+  var cel=function(col,v,txt){
+    var e=R.est[col]?(' s="'+R.est[col]+'"'):'';
+    if(txt)return '<c r="'+col+fila+'"'+e+' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(v)+'</t></is></c>';
+    if(v===''||v==null)return '<c r="'+col+fila+'"'+e+'/>';
+    return '<c r="'+col+fila+'"'+e+'><v>'+v+'</v></c>'};
+  var cuerpo=cel('C',titulo,true)+cel('O',0,false);
+  _WKC_COLS.forEach(function(col,i){
+    cuerpo+=cel(col,(hasta!=null&&(i+1)>hasta)?'':vals[i],false)});
+  var nueva='<row r="'+fila+'"'+R.at+'>'+cuerpo+'</row>';
+  var re1=new RegExp('<row r="'+fila+'"(?:\\s[^>]*?)?(?:/>|>[\\s\\S]*?</row>)');
+  if(re1.test(xml))return {xml:xml.replace(re1,nueva),creada:false};
+  var puesto=false;
+  var out=xml.replace(/<row r="(\d+)"/g,function(t,rs){
+    if(puesto||+rs<fila)return t;
+    puesto=true;return nueva+t});
+  if(!puesto)out=xml.replace('</sheetData>',nueva+'</sheetData>');
+  return {xml:out,creada:true}}
+/* Vacia una fila de la semana `hasta` en adelante, sin tocar su formato */
+function _wkCortaCurva(xml,fila,hasta){
+  var n=0;
+  var re1=new RegExp('(<row r="'+fila+'"(?:\\s[^>]*?)?>)([\\s\\S]*?)(</row>)');
+  var out=xml.replace(re1,function(t,ini,cuerpo,fin){
+    var c2=cuerpo.replace(/<c r="([A-Z]+)\d+"((?:\s[^>]*?)?)(\/>|>[\s\S]*?<\/c>)/g,
+      function(t2,col,at,resto){
+        var i=_WKC_COLS.indexOf(col);
+        if(i<0||(i+1)<=hasta)return t2;
+        n++;return '<c r="'+col+fila+'"'+at.replace(/\s*t="[^"]*"/,'')+'/>'});
+    return ini+c2+fin});
+  return {xml:out,n:n}}
+/* Una serie mas en un grafico, escrita de cero: sin cache, que Excel la
+   rehace al abrir. Clonarla de otra arrastraba etiquetas y lineas de
+   tendencia que no venian a cuento. */
+function _wkSerieNueva(cx,hoja,filaVal,filaCat,titulo,color,idx){
+  var H=_wkEsc("'"+hoja+"'");
+  var s='<c:ser><c:idx val="'+idx+'"/><c:order val="'+idx+'"/>'+
+    '<c:tx><c:strRef><c:f>'+H+'!$C$'+filaVal+'</c:f></c:strRef></c:tx>'+
+    '<c:spPr><a:ln w="28575" cap="rnd"><a:solidFill><a:srgbClr val="'+color+'"/></a:solidFill><a:round/></a:ln></c:spPr>'+
+    '<c:marker><c:symbol val="none"/></c:marker>'+
+    '<c:cat><c:numRef><c:f>'+H+'!$P$'+filaCat+':$AG$'+filaCat+'</c:f></c:numRef></c:cat>'+
+    '<c:val><c:numRef><c:f>'+H+'!$P$'+filaVal+':$AG$'+filaVal+'</c:f></c:numRef></c:val>'+
+    '<c:smooth val="0"/></c:ser>';
+  var i=cx.lastIndexOf('</c:ser>');
+  if(i<0)return {xml:cx,ok:false};
+  return {xml:cx.slice(0,i+8)+s+cx.slice(i+8),ok:true}}
 /* ------------- La semana del Gantt, como hoja del libro ---------------------
    El Gantt de la app ya calcula, dia a dia, lo PROGRAMADO (del cronograma
    proyectado), lo EJECUTADO y lo que queda por delante (el forecast). La hoja
@@ -7453,7 +7532,7 @@ function _wkExcel(){
          un SUMIF por codigo de tarea. Aqui se escribe esa hoja para cada
          cronograma elegido y se apunta PROGRAMACION al que corresponde: no
          se toca ni una formula de las verdes, solo de donde leen. */
-      var _plMsg='',_mapa3=null;
+      var _plMsg='',_mapa3=null,_curvasCron=[];
       try{
         var _eleg=[].slice.call(document.querySelectorAll('._wkCk:checked')).map(function(k){return k.value});
         var _Lc=(await _crPull()).filter(function(z){return _eleg.indexOf(z.cron_id)>=0});
@@ -7466,6 +7545,7 @@ function _wkExcel(){
             var _fil=_crPlanSemanal(_tt,_uu.items,_rej);
             _tot[_cc.cron_id]=Math.round(_fil.reduce(function(a,f){return a+f.hh},0)*100)/100;
             if(_fil.plegadoFin>0)_pleg[_cc.cron_id]=_fil.plegadoFin;
+            _curvasCron.push({id:_cc.cron_id,v:_wkCurvaDe(_fil,_rej)});
             var _xmlP=_crHojaPlan(_cc,_fil,_rej);
             var _nomP='ACTIVITI_PLAN ('+_cc.cron_id+')';
             if(hojas[_nomP]&&mapa[hojas[_nomP]])cambiar[hojas[_nomP]]=_xmlP;
@@ -7509,6 +7589,26 @@ function _wkExcel(){
               ' que caían después del cuadro'):'');
           r.avisos.push('Cronogramas'+_plMsg)}
       }catch(_epl){r.avisos.push('No se pudieron escribir los alimentadores de cronograma: '+String((_epl&&_epl.message)||_epl))}
+      /* ---- las curvas: una por cronograma, y el real cortado en la semana ---- */
+      var _curMsg='',_curFilas=[];
+      try{
+        if(hPhy&&mapa[hPhy]&&typeof _wkCurvaDe==='function'&&_curvasCron.length){
+          var _xf=cambiar[hPhy]||(await leer(hPhy));
+          var _iSem=semN-27+1;               /* 1..18, la semana del reporte */
+          _curvasCron.forEach(function(c2,i){
+            var fila=(i===0)?_WKC_LB0:(_WKC_EXTRA+i-1);
+            var tit='% PROGRAMADO ACUMULADO ('+c2.id+')';
+            var rr=_wkPonCurva(_xf,fila,tit,c2.v,null,_WKC_LB0);
+            _xf=rr.xml;_curFilas.push({fila:fila,id:c2.id,creada:rr.creada})});
+          /* el real termina en la semana del reporte: de ahi para adelante,
+             vacio. Con ceros la linea se desplomaba hasta el eje. */
+          var _ct=_wkCortaCurva(_xf,_WKC_ACT,_iSem);
+          _xf=_ct.xml;
+          cambiar[hPhy]=_xf;
+          _curMsg=' · curvas: '+_curFilas.map(function(f){
+            return f.id+' en la fila '+f.fila+(f.creada?' (nueva)':'')}).join(', ')+
+            ' · el real se corta en la S'+semN+' ('+_ct.n+' casillas vaciadas)'}
+      }catch(_ec9){r.avisos.push('No se pudieron escribir las curvas: '+String((_ec9&&_ec9.message)||_ec9))}
       /* ---- la semana del Gantt, y PPC leyendo de ella ----
          PPC traia el forecast, el acumulado y los siete dias escritos a mano.
          Ahora sale una hoja con lo que calcula el Gantt y PPC la consulta. */
@@ -7551,6 +7651,29 @@ function _wkExcel(){
           var cx=await leer(en3.nombre);
           var rc=_wkCurvas(cx,[phy.filaAcum,phy.filaSem],colFin2);
           if(rc.cambio){cambiar[en3.nombre]=rc.xml;curvas+=rc.cambio}}}
+      /* los graficos que dibujaban la fila 218 reciben una serie por cada
+         cronograma de mas: la curva se ve, no solo el numero */
+      try{
+        if(_curFilas.length>1){
+          var _hojaPhy='PHYSICAL % PROGRESS',_nser=0,_ngraf=0;
+          for(var _ei=0;_ei<entradas.length;_ei++){
+            var _en9=entradas[_ei];
+            if(!/^xl[/]charts[/]chart\d+[.]xml$/.test(_en9.nombre))continue;
+            var _cx=cambiar[_en9.nombre]||(await leer(_en9.nombre));
+            if(_cx.indexOf('$P$'+_WKC_LB0+':$AG$'+_WKC_LB0)<0)continue;
+            var _base=(_cx.match(/<c:ser>/g)||[]).length;
+            var _hecho=false;
+            for(var _k9=1;_k9<_curFilas.length;_k9++){
+              var _f9=_curFilas[_k9];
+              if(_cx.indexOf('$P$'+_f9.fila+':$AG$'+_f9.fila)>=0)continue;
+              var _rs=_wkSerieNueva(_cx,_hojaPhy,_f9.fila,7,
+                '% PROGRAMADO ACUMULADO ('+_f9.id+')',
+                _WKC_COLORES[_k9%_WKC_COLORES.length],_base+_k9-1);
+              if(_rs.ok){_cx=_rs.xml;_nser++;_hecho=true}}
+            if(_hecho){cambiar[_en9.nombre]=_cx;_ngraf++}}
+          if(_nser)_curMsg+=' · '+_nser+' serie(s) añadida(s) en '+_ngraf+' gráfico(s)'}
+      }catch(_eg9){r.avisos.push('No se pudo añadir la serie a los gráficos: '+String((_eg9&&_eg9.message)||_eg9))}
+      if(_curMsg)r.avisos.push('Curvas'+_curMsg);
       for(var nm in cambiar){
         var u8=enc.encode(cambiar[nm]),en2=mapa[nm];
         en2.crc=_wkCrc32(u8);en2.usz=u8.length;en2.metodo=8;en2.datos=await _wkDeflar(u8)}
@@ -8702,7 +8825,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823h9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823j1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
