@@ -1961,12 +1961,14 @@ function _wkAcum(cutISO){
   return out}
 /* el % del proyecto con el universo de la app: hh ganadas / hh totales,
    cada partida topada a su 100% (la misma vara del panel) */
-function _wkPctApp(datos){
+function _wkPctApp(datos,conSobre){
   var hhT=0,pts=0;
   for(var k in datos){var d=datos[k];var hh=Number(d[2])||0;if(!(hh>0))continue;
     hhT+=hh;var tot=Number(d[1])||0;
     var fr=(d.length>6&&isFinite(Number(d[6])))?Math.min(1,(Number(d[6])||0)/100)
           :((tot>0)?Math.min(1,(Number(d[0])||0)/tot):0);
+    /* con sobremetrado incluido, la fraccion real de la partida cuenta aunque pase de 1 */
+    if(conSobre&&tot>0){var raw=(Number(d[0])||0)/tot;if(raw>fr)fr=raw}
     pts+=hh*fr}
   return {pct:hhT>0?pts/hhT:0,hhT:Math.round(hhT*10)/10,pts:Math.round(pts*10)/10}}
 /* ---------- zip: leer y rearmar sin librerias ---------- */
@@ -2291,7 +2293,7 @@ function _wkExcel(){
       else wbx=wbx.replace('</workbook>','<calcPr fullCalcOnLoad="1"/></workbook>');
       var cambiar={};cambiar[hP62]=r.xml;cambiar[hCar]=x22;cambiar['xl/workbook.xml']=wbx;
       /* el % final con el universo de la app (todas las partidas + adicionales) */
-      var pctA=_wkPctApp(datos),phy=null;
+      var pctA=_wkPctApp(datos,!topar),phy=null;
       if(hPhy&&mapa[hPhy]){
         try{phy=_wkPonPct(await leer(hPhy),ss,semN,pctA.pct);cambiar[hPhy]=phy.xml}
         catch(_ep){r.avisos.push('No se pudo estampar el % en PHYSICAL % PROGRESS: '+String((_ep&&_ep.message)||_ep))}}
@@ -3440,7 +3442,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260821c4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260821c5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
