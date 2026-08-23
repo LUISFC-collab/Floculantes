@@ -3507,7 +3507,52 @@ function _crXlsCel(col,r,v,texto,st){
                     y los items que la componen.
    Las fechas se pueden poner en ALCANCE o en AGRUPADO; la de AGRUPADO manda y
    se aplica a todas las partidas de esa tarea. */
+/* Evalua de verdad las formulas del libro: recorre ALCANCE como lo haria
+   Excel y comprueba que la suma de las tareas cuadra con el alcance marcado. */
+function _crCuadre(hoja1,hoja2){
+  try{
+    var leer=function(x){
+      var out=[];
+      String(x).replace(/<row r="(\d+)">([\s\S]*?)<\/row>/g,function(_t,rs,cuerpo){
+        var d={_r:+rs};
+        cuerpo.replace(/<c r="([A-Z]+)\d+"[^>]*?(?:\/>|>([\s\S]*?)<\/c>)/g,function(_c,col,inner){
+          inner=inner||'';
+          var f=inner.match(/<f>([\s\S]*?)<\/f>/);
+          var t=inner.match(/<t[^>]*>([\s\S]*?)<\/t>/);
+          var v=inner.match(/<v>([^<]*)<\/v>/);
+          d[col]=f?{f:f[1]}:(t?t[1]:(v?v[1]:''));return _c});
+        out.push(d);return _t});
+      return out};
+    var A=leer(hoja1).filter(function(d){return d._r>3}),B=leer(hoja2);
+    var suma=function(cs,cc,val){var a=0;A.forEach(function(f){
+      if(String(f[cc]||'')===String(val)&&f.J==='SI')a+=(Number(f[cs])||0)});return a};
+    var porFila={};B.forEach(function(d){porFila[d._r]=d});
+    var ev=function(t){
+      var js=String(t)
+        .replace(/SUMIFS\(ALCANCE!\$([A-Z]):\$[A-Z],ALCANCE!\$([A-Z]):\$[A-Z],\$B(\d+),ALCANCE!\$J:\$J,"SI"\)/g,
+          function(_m,cs,cc,rr){return String(suma(cs,cc,(porFila[+rr]||{}).B||''))})
+        .replace(/SUMIFS\(ALCANCE!\$([A-Z]):\$[A-Z],ALCANCE!\$A:\$A,"([^"]+)",ALCANCE!\$J:\$J,"SI"\)/g,
+          function(_m,cs,it){return String(suma(cs,'A',it))});
+      if(/[A-Z]{2,}\(/.test(js))return null;
+      try{return Function('return ('+js+')')()}catch(e){return null}};
+    var hh=0,repes=[],vistos={};
+    B.forEach(function(d){
+      var cod=(typeof d.A==='string')?d.A:'';
+      var esFila=/^[A-Za-z]/.test(cod)&&d.I!=null;
+      /* filas de tarea (llevan COD. P6) y filas sin tarea (llevan solo B) */
+      var esTarea=!!cod&&d.D!=='WBS'&&d.D!=='AVISO';
+      var esSuelta=!cod&&typeof d.D==='string'&&d.D.indexOf('SIN TAREA')===0;
+      if(!esTarea&&!esSuelta)return;
+      if(esTarea&&typeof d.B==='string'&&d.B&&d.B!=='(repartida)'){
+        if(vistos[d.B])repes.push(d.B);vistos[d.B]=1}
+      var v=(d.I&&d.I.f)?ev(d.I.f):Number(d.I||0);
+      if(v!=null)hh+=v});
+    var alcHH=0;A.forEach(function(f){if(f.J==='SI')alcHH+=(Number(f.H)||0)});
+    return {tareas:hh,alcance:alcHH,dif:hh-alcHH,repes:repes}
+  }catch(e){return null}}
 function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs){
+  nomWbs=nomWbs||{};
+  var cuadre=null;
   /* un relleno por agrupacion, con el mismo color que se ve en el aplicativo */
   var _fills=['<fill><patternFill patternType="none"/></fill>',
               '<fill><patternFill patternType="gray125"/></fill>'];
@@ -3521,7 +3566,6 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs){
     _xfs.push('<xf numFmtId="0" fontId="0" fillId="'+(_fills.length-1)+'" borderId="0" xfId="0" applyFill="1"/>');
     _estG[g.grupo_id]=_xfs.length-1});
   var est=function(gid){return (gid&&_estG[gid])||0};
-  nomWbs=nomWbs||{};
   var COLS=['A','B','C','D','E','F','G','H','I','J','K','L','M'];
   grupos=grupos||[];
   var repDe={},nomG={},miemG={};
@@ -3550,16 +3594,22 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs){
     var propios=ms.filter(function(i){return partes(i)===1});
     var compart=ms.filter(function(i){return partes(i)>1});
     if(!ms.length){codDeTarea[t.task_code]={p6:t.task_code,qps:'',tipo:'INFORMATIVA',g:'',
-      ms:[],propios:[],compart:[]};return}
+      ms:[],propios:[],compart:[],base:false};return}
     var gs={};ms.forEach(function(i){if(grupoDe[i])gs[grupoDe[i]]=1});
     var gk=Object.keys(gs);
-    var base=propios.length?propios:ms;
-    if(gk.length===1&&repDe[gk[0]]&&_existe[repDe[gk[0]]]&&partes(repDe[gk[0]])===1){
-      codDeTarea[t.task_code]={p6:t.task_code,qps:repDe[gk[0]],tipo:'AGRUPADA',g:gk[0],
-        ms:ms,propios:propios,compart:compart};return}
-    var may=base[0];base.forEach(function(i){if(_hh[i]>_hh[may])may=i});
-    codDeTarea[t.task_code]={p6:t.task_code,qps:may,
-      tipo:(compart.length&&ms.length===compart.length?'REPARTIDA':(ms.length===1?'SIMPLE':'AGRUPADA')),
+    /* El codigo que sirve de llave tiene que ser una partida PROPIA de esta
+       tarea. El representante del grupo solo vale si es suyo: si el grupo se
+       reparte entre varias tareas, cada una necesita el suyo o ninguna suma
+       bien. */
+    var r0=(gk.length===1)?repDe[gk[0]]:'';
+    var cod='';
+    if(r0&&_existe[r0]&&propios.indexOf(r0)>=0)cod=r0;
+    if(!cod&&propios.length){
+      var may=propios[0];propios.forEach(function(i){if(_hh[i]>_hh[may])may=i});cod=may}
+    codDeTarea[t.task_code]={p6:t.task_code,
+      qps:cod||compart[0]||'',
+      base:!!cod,
+      tipo:(!propios.length?'REPARTIDA':(ms.length===1?'SIMPLE':'AGRUPADA')),
       g:gk[0]||'',ms:ms,propios:propios,compart:compart}});
   /* La marca de las repartidas no casa con ningun codigo de tarea a proposito:
      esas no las recoge el SUMIFS, se suman aparte con su fraccion */
@@ -3697,9 +3747,14 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs){
           return '+SUMIFS(ALCANCE!$'+colA+':$'+colA+',ALCANCE!$A:$A,"'+i+'",ALCANCE!$J:$J,"SI")/'+partes(i)}).join('')};
       var fracN=(k.compart||[]).map(function(i){
         return '+COUNTIFS(ALCANCE!$A:$A,"'+i+'",ALCANCE!$J:$J,"SI")/'+partes(i)}).join('');
-      c+=frm('H',e.fila,'COUNTIFS(ALCANCE!$M:$M,$B'+e.fila+',ALCANCE!$J:$J,"SI")'+fracN);
-      c+=frm('I',e.fila,'SUMIFS(ALCANCE!$H:$H,ALCANCE!$M:$M,$B'+e.fila+',ALCANCE!$J:$J,"SI")'+frac('H'));
-      c+=frm('J',e.fila,'SUMIFS(ALCANCE!$G:$G,ALCANCE!$M:$M,$B'+e.fila+',ALCANCE!$J:$J,"SI")'+frac('G'))}
+      /* la suma de base recoge las partidas propias de la tarea; si no tiene
+         ninguna, todo entra por las fracciones y no hay suma de base */
+      var bN=k.base?('COUNTIFS(ALCANCE!$M:$M,$B'+e.fila+',ALCANCE!$J:$J,"SI")'):'0';
+      var bH=k.base?('SUMIFS(ALCANCE!$H:$H,ALCANCE!$M:$M,$B'+e.fila+',ALCANCE!$J:$J,"SI")'):'0';
+      var bG=k.base?('SUMIFS(ALCANCE!$G:$G,ALCANCE!$M:$M,$B'+e.fila+',ALCANCE!$J:$J,"SI")'):'0';
+      c+=frm('H',e.fila,bN+fracN);
+      c+=frm('I',e.fila,bH+frac('H'));
+      c+=frm('J',e.fila,bG+frac('G'))}
     c+=_crXlsCel('K',e.fila,ini,true);
     c+=_crXlsCel('L',e.fila,fin,true);
     c+=_crXlsCel('M',e.fila,'',true);
@@ -3808,6 +3863,14 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs){
     String(x).replace(/<f>([\s\S]*?)<\/f>/g,function(_t,f){
       if(!_larga&&f.length>7000)_larga=f.length;return _t})});
   if(_larga)throw new Error('una fórmula salió de '+_larga+' caracteres: hay demasiadas partidas repartidas en una misma tarea');
+  /* El cuadre, evaluado aquí y no de palabra: lo que sumen las tareas mas lo
+     que quede sin tarea tiene que ser exactamente lo que el aplicativo tiene
+     marcado INCLUIR = SI. Si no, no se entrega el libro. */
+  cuadre=_crCuadre(hoja1,hoja2);
+  if(cuadre&&Math.abs(cuadre.dif)>0.011)
+    throw new Error('el libro no cuadra: las tareas suman '+cuadre.tareas.toFixed(2)+
+      ' hh y el alcance marcado son '+cuadre.alcance.toFixed(2)+' hh (sobran '+cuadre.dif.toFixed(2)+
+      ')'+(cuadre.repes.length?(' — código QPS repetido en '+cuadre.repes.slice(0,3).join(', ')):''));
   var partesZip=[
     ['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
@@ -7920,7 +7983,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823f7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823f8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
