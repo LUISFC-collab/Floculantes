@@ -5144,6 +5144,311 @@ function _wkHojaCron(cronos,actual,semanas){
     '<drawing r:id="rIdDr1"/>'+
     '</worksheet>';
   return {xml:xml,filaDe:filaDe,ultCol:ult,ultFila:n-1,colIni:C0}}
+/* ================= El libro armado por el aplicativo ========================
+   Hasta ahora el reporte salia de rellenar una plantilla con un numero de
+   filas fijo. Eso obligaba a que el cronograma cupiera en el formato, cuando
+   tiene que ser al reves. Aqui el libro se construye entero, con tantas filas
+   como actividades tenga el cronograma.
+
+   Un cuidado importante: LB0 y LB1 son universos distintos — el mismo
+   task_code NO es la misma actividad. Lo unico que comparten son las PARTIDAS
+   del QPS. Por eso la linea del LB0 de cada actividad se calcula sumando lo
+   que el LB0 programo para las mismas partidas que esa actividad tiene. */
+
+/* Las HH de cada PARTIDA repartidas por semana, segun el cronograma que sea.
+   Es la moneda comun entre lineas base. */
+function _wkPlanPorItem(tar,uItems,semanas){
+  var rp=_crReparto(tar),ult=semanas.length-1,out={};
+  (tar||[]).forEach(function(t){
+    if(!t.ini||!t.fin)return;
+    var d0=_crASerial(t.ini),nd=Math.max(1,_crASerial(t.fin)-d0+1);
+    (t.items||[]).forEach(function(it){
+      var hh=(Number(uItems[it])||0)/_crVeces(rp,it);
+      if(!(hh>0))return;
+      var fila=out[it]||(out[it]=semanas.map(function(){return 0}));
+      var porDia=hh/nd;
+      for(var k=0;k<nd;k++){
+        var dia=_crDeSerial(d0+k),w=-1;
+        if(dia>semanas[ult].fin)w=ult;
+        else if(dia<semanas[0].ini)w=0;
+        else for(var j=0;j<semanas.length;j++)
+          if(dia>=semanas[j].ini&&dia<=semanas[j].fin){w=j;break}
+        if(w>=0)fila[w]+=porDia}})});
+  return out}
+/* Suma el reparto de un puñado de partidas */
+function _wkSumaItems(porItem,items,semanas){
+  var out=semanas.map(function(){return 0}),hay=false;
+  (items||[]).forEach(function(i){
+    var f=porItem[i];if(!f)return;hay=true;
+    f.forEach(function(v,k){out[k]+=v})});
+  return hay?out:null}
+/* El acumulado en fraccion, a partir de un reparto semanal y su total */
+function _wkAcumDe(sem,total){
+  var a=0;return sem.map(function(v){a+=v;return total>0?Math.min(1,a/total):0})}
+
+/* ---------------------------- la carátula --------------------------------- */
+function _wkCaratulaApp(info){
+  var r=[],n=1;
+  var linea=function(et,val,txt){
+    var c=_crXlsCel('B',n,et,true)+_crXlsCel('D',n,val,txt!==false);
+    r.push('<row r="'+n+'">'+c+'</row>');n++};
+  r.push('<row r="1">'+_crXlsCel('B',1,'CONTRACTOR WEEKLY REPORT',true)+'</row>');n=2;
+  r.push('<row r="2">'+_crXlsCel('B',2,info.proyecto||'',true)+'</row>');n=4;
+  linea('Semana','S'+info.sem);
+  linea('Del','('+info.semIni+')');
+  linea('Al','('+info.semFin+')');
+  linea('Corte de datos',info.corte);
+  linea('Generado',info.hoy);
+  n++;
+  r.push('<row r="'+n+'">'+_crXlsCel('B',n,'CRONOGRAMAS INCLUIDOS',true)+'</row>');n++;
+  r.push('<row r="'+n+'">'+_crXlsCel('B',n,'CÓDIGO',true)+_crXlsCel('C',n,'NOMBRE',true)+
+    _crXlsCel('D',n,'ACTIVIDADES',true)+_crXlsCel('E',n,'HH',true)+
+    _crXlsCel('F',n,'INICIO',true)+_crXlsCel('G',n,'FIN',true)+'</row>');n++;
+  (info.crons||[]).forEach(function(c){
+    r.push('<row r="'+n+'">'+_crXlsCel('B',n,c.id,true)+_crXlsCel('C',n,c.nombre||'',true)+
+      _crXlsCel('D',n,c.nAct,false)+_crXlsCel('E',n,c.hh,false)+
+      _crXlsCel('F',n,c.ini||'',true)+_crXlsCel('G',n,c.fin||'',true)+'</row>');n++});
+  n++;
+  r.push('<row r="'+n+'">'+_crXlsCel('B',n,'AVANCE AL CORTE',true)+'</row>');n++;
+  r.push('<row r="'+n+'">'+_crXlsCel('B',n,'% real del aplicativo',true)+
+    _crXlsCel('D',n,info.pctReal,false)+'</row>');n++;
+  r.push('<row r="'+n+'">'+_crXlsCel('B',n,'HH del alcance',true)+
+    _crXlsCel('D',n,info.hhAlcance,false)+'</row>');n++;
+  return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<dimension ref="A1:G'+(n-1)+'"/>'+
+    '<sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>'+
+    '<sheetFormatPr defaultRowHeight="15"/>'+
+    '<cols><col min="1" max="1" width="3" customWidth="1"/>'+
+    '<col min="2" max="2" width="26" customWidth="1"/>'+
+    '<col min="3" max="3" width="42" customWidth="1"/>'+
+    '<col min="4" max="7" width="14" customWidth="1"/></cols>'+
+    '<sheetData>'+r.join('')+'</sheetData>'+
+    '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
+    ultima:n-1}}
+
+/* ------------------------- PROGRAMACION ----------------------------------- */
+/* Una fila por cronograma y una del avance real, por cada actividad del
+   cronograma que hace de espina (el ultimo marcado, que es el vigente). */
+function _wkProgApp(P){
+  var COLS=['A','B','C','D','E','F','G','H','I','J','K','L'];
+  var CAB=['COD. P6','CODIGO QPS','PARTIDA','LÍNEA','INICIO','FIN','DURAC. (d)',
+           'CANT.','UND','HH','PESO','ACUM.'];
+  var sem=P.semanas, nS=sem.length;
+  var col=function(i){return _wkgCol('M',i)};   /* M es la casilla de arranque */
+  var r=[];
+  r.push('<row r="1">'+_crXlsCel('A',1,
+    'PROGRAMACIÓN — '+P.espina.id+' con '+P.crons.length+' línea(s) base y el avance real. '+
+    'Generado por el aplicativo: hay tantas filas como actividades tenga el cronograma.',true)+'</row>');
+  var c2='';
+  c2+=_crXlsCel('A',2,'Semana',true)+_crXlsCel('B',2,'S'+P.sem,true);
+  c2+=_crXlsCel('D',2,'Corte',true)+_crXlsCel('E',2,P.corte,true);
+  r.push('<row r="2">'+c2+'</row>');
+  /* fila 3: los rotulos de semana; fila 4: el jueves de cierre */
+  var c3='',c4='';
+  CAB.forEach(function(h,i){c3+=_crXlsCel(COLS[i],3,h,true)});
+  c3+=_crXlsCel('M',3,'S0',true);
+  sem.forEach(function(s,i){c3+=_crXlsCel(col(i+1),3,'S'+s.n,true)});
+  sem.forEach(function(s,i){c4+=_crXlsCel(col(i+1),4,s.serFin,false)});
+  r.push('<row r="3">'+c3+'</row>');
+  r.push('<row r="4">'+c4+'</row>');
+  var n=5,nAct=0,filasAct=[];
+  var prev=[];
+  P.filas.forEach(function(f){
+    /* los titulos de WBS, en su sitio */
+    var ruta=String(f.wbs||'').split(' / ').filter(function(z){return z});
+    var i0=0;while(i0<ruta.length&&i0<prev.length&&ruta[i0]===prev[i0])i0++;
+    for(var j=i0;j<ruta.length;j++){
+      var rj=ruta.slice(0,j+1).join(' / ');
+      r.push('<row r="'+n+'">'+
+        _crXlsCel('C',n,new Array(j+1).join('    ')+String(P.nomWbs[rj]||ruta[j]).toUpperCase(),true)+
+        '</row>');n++}
+    prev=ruta;
+    var base=n;
+    /* una fila por cronograma */
+    P.crons.forEach(function(cr,k){
+      var v=f.lineas[cr.id];
+      var c='';
+      if(k===0){
+        c+=_crXlsCel('A',n,f.cod,true);
+        c+=_crXlsCel('B',n,f.qps||'',true);
+        c+=_crXlsCel('C',n,new Array(ruta.length+1).join('    ')+f.nom,true);
+      }
+      c+=_crXlsCel('D',n,cr.id,true);
+      if(v){
+        c+=_crXlsCel('E',n,_crASerial(v.ini),false);
+        c+=_crXlsCel('F',n,_crASerial(v.fin),false);
+        c+=_crXlsCel('G',n,v.dias||'',false);
+      }
+      if(k===0){
+        c+=_crXlsCel('H',n,(f.cant===''||f.cant==null)?'':f.cant,false);
+        c+=_crXlsCel('I',n,f.und||'',true);
+      }
+      c+=_crXlsCel('J',n,v?Math.round(v.hh*100)/100:'',false);
+      c+=_crXlsCel('K',n,v&&P.hhTot[cr.id]>0?Math.round(v.hh/P.hhTot[cr.id]*1e6)/1e6:'',false);
+      c+=_crXlsCel('L',n,'',false);
+      c+=_crXlsCel('M',n,0,false);
+      if(v)v.acum.forEach(function(a,i){c+=_crXlsCel(col(i+1),n,Math.round(a*1e6)/1e6,false)});
+      r.push('<row r="'+n+'">'+c+'</row>');n++});
+    /* y la del avance real, que se corta en la semana del reporte */
+    var c='';
+    c+=_crXlsCel('D',n,'Actual',true);
+    c+=_crXlsCel('J',n,Math.round((f.hhReal||0)*100)/100,false);
+    c+=_crXlsCel('L',n,Math.round((f.pctReal||0)*1e6)/1e6,false);
+    c+=_crXlsCel('M',n,0,false);
+    (f.acumReal||[]).forEach(function(a,i){
+      if(i+1<=P.iSem)c+=_crXlsCel(col(i+1),n,Math.round(a*1e6)/1e6,false)});
+    r.push('<row r="'+n+'">'+c+'</row>');n++;
+    nAct++;filasAct.push({base:base,fin:n-1})});
+  /* el total, formulado */
+  var pri=filasAct.length?filasAct[0].base:5, ult=n-1;
+  var tot='';
+  tot+=_crXlsCel('C',n,'TOTAL',true);
+  P.crons.forEach(function(cr){tot+=''});
+  tot+=_crXlsCel('J',n,'',false);
+  r.push('<row r="'+n+'">'+tot+'</row>');
+  var ultCol=col(nS);
+  return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<dimension ref="A1:'+ultCol+n+'"/>'+
+    '<sheetViews><sheetView workbookViewId="0">'+
+    '<pane xSplit="4" ySplit="4" topLeftCell="E5" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
+    '<sheetFormatPr defaultRowHeight="15"/>'+
+    '<cols><col min="1" max="2" width="12" customWidth="1"/>'+
+    '<col min="3" max="3" width="56" customWidth="1"/>'+
+    '<col min="4" max="4" width="9" customWidth="1"/>'+
+    '<col min="5" max="12" width="11" customWidth="1"/>'+
+    '<col min="13" max="'+(12+nS+1)+'" width="9" customWidth="1"/></cols>'+
+    '<sheetData>'+r.join('')+'</sheetData>'+
+    '<autoFilter ref="A3:'+ultCol+ult+'"/>'+
+    '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
+    actividades:nAct, ultima:n}}
+/* Junta los datos y arma el libro. La espina es el ULTIMO cronograma marcado
+   -el vigente- y de el salen las actividades; los demas aportan su linea. */
+async function _wkDatosLibro(semN,corte,ids){
+  var sem=_crRejilla();
+  var L=(await _crPull()).filter(function(c){return ids.indexOf(c.cron_id)>=0});
+  if(!L.length)throw new Error('no hay ningún cronograma marcado');
+  var C=[];
+  for(var i=0;i<L.length;i++){
+    var c=L[i];
+    var tar=await _crTareas(c.cron_id),alc=await _crAlc(c.cron_id);
+    var u=_crUniverso(c.cron_id,alc);
+    var wbs=[];try{wbs=await _crWbsDe(c.cron_id)}catch(e){}
+    var nom={};wbs.forEach(function(w){if(w.nombre)nom[w.ruta]=w.nombre});
+    C.push({id:c.cron_id,nombre:c.nombre||'',ini:c.inicio||'',fin:c.fin||'',
+      tar:tar,alc:alc,u:u,nomWbs:nom,
+      porItem:_wkPlanPorItem(tar,u.items,sem),
+      rp:_crReparto(tar)})}
+  var esp=C[C.length-1];
+  var porId={};_crPartidas().forEach(function(p){porId[p.id]=p});
+  var vivas={};
+  try{(DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id)vivas[p.id]=p})}catch(e){}
+  var pctA=function(id,f){try{var p=vivas[id];return p?(Number(pctOfAt(p,f))||0)/100:0}catch(e){return 0}};
+  var filas=[];
+  esp.tar.slice().sort(function(a,b){return (a.orden||0)-(b.orden||0)}).forEach(function(t){
+    var ms=(t.items||[]).filter(function(i){return esp.u.items[i]!=null});
+    var hhE=0;ms.forEach(function(i){hhE+=esp.u.items[i]/_crVeces(esp.rp,i)});
+    var lineas={};
+    C.forEach(function(cc){
+      var s=(cc.id===esp.id)
+        ? (function(){ /* la espina usa su propia tarea */
+            var o=sem.map(function(){return 0});
+            if(t.ini&&t.fin&&hhE>0){
+              var d0=_crASerial(t.ini),nd=Math.max(1,_crASerial(t.fin)-d0+1),pd=hhE/nd,ult=sem.length-1;
+              for(var k=0;k<nd;k++){var d=_crDeSerial(d0+k),w=-1;
+                if(d>sem[ult].fin)w=ult;else if(d<sem[0].ini)w=0;
+                else for(var j=0;j<sem.length;j++)if(d>=sem[j].ini&&d<=sem[j].fin){w=j;break}
+                if(w>=0)o[w]+=pd}}
+            return o})()
+        : _wkSumaItems(cc.porItem,ms,sem);   /* los demas, por las mismas partidas */
+      if(!s)return;
+      var hh=s.reduce(function(a,b){return a+b},0);
+      if(!(hh>0)&&cc.id!==esp.id)return;
+      /* la ventana de esa linea base: primera y ultima semana con carga */
+      var p=-1,q=-1;s.forEach(function(v,i){if(v>0.000001){if(p<0)p=i;q=i}});
+      lineas[cc.id]={hh:hh,acum:_wkAcumDe(s,hh),
+        ini:(cc.id===esp.id)?t.ini:(p>=0?sem[p].ini:''),
+        fin:(cc.id===esp.id)?t.fin:(q>=0?sem[q].fin:''),
+        dias:(cc.id===esp.id)?((t.ini&&t.fin)?(_crASerial(t.fin)-_crASerial(t.ini)+1):0)
+                             :(p>=0?((q-p+1)*7):0)}});
+    /* el avance real de esas partidas, semana a semana */
+    var acumReal=sem.map(function(s2){
+      if(!(hhE>0))return 0;
+      var v=0;ms.forEach(function(i){v+=(esp.u.items[i]/_crVeces(esp.rp,i))*pctA(i,s2.fin)});
+      return Math.min(1,v/hhE)});
+    var hoy=(typeof todayISO==='function')?todayISO():corte;
+    var pr=0;if(hhE>0)ms.forEach(function(i){pr+=(esp.u.items[i]/_crVeces(esp.rp,i))*pctA(i,corte)});
+    var cant='',und='',qps='';
+    if(ms.length===1&&porId[ms[0]]){cant=porId[ms[0]].cant;und=porId[ms[0]].und||'';qps=ms[0]}
+    else if(ms.length>1)qps='('+ms.length+')';
+    filas.push({cod:t.task_code,qps:qps,nom:String(t.nombre||''),wbs:String(t.wbs||''),
+      cant:cant,und:und,lineas:lineas,
+      hhReal:hhE>0?pr:0,pctReal:hhE>0?Math.min(1,pr/hhE):0,acumReal:acumReal})});
+  var hhTot={};C.forEach(function(cc){hhTot[cc.id]=cc.u.hh});
+  return {sem:sem,C:C,esp:esp,filas:filas,hhTot:hhTot,
+    iSem:Math.max(1,Math.min(sem.length,semN-26))}}
+/* El libro entero, con las hojas que lleva hasta ahora */
+async function _wkLibroApp(semN,corte,ids){
+  var D=await _wkDatosLibro(semN,corte,ids);
+  var sem=D.sem;
+  var pctReal=0,hhAlc=D.esp.u.hh;
+  D.filas.forEach(function(f){pctReal+=f.hhReal});
+  pctReal=hhAlc>0?(pctReal/hhAlc):0;
+  var car=_wkCaratulaApp({proyecto:DATA.proyecto,sem:semN,
+    semIni:sem[D.iSem-1].ini,semFin:sem[D.iSem-1].fin,corte:corte,
+    hoy:(typeof todayISO==='function')?todayISO():'',
+    crons:D.C.map(function(c){return {id:c.id,nombre:c.nombre,nAct:c.tar.length,
+      hh:c.u.hh,ini:c.ini,fin:c.fin}}),
+    pctReal:Math.round(pctReal*1e6)/1e6, hhAlcance:hhAlc});
+  var prog=_wkProgApp({espina:{id:D.esp.id},crons:D.C.map(function(c){return {id:c.id}}),
+    semanas:sem,sem:semN,corte:corte,iSem:D.iSem,filas:D.filas,
+    nomWbs:D.esp.nomWbs,hhTot:D.hhTot});
+  var hojas=[['Carátula',car.xml],['PROGRAMACION',prog.xml]];
+  D.C.forEach(function(c){
+    var fil=_crPlanSemanal(c.tar,c.u.items,sem);
+    hojas.push(['ACTIVITY_PLAN ('+c.id+')',
+      _crHojaPlan({cron_id:c.id,nombre:c.nombre},fil,sem)]);
+    hojas.push(['P6-'+c.id,_wkHojaP6({cron_id:c.id},c.tar,c.u.items,sem).xml])});
+  return {hojas:hojas,info:{actividades:prog.actividades,
+    crons:D.C.map(function(c){return c.id}),espina:D.esp.id,
+    pctReal:Math.round(pctReal*1000)/10}}}
+/* El paquete .xlsx a partir de una lista [nombre, xml] */
+function _wkPaqueteApp(hojas){
+  var ov=function(i){return '<Override PartName="/xl/worksheets/sheet'+i+
+    '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'};
+  var partes=[
+    ['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
+      '<Default Extension="xml" ContentType="application/xml"/>'+
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+
+      hojas.map(function(_h,i){return ov(i+1)}).join('')+
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+    ['_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+    ['xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '+
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
+      '<sheets>'+hojas.map(function(h,i){
+        return '<sheet name="'+_wkEsc(h[0])+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>'}).join('')+
+      '</sheets><calcPr calcId="0" fullCalcOnLoad="1"/></workbook>'],
+    ['xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      hojas.map(function(_h,i){return '<Relationship Id="rId'+(i+1)+
+        '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>'}).join('')+
+      '<Relationship Id="rId'+(hojas.length+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+    ['xl/styles.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>'+
+      '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'+
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'+
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+      '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>'+
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>']];
+  hojas.forEach(function(h,i){partes.push(['xl/worksheets/sheet'+(i+1)+'.xml',h[1]])});
+  return partes}
 /* ---------------- Una hoja P6 por cronograma, hecha por la app -------------
    La plantilla trae UNA hoja 'P6-2' con la lista de actividades, y esa lista
    no sale del aplicativo: son formulas contra la hoja 'Partidas', que viene
@@ -7522,17 +7827,38 @@ function _wkExcel(){
   document.getElementById('_wkGo').onclick=function(){
     if(!file)return;
     file.arrayBuffer().then(function(buf){_armar(buf,'plantilla')})};
+  /* El libro lo arma el aplicativo: tantas filas como actividades tenga el
+     cronograma. No se rellena ninguna plantilla, asi que el formato se
+     adapta a los datos y no al reves. */
   document.getElementById('_wkSolo').onclick=async function(){
     var b=document.getElementById('_wkSolo'),msg=document.getElementById('_wkMsg');
-    var t0=b.textContent;b.disabled=true;b.textContent='Trayendo el libro guía…';
+    var t0=b.textContent;b.disabled=true;b.textContent='Armando…';
     try{
-      var res=await fetch('plantilla_semanal.xlsx?v='+encodeURIComponent(typeof APP_VER!=='undefined'?APP_VER:''),{cache:'no-store'});
-      if(!res.ok)throw new Error('HTTP '+res.status);
-      var buf=await res.arrayBuffer();
-      b.textContent=t0;
-      await _armar(buf,'solo');
+      var semN=+document.getElementById('_wkSel').value;
+      var corteJue=_wkISO(_wkSem(semN).fin);
+      var hastaHoy=((document.getElementById('_wkCorte')||{}).value!=='jueves');
+      var corte=hastaHoy?((typeof todayISO==='function')?todayISO():corteJue):corteJue;
+      var ids=[].slice.call(document.querySelectorAll('._wkCk:checked')).map(function(k){return k.value});
+      if(!ids.length)throw new Error('marca al menos un cronograma');
+      msg.textContent='Armando el libro desde el aplicativo (S'+semN+')…';
+      try{if(typeof syncPull==='function')await syncPull()}catch(_e){}
+      await _crCatPull();
+      var LB=await _wkLibroApp(semN,corte,ids);
+      var enc=new TextEncoder(),ent=[],partes=_wkPaqueteApp(LB.hojas);
+      for(var i=0;i<partes.length;i++){
+        var u8=enc.encode(partes[i][1]);
+        ent.push({nombre:partes[i][0],metodo:8,tiempo:_crZipTs(),
+          crc:_wkCrc32(u8),usz:u8.length,datos:await _wkDeflar(u8)})}
+      var blob=_wkZipArmar(ent);
+      var url=URL.createObjectURL(blob),a=document.createElement('a');
+      a.href=url;a.download='Reporte semanal S'+semN+' — '+LB.info.espina+'.xlsx';
+      document.body.appendChild(a);a.click();
+      setTimeout(function(){try{URL.revokeObjectURL(url);a.remove()}catch(e){}},4000);
+      msg.innerHTML='<div style="color:#0C5132;font-weight:800">✓ Libro armado — '+LB.hojas.length+
+        ' hojas · '+LB.info.actividades+' actividades de '+esc(LB.info.espina)+
+        ' · líneas: '+esc(LB.info.crons.join(' + '))+' + Actual · real al corte '+LB.info.pctReal+'%</div>';
     }catch(e2){
-      msg.innerHTML='<div style="color:#B42318;font-weight:800">⚠ No se pudo traer el libro guía ('+String((e2&&e2.message)||e2)+'). Sin internet, usa 📄 con tu plantilla.</div>';
+      msg.innerHTML='<div style="color:#B42318;font-weight:800">⚠ '+esc(String((e2&&e2.message)||e2))+'</div>';
     }
     b.disabled=false;b.textContent=t0;
   };
@@ -9035,7 +9361,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823j6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823k1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
