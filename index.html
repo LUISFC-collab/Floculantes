@@ -7137,6 +7137,46 @@ function _wkExcel(){
             retiradas:dm.partidas.filter(function(q){return q.estado==='Retirada del alcance'}).length,
             sinHH:dm.partidas.filter(function(q){return q.sin_hh}).length}}
       }catch(_emj){r.avisos.push('No se pudieron aplicar los colores y la hoja AVANCE SEMANAL: '+String((_emj&&_emj.message)||_emj))}
+      /* ---- los alimentadores amarillos, uno por cronograma marcado ----
+         Las hojas verdes leen su plan de una hoja ACTIVITI_PLAN (<id>) con
+         un SUMIF por codigo de tarea. Aqui se escribe esa hoja para cada
+         cronograma elegido y se apunta PROGRAMACION al que corresponde: no
+         se toca ni una formula de las verdes, solo de donde leen. */
+      var _plMsg='';
+      try{
+        var _eleg=[].slice.call(document.querySelectorAll('._wkCk:checked')).map(function(k){return k.value});
+        var _Lc=(await _crPull()).filter(function(z){return _eleg.indexOf(z.cron_id)>=0});
+        if(_Lc.length&&typeof _crHojaPlan==='function'){
+          var _ult=44;_Lc.forEach(function(z){var w=_crSemDeFecha(z.fin);if(w>_ult)_ult=w});
+          var _rej=_crRejilla(_ult),_nuev=0,_tot={};
+          for(var _ci=0;_ci<_Lc.length;_ci++){
+            var _cc=_Lc[_ci];
+            var _tt=await _crTareas(_cc.cron_id),_aa=await _crAlc(_cc.cron_id);
+            var _uu=_crUniverso(_cc.cron_id,_aa);
+            var _fil=_crPlanSemanal(_tt,_uu.items,_rej);
+            _tot[_cc.cron_id]=Math.round(_fil.reduce(function(a,f){return a+f.hh},0)*100)/100;
+            var _xmlP=_crHojaPlan(_cc,_fil,_rej);
+            var _nomP='ACTIVITI_PLAN ('+_cc.cron_id+')';
+            if(hojas[_nomP]&&mapa[hojas[_nomP]])cambiar[hojas[_nomP]]=_xmlP;
+            else{await _wkNuevaHoja(entradas,mapa,leer,_nomP,_xmlP,enc,pkgH);_nuev++}}
+          /* el ultimo marcado es el mas vigente: es el que manda en el plan */
+          var _el=_Lc[_Lc.length-1].cron_id;
+          var _hPr=hojas['PROGRAMACION'];
+          var _cam=0;
+          if(_hPr&&mapa[_hPr]&&_el!=='LB0'){
+            var _xpr=cambiar[_hPr]||(await leer(_hPr));
+            _cam=(_xpr.match(/ACTIVITI_PLAN \(LB0\)/g)||[]).length;
+            if(_cam){
+              _xpr=_xpr.split('ACTIVITI_PLAN (LB0)').join('ACTIVITI_PLAN ('+_el+')');
+              cambiar[_hPr]=_xpr}}
+          _plMsg=' · alimentadores: '+_Lc.map(function(z){return z.cron_id+' '+_tot[z.cron_id]+' hh'}).join(' | ')+
+            (_nuev?(' ('+_nuev+' hoja(s) nueva(s))'):'')+
+            (_cam?(' · PROGRAMACIÓN toma el plan de '+_el+' en '+_cam+' fórmulas'):
+                  (' · PROGRAMACIÓN sigue con el plan de LB0'))+
+            ((_rej.length>18)?(' · ojo: la rejilla llega a la S'+_rej[_rej.length-1].n+
+              ' y el libro solo mira hasta la S44'):'');
+          r.avisos.push('Cronogramas'+_plMsg)}
+      }catch(_epl){r.avisos.push('No se pudieron escribir los alimentadores de cronograma: '+String((_epl&&_epl.message)||_epl))}
       /* el registro de las hojas nuevas, ya acumulado */
       var wbx=pkgH.wb||await leer('xl/workbook.xml');
       if(pkgH.rels)cambiar['xl/_rels/workbook.xml.rels']=pkgH.rels;
@@ -8307,7 +8347,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823h4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823h5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
