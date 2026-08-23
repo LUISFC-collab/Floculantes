@@ -2747,8 +2747,9 @@ function _crTramos(nivel,tar,alc,u,grupoDe){
     o.peso+=x.peso});
   var r=[];for(var k2 in m)r.push(m[k2]);
   return r}
-async function _crCurvaUI(c,nivel){
+async function _crCurvaUI(c,nivel,conWbs){
   nivel=nivel||'tarea';
+  conWbs=!!conWbs;
   if(!c)return;
   var tar=await _crTareas(c.cron_id);
   var alc=await _crAlc(c.cron_id);
@@ -2757,7 +2758,8 @@ async function _crCurvaUI(c,nivel){
   var grupoDe={};
   try{(await _agDe(c.cron_id)).forEach(function(g){
     (g.miembros||[]).forEach(function(x){grupoDe[x]=g.grupo_id})})}catch(_eg){}
-  var tramos=_crTramos(nivel,tar,alc,u,grupoDe);
+  /* con WBS marcado, la curva se mira a la altura del WBS */
+  var tramos=_crTramos(conWbs?'wbs':nivel,tar,alc,u,grupoDe);
   var cur=_crCurva(tramos,u.hh,sem,tramos.map(function(x){return x.peso}));
   var carga=_crCarga(tar,u.items);
   /* cuantas personas harian falta, a 9 h por dia */
@@ -2769,10 +2771,14 @@ async function _crCurvaUI(c,nivel){
   var maxSem=0;cur.porSem.forEach(function(v){if(v>maxSem)maxSem=v});
   var barras='',linea='',ptos='';
   var pocas=sem.length<=16;
+  var casilla=gw/Math.max(1,sem.length);
+  /* el centro de la casilla de cada semana: asi la barra cae DENTRO de su
+     semana y no a caballo entre dos */
+  var cx=function(i){return mx+(i+0.5)*casilla};
   sem.forEach(function(s,i){
-    var x=mx+(sem.length>1?(i*gw/(sem.length-1)):gw/2);
+    var x=cx(i);
     var hv=maxSem>0?(cur.porSem[i]/maxSem):0;
-    var bw=Math.max(3,gw/Math.max(1,sem.length)*0.55);
+    var bw=Math.max(3,casilla*0.62);
     var by=my+gh-hv*gh*0.55;
     barras+='<rect x="'+(x-bw/2).toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bw.toFixed(1)+
       '" height="'+(hv*gh*0.55).toFixed(1)+'" fill="#1d3550"/>';
@@ -2796,18 +2802,24 @@ async function _crCurvaUI(c,nivel){
   var etq='';
   sem.forEach(function(s,i){
     if(sem.length>12&&(i%2))return;
-    var x=mx+(sem.length>1?(i*gw/(sem.length-1)):gw/2);
-    etq+='<text x="'+x.toFixed(1)+'" y="'+(my+gh+13)+'" fill="#7d8590" font-size="8.5" text-anchor="middle">S'+s.n+'</text>'});
+    etq+='<text x="'+cx(i).toFixed(1)+'" y="'+(my+gh+13)+'" fill="#7d8590" font-size="8.5" text-anchor="middle">S'+s.n+'</text>'});
+  /* una raya por semana, para que se vea a que casilla pertenece cada barra */
+  sem.forEach(function(s,i){
+    var xr=mx+i*casilla;
+    etq+='<line x1="'+xr.toFixed(1)+'" y1="'+my+'" x2="'+xr.toFixed(1)+'" y2="'+(my+gh)+'" stroke="#141f33" stroke-width="1"/>'});
   var duras=carga.filter(function(x){return x.hhDia>90});
   ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'+
     '<b style="font-size:14.5px;color:'+esc(c.color||'#8ECBF5')+'">📈 Curva de '+esc(c.cron_id)+'</b>'+
     '<span style="background:#152436;border:1px solid #1d3550;border-radius:8px;padding:3px 9px;font-size:11.5px;color:#9db4d6">'+
     sem.length+' semanas · '+u.hh+' hh · '+carga.length+' tareas con horas</span>'+
     '<span style="display:inline-flex;gap:0;border:1px solid #1d3550;border-radius:8px;overflow:hidden">'+
-    [['partida','Partidas'],['tarea','Tareas'],['agr','Agrupaciones'],['wbs','WBS']].map(function(o){
-      return '<button data-niv="'+o[0]+'" style="background:'+(nivel===o[0]?'#1B5E8A':'#0d1117')+
-        ';color:'+(nivel===o[0]?'#fff':'#9db4d6')+';border:0;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer">'+o[1]+'</button>'}).join('')+
+    [['partida','Partidas'],['tarea','Tareas'],['agr','Agrupaciones']].map(function(o){
+      return '<button data-niv="'+o[0]+'" style="background:'+((nivel===o[0]&&!conWbs)?'#1B5E8A':'#0d1117')+
+        ';color:'+((nivel===o[0]&&!conWbs)?'#fff':'#9db4d6')+';border:0;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer">'+o[1]+'</button>'}).join('')+
     '</span>'+
+    '<label style="display:inline-flex;gap:5px;align-items:center;background:'+(conWbs?'#1B5E8A':'#0d1117')+
+      ';border:1px solid #1d3550;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;color:'+(conWbs?'#fff':'#9db4d6')+';cursor:pointer">'+
+      '<input type="checkbox" id="_crCurWbs"'+(conWbs?' checked':'')+'> con WBS</label>'+
     '<span style="font-size:10.5px;color:#7d8590">'+tramos.length+' tramo(s)</span>'+
     '<button id="_crCurX" style="margin-left:auto;background:#444;color:#fff;border:0;border-radius:8px;padding:8px 12px">✕</button></div>'+
     '<div style="background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:8px;overflow-x:auto">'+
@@ -2827,20 +2839,43 @@ async function _crCurvaUI(c,nivel){
           ', por eso la curva sale más suave. Cambia a <b>Tareas</b> para ver el detalle real del cronograma.</div>')
         :'<div style="background:#0F2419;border:1px solid #1d3a2a;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#9FE8B0">✓ Ninguna tarea pide más de 90 hh/día: el reparto es realista.</div>'))+
     '<div style="flex:1;overflow:auto;margin-top:9px;background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:7px">'+
-    '<div style="font-size:11px;color:#7d8590;font-weight:700;margin-bottom:5px">CARGA POR TAREA (de más a menos apretada)</div>'+
-    carga.slice(0,40).map(function(x){
-      var col=x.hhDia>200?'#F0A3A3':(x.hhDia>90?'#E8C9A0':'#9FE8B0');
-      return '<div style="display:flex;gap:8px;padding:5px 6px;border-bottom:1px solid #16202e;font-size:11px">'+
-        '<b style="color:#8ECBF5;flex:none;width:52px">'+esc(x.cod)+'</b>'+
-        '<span style="flex:1;min-width:0;overflow-wrap:anywhere">'+esc(x.nom.slice(0,52))+'</span>'+
-        '<span style="flex:none;color:#9db4d6">'+x.dias+'d</span>'+
-        '<span style="flex:none;color:#9FE8B0;width:64px;text-align:right">'+x.hh+' hh</span>'+
-        '<span style="flex:none;color:'+col+';font-weight:800;width:74px;text-align:right">'+x.hhDia+' hh/día</span></div>'}).join('')+
+    '<div style="font-size:11px;color:#7d8590;font-weight:700;margin-bottom:5px">CARGA POR TAREA '+
+      (conWbs?'(en el orden del cronograma, bajo sus títulos de WBS)':'(de más a menos apretada)')+'</div>'+
+    (function(){
+      var wbsDe={};tar.forEach(function(t){wbsDe[t.task_code]=String(t.wbs||'')});
+      var ordenDe={};tar.forEach(function(t){ordenDe[t.task_code]=t.orden||0});
+      function linea(x){
+        var col=x.hhDia>200?'#F0A3A3':(x.hhDia>90?'#E8C9A0':'#9FE8B0');
+        return '<div style="display:flex;gap:8px;padding:5px 6px;border-bottom:1px solid #16202e;font-size:11px">'+
+          '<b style="color:#8ECBF5;flex:none;width:52px">'+esc(x.cod)+'</b>'+
+          '<span style="flex:1;min-width:0;overflow-wrap:anywhere">'+esc(x.nom.slice(0,52))+'</span>'+
+          '<span style="flex:none;color:#9db4d6">'+x.dias+'d</span>'+
+          '<span style="flex:none;color:#9FE8B0;width:64px;text-align:right">'+x.hh+' hh</span>'+
+          '<span style="flex:none;color:'+col+';font-weight:800;width:74px;text-align:right">'+x.hhDia+' hh/día</span></div>'}
+      if(!conWbs)return carga.slice(0,40).map(linea).join('');
+      /* con WBS: en el orden del cronograma y con sus titulos */
+      var orden=carga.slice().sort(function(a,b){return (ordenDe[a.cod]||0)-(ordenDe[b.cod]||0)});
+      var H='',prev=[];
+      orden.forEach(function(x){
+        var ruta=(wbsDe[x.cod]||'').split(' / ').filter(function(z){return z});
+        var i=0;while(i<ruta.length&&i<prev.length&&ruta[i]===prev[i])i++;
+        for(var j=i;j<ruta.length;j++){
+          var suma=0;orden.forEach(function(y){
+            var r2=(wbsDe[y.cod]||'').split(' / ').filter(function(z){return z});
+            if(r2.length>j&&r2[j]===ruta[j]&&r2.slice(0,j).join('/')===ruta.slice(0,j).join('/'))suma+=y.hh});
+          H+='<div style="padding:6px 6px 4px '+(6+j*14)+'px;border-bottom:1px solid #16202e;font-size:11px;'+
+            'color:#8ECBF5;font-weight:800;background:#0f1a26">'+esc(ruta[j].toUpperCase())+
+            '<span style="float:right;color:#9FE8B0">'+(Math.round(suma*10)/10)+' hh</span></div>'}
+        prev=ruta;
+        H+=linea(x)});
+      return H})()+
     '</div>';
   document.body.appendChild(ov);
   document.getElementById('_crCurX').onclick=function(){ov.remove()};
   ov.querySelectorAll('[data-niv]').forEach(function(b){b.onclick=function(){
-    ov.remove();_crCurvaUI(c,b.getAttribute('data-niv'))}});
+    ov.remove();_crCurvaUI(c,b.getAttribute('data-niv'),false)}});
+  var ck=document.getElementById('_crCurWbs');
+  if(ck)ck.onchange=function(){ov.remove();_crCurvaUI(c,nivel,ck.checked)};
 }
 
 /* --------- FECHAS por partida dentro de cada cronograma ---------------------
@@ -7209,7 +7244,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823d7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823d8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
