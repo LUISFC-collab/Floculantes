@@ -5800,8 +5800,9 @@ function _wkCostoApp(P){
         if(m.modo==='acum')
           fq='IFERROR(SUMIF($F$'+(m.ini+D)+':$F$'+(m.fin+D)+',"'+m.marca+'",'+
              cc+'$'+(m.ini+D)+':'+cc+'$'+(m.fin+D)+'),0)';
-        else if(m.modo==='per')
-          fq=(kr===1)?(cc+(base0)):('IFERROR('+cc+(base0)+'-'+colC(kr-1)+(base0)+',"")');
+        else if(m.modo==='per'){
+          var ra=m.res+D+(m.cual==='plan'?0:1);
+          fq=(kr===1)?(cc+ra):('IFERROR('+cc+ra+'-'+colC(kr-1)+ra+',"")')}
         else if(m.modo==='gg')
           fq='IFERROR('+_wkPhyHoja()+'!'+_wkgCol('O',kr)+'$'+prAc+'*'+TOTGG+',"")';
         else
@@ -5970,12 +5971,11 @@ function _wkMetradoApp(P){
     var vac=function(col,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+'/>'};
     if(m.tipo==='blanco'){r.push('<row r="'+n+'"/>');return}
     if(m.tipo==='res'){
+      /* aqui las columnas son metrados, y cada actividad va en su unidad:
+         sumar metros con kilos no significa nada, asi que no hay resumen */
       var te=function(cl){return _wkTinteCuadro(ePlan.e[cl],m)};
-      COLS.forEach(function(cl){
-        c+=(cl==='O')?cel('O','PROGRAMACION!D'+n,te('O')):vac(cl,te(cl))});
-      c+=vac(colM(0),te(colM(0)));
-      for(var kr=1;kr<=nS;kr++)
-        c+=cel(colM(kr),'PROGRAMACION!'+colS(kr)+n+'*$G$'+m.tot,te(colM(kr)));
+      COLS.forEach(function(cl){c+=vac(cl,te(cl))});
+      for(var kr=0;kr<=nS;kr++)c+=vac(colM(kr),te(colM(kr)));
       r.push('<row r="'+n+'"'+ePlan.at+'>'+c+'</row>');return}
     /* el rotulo del cuadro y su total se miran como un titulo mas, y llevan
        el color de su cuadro para que se vea a cual pertenece la fila */
@@ -6048,10 +6048,13 @@ function _wkPhysicalApp(P){
     if(m.tipo==='blanco'){r.push('<row r="'+n+'"/>');return}
     if(m.tipo==='res'){
       var te=function(cl){return _wkTinteCuadro(ePlan.e[cl],m)};
+      /* el gasto general no es cosa de esta hoja: esa fila se deja en blanco */
       COLS.forEach(function(cl){
-        c+=(cl==='C')?cel('C','PROGRAMACION!D'+pr,te('C')):vac(cl,te(cl))});
-      for(var kr=1;kr<=nS;kr++)
-        c+=cel(colP(kr),'PROGRAMACION!'+_wkgCol('N',kr)+pr,te(colP(kr)));
+        c+=(cl==='C'&&!m.soloCosto)?cel('C','PROGRAMACION!D'+pr,te('C')):vac(cl,te(cl))});
+      for(var kr=0;kr<=nS;kr++)
+        c+=(kr&&!m.soloCosto)
+          ? cel(colP(kr),'PROGRAMACION!'+_wkgCol('N',kr)+pr,te(colP(kr)))
+          : vac(colP(kr),te(colP(kr)));
       r.push('<row r="'+n+'"'+ePlan.at+'>'+c+'</row>');return}
     if(m.tipo==='wbs'||m.tipo==='cuadro'||m.tipo==='total'){
       var tw=function(col){return _wkTinteCuadro(eWbs.e[col],m)};
@@ -6265,8 +6268,9 @@ function _wkProgApp(P){
     RES.forEach(function(z,iz){
       n=pb.res+iz;
       var cr='';
+      var suya=!(z[0]==='gg'||z[0]==='tgg');
       COLS.forEach(function(cx){
-        cr+=(cx==='D')?cel('D',z[2],col(cx,1),true):val(cx,'',col(cx,1))});
+        cr+=(cx==='D'&&suya)?cel('D',z[2],col(cx,1),true):val(cx,'',col(cx,1))});
       cr+=val(colS(0),'',ePlan.e[colS(0)]);
       for(var w3=1;w3<=nS;w3++){
         var cc=colS(w3),f3='';
@@ -6280,7 +6284,10 @@ function _wkProgApp(P){
            vacias, pero la fila existe para que las cuatro hojas casen */
         cr+=f3?cel(cc,f3,ePlan.e[cc]):val(cc,'',ePlan.e[cc])}
       mapa.push({tipo:'res',r:n,cron:bl.id,ib:ib,nivel:1,modo:z[0],cual:z[1],
-        etiqueta:z[2],marca:z[3],ini:pb.ini,fin:pb.fin,tot:pb.tot,res:pb.res});
+        etiqueta:z[2],marca:z[3],ini:pb.ini,fin:pb.fin,tot:pb.tot,res:pb.res,
+        /* el gasto general solo existe en COSTO: en las demas hojas la fila se
+           queda entera en blanco, ni siquiera con rotulo */
+        soloCosto:(z[0]==='gg'||z[0]==='tgg')});
       r.push('<row r="'+n+'"'+ePlan.at+'>'+cr+'</row>')});
     n=pb.res+8});
   var ultCol=_wkgCol('N',nS);
@@ -10595,7 +10602,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823w3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823x1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
