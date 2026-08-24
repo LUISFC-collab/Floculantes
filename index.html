@@ -5288,7 +5288,13 @@ function _crAvanceDe(items,corte,ctx){
     var p=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0]);
     if(!p)return;
     var h=0;try{h=Number(_hhDe(p))||0}catch(e){}
-    var pc=0;try{pc=Number(pctOfAt(p,corte))||0}catch(e){}
+    var pc=0;
+    try{
+      /* si la partida va por fases, el % sale de ellas: pctOfAt solo mira la
+         unidad del contrato y se deja fuera el suministro ya recibido */
+      var pf=(typeof _fzPctAt==='function')?_fzPctAt(id,corte):null;
+      pc=(pf!=null)?(Number(pf)||0):(Number(pctOfAt(p,corte))||0);
+    }catch(e){}
     var trozo=ctx?(h/_crVeces(ctx.rp,id)):h;
     var gan=ctx?_crGanadas(ctx.rp,id,ctx.cod,h,Math.min(100,pc)/100)
                :(trozo*Math.min(100,pc)/100);
@@ -5305,8 +5311,53 @@ function _crAvanceDe(items,corte,ctx){
         if(!fin||f>fin)fin=f})}catch(e){}});
   return {pct:hh>0?(pts/hh):0,ini:ini,fin:(hayFin&&algo)?fin:'',algo:algo}}
 function _crFecXer(iso){return iso?(iso+' 00:00'):''}
+/* Sin tildes ni comillas listas ni guiones largos. El .xer se lee en P6 como
+   texto de una sola tabla de caracteres, y cualquier acento viaja mal segun
+   quien lo abra; aplanado dice lo mismo en todas partes. */
+function _crPlano(t){
+  var x=String(t==null?'':t);
+  try{x=x.normalize('NFD').replace(/[\u0300-\u036f]/g,'')}catch(_e){}
+  return x
+    .replace(/[\u2018\u2019\u201b]/g,"'")
+    .replace(/[\u201c\u201d\u201f]/g,'"')
+    .replace(/[\u2010-\u2015]/g,'-')
+    .replace(/\u2026/g,'...')
+    .replace(/[\u00ba\u00b0]/g,'o').replace(/\u00aa/g,'a')
+    .replace(/\u00d1/g,'N').replace(/\u00f1/g,'n')
+    .replace(/\u20ac/g,'EUR').replace(/\u00a0/g,' ')
+    .replace(/[^\x09\x0a\x0d\x20-\x7e]/g,'')}
+/* los bytes del archivo. Un Blob hecho con una cadena SIEMPRE sale en UTF-8
+   por mucho que el tipo MIME diga otra cosa; por eso se entregan bytes. */
+function _crBytes(txt){
+  var t=_crPlano(txt),b=new Uint8Array(t.length);
+  for(var i=0;i<t.length;i++)b[i]=t.charCodeAt(i)&0xff;
+  return b}
 
-async function _crExportar(c,corte){
+/* el nombre de proyecto con el que tiene que entrar a P6 */
+var _XER_PROY='REPOSICION DEL SISTEMA DE FLOCULANTES';
+/* Renombra el proyecto: el Project ID de P6 es `proj_short_name`, y el nodo
+   raiz del WBS -el que lleva proj_node_flag='Y'- repite ese codigo y guarda el
+   nombre largo. Hay que tocar los dos o P6 ensena uno viejo y otro nuevo. */
+function _crXerRenombra(lineas,cronId,sem){
+  if(!(sem>0))return 0;
+  var nom=cronId+'-SEMANA'+sem,n=0;
+  var enT='',campos=null,col={};
+  for(var i=0;i<lineas.length;i++){
+    var ln=lineas[i];
+    if(ln.indexOf('%T')===0){enT=String(ln.split('\t')[1]||'').trim();campos=null;continue}
+    if(ln.indexOf('%F')===0){campos=ln.split('\t').slice(1).map(function(x){return String(x).trim()});
+      col={};campos.forEach(function(c2,j){col[c2]=j});continue}
+    if(ln.indexOf('%R')!==0||!campos)continue;
+    var v=ln.split('\t'),d=v.slice(1),toca=false;
+    var pon=function(campo,val){var j=(col[campo]===undefined?-1:col[campo]);
+      if(j>=0){d[j]=val;toca=true}};
+    if(enT==='PROJECT')pon('proj_short_name',nom);
+    else if(enT==='PROJWBS'){
+      var jf=(col['proj_node_flag']===undefined?-1:col['proj_node_flag']);
+      if(jf>=0&&String(d[jf]).trim()==='Y'){pon('wbs_short_name',nom);pon('wbs_name',_XER_PROY)}}
+    if(toca){lineas[i]=[v[0]].concat(d).join('\t');n++}}
+  return n}
+async function _crExportar(c,corte,sem){
   var fila=await sbSelect(T_CRO,'select=crudo,archivo,cron_id&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(c.cron_id)+'&limit=1');
   var crudo=(fila&&fila[0]&&fila[0].crudo)||'';
   if(!crudo)throw new Error('ese cronograma no guardó su archivo original — vuelve a cargar el .xer');
@@ -5355,7 +5406,9 @@ async function _crExportar(c,corte){
     lineas[i]=[v[0]].concat(d).join('\t');
     tocadas++;
     if(detalle.length<40)detalle.push({cod:_crTx(d[ci('task_code')]),pct:Math.round(pct*100)/100,n:m.items.length})}
-  return {txt:lineas.join('\n'),tocadas:tocadas,sinMatch:sinMatch,detalle:detalle,faltan:faltan}}
+  var renom=_crXerRenombra(lineas,c.cron_id,sem);
+  return {txt:lineas.join('\n'),tocadas:tocadas,sinMatch:sinMatch,detalle:detalle,
+    faltan:faltan,renom:renom,nombre:(sem>0?(c.cron_id+'-SEMANA'+sem):'')}}
 
 function _crExportUI(){
   if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return}
@@ -5367,6 +5420,11 @@ function _crExportUI(){
     '<div style="font-size:12px;color:#5C6779;line-height:1.5;margin-bottom:12px">Se toma el cronograma tal como lo cargaste y se le aplica el avance del aplicativo: fechas reales, % físico, estado y horas gastadas. Lo demás (WBS, precedencias, calendarios, recursos) viaja intacto para que P6 lo importe sin problemas.</div>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Cronograma</label>'+
     '<select id="_crExpSel" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:11px"></select>'+
+    '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Semana que se crea</label>'+
+    '<input type="number" id="_crExpSem" min="1" max="99" step="1" placeholder="34" '+
+      'style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;'+
+      'padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:4px">'+
+    '<div id="_crExpSemNota" style="font-size:11px;color:#5C6779;margin-bottom:11px"></div>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Avance hasta</label>'+
     '<input type="date" id="_crExpFec" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:11px">'+
     '<div id="_crExpMsg" style="font-size:12px;color:#5C6779;margin-bottom:11px"></div>'+
@@ -5377,6 +5435,25 @@ function _crExportUI(){
   ov.onclick=function(e){if(e.target===ov)ov.remove()};
   document.getElementById('_crExpNo').onclick=function(){ov.remove()};
   document.getElementById('_crExpFec').value=(typeof todayISO==='function')?todayISO():'';
+  /* la semana se propone sola a partir del corte, y el rotulo dice como va a
+     quedar el Project ID para no tener que adivinarlo */
+  var _semNota=function(){
+    var e=document.getElementById('_crExpSem'),n=document.getElementById('_crExpSemNota');
+    if(!e||!n)return;
+    var v=parseInt(e.value,10),id=(document.getElementById('_crExpSel')||{}).value||'';
+    n.textContent=(v>0&&id)
+      ?('Entra a P6 como  '+id+'-SEMANA'+v+'  ·  '+_XER_PROY)
+      :'Sin número, el archivo conserva el que ya traía.'};
+  var _semDe=function(iso){
+    if(!iso)return 0;
+    var d=Math.round((Date.parse(iso+'T00:00:00Z')-Date.UTC(1899,11,30))/864e5);
+    return 27+Math.floor((d-46199)/7)};
+  (function(){
+    var f=document.getElementById('_crExpFec'),e=document.getElementById('_crExpSem');
+    if(e&&f){var v=_semDe(f.value);if(v>0)e.value=v;
+      e.oninput=_semNota;
+      f.addEventListener('change',function(){var w=_semDe(f.value);if(w>0)e.value=w;_semNota()})}
+    _semNota()})();
   _crPull().then(function(L){
     var s=document.getElementById('_crExpSel');if(!s)return;
     if(!L.length){s.innerHTML='<option>— no hay cronogramas cargados —</option>';
@@ -5392,10 +5469,11 @@ function _crExportUI(){
       var id=document.getElementById('_crExpSel').value;
       var c=_crLista().filter(function(x){return x.cron_id===id})[0];
       var corte=document.getElementById('_crExpFec').value||((typeof todayISO==='function')?todayISO():'');
-      var r=await _crExportar(c,corte);
-      var blob=new Blob([r.txt],{type:'text/plain;charset=windows-1252'});
+      var sem=parseInt(document.getElementById('_crExpSem').value,10);
+      var r=await _crExportar(c,corte,(sem>0?sem:0));
+      var blob=new Blob([_crBytes(r.txt)],{type:'text/plain'});
       var url=URL.createObjectURL(blob),a=document.createElement('a');
-      a.href=url;a.download=id+'_corrido_'+corte.replace(/-/g,'')+'.xer';
+      a.href=url;a.download=(r.nombre||(id+'_corrido_'+corte.replace(/-/g,'')))+'.xer';
       document.body.appendChild(a);a.click();
       setTimeout(function(){try{URL.revokeObjectURL(url);a.remove()}catch(_e){}},4000);
       try{if(typeof logCambio==='function')logCambio('cronograma',id,'exportado a Primavera ('+r.tocadas+' tareas con avance)')}catch(_e){}
@@ -11793,7 +11871,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824e9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824f1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
