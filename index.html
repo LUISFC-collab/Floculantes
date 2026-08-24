@@ -5709,25 +5709,32 @@ function _wkCostoApp(P){
       var cd=colC(w2);
       c2+=celF(cd,n2,(w2===1)?(cd+na):('IFERROR('+cd+na+'-'+colC(w2-1)+na+',"")'),ePlan.e[cd])}
     r.push('<row r="'+n2+'">'+c2+'</row>')}
-  var ultPie=fPer(nL-1);
+  /* ---- el gasto general, que va por avance ----
+     El % acumulado de cada linea ya esta en el pie de PHYSICAL, pesado por las
+     HH de cada actividad; aqui solo se multiplica por el total de gastos
+     generales de la hoja GG. Pasada la semana de corte el real no tiene %, y
+     entonces esta fila tampoco pone nada. */
+  var fGG=function(i){return fPer(nL-1)+2+i};
+  var titulo3=function(i){return i<lineas.length?('GASTO GENERAL '+lineas[i]):'GASTO GENERAL REAL'};
+  var TOT=(P.hojaGG?("'"+P.hojaGG+"'!"):'GG!')+'$'+(P.celdaGG||'F$86');
+  for(var g=0;g<nL;g++){
+    var n3=fGG(g), c3='';
+    c3+=celT('C',n3,titulo3(g),ePlan.e.C);
+    for(var w3=1;w3<=nS;w3++){
+      var ce=colC(w3), pf=(P.phyAcum&&P.phyAcum[g]);
+      c3+=celF(ce,n3, pf
+        ? ('IFERROR('+_wkPhyHoja()+'!'+_wkgCol('O',w3)+'$'+pf+'*'+TOT+',"")')
+        : '""', ePlan.e[ce])}
+    r.push('<row r="'+n3+'">'+c3+'</row>')}
+  var ultPie=fGG(nL-1);
   var enc=base.slice(0,base.indexOf('<sheetData>'))
     .replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:'+ultCol+ultPie+'"/>');
   var pie=_wkLimpiaCola(base.slice(base.indexOf('</sheetData>')+12));
   pie=pie.replace(/<autoFilter ref="[^"]*"[^>]*\/>/,'<autoFilter ref="A'+(f0-1)+':'+ultCol+ult+'"/>');
-  pie=pie.replace('</worksheet>','<drawing r:id="rId1"/></worksheet>');
-  var series=[];
-  for(var k2=0;k2<nL;k2++){
-    var col=(k2<lineas.length)?_WK_SERIE[k2%_WK_SERIE.length]:['E0721C','28575'];
-    series.push({nombre:titulo(k2),fila:fAcum(k2),color:col[0],ancho:col[1],
-      guion:(k2<lineas.length-1)?'dash':'', marca:(k2===lineas.length)})}
-  /* aqui las semanas no son numeros sino la fecha de cierre, y el eje va en
-     importes: sin tope fijo, que el costo no acaba en 100% */
-  var grafico=_wkCurvaXml({hoja:'COSTO',titulo:'CURVA DE COSTO — ACUMULADO',
-    series:series,filaCat:P.filaCat||5,colIni:colC(1),colFin:ultCol,colNom:'C',
-    catFmt:'dd/mm',valFmt:'#,##0',valMax:null,valUnit:null});
-  var dibujo=_wkDibujoXml({col0:1,fila0:ultPie+1,col1:15,fila1:ultPie+27,nombre:'Curva de costo'});
   return {xml:enc+'<sheetData>'+r.join('')+'</sheetData>'+pie, ultima:ult,
-    ultimaPie:ultPie, grafico:grafico, dibujo:dibujo}}
+    ultimaPie:ultPie}}
+/* el nombre de la hoja, entrecomillado porque lleva espacios y un % */
+function _wkPhyHoja(){return "'PHYSICAL % PROGRESS'"}
 /* ---------------- La curva de avance fisico --------------------------------
    Un grafico de lineas hecho a mano: no hay ninguno que copiar porque estas
    hojas las genera el aplicativo desde cero. Lee las filas de sumatoria del
@@ -5999,8 +6006,9 @@ function _wkPhysicalApp(P){
     series:series,filaCat:7,colIni:colP(1),colFin:ultCol,colNom:'C',
     catFmt:'"S"0',valFmt:'0%',valMax:1,valUnit:0.1});
   var dibujo=_wkDibujoXml({col0:1,fila0:ultPie+1,col1:15,fila1:ultPie+27,nombre:'Curva de avance'});
+  var acum=[];for(var q=0;q<nL;q++)acum.push(fAcum(q));
   return {xml:enc+'<sheetData>'+r.join('')+'</sheetData>'+pie, ultima:ult,
-    ultimaPie:ultPie, grafico:grafico, dibujo:dibujo}}
+    ultimaPie:ultPie, grafico:grafico, dibujo:dibujo, acum:acum, lineas:lineas}}
 /* ------------------------- PROGRAMACION -----------------------------------
    Los encabezados no se rehacen: se COPIAN las filas 1 a 9 de la hoja
    original, con sus estilos, sus anchos y sus fechas. De la 10 en adelante se
@@ -6174,7 +6182,9 @@ function _wkHojaP6Esp(id,filas,semanas){
     '<sheetFormatPr defaultRowHeight="15"/>'+
     '<cols><col min="1" max="2" width="12" customWidth="1"/>'+
     '<col min="3" max="3" width="54" customWidth="1"/>'+
-    '<col min="4" max="10" width="13" customWidth="1"/></cols>'+
+    '<col min="4" max="7" width="13" customWidth="1"/>'+
+    '<col min="8" max="8" width="11" customWidth="1"/>'+
+    '<col min="9" max="10" width="13.5" customWidth="1"/></cols>'+
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
     ultima:n-1}}
@@ -6220,8 +6230,10 @@ function _wkFeederEsp(id,filas,semanas){
     '<sheetFormatPr defaultRowHeight="15"/>'+
     '<cols><col min="1" max="1" width="12" customWidth="1"/>'+
     '<col min="2" max="2" width="52" customWidth="1"/>'+
-    '<col min="3" max="6" width="12" customWidth="1"/>'+
-    '<col min="7" max="'+(6+semanas.length)+'" width="9" customWidth="1"/></cols>'+
+    '<col min="3" max="3" width="12" customWidth="1"/>'+
+    '<col min="4" max="5" width="13.5" customWidth="1"/>'+
+    '<col min="6" max="6" width="11" customWidth="1"/>'+
+    '<col min="7" max="'+(6+semanas.length)+'" width="11.5" customWidth="1"/></cols>'+
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
     ultima:n}}
@@ -6358,10 +6370,20 @@ async function _wkLibroApp(semN,corte,ids){
     phy=_wkPhysicalApp(Object.assign({
       base:base.hojas['PHYSICAL % PROGRESS'],filaIni:15},comun));
     mete('PHYSICAL % PROGRESS',phy.xml,15,{grafico:phy.grafico,dibujo:phy.dibujo})}
+  /* la hoja de gastos generales, tal cual: es gris, va entera y de ella sale
+     el total que el gasto general de COSTO reparte por avance. Su unica
+     referencia de fuera -el costo directo, que sacaba de la hoja QPS- se
+     reapunta al total de COSTO para que no quede colgando. */
+  var HGG=null;
+  if(base.hojas['GG']&&phy){
+    HGG='GG';
+    hojas.push([HGG,_wkPintaHoja(_wkLimpiaHoja(
+      base.hojas['GG'].replace('<f>+QPS!V263</f>','<f>COSTO!$D$6</f>')),13),null])}
   if(base.hojas['COSTO']){
     var cos=_wkCostoApp(Object.assign({base:base.hojas['COSTO'],filaIni:7,
-      filaCat:5,p6Ult:p6Ult[D.esp.id]},comun));
-    mete('COSTO',cos.xml,7,{grafico:cos.grafico,dibujo:cos.dibujo})}
+      p6Ult:p6Ult[D.esp.id],hojaGG:HGG,celdaGG:'F$86',
+      phyAcum:(phy&&phy.acum)||null},comun));
+    mete('COSTO',cos.xml,7,null)}
   return {hojas:hojas,styles:_wkPintorCierra(fus.xml),ss:base.ss,
     info:{actividades:prog.actividades,
       crons:D.C.map(function(c){return c.id}),espina:D.esp.id,
@@ -10331,7 +10353,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823q1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823q2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
