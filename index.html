@@ -5601,6 +5601,23 @@ function _wkCurvas(xml,filas,colFin){
       cambio++;return a+colFin+b})});
   return {xml:xml,cambio:cambio}}
 /* ---------- resolver las hojas por su NOMBRE ---------- */
+/* Como se llama de verdad esa hoja en la plantilla. Los nombres traen espacios
+   de sobra -«CONSTRUCTION EQUIPMENT SCHE » los lleva- y buscarlos tal cual
+   falla en silencio: la hoja no sale y nadie se entera. */
+function _wkComoSeLlama(hojas,quiero){
+  if(!hojas)return '';
+  if(hojas[quiero])return quiero;
+  var q=String(quiero||'').trim().toLowerCase();
+  for(var k in hojas)if(String(k).trim().toLowerCase()===q)return k;
+  return ''}
+/* Mete una hoja de la plantilla tal cual, con su dibujo si sus piezas estan.
+   Si no estan hay que QUITAR el dibujo: un <drawing> que apunta a una relacion
+   que no existe es justo lo que hace que Excel pida reparar el libro. */
+function _wkConDibujo(hojas,nom,base){
+  var a=(base.activos||{})[nom]||null;
+  var x=_wkLimpiaSalvoDibujo(base.hojas[nom]);
+  if(a)hojas.push([nom,x,{relsHoja:a.rels,partes:a.partes}]);
+  else hojas.push([nom,String(x).replace(/<drawing\b[^>]*\/>/g,''),null])}
 function _wkXmlTxt(t){return String(t||'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&')}
 function _wkHojas(wbxml,relsxml){
   var rel={};String(relsxml||'').replace(/Id="(rId\d+)"[^>]*Target="([^"]+)"/g,function(_t,id,tg){
@@ -5971,7 +5988,8 @@ async function _wkBaseFormato(){
   /* Las dos caratulas llevan su dibujo: la verde del reporte y la azul del
      bloque de anexos. Se recoge el arbol entero de cada una. */
   var act={};
-  var CON_DIBUJO=['Car\u00e1tula (P)','Car\u00e1tula','RFI','FCR'];
+  var CON_DIBUJO=['Car\u00e1tula (P)','Car\u00e1tula','RFI','FCR',
+    'Registro Fot SEM'];
   for(var q=0;q<CON_DIBUJO.length;q++){
     var nm=CON_DIBUJO[q];
     if(!hojas[nm])continue;
@@ -7595,10 +7613,6 @@ async function _wkLibroApp(semN,corte,ids){
       phyAcum:(phy&&phy.acum)||null},comun));
     mete('COSTO',cos.xml,7,null)}
   /* El bloque de anexos, al final y con SU caratula delante: la azul */
-  if(base.hojas['Car\u00e1tula']){
-    var acz=(base.activos||{})['Car\u00e1tula']||null;
-    hojas.push(['Carátula',_wkLimpiaSalvoDibujo(base.hojas['Car\u00e1tula']),
-      acz?{relsHoja:acz.rels,partes:acz.partes}:null])}
   if(pan)['STAFFING TABULATION CHART','CONSTRUCTION EQUIPMENT SCHE '].forEach(function(nm){
     if(!pan.hojas[nm])return;
     var a2=pan.activos[nm]||null;
@@ -7609,6 +7623,13 @@ async function _wkLibroApp(semN,corte,ids){
     var ax=(base.activos||{})[nm]||null;
     hojas.push([nm,_wkLimpiaSalvoDibujo(base.hojas[nm]),
       ax?{relsHoja:ax.rels,partes:ax.partes}:null])});
+  /* La ultima verde: el registro fotografico de la semana. Va tal cual -con
+     su formato y sus imagenes-, como toda hoja verde. */
+  var _nfo=_wkComoSeLlama(base.hojas,'Registro Fot SEM');
+  if(_nfo)_wkConDibujo(hojas,_nfo,base);
+  /* Y detras de todas las verdes, la caratula azul: la que abre los anexos. */
+  var _ncz=_wkComoSeLlama(base.hojas,'Car\u00e1tula');
+  if(_ncz)_wkConDibujo(hojas,_ncz,base);
   return {hojas:hojas,styles:_wkPintorCierra(estilos),ss:base.ss,
     info:{actividades:prog.actividades,
       crons:D.bloques.map(function(b){return b.id}),espina:D.esp.id,
@@ -11622,7 +11643,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824e6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824e7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
