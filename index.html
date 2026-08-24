@@ -6280,6 +6280,28 @@ async function _crPlanRecupera(cronId,corte,semN){
         conProg=true;
         var pdd=queda/fut.length;
         fut.forEach(function(d){fore[cod][d]=(fore[cod][d]||0)+pdd})})}
+    /* lo que el LB1 deja para DESPUES de la ventana: el plan no acaba al
+       recuperar, sigue con el cronograma hasta el final de la obra */
+    if(nd){
+      var pdC=1/nd;
+      for(var kC=0;kC<nd;kC++){
+        var fC=_crDeSerial(d0+kC);
+        if(fC>vFin&&fC<=gFin){
+          fore[cod][fC]=(fore[cod][fC]||0)+pdC;
+          back[cod][fC]=(back[cod][fC]||0)+pdC}}}
+    /* y las que arrancan enteras despues de la ventana: no tienen nada que
+       recuperar, pero forman parte del plan igual */
+    if(saldo<=1e-9&&!priIni&&hh>0&&t.ini&&t.ini>vFin){
+      var labF=_crLaborables(t.ini,t.fin||t.ini);
+      var ddF=Math.max(1,labF.length);
+      recup.push({cod:cod,nom:String(t.nombre||''),ini:t.ini,dias:ddF,
+                  desdeCorte:'',diasRecupera:0,saldo:0,
+                  hh:Math.round(hh*100)/100,hhSaldo:0});
+      (t.items||[]).forEach(function(i){
+        if(u.items[i]==null)return;
+        var y=porPart[i];
+        if(!y||t.ini<y.start)porPart[i]={_id:i,start:t.ini,dias:ddF,
+          disc:String((porId[i]&&porId[i].esp)||'')}})}
     if(saldo>1e-9&&hh>=0){
       /* la ventana de esta actividad: no antes del dia siguiente al corte, ni
          antes de lo que el propio LB1 decia */
@@ -12514,7 +12536,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824g6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824g7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
