@@ -6281,117 +6281,151 @@ async function _crPlanGuarda(R,cronId,semN){
    hoja 3WLA de la plantilla. */
 function _wkHoja3WLA(semN,bloque,base,R){
   if(!bloque||!bloque.filas||!bloque.filas.length)return null;
-  /* OJO: en la plantilla la hoja se llama «3WLA », con un espacio al final.
-     Buscarla por el nombre exacto devuelve undefined y la hoja sale en crudo. */
+  /* OJO: en la plantilla la hoja se llama «3WLA », con un espacio al final. */
   var _n3=_wkComoSeLlama(base&&base.hojas,'3WLA');
   var T=(_n3&&base.hojas[_n3])||'';
   if(!T){try{console.warn('PARA 3WLA: la plantilla no trae la hoja 3WLA; '+
     'se usan los estilos del aplicativo')}catch(_e){}}
-  /* cada estilo con su alternativa de la casa, para que la hoja nunca salga
-     sin formato aunque la plantilla cambie */
   var E=function(ref,alt){
     var v=_wkEstiloDe(T,ref);
     return v!==''?v:((alt==null||alt==='')?'':String(alt))};
   var W=(typeof _WKS!=='undefined'&&_WKS)?_WKS:{};
-  var stSem=E('M4',W.cabSem),stFec=E('M5',W.fecha),stDia=E('M6',W.cabSem),
-      stTotJ=E('J8',W.num),stTotK=E('K8',W.pct),
-      stTit1=E('C9',W.wbs1),stTit2=E('C10',W.wbs2);
+  /* la hoja amarilla de la que cuelgan las formulas */
+  var P6="'P6-"+String(bloque.id).replace(/'/g,"''")+"'";
+  var nSem=((typeof _wkSemanas==='function'?_wkSemanas():[])||[]).length||18;
+  var cR0=_WKP6.sem0,cRN=_wkP6Col(nSem-1);
+  /* estilos base */
+  var stTit=E('C9',W.wbs1),stTit2=E('C10',W.wbs2);
+  var stSem=E('M4',W.cabSem),stFec=W.fecha||E('M5'),stDia=E('M6',W.cabSem);
+  var stTotJ=E('J8',W.num),stTotK=E('K8',W.pct);
   var CAB={A:E('A19',W.texto),B:E('B19',W.texto),C:E('C19',W.texto),D:E('D19',W.texto),
            E:E('E19',W.num),F:E('F19',W.num),G:E('G19',W.num),H:E('H19',W.num),
            I:E('I19',W.num),J:E('J19',W.num),K:E('K19',W.pct),L:E('L19',W.texto)};
   var stCabF={B:E('B7',W.cab),C:E('C7',W.cab),D:E('D7',W.cab),E:E('E7',W.cab),
               F:E('F7',W.cab),G:E('G7',W.cab),H:E('H7',W.cab),I:E('I7',W.cab),
               J:E('J7',W.cab),K:E('K7',W.cab),L:E('L7',W.cab)};
-  var stDato=E('P19',W.num)||CAB.E;
+  var stDato=E('P19',W.num),stPct=E('K19',W.pct);
+  /* un color por linea: el suave para toda la fila, el fuerte para la casilla
+     que trae valor, y el borde en el tono de la linea */
+  var COL=[{sua:'FFDCE9FB',fue:'FFA9C9F5',bor:'FF2E5C9A'},
+           {sua:'FFDFF4E7',fue:'FF9EDCB8',bor:'FF1E7A46'},
+           {sua:'FFFBE3EE',fue:'FFF3B4D0',bor:'FFA83A6B'}];
+  var GRIS='FFB9C4D4';
+  var memo={};
+  var tinta=function(st,fill,bor){
+    var k=st+'|'+fill+'|'+bor;
+    if(memo[k]==null)memo[k]=_wkBordeFondo(st,fill,bor);
+    return memo[k]};
   var LET=['V','S','D','L','M','M','J'];
-  var BLQ=[12,21,30];                       /* M, V y AE */
+  var BLQ=[12,21,30];                          /* M, V y AE */
   var ROT=['ITEM','DESCRIPTION','Und','CANTIDAD CONTRACTUAL','CANTIDAD FORE CAST',
-           'AVANCE ACUMULADO','SALDO','Rate','HH Contractuales','% Restante','FRENTE'];
+           'AVANCE ACUMULADO','SALDO','Rate','HH Contractuales','% Restante','LÍNEA'];
   var COLS='BCDEFGHIJKL'.split('');
-  var filas=[],n;
+  var filas=[],merges=[];
   function fila(r,cs){filas.push('<row r="'+r+'">'+cs.join('')+'</row>')}
-  /* la cabecera de las tres semanas: numero, jueves de corte y letras */
+  /* --- fila 1: el titulo, de una pieza --- */
+  fila(1,[_wkCelE('A',1,'PARA 3WLA — '+(bloque.nombre||bloque.id)+
+    ' · semanas S'+semN+' a S'+(semN+2),true,W.titulo)]);
+  merges.push('A1:L1');
+  fila(2,[_wkCelE('A',2,'Cantidades, unidad y ritmo salen por fórmula de la hoja P6-'+
+    bloque.id+'. Cada actividad va en tres líneas: lo programado, lo ejecutado y el plan a recuperar.',
+    true,W.subtitulo)]);
+  merges.push('A2:L2');
+  /* --- filas 4, 5 y 6: la cabecera de las tres semanas --- */
   var f4=[],f5=[],f6=[];
   BLQ.forEach(function(c0,b){
     var sm=_wkSem(semN+b);
-    f4.push(_wkCelE(_wkColL(c0),4,semN+b,false,stSem));
-    /* la plantilla pone aqui el VIERNES en que abre la semana -46248 para la
-       34-, no el jueves de cierre; la fila 6 empieza en V, que lo confirma */
-    f5.push(_wkCelE(_wkColL(c0),5,sm.ini,false,stFec));
-    for(var d=0;d<7;d++)f6.push(_wkCelE(_wkColL(c0+d),6,LET[d],true,stDia))});
-  fila(1,[_wkCelE('B',1,'PARA 3WLA — '+(bloque.nombre||bloque.id)+
-    ' · semanas S'+semN+' a S'+(semN+2),true,stCabF.C)]);
+    f4.push(_wkCelE(_wkColL(c0),4,'SEMANA '+(semN+b),true,stSem));
+    /* la celda unida necesita las demas declaradas, aunque vayan vacias */
+    for(var q=1;q<7;q++)f4.push(_wkCelE(_wkColL(c0+q),4,'',false,stSem));
+    merges.push(_wkColL(c0)+'4:'+_wkColL(c0+6)+'4');
+    for(var d=0;d<7;d++){
+      f5.push(_wkCelE(_wkColL(c0+d),5,sm.ini+d,false,stFec));
+      f6.push(_wkCelE(_wkColL(c0+d),6,LET[d],true,stDia))}
+    /* y los dos rotulos de porcentaje del bloque */
+    f4.push(_wkCelE(_wkColL(c0+7),4,'',false,stSem));
+    f4.push(_wkCelE(_wkColL(c0+8),4,'',false,stSem))});
   fila(4,f4);fila(5,f5);fila(6,f6);
-  fila(7,COLS.map(function(c,k){return _wkCelE(c,7,ROT[k],true,stCabF[c])}));
-  var r0=9;                                  /* la primera fila de datos */
-  /* las actividades, bajo sus titulos de WBS */
-  var prev=[],n2=r0,cuerpo=[];
+  /* --- fila 7: los rotulos --- */
+  var f7=COLS.map(function(c,k){return _wkCelE(c,7,ROT[k],true,stCabF[c])});
+  BLQ.forEach(function(c0,b){
+    f7.push(_wkCelE(_wkColL(c0+7),7,'% S'+(semN+b),true,stCabF.K));
+    f7.push(_wkCelE(_wkColL(c0+8),7,'% ACUM',true,stCabF.K))});
+  fila(7,f7);
+  /* --- el cuerpo: titulos de WBS y tres lineas por actividad --- */
+  var prev=[],cuerpo=[],r0=9;
   bloque.filas.forEach(function(f){
     var ruta=String(f.wbs||'').split(' / ').filter(function(z){return z});
     var i0=0;while(i0<ruta.length&&i0<prev.length&&ruta[i0]===prev[i0])i0++;
     for(var q=i0;q<ruta.length;q++){
       var rj=ruta.slice(0,q+1).join(' / ');
-      cuerpo.push({tit:String((bloque.nomWbs||{})[rj]||ruta[q]).toUpperCase(),niv:q});
-    }
-    prev=ruta;
-    cuerpo.push({f:f})});
-  /* tres lineas por actividad: lo programado, lo ejecutado y el plan */
+      cuerpo.push({tit:String((bloque.nomWbs||{})[rj]||ruta[q]).toUpperCase(),niv:q})}
+    prev=ruta;cuerpo.push({f:f})});
   var LINEAS=R?['PROGRAMADO SEM. ANT.','ACTUAL','FORECAST']:['PROGRAMADO'];
   var cuerpo2=[];
   cuerpo.forEach(function(z){
     if(z.tit!=null){cuerpo2.push(z);return}
     LINEAS.forEach(function(L,k){cuerpo2.push({f:z.f,linea:L,k:k})})});
   cuerpo=cuerpo2;
-  /* primero hay que saber donde acaba, porque los totales miran el rango */
   var nFin=r0+cuerpo.length-1;
-  var totJ='SUM(J'+r0+':J'+nFin+')', totK='SUM(K'+r0+':K'+nFin+')';
-  fila(8,[_wkCelE('J',8,'',false,stTotJ,totJ),_wkCelE('K',8,'',false,stTotK,totK)]);
-  n=r0;
+  fila(8,[_wkCelE('J',8,'',false,stTotJ,'SUM(J'+r0+':J'+nFin+')'),
+          _wkCelE('K',8,'',false,stTotK,'SUM(K'+r0+':K'+nFin+')')]);
+  /* los rangos de dias, que hacen falta para el acumulado */
+  var rangos=function(hasta,n){
+    var o=[];
+    for(var b=0;b<=hasta;b++)o.push(_wkColL(BLQ[b])+n+':'+_wkColL(BLQ[b]+6)+n);
+    return o.join(',')};
+  var n=r0,nFilas=0;
   cuerpo.forEach(function(z){
     if(z.tit!=null){
-      fila(n,[_wkCelE('C',n,z.tit,true,z.niv?stTit2:stTit1)]);n++;return}
-    var f=z.f;
-    /* la plantilla trata como Glb. lo que no tiene una unidad propia: asi la
-       actividad con varias partidas sigue aportando sus HH al total */
-    var cant=Number(f.cant)||0, und=String(f.und||''), hh=Number(f.hh)||0;
-    if(!(cant>0)||!und){cant=1;und='Glb.'}
-    var rate=cant>0?(hh/cant):0;
-    var avance=cant*(Number(f.pctReal)||0);
-    var frente=(function(){
-      var r=String(f.wbs||'').split(' / ').filter(function(z2){return z2});
-      return r.length?String((bloque.nomWbs||{})[r.join(' / ')]||r[r.length-1]):''})();
+      fila(n,[_wkCelE('C',n,z.tit,true,z.niv?stTit2:stTit)]);n++;return}
+    var f=z.f,C=COL[z.k||0]||COL[0];
+    var st=function(base){return tinta(base,C.sua,GRIS)};
+    var V=function(campo,col){
+      return 'IFERROR(VLOOKUP($B'+n+','+P6+'!$B:$K,'+col+',0),'+
+        (campo==='txt'?'""':'0')+')'};
     var cs=[
-      _wkCelE('A',n,f.qps||'',true,CAB.A),
-      _wkCelE('B',n,f.cod||'',true,CAB.B),
-      _wkCelE('C',n,f.nom||'',true,CAB.C),
-      _wkCelE('D',n,und,true,CAB.D),
-      _wkCelE('E',n,cant,false,CAB.E),
-      _wkCelE('F',n,'',false,CAB.F,'E'+n),
-      _wkCelE('G',n,avance,false,CAB.G),
-      _wkCelE('H',n,'',false,CAB.H,'F'+n+'-G'+n),
-      _wkCelE('I',n,rate,false,CAB.I),
-      _wkCelE('J',n,'',false,CAB.J,'E'+n+'*I'+n),
-      _wkCelE('K',n,'',false,CAB.K,'IF($J$8=0,0,H'+n+'*I'+n+'/$J$8)'),
-      _wkCelE('L',n,z.linea||frente,true,CAB.L)];
+      _wkCelE('A',n,f.qps||'',true,st(CAB.A)),
+      _wkCelE('B',n,f.cod||'',true,st(CAB.B)),
+      _wkCelE('C',n,'',true,st(CAB.C),V('txt',3)),
+      _wkCelE('D',n,'',true,st(CAB.D),V('txt',5)),
+      _wkCelE('E',n,'',false,st(CAB.E),V('num',4)),
+      _wkCelE('F',n,'',false,st(CAB.F),'E'+n),
+      _wkCelE('G',n,'',false,st(CAB.G),
+        'IFERROR($E'+n+'*SUM(INDEX('+P6+'!$'+cR0+':$'+cRN+
+        ',MATCH($B'+n+','+P6+'!$B:$B,0),0))/VLOOKUP($B'+n+','+P6+'!$B:$K,6,0),0)'),
+      _wkCelE('H',n,'',false,st(CAB.H),'F'+n+'-G'+n),
+      _wkCelE('I',n,'',false,st(CAB.I),
+        'IFERROR(VLOOKUP($B'+n+','+P6+'!$B:$K,6,0)/$E'+n+',0)'),
+      _wkCelE('J',n,'',false,st(CAB.J),'$E'+n+'*$I'+n),
+      _wkCelE('K',n,'',false,st(CAB.K),'IF($J$8=0,0,$H'+n+'*$I'+n+'/$J$8)'),
+      _wkCelE('L',n,z.linea||'',true,st(CAB.L))];
     /* el dia a dia de esta linea, en la unidad de la actividad */
     var mapa=null;
-    if(!R){
-      mapa={};
+    if(!R){mapa={};
       if(f.ini&&f.fin){var d0=_crASerial(f.ini),d1=_crASerial(f.fin),nd=Math.max(1,d1-d0+1);
-        for(var q=0;q<nd;q++)mapa[_crDeSerial(d0+q)]=1/nd}}
+        for(var q2=0;q2<nd;q2++)mapa[_crDeSerial(d0+q2)]=1/nd}}
     else mapa=(z.k===0?R.plan:z.k===1?R.actual:R.fore)[f.cod]||{};
+    var cant=Number(f.cant)||0,und=String(f.und||'');
+    if(!(cant>0)||!und)cant=1;
     BLQ.forEach(function(c0,b){
       var sm=_wkSem(semN+b);
       for(var d=0;d<7;d++){
         var fe=_wkISO(sm.ini+d),v=mapa[fe];
-        if(v>1e-9)cs.push(_wkCelE(_wkColL(c0+d),n,cant*v,false,stDato))}});
-    fila(n,cs);n++});
-  var ult=_wkColL(BLQ[2]+6);
+        /* con valor: relleno fuerte y borde del color de la linea */
+        cs.push(_wkCelE(_wkColL(c0+d),n,(v>1e-9)?(cant*v):'',false,
+          (v>1e-9)?tinta(stDato,C.fue,C.bor):st(stDato)))}
+      cs.push(_wkCelE(_wkColL(c0+7),n,'',false,tinta(stPct,C.sua,GRIS),
+        'IFERROR(SUM('+_wkColL(c0)+n+':'+_wkColL(c0+6)+n+')/$E'+n+',0)'));
+      cs.push(_wkCelE(_wkColL(c0+8),n,'',false,tinta(stPct,C.sua,C.bor),
+        'IFERROR(SUM('+rangos(b,n)+')/$E'+n+',0)'))});
+    fila(n,cs);n++;nFilas++});
+  var ult=_wkColL(BLQ[2]+8);
   var xml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
     _wkTab(_WK_AMARILLO)+
     '<dimension ref="A1:'+ult+Math.max(9,n-1)+'"/>'+
-    '<sheetViews><sheetView workbookViewId="0">'+
+    '<sheetViews><sheetView showGridLines="0" workbookViewId="0">'+
     '<pane xSplit="3" ySplit="7" topLeftCell="D8" activePane="bottomRight" state="frozen"/>'+
     '</sheetView></sheetViews>'+
     '<sheetFormatPr defaultRowHeight="15"/>'+
@@ -6400,12 +6434,14 @@ function _wkHoja3WLA(semN,bloque,base,R){
     '<col min="3" max="3" width="46" customWidth="1"/>'+
     '<col min="4" max="4" width="8" customWidth="1"/>'+
     '<col min="5" max="11" width="13" customWidth="1"/>'+
-    '<col min="12" max="12" width="20" customWidth="1"/>'+
-    '<col min="13" max="'+(BLQ[2]+7)+'" width="8" customWidth="1"/></cols>'+
+    '<col min="12" max="12" width="22" customWidth="1"/>'+
+    '<col min="13" max="'+(BLQ[2]+9)+'" width="9" customWidth="1"/></cols>'+
     '<sheetData>'+filas.join('')+'</sheetData>'+
+    (merges.length?('<mergeCells count="'+merges.length+'">'+
+      merges.map(function(m){return '<mergeCell ref="'+m+'"/>'}).join('')+'</mergeCells>'):'')+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'+
     '</worksheet>';
-  return {xml:xml,filas:n-r0,ini:r0,fin:nFin}}
+  return {xml:xml,filas:nFilas,ini:r0,fin:nFin}}
 function _wkHojaCron(cronos,actual,semanas){
   var C0=7;                                   /* las semanas empiezan en la col H */
   var filas=[],r=0;
@@ -6884,8 +6920,9 @@ function _wkPintorAbre(styles){
   _WKPINTA={fuentes:_wkSaca(styles,'fonts','font'),
     xfs:_wkSaca(styles,'cellXfs','xf'),
     codigos:nfm, usados:{},
-    nuevasF:[],nuevosX:[],nuevosNf:[],rellenos:[],cache:{},
+    nuevasF:[],nuevosX:[],nuevosNf:[],rellenos:[],nuevosB:[],cache:{},
     nF:_wkCuenta(styles,'fonts'), nFi:_wkCuenta(styles,'fills'),
+    nB:_wkCuenta(styles,'borders'),
     nX:_wkCuenta(styles,'cellXfs'), sig:300};
   (styles.match(/numFmtId="(\d+)"/g)||[]).forEach(function(t){
     _WKPINTA.usados[+t.match(/\d+/)[0]]=1})}
@@ -6959,6 +6996,41 @@ function _wkFondo(s,rgb){
   var j=P.nuevosX.indexOf(nx);
   if(j<0){P.nuevosX.push(nx);j=P.nuevosX.length-1}
   var idx=P.nX+j;P.cache[k]=idx;return idx}
+/* El gemelo de un estilo con otro relleno y otro borde. `_wkFondo` solo sabe
+   de relleno; aqui hace falta ademas marcar el borde, que es lo que separa una
+   casilla con trabajo de una vacia. */
+function _wkBordeFondo(s,rgbFill,rgbBorde){
+  var P=_WKPINTA;if(!P)return s;
+  s=(s==null||s==='')?0:+s;
+  var k='BF'+s+'|'+(rgbFill||'')+'|'+(rgbBorde||'');
+  if(P.cache[k]!=null)return P.cache[k];
+  var xf=(s<P.nX)?P.xfs[s]:P.nuevosX[s-P.nX];
+  if(!xf){P.cache[k]=s;return s}
+  var nx=xf;
+  var mete=function(attr,val,apply){
+    var re=new RegExp(attr+'="\\d+"');
+    nx=re.test(nx)?nx.replace(re,attr+'="'+val+'"'):nx.replace('<xf ','<xf '+attr+'="'+val+'" ');
+    var ra=new RegExp(apply+'="0"');
+    nx=new RegExp(apply+'=').test(nx)?nx.replace(ra,apply+'="1"')
+                                     :nx.replace('<xf ','<xf '+apply+'="1" ')};
+  if(rgbFill){
+    P.rellenos=P.rellenos||[];
+    var fl='<fill><patternFill patternType="solid"><fgColor rgb="'+rgbFill+
+      '"/><bgColor indexed="64"/></patternFill></fill>';
+    var i=P.rellenos.indexOf(fl);
+    if(i<0){P.rellenos.push(fl);i=P.rellenos.length-1}
+    mete('fillId',P.nFi+i,'applyFill')}
+  if(rgbBorde){
+    P.nuevosB=P.nuevosB||[];
+    var L='<border>'+['left','right','top','bottom'].map(function(z){
+      return '<'+z+' style="thin"><color rgb="'+rgbBorde+'"/></'+z+'>'}).join('')+
+      '<diagonal/></border>';
+    var j=P.nuevosB.indexOf(L);
+    if(j<0){P.nuevosB.push(L);j=P.nuevosB.length-1}
+    mete('borderId',P.nB+j,'applyBorder')}
+  var q=P.nuevosX.indexOf(nx);
+  if(q<0){P.nuevosX.push(nx);q=P.nuevosX.length-1}
+  var idx=P.nX+q;P.cache[k]=idx;return idx}
 /* Recorre una hoja y le cambia el estilo a toda celda con contenido, de la
    fila `desde` para abajo: las cabeceras se quedan como estan. */
 function _wkPintaHoja(xml,desde){
@@ -6982,6 +7054,7 @@ function _wkPintorCierra(styles){
   x=_wkMete(x,'numFmts',P.nuevosNf);
   x=_wkMete(x,'fonts',P.nuevasF);
   x=_wkMete(x,'fills',P.rellenos||[]);
+  x=_wkMete(x,'borders',P.nuevosB||[]);
   x=_wkMete(x,'cellXfs',P.nuevosX);
   return x}
 /* Le pone -o le cambia- el color de pestana a una hoja ya hecha. El sheetPr
@@ -12250,7 +12323,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824f8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824f9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
