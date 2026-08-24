@@ -6192,12 +6192,34 @@ async function _crPlanRecupera(cronId,corte,semN){
   /* se recupera a partir del dia siguiente al corte; lo anterior ya paso */
   var desde=_crDeSerial(_crASerial(corte)+1);
   if(desde<vIni)desde=vIni;
-  var plan={},actual={},fore={},recup=[],porPart={};
+  var plan={},actual={},fore={},back={},recup=[],porPart={};
+  /* el respaldo que manda: el mas reciente de BACK_CRONOGRAMAS */
+  var bkSnap={};
+  try{
+    var bk=(state.backcron||[]).slice().sort(function(a,b){
+      return (b.ts||0)-(a.ts||0)})[0];
+    if(bk)Object.keys(bk.snap||{}).forEach(function(d){
+      (bk.snap[d]||[]).forEach(function(e){
+        var id=e._id||e.partida_id;
+        if(id&&e.start)bkSnap[id]={start:e.start,dias:e.dias||1}})});
+  }catch(_eb){}
   tar.forEach(function(t){
     var hh=0;(t.items||[]).forEach(function(i){
       if(u.items[i]!=null)hh+=(Number(u.items[i])||0)/_crVeces(rp,i)});
     var cod=t.task_code;
-    plan[cod]={};actual[cod]={};fore[cod]={};
+    plan[cod]={};actual[cod]={};fore[cod]={};back[cod]={};
+    /* la secuencia del respaldo, repartida sobre el calendario */
+    if(hh>0)(t.items||[]).forEach(function(i){
+      var b2=bkSnap[i];if(!b2)return;
+      var hi=(Number(u.items[i])||0)/_crVeces(rp,i);
+      if(!(hi>0))return;
+      var oc=[];
+      try{oc=(typeof occupiedDays==='function')?occupiedDays(b2.start,b2.dias||1):[b2.start]}
+      catch(_eo2){oc=[b2.start]}
+      var dentro=oc.filter(function(d){return d>=gIni&&d<=gFin});
+      if(!dentro.length)return;
+      var pdb=(hi/hh)/dentro.length;
+      dentro.forEach(function(d){back[cod][d]=(back[cod][d]||0)+pdb})});
     /* --- lo que el LB1 pedia esos dias --- */
     var d0=t.ini?_crASerial(t.ini):0,d1=t.fin?_crASerial(t.fin):0;
     var nd=(d0&&d1)?Math.max(1,d1-d0+1):0;
@@ -6309,7 +6331,8 @@ async function _crPlanRecupera(cronId,corte,semN){
         if(!y||priIni<y.start)porPart[i]={_id:i,start:priIni,dias:dd,
           disc:String((porId[i]&&porId[i].esp)||'')}})}});
   return {vIni:vIni,vFin:vFin,gIni:gIni,gFin:gFin,desde:desde,
-          plan:plan,actual:actual,fore:fore,recup:recup,
+          plan:plan,actual:actual,fore:fore,back:back,hayBack:!!Object.keys(bkSnap).length,
+          recup:recup,
           partidas:Object.keys(porPart).map(function(k){return porPart[k]})}}
 /* Guarda el plan como respaldo, con la forma que ya tienen los respaldos: una
    entrada por partida con su arranque y sus dias. Se fecha en el jueves de la
@@ -6377,7 +6400,8 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
   var stDato=E('P19',W.num),stPct=E('K19',W.pct),stTotJ=E('J8',W.num),stTotK=E('K8',W.pct);
   var COL=[{sua:'FFDCE9FB',fue:'FFA9C9F5',bor:'FF2E5C9A'},
            {sua:'FFDFF4E7',fue:'FF9EDCB8',bor:'FF1E7A46'},
-           {sua:'FFFBE3EE',fue:'FFF3B4D0',bor:'FFA83A6B'}];
+           {sua:'FFFBE3EE',fue:'FFF3B4D0',bor:'FFA83A6B'},
+           {sua:'FFF3E9D2',fue:'FFE3C98A',bor:'FF8A6D1F'}];   /* el respaldo */
   var GRIS='FFB9C4D4', FINDE='FFF7DCDC', FINDEB='FFC98A8A';
   var PLOMO='FFDCDFE4', PLOMOB='FF9AA2AC';   /* las columnas de resumen */
   var memo={};
@@ -6396,6 +6420,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
            'AVANCE ACUMULADO','SALDO','Rate','HH Contractuales','% Restante','LÍNEA'];
   var COLS='BCDEFGHIJKL'.split('');
   var LINEAS=R?['PROGRAMADO SEM. ANT.','ACTUAL','FORECAST']:['PROGRAMADO'];
+  if(R&&R.hayBack)LINEAS.push('BACK_CRONOGRAMAS');
   var filas=[],merges=[],altos={};
   function fila(r,cs,alto){
     filas.push('<row r="'+r+'"'+(alto?(' ht="'+alto+'" customHeight="1"'):'')+'>'+cs.join('')+'</row>')}
@@ -6431,11 +6456,17 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
   /* ---- fila 7: rotulos ---- */
   var f7=COLS.map(function(c,k){return _wkCelE(c,7,ROT[k],true,stCabF[c])});
   BLQ.forEach(function(c0,b){
+    /* los dias de la fila 7: sin ellos, de M a S no hay ni relleno ni borde */
+    for(var d7=0;d7<7;d7++)
+      f7.push(_wkCelE(_wkColL(c0+d7),7,'',true,
+        (d7===1||d7===2)?tinta(stCabF.K,FINDE,FINDEB):stCabF.K));
     f7.push(_wkCelE(_wkColL(c0+7),7,'% S'+SEMS[b],true,tinta(stCabF.K,PLOMO,PLOMOB)));
     f7.push(_wkCelE(_wkColL(c0+8),7,'% ACUM',true,tinta(stCabF.K,PLOMO,PLOMOB)))});
   fila(7,f7,30);
   /* ---- el cuerpo ---- */
-  var prev=[],cuerpo=[],r0=8+LINEAS.length;     /* 8,9,10 son el resumen */
+  /* el resumen: una fila por concepto con el % de la semana y otra tanda con
+     el acumulado hasta esa semana */
+  var prev=[],cuerpo=[],r0=8+LINEAS.length*2;
   bloque.filas.forEach(function(f){
     var ruta=String(f.wbs||'').split(' / ').filter(function(z){return z});
     var i0=0;while(i0<ruta.length&&i0<prev.length&&ruta[i0]===prev[i0])i0++;
@@ -6451,24 +6482,33 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
     return o.join(',')};
   /* ---- filas 8..10: el resumen, una por concepto ---- */
   var RL='$L$'+r0+':$L$'+nFin, RJ='$J$'+r0+':$J$'+nFin, RK='$K$'+r0+':$K$'+nFin;
-  LINEAS.forEach(function(L,k){
-    var n=8+k,C=COL[k]||COL[0];
+  var ponResumen=function(k,acum){
+    var L=LINEAS[k],C=COL[k]||COL[0];
+    var n=8+k+(acum?LINEAS.length:0);
     var q='"'+L+'"';
-    var cs=[_wkCelE('I',n,'',true,tinta(stCabF.I,C.sua,C.bor)),
+    var cs=[_wkCelE('I',n,acum?'ACUMULADO':'DE LA SEMANA',true,tinta(stCabF.I,C.sua,C.bor)),
             _wkCelE('J',n,'',false,tinta(stTotJ,C.sua,C.bor),'SUMIF('+RL+','+q+','+RJ+')'),
             _wkCelE('K',n,'',false,tinta(stTotK,C.sua,C.bor),'SUMIF('+RL+','+q+','+RK+')'),
             _wkCelE('L',n,L,true,tinta(CAB.L,C.sua,C.bor))];
     BLQ.forEach(function(c0,b){
       var T1=_wkColL(c0+7),U1=_wkColL(c0+8);
-      /* ponderado por HH: una actividad de 500 horas no puede pesar lo mismo
-         que una de 3 */
+      /* los dias, para que la banda del resumen no tenga huecos */
+      for(var d8=0;d8<7;d8++)
+        cs.push(_wkCelE(_wkColL(c0+d8),n,'',false,
+          (d8===1||d8===2)?tinta(stDato,FINDE,FINDEB):tinta(stDato,C.sua,C.bor)));
+      /* ponderado por HH, pero SIN multiplicar dos columnas: se suman las HH
+         de la semana que cada fila deja ya calculadas. Multiplicar columnas
+         hace que un solo texto perdido en el rango devuelva #VALUE! y el
+         IFERROR lo convierta en un cero mudo. */
+      /* de que columna se pondera: la de la semana o la del acumulado */
+      var FUE=acum?U1:T1;
       cs.push(_wkCelE(T1,n,'',false,tinta(stPct,PLOMO,PLOMOB),
-        'IFERROR(SUMPRODUCT(('+RL+'='+q+')*'+RJ+'*$'+T1+'$'+r0+':$'+T1+'$'+nFin+')/'+
+        'IFERROR(SUMPRODUCT(('+RL+'='+q+')*'+RJ+'*$'+FUE+'$'+r0+':$'+FUE+'$'+nFin+')/'+
         'SUMIF('+RL+','+q+','+RJ+'),0)'));
-      cs.push(_wkCelE(U1,n,'',false,tinta(stPct,PLOMO,PLOMOB),
-        'IFERROR(SUMPRODUCT(('+RL+'='+q+')*'+RJ+'*$'+U1+'$'+r0+':$'+U1+'$'+nFin+')/'+
-        'SUMIF('+RL+','+q+','+RJ+'),0)'))});
-    fila(n,cs)});
+      cs.push(_wkCelE(U1,n,'',false,tinta(stPct,PLOMO,PLOMOB)))});
+    fila(n,cs)};
+  LINEAS.forEach(function(_L,k){ponResumen(k,false)});
+  LINEAS.forEach(function(_L,k){ponResumen(k,true)});
   /* ---- las actividades ---- */
   var n=r0,nFilas=0;
   cuerpo.forEach(function(z){
@@ -6509,7 +6549,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
     if(!R){mapa={};
       if(f.ini&&f.fin){var d0=_crASerial(f.ini),d1=_crASerial(f.fin),nd=Math.max(1,d1-d0+1);
         for(var q2=0;q2<nd;q2++)mapa[_crDeSerial(d0+q2)]=1/nd}}
-    else mapa=(z.k===0?R.plan:z.k===1?R.actual:R.fore)[f.cod]||{};
+    else mapa=(z.k===0?R.plan:z.k===1?R.actual:z.k===2?R.fore:R.back)[f.cod]||{};
     var cant=Number(f.cant)||0,und=String(f.und||'');
     if(!(cant>0)||!und)cant=1;
     BLQ.forEach(function(c0,b){
@@ -12471,7 +12511,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824g4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824g5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
