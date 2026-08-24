@@ -6476,83 +6476,61 @@ function _wkFeederEsp(bloques,semanas,real){
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
     ultima:n-1}}
 /* ---------------- REPORTE SEMANAL ------------------------------------------
-   La portada de números: una fila por cronograma con lo que hay que mirar de
-   un vistazo -horas, avance, costo y gasto general- y todo leído de los
-   resúmenes de cada cuadro, no recalculado. Si cambia un metrado, cambia aquí
-   sin tocar nada.
+   Es el PANEL CONTROL del libro guia, copiado tal cual: su formato, sus
+   combinaciones y sus formulas. Lo unico que se toca son las FILAS a las que
+   apuntan, porque en el libro del aplicativo los resumenes de cada cuadro
+   caen donde caen.
 
-   `res` trae, por cronograma, en qué fila de PROGRAMACION quedaron sus
-   resúmenes y en qué fila su total; de ahí sale todo. */
-function _wkReporteSemanal(P){
-  var S=_WKS,r=[],n=1,sem=P.semanas,cor=P.colCorte;
-  var t=function(col,f,v,est,txt){
-    return _crXlsCel(col,f,v,txt!==false,est)};
-  var fx=function(col,f,fo,est){
-    return '<c r="'+col+f+'"'+(est?(' s="'+est+'"'):'')+'><f>'+_wkEsc(fo)+'</f></c>'};
-  /* --- la cabecera --- */
-  r.push('<row r="1" ht="26" customHeight="1">'+
-    _crXlsCel('B',1,'REPORTE SEMANAL',true,S.titulo)+'</row>');
-  r.push('<row r="2">'+_crXlsCel('B',2,P.proyecto||'',true,S.etiq)+'</row>');
-  r.push('<row r="3">'+_crXlsCel('B',3,'Semana',true,S.chico)+
-    _crXlsCel('C',3,'S'+P.sem,true,S.texto)+
-    _crXlsCel('D',3,'Corte',true,S.chico)+
-    _crXlsCel('E',3,P.corte?_crASerial(P.corte):'',false,S.fecha)+'</row>');
-  n=5;
-  /* --- la tabla --- */
-  var cab=[['B','CRONOGRAMA'],['C','HH TOTAL'],['D','HH PLAN AL CORTE'],
-           ['E','HH REAL AL CORTE'],['F','% PLAN'],['G','% REAL'],['H','DESVIACIÓN'],
-           ['I','COSTO TOTAL'],['J','COSTO PLAN AL CORTE'],['K','COSTO REAL AL CORTE'],
-           ['L','GASTO GENERAL REAL'],['M','TOTAL REAL + GG']];
-  r.push('<row r="'+n+'" ht="30" customHeight="1">'+
-    cab.map(function(c){return _crXlsCel(c[0],n,c[1],true,S.cab)}).join('')+'</row>');
-  n++;
-  var PR='PROGRAMACION!', CO="'COSTO'!";
-  (P.res||[]).forEach(function(x,i){
-    var c='';
-    c+=_crXlsCel('B',n,x.id,true,_wkEstWbs(1,i));
-    c+=fx('C',n,PR+'$K$'+x.tot,S.num);
-    c+=fx('D',n,PR+'$K$'+x.tot+'*'+PR+cor+x.acumPlan,S.num);
-    c+=fx('E',n,PR+'$K$'+x.tot+'*'+PR+cor+x.acumReal,S.num);
-    c+=fx('F',n,PR+cor+x.acumPlan,S.pct);
-    c+=fx('G',n,PR+cor+x.acumReal,S.pct);
-    c+=fx('H',n,'IFERROR('+PR+cor+x.acumReal+'-'+PR+cor+x.acumPlan+',"")',S.pct);
-    c+=fx('I',n,'IFERROR(SUMIF('+CO+'$F$'+x.cIni+':$F$'+x.cFin+',"Prog. '+x.id+'",'+
-      CO+'$E$'+x.cIni+':$E$'+x.cFin+'),0)',S.num);
-    c+=fx('J',n,CO+x.cCorte+x.cPlan,S.num);
-    c+=fx('K',n,CO+x.cCorte+x.cReal,S.num);
-    c+=fx('L',n,'IFERROR('+CO+x.cCorte+x.cGG+',"")',S.num);
-    c+=fx('M',n,'IFERROR('+CO+x.cCorte+x.cTot+',"")',S.num);
-    r.push('<row r="'+n+'">'+c+'</row>');n++});
-  /* --- el detalle por semana del cronograma vigente --- */
-  var v=(P.res||[])[0];
-  if(v){
-    n++;
-    r.push('<row r="'+n+'">'+_crXlsCel('B',n,'AVANCE SEMANA A SEMANA — '+v.id,
-      true,S.etiq)+'</row>');n++;
-    var fil=[['SEMANA',null],['PLAN ACUMULADO',v.acumPlan],['REAL ACUMULADO',v.acumReal],
-             ['PLAN DEL PERIODO',v.perPlan],['REAL DEL PERIODO',v.perReal]];
-    fil.forEach(function(z,iz){
-      var c='';
-      c+=_crXlsCel('B',n,z[0],true,iz?S.texto:S.cab);
-      sem.forEach(function(s2,k){
-        var col=_wkgCol('C',k);
-        c+=iz?fx(col,n,PR+_wkgCol('N',k+1)+z[1],S.pct)
-             :_crXlsCel(col,n,'S'+s2.n,true,S.cab)});
-      r.push('<row r="'+n+'">'+c+'</row>');n++})}
-  var ultCol=_wkgCol('C',Math.max(11,sem.length-1));
-  return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
-    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    _wkTab(_WK_VERDE)+
-    '<dimension ref="A1:'+ultCol+(n-1)+'"/>'+
-    '<sheetViews><sheetView showGridLines="0" tabSelected="1" workbookViewId="0"/></sheetViews>'+
-    '<sheetFormatPr defaultRowHeight="15"/>'+
-    '<cols><col min="1" max="1" width="2.5" customWidth="1"/>'+
-    '<col min="2" max="2" width="26" customWidth="1"/>'+
-    '<col min="3" max="13" width="15" customWidth="1"/>'+
-    '<col min="14" max="'+(2+sem.length)+'" width="11" customWidth="1"/></cols>'+
-    '<sheetData>'+r.join('')+'</sheetData>'+
-    '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
-    ultima:n-1}}
+   La linea de arriba es el cronograma vigente y la de abajo la siguiente
+   linea base, que es justo la estructura que ya tenia -una fila por linea-. */
+function _wkPonCelda(xml,ref,contenido,txt,quitaEstilo){
+  var col=(ref.match(/^[A-Z]+/)||[''])[0], f=(ref.match(/\d+$/)||[''])[0];
+  var reF=new RegExp('(<row r="'+f+'"(?:\\s[^>]*?)?>)([\\s\\S]*?)(<\\/row>)');
+  return xml.replace(reF,function(t,a,cu,b){
+    var reC=new RegExp('<c r="'+ref+'"((?:\\s[^>]*?)?)(\\/>|>[\\s\\S]*?<\\/c>)');
+    if(!reC.test(cu))return t;
+    return a+cu.replace(reC,function(t2,at){
+      at=String(at).replace(/\s*t="[^"]*"/,'');
+      if(quitaEstilo)at=at.replace(/\s*s="\d+"/,'');
+      if(contenido===''||contenido==null)return '<c r="'+ref+'"'+at+'/>';
+      return txt
+        ? '<c r="'+ref+'"'+at+' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(contenido)+'</t></is></c>'
+        : '<c r="'+ref+'"'+at+'><f>'+_wkEsc(contenido)+'</f></c>'})+b})}
+function _wkPanelApp(P){
+  var x=P.base, R=P.res||[];
+  var PHY="'PHYSICAL % PROGRESS'", ult=_wkgCol('O',(P.semanas||[]).length);
+  /* las cuatro celdas de avance de una linea, con SUS filas */
+  var avance=function(fila,c){
+    var idx=function(f){return 'IFERROR(INDEX('+PHY+'!P'+f+':'+ult+f+
+      ',MATCH($AG$15,'+PHY+'!$P$7:$'+ult+'$7,0)),0)'};
+    x=_wkPonCelda(x,'AF'+fila,idx(c.pPer),false);
+    x=_wkPonCelda(x,'AH'+fila,idx(c.rPer),false);
+    x=_wkPonCelda(x,'AJ'+fila,idx(c.pAcum),false);
+    x=_wkPonCelda(x,'AL'+fila,idx(c.rAcum),false)};
+  var costo=function(fila,c){
+    var uc=_wkgCol('G',(P.semanas||[]).length);
+    var idx=function(f){return 'IFERROR(INDEX(COSTO!H'+f+':'+uc+f+
+      ',MATCH($AG$15,COSTO!$H$3:$'+uc+'$3,0)),0)'};
+    x=_wkPonCelda(x,'AF'+fila,idx(c.cpPer),false);
+    x=_wkPonCelda(x,'AH'+fila,idx(c.crPer),false);
+    x=_wkPonCelda(x,'AJ'+fila,idx(c.cpAcum),false);
+    x=_wkPonCelda(x,'AL'+fila,idx(c.crAcum),false)};
+  /* la semana la manda la caratula, que aqui se llama solo 'Carátula' */
+  x=x.replace(/'Car[áa]tula \(P\)'!/g,"Carátula!");
+  /* arriba el vigente, debajo la siguiente linea base */
+  if(R[0]){x=_wkPonCelda(x,'AC18',R[0].id,true);avance(18,R[0]);costo(35,R[0])}
+  if(R[1]){x=_wkPonCelda(x,'AC19',R[1].id,true);avance(19,R[1]);costo(36,R[1])}
+  else x=_wkPonCelda(x,'AC19','',true);
+  /* los rotulos que nombran al cronograma de referencia */
+  ['AC20','AC32'].forEach(function(rf){
+    x=_wkPonCelda(x,rf,'RESPECTO AL CRONOGRAMA '+((R[0]&&R[0].id)||''),true)});
+  /* SPI y CPI de la segunda linea, como los de la primera */
+  if(R[1]){
+    x=_wkPonCelda(x,'AF22','IFERROR(AH19/AF19,0)',false);
+    x=_wkPonCelda(x,'AL22','IFERROR(AL19/AJ19,0)',false)}
+  x=_wkLimpiaHoja(x);
+  x=_wkPonTab(x,_WK_VERDE);
+  return {xml:x}}
 /* ---------------- Un cuadro cerrado por cronograma --------------------------
    Nada de encajar una linea base sobre las actividades de otra. Cada
    cronograma trae SUS actividades, SU arbol de WBS y SUS horas, y en el libro
@@ -6730,10 +6708,19 @@ async function _wkLibroApp(semN,corte,ids){
     else if(m.modo==='per')x['per'+cual]=m.r;
     else if(m.modo==='gg'&&m.cual==='real')x.cGG=m.r+dCosto;
     else if(m.modo==='tgg'&&m.cual==='real')x.cTot=m.r+dCosto});
-  var colCorte=_wkgCol('N',D.iSem), colCorteCos=_wkgCol('G',D.iSem);
-  resRS.forEach(function(x){x.cCorte=colCorteCos});
-  mete('REPORTE SEMANAL',_wkReporteSemanal({proyecto:DATA.proyecto,sem:semN,corte:corte,
-    semanas:sem,res:resRS,colCorte:colCorte}).xml,6);
+  /* las filas que el panel necesita, ya trasladadas a cada hoja */
+  var dPhy=15-10;
+  resRS.forEach(function(x){
+    x.pAcum=x.acumPlan+dPhy; x.rAcum=x.acumReal+dPhy;
+    x.pPer=x.perPlan+dPhy;   x.rPer=x.perReal+dPhy;
+    x.cpAcum=x.acumPlan+dCosto; x.crAcum=x.acumReal+dCosto;
+    x.cpPer=x.perPlan+dCosto;   x.crPer=x.perReal+dCosto});
+  if(base.hojas['PANEL CONTROL'])
+    hojas.push(['REPORTE SEMANAL',
+      _wkPanelApp({base:base.hojas['PANEL CONTROL'],res:resRS,semanas:sem}).xml,null]);
+  /* el panel cuenta RFI y FCR: sin esas hojas sus formulas quedarian colgando */
+  ['RFI','FCR'].forEach(function(nm){
+    if(base.hojas[nm])hojas.push([nm,_wkLimpiaHoja(base.hojas[nm]),null])});
   mete('PROGRAMACION',_wkLimpiaHoja(prog.xml),10);
   /* METRADO y PHYSICAL son espejo de PROGRAMACION: siguen su mapa de filas */
   var comun={semanas:sem,iSem:D.iSem,mapa:prog.mapa,ultFila:prog.ultima,
@@ -10747,7 +10734,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
