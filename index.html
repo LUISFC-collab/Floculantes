@@ -5626,6 +5626,108 @@ function _wkLimpiaCola(pie){
     .replace(/<controls>[\s\S]*?<\/controls>/g,'')
     .replace(/<tableParts[^>]*\/>|<tableParts[^>]*>[\s\S]*?<\/tableParts>/g,'')
     .replace(/(<pageSetup\b[^>]*?)\s+r:id="[^"]*"/g,'$1')}
+/* ------------------------------ COSTO --------------------------------------
+   Otra espejo de PROGRAMACION, con su propio desfase: la hoja original empieza
+   en la fila 7 y sus semanas van de la H a la Y, sin la columna de la S0.
+
+   Lo unico que no sale de PROGRAMACION es el costo de cada actividad, que en
+   la hoja original era `Partidas!H<n>` -la hoja congelada del libro guia, la
+   misma que hacia que todo saliera con la lista vieja-. Ahora sale de la lista
+   amarilla del cronograma vigente, que lleva su columna de costo, y COSTO la
+   busca con un VLOOKUP: asi sigue siendo formula y se mueve con el aplicativo. */
+function _wkCostoApp(P){
+  var base=P.base, sem=P.semanas, nS=sem.length;
+  var colC=function(i){return _wkgCol('G',i)};      /* H = S27 */
+  var ultCol=colC(nS);
+  var f0=P.filaIni||7;
+  var D=f0-((P.mapa[0]&&P.mapa[0].r)||10);
+  var ult=P.ultFila+D;
+  var lineas=[];P.mapa.forEach(function(m){
+    if(m.tipo==='plan'&&lineas.indexOf(m.cron)<0)lineas.push(m.cron)});
+  var espina=lineas.length?lineas[lineas.length-1]:'';
+  var H6="'P6-"+espina+"'";
+  var RG=H6+'!$'+_WKP6.cod+'$3:$'+_WKP6.fin+'$'+(P.p6Ult||3);
+  var CAB=H6+'!$'+_WKP6.cod+'$2:$'+_WKP6.fin+'$2';
+  /* el pie: acumulado y del periodo, por linea */
+  var pie0=ult+2, nL=lineas.length+1;
+  var fAcum=function(i){return pie0+i}, fPer=function(i){return pie0+nL+1+i};
+  var etiq=function(i){return i<lineas.length?('Prog. '+lineas[i]):'Actual'};
+  var ret={};
+  /* los totales de la cabecera suman SOLO la linea vigente: con varias lineas
+     base, sumar la columna entera contaria cada actividad una vez por linea */
+  ret['D'+(f0-1)]='IFERROR(SUMIF($F$'+f0+':$F$'+ult+',"Prog. '+espina+'",$D$'+f0+':$D$'+ult+'),0)';
+  ret['E'+(f0-1)]='IFERROR(SUMIF($F$'+f0+':$F$'+ult+',"Prog. '+espina+'",$E$'+f0+':$E$'+ult+'),0)';
+  var C=_wkCabeceraDe(base,f0-1,ret), P0=C.P0, r=C.filas.slice();
+  var eWbs=_wkEstDe(P0,f0), ePlan=_wkEstDe(P0,f0+4), eReal=_wkEstDe(P0,f0+5);
+  var COLS=['A','B','C','D','E','F'];
+  P.mapa.forEach(function(m){
+    var n=m.r+D, pr=m.r, c='';
+    var cel=function(col,f,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+'><f>'+_wkEsc(f)+'</f></c>'};
+    var txt=function(col,t,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+
+      ' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(t)+'</t></is></c>'};
+    var vac=function(col,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+'/>'};
+    if(m.tipo==='wbs'){
+      COLS.forEach(function(col){c+=(col==='C')?cel('C','PROGRAMACION!D'+pr,eWbs.e.C):vac(col,eWbs.e[col])});
+      for(var k=1;k<=nS;k++)c+=vac(colC(k),eWbs.e[colC(k)]);
+      r.push('<row r="'+n+'"'+eWbs.at+'>'+c+'</row>');return}
+    var est=(m.tipo==='plan')?ePlan:eReal;
+    if(m.tipo==='plan'){
+      c+=vac('A',est.e.A);
+      c+=cel('B','PROGRAMACION!C'+pr,est.e.B);
+      c+=cel('C','PROGRAMACION!D'+pr,est.e.C);
+      c+=(m.r===m.base)
+        ? cel('D','IFERROR(VLOOKUP($B'+n+','+RG+',MATCH('+H6+'!$'+_WKP6.costo+'$2,'+CAB+',0),FALSE),0)',est.e.D)
+        : cel('D','$D'+(m.base+D),est.e.D);
+      c+=cel('E','$D'+n,est.e.E);
+      c+=txt('F','Prog. '+m.cron,est.e.F);
+    }else{
+      COLS.forEach(function(col){
+        c+=(col==='F')?txt('F','Actual',est.e.F):vac(col,est.e[col])});
+    }
+    for(var w=1;w<=nS;w++)
+      c+=cel(colC(w),'$D'+(m.base+D)+'*PROGRAMACION!'+_wkgCol('N',w)+pr,est.e[colC(w)]);
+    r.push('<row r="'+n+'"'+est.at+'>'+c+'</row>')});
+  /* ---- el pie, formulado ---- */
+  var rango=function(col){return '$'+col+'$'+f0+':$'+col+'$'+ult};
+  var titulo=function(i){return i<lineas.length?('ACUMULADO '+lineas[i]):'ACUMULADO REAL'};
+  var titulo2=function(i){return i<lineas.length?('DEL PERIODO '+lineas[i]):'DEL PERIODO REAL'};
+  var celF=function(col,n,f,e){return '<c r="'+col+n+'"'+(e?(' s="'+e+'"'):'')+'><f>'+_wkEsc(f)+'</f></c>'};
+  var celT=function(col,n,t,e){return '<c r="'+col+n+'"'+(e?(' s="'+e+'"'):'')+
+    ' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(t)+'</t></is></c>'};
+  for(var i=0;i<nL;i++){
+    var n1=fAcum(i), et=etiq(i), esReal=(i===lineas.length), c1='';
+    c1+=celT('C',n1,titulo(i),ePlan.e.C);
+    for(var w1=1;w1<=nS;w1++){
+      var cc=colC(w1);
+      c1+=celF(cc,n1,(esReal&&w1>P.iSem)?'""'
+        :('IFERROR(SUMIF('+rango('F')+',"'+et+'",'+cc+'$'+f0+':'+cc+'$'+ult+'),0)'),ePlan.e[cc])}
+    r.push('<row r="'+n1+'">'+c1+'</row>')}
+  for(var j=0;j<nL;j++){
+    var n2=fPer(j), na=fAcum(j), c2='';
+    c2+=celT('C',n2,titulo2(j),ePlan.e.C);
+    for(var w2=1;w2<=nS;w2++){
+      var cd=colC(w2);
+      c2+=celF(cd,n2,(w2===1)?(cd+na):('IFERROR('+cd+na+'-'+colC(w2-1)+na+',"")'),ePlan.e[cd])}
+    r.push('<row r="'+n2+'">'+c2+'</row>')}
+  var ultPie=fPer(nL-1);
+  var enc=base.slice(0,base.indexOf('<sheetData>'))
+    .replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:'+ultCol+ultPie+'"/>');
+  var pie=_wkLimpiaCola(base.slice(base.indexOf('</sheetData>')+12));
+  pie=pie.replace(/<autoFilter ref="[^"]*"[^>]*\/>/,'<autoFilter ref="A'+(f0-1)+':'+ultCol+ult+'"/>');
+  pie=pie.replace('</worksheet>','<drawing r:id="rId1"/></worksheet>');
+  var series=[];
+  for(var k2=0;k2<nL;k2++){
+    var col=(k2<lineas.length)?_WK_SERIE[k2%_WK_SERIE.length]:['E0721C','28575'];
+    series.push({nombre:titulo(k2),fila:fAcum(k2),color:col[0],ancho:col[1],
+      guion:(k2<lineas.length-1)?'dash':'', marca:(k2===lineas.length)})}
+  /* aqui las semanas no son numeros sino la fecha de cierre, y el eje va en
+     importes: sin tope fijo, que el costo no acaba en 100% */
+  var grafico=_wkCurvaXml({hoja:'COSTO',titulo:'CURVA DE COSTO — ACUMULADO',
+    series:series,filaCat:P.filaCat||5,colIni:colC(1),colFin:ultCol,colNom:'C',
+    catFmt:'dd/mm',valFmt:'#,##0',valMax:null,valUnit:null});
+  var dibujo=_wkDibujoXml({col0:1,fila0:ultPie+1,col1:15,fila1:ultPie+27,nombre:'Curva de costo'});
+  return {xml:enc+'<sheetData>'+r.join('')+'</sheetData>'+pie, ultima:ult,
+    ultimaPie:ultPie, grafico:grafico, dibujo:dibujo}}
 /* ---------------- La curva de avance fisico --------------------------------
    Un grafico de lineas hecho a mano: no hay ninguno que copiar porque estas
    hojas las genera el aplicativo desde cero. Lee las filas de sumatoria del
@@ -5671,21 +5773,22 @@ function _wkCurvaXml(P){
    '<c:marker val="1"/><c:axId val="411001"/><c:axId val="411002"/></c:lineChart>'+
    '<c:catAx><c:axId val="411001"/><c:scaling><c:orientation val="minMax"/></c:scaling>'+
    '<c:delete val="0"/><c:axPos val="b"/>'+
-   '<c:numFmt formatCode="&quot;S&quot;0" sourceLinked="0"/>'+
+   '<c:numFmt formatCode="'+_wkEsc(P.catFmt||'"S"0')+'" sourceLinked="0"/>'+
    '<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>'+
    '<c:spPr><a:noFill/><a:ln w="9525" cap="flat"><a:solidFill><a:srgbClr val="C7D2E0"/></a:solidFill></a:ln></c:spPr>'+
    _wkTxPr(900,'5C6779')+
    '<c:crossAx val="411002"/><c:crosses val="autoZero"/><c:auto val="1"/>'+
    '<c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>'+
    '<c:valAx><c:axId val="411002"/><c:scaling><c:orientation val="minMax"/>'+
-   '<c:max val="1"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>'+
+   (P.valMax===null?'':('<c:max val="'+(P.valMax||1)+'"/>'))+'<c:min val="0"/>'+
+   '</c:scaling><c:delete val="0"/><c:axPos val="l"/>'+
    '<c:majorGridlines><c:spPr><a:ln w="9525" cap="flat"><a:solidFill>'+
    '<a:srgbClr val="E6EBF2"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>'+
-   '<c:numFmt formatCode="0%" sourceLinked="0"/>'+
+   '<c:numFmt formatCode="'+_wkEsc(P.valFmt||'0%')+'" sourceLinked="0"/>'+
    '<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>'+
    '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>'+_wkTxPr(900,'5C6779')+
    '<c:crossAx val="411001"/><c:crosses val="autoZero"/><c:crossBetween val="between"/>'+
-   '<c:majorUnit val="0.1"/></c:valAx>'+
+   (P.valUnit===null?'':('<c:majorUnit val="'+(P.valUnit||0.1)+'"/>'))+'</c:valAx>'+
    '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>'+
    '<c:legend><c:legendPos val="b"/><c:overlay val="0"/>'+
    '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>'+_wkTxPr(900,'1F3864')+'</c:legend>'+
@@ -5850,8 +5953,11 @@ function _wkPhysicalApp(P){
   /* ---- el pie: las sumatorias, todas formuladas ----
      El acumulado de una linea es el de sus actividades pesado por las HH que
      cada una vale (columna F), que es justo lo que hace el SUMPRODUCT. Pasado
-     el corte, el avance real devuelve NA() a proposito: asi la curva se corta
-     en la semana del reporte en vez de desplomarse a cero. */
+     el corte, el avance real deja la celda vacia a proposito: asi la curva se
+     corta en la semana del reporte en vez de desplomarse a cero, y la hoja no
+     se llena de #N/D -por eso vacia y no NA(), que hace lo mismo en el grafico
+     pero se ve-. El grafico lleva dispBlanksAs="gap", que es lo que abre el
+     hueco. */
   var rango=function(c){return '$'+c+'$'+f0+':$'+c+'$'+ult};
   var titulo=function(i){return i<lineas.length?('ACUMULADO '+lineas[i]):'ACUMULADO REAL'};
   var titulo2=function(i){return i<lineas.length?('DEL PERIODO '+lineas[i]):'DEL PERIODO REAL'};
@@ -5864,7 +5970,7 @@ function _wkPhysicalApp(P){
     c1+=celT('C',n1,titulo(i),ePlan.e.C);
     for(var w=1;w<=nS;w++){
       var cc=colP(w);
-      var f=(esReal&&w>P.iSem)?'NA()'
+      var f=(esReal&&w>P.iSem)?'""'
         :('IFERROR(SUMPRODUCT(('+rango('N')+'="'+et+'")*'+rango('F')+'*'+cc+'$'+f0+':'+cc+'$'+ult+
           ')/SUMIF('+rango('N')+',"'+et+'",'+rango('F')+'),0)');
       c1+=celF(cc,n1,f,ePlan.e[cc])}
@@ -5874,7 +5980,7 @@ function _wkPhysicalApp(P){
     c2+=celT('C',n2,titulo2(j),ePlan.e.C);
     for(var w2=1;w2<=nS;w2++){
       var cd=colP(w2);
-      var f2=(w2===1)?(cd+na):('IFERROR('+cd+na+'-'+colP(w2-1)+na+',NA())');
+      var f2=(w2===1)?(cd+na):('IFERROR('+cd+na+'-'+colP(w2-1)+na+',"")');
       c2+=celF(cd,n2,f2,ePlan.e[cd])}
     r.push('<row r="'+n2+'">'+c2+'</row>')}
   var ultPie=fPer(nL-1);
@@ -5890,7 +5996,8 @@ function _wkPhysicalApp(P){
     series.push({nombre:titulo(k),fila:fAcum(k),color:col[0],ancho:col[1],
       guion:(k<lineas.length-1)?'dash':'', marca:(k===lineas.length)})}
   var grafico=_wkCurvaXml({hoja:'PHYSICAL % PROGRESS',titulo:'CURVA DE AVANCE FÍSICO — % ACUMULADO',
-    series:series,filaCat:7,colIni:colP(1),colFin:ultCol,colNom:'C'});
+    series:series,filaCat:7,colIni:colP(1),colFin:ultCol,colNom:'C',
+    catFmt:'"S"0',valFmt:'0%',valMax:1,valUnit:0.1});
   var dibujo=_wkDibujoXml({col0:1,fila0:ultPie+1,col1:15,fila1:ultPie+27,nombre:'Curva de avance'});
   return {xml:enc+'<sheetData>'+r.join('')+'</sheetData>'+pie, ultima:ult,
     ultimaPie:ultPie, grafico:grafico, dibujo:dibujo}}
@@ -6027,7 +6134,8 @@ function _wkProgApp(P){
    una sola vez y de estas dos tablas salen tanto las hojas como las formulas
    que las buscan; asi no se puede mover una columna y olvidar la otra parte.
    La cabecera lleva solo el nombre del proyecto y la fecha. */
-var _WKP6={cod:'A',qps:'B',nom:'C',cant:'D',und:'E',hh:'F',dias:'G',ini:'H',fin:'I'};
+var _WKP6={cod:'A',qps:'B',nom:'C',cant:'D',und:'E',hh:'F',costo:'G',
+  dias:'H',ini:'I',fin:'J'};
 var _WKF ={cod:'A',nom:'B',hh:'C',ini:'D',fin:'E',dias:'F',sem0:'G'};
 function _wkFCol(i){return _wkgCol(_WKF.sem0,i)}      /* la semana i (0..) */
 function _wkP6Num(col){return col.charCodeAt(0)-64}   /* para el VLOOKUP */
@@ -6041,7 +6149,8 @@ function _wkHojaP6Esp(id,filas,semanas){
     _crXlsCel(P.nom,1,_WKFECHA?_crASerial(_WKFECHA):'',false,S.fecha)+
     _crXlsCel(P.hh,1,id,true,S.cab)+'</row>');
   var cab=[[P.cod,'ITEM'],[P.qps,'ITEM QPS'],[P.nom,'PARTIDA'],[P.cant,'CANT.'],
-           [P.und,'UND'],[P.hh,'HH'],[P.dias,'DURAC. (d)'],[P.ini,'INICIO'],[P.fin,'FIN']];
+           [P.und,'UND'],[P.hh,'HH'],[P.costo,'COSTO'],[P.dias,'DURAC. (d)'],
+           [P.ini,'INICIO'],[P.fin,'FIN']];
   r.push('<row r="2">'+cab.map(function(c){return _crXlsCel(c[0],2,c[1],true,S.cab)}).join('')+'</row>');
   filas.forEach(function(f){
     var v=f.lineas[id],c='';
@@ -6051,6 +6160,7 @@ function _wkHojaP6Esp(id,filas,semanas){
     c+=_crXlsCel(P.cant,n,(f.cant===''||f.cant==null)?'':f.cant,false,S.num);
     c+=_crXlsCel(P.und,n,f.und||'',true,S.texto);
     c+=_crXlsCel(P.hh,n,v?Math.round(v.hh*100)/100:'',false,S.num);
+    c+=_crXlsCel(P.costo,n,(f.costo||f.costo===0)?Math.round(f.costo*100)/100:'',false,S.num);
     c+=_crXlsCel(P.dias,n,(v&&v.dias)?v.dias:'',false,S.ent);
     c+=_crXlsCel(P.ini,n,v?_crASerial(v.ini):'',false,S.fecha);
     c+=_crXlsCel(P.fin,n,v?_crASerial(v.fin):'',false,S.fecha);
@@ -6064,7 +6174,7 @@ function _wkHojaP6Esp(id,filas,semanas){
     '<sheetFormatPr defaultRowHeight="15"/>'+
     '<cols><col min="1" max="2" width="12" customWidth="1"/>'+
     '<col min="3" max="3" width="54" customWidth="1"/>'+
-    '<col min="4" max="9" width="12" customWidth="1"/></cols>'+
+    '<col min="4" max="10" width="13" customWidth="1"/></cols>'+
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
     ultima:n-1}}
@@ -6174,11 +6284,16 @@ async function _wkDatosLibro(semN,corte,ids){
       return Math.max(0,Math.round(((a-(i?acumReal[i-1]:0))*hhE)*1e6)/1e6)});
     var hoy=(typeof todayISO==='function')?todayISO():corte;
     var pr=0;if(hhE>0)ms.forEach(function(i){pr+=(esp.u.items[i]/_crVeces(esp.rp,i))*pctA(i,corte)});
+    /* el costo de la actividad: lo que valen sus partidas, repartido igual
+       que las horas cuando una partida cae en varias actividades */
+    var costo=0;ms.forEach(function(i){
+      var pp=porId[i];if(!pp)return;
+      costo+=(Number(pp.tot)||0)/_crVeces(esp.rp,i)});
     var cant='',und='',qps='';
     if(ms.length===1&&porId[ms[0]]){cant=porId[ms[0]].cant;und=porId[ms[0]].und||'';qps=ms[0]}
     else if(ms.length>1)qps='('+ms.length+')';
     filas.push({cod:t.task_code,qps:qps,nom:String(t.nombre||''),wbs:String(t.wbs||''),
-      cant:cant,und:und,lineas:lineas,
+      cant:cant,und:und,costo:costo,lineas:lineas,
       hhReal:hhE>0?pr:0,pctReal:hhE>0?Math.min(1,pr/hhE):0,
       acumReal:acumReal,semReal:semReal})});
   var hhTot={};C.forEach(function(cc){hhTot[cc.id]=cc.u.hh});
@@ -6243,6 +6358,10 @@ async function _wkLibroApp(semN,corte,ids){
     phy=_wkPhysicalApp(Object.assign({
       base:base.hojas['PHYSICAL % PROGRESS'],filaIni:15},comun));
     mete('PHYSICAL % PROGRESS',phy.xml,15,{grafico:phy.grafico,dibujo:phy.dibujo})}
+  if(base.hojas['COSTO']){
+    var cos=_wkCostoApp(Object.assign({base:base.hojas['COSTO'],filaIni:7,
+      filaCat:5,p6Ult:p6Ult[D.esp.id]},comun));
+    mete('COSTO',cos.xml,7,{grafico:cos.grafico,dibujo:cos.dibujo})}
   return {hojas:hojas,styles:_wkPintorCierra(fus.xml),ss:base.ss,
     info:{actividades:prog.actividades,
       crons:D.C.map(function(c){return c.id}),espina:D.esp.id,
@@ -10212,7 +10331,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823p1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823q1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
