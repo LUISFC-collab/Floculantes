@@ -5780,9 +5780,14 @@ function _wkCostoApp(P){
     if(m.tipo==='plan'&&lineas.indexOf(m.cron)<0)lineas.push(m.cron)});
   /* los cuadros van con el vigente arriba: es el primero, no el ultimo */
   var espina=lineas.length?lineas[0]:'';
-  var H6="'P6-"+espina+"'";
-  var RG=H6+'!$'+_WKP6.cod+'$3:$'+_WKP6.fin+'$'+(P.p6Ult||3);
-  var CAB=H6+'!$'+_WKP6.cod+'$2:$'+_WKP6.fin+'$2';
+  /* cada cuadro busca en SU lista: la del vigente no sabe nada de las
+     actividades del LB0 y devolvia 0 o, peor, el costo de otra actividad */
+  var buscaEn=function(cron,n){
+    var h="'P6-"+cron+"'";
+    var ult=(P.p6Ult&&P.p6Ult[cron])||3;
+    return 'IFERROR(VLOOKUP($'+_WKP6.cod+n+','+
+      h+'!$'+_WKP6.cod+'$3:$'+_WKP6.fin+'$'+ult+',MATCH('+
+      h+'!$'+_WKP6.costo+'$2,'+h+'!$'+_WKP6.cod+'$2:$'+_WKP6.fin+'$2,0),FALSE),0)'};
   var ret={};
   /* los totales de la cabecera suman SOLO la linea vigente: con varias lineas
      base, sumar la columna entera contaria cada actividad una vez por linea */
@@ -5840,7 +5845,7 @@ function _wkCostoApp(P){
       c+=cel('B','PROGRAMACION!C'+pr,est.e.B);
       c+=cel('C','PROGRAMACION!D'+pr,est.e.C);
       c+=(m.r===m.base)
-        ? cel('D','IFERROR(VLOOKUP($B'+n+','+RG+',MATCH('+H6+'!$'+_WKP6.costo+'$2,'+CAB+',0),FALSE),0)',est.e.D)
+        ? cel('D',buscaEn(m.cron,n),est.e.D)
         : cel('D','$D'+(m.base+D),est.e.D);
       c+=cel('E','$D'+n,est.e.E);
       c+=txt('F','Prog. '+m.cron,est.e.F);
@@ -6744,7 +6749,7 @@ async function _wkLibroApp(semN,corte,ids){
   if(base.hojas['COSTO']){
     var cos=_wkCostoApp(Object.assign({base:base.hojas['COSTO'],filaIni:7,
       desfasePhy:15-10,
-      p6Ult:p6Ult[D.esp.id],hojaGG:HGG,celdaGG:'F$86',
+      p6Ult:p6Ult,hojaGG:HGG,celdaGG:'F$86',
       phyAcum:(phy&&phy.acum)||null},comun));
     mete('COSTO',cos.xml,7,null)}
   return {hojas:hojas,styles:_wkPintorCierra(fus.xml),ss:base.ss,
@@ -10742,7 +10747,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823z2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
