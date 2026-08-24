@@ -5141,6 +5141,10 @@ function _wkCurvaApp(semanas,conSobre){
 /* ---- construir la hoja CRONOGRAMAS ---- */
 function _wkColL(i){var s='';i=i+1;while(i>0){var r=(i-1)%26;s=String.fromCharCode(65+r)+s;i=Math.floor((i-1)/26)}return s}
 function _wkEsc(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+/* Para un valor de ATRIBUTO hay que escapar tambien las comillas: un formato
+   como "S"0 -las comillas son como Excel marca un literal- rompe el atributo
+   y el libro entero sale pidiendo reparacion. */
+function _wkEscAt(t){return _wkEsc(t).replace(/"/g,'&quot;').replace(/'/g,'&apos;')}
 function _wkCel(col,r,v,texto){
   if(texto)return '<c r="'+col+r+'" t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(v)+'</t></is></c>';
   if(v==null||v==='')return '';
@@ -5681,7 +5685,7 @@ function _wkPinta(s,num){
       else if(yaB!=null)nuevoNf=yaB;
       else{while(P.usados[P.sig])P.sig++;nuevoNf=P.sig++;P.usados[nuevoNf]=1;
         P.codigos[nuevoNf]=dos;
-        P.nuevosNf.push('<numFmt numFmtId="'+nuevoNf+'" formatCode="'+_wkEsc(dos)+'"/>')}}}
+        P.nuevosNf.push('<numFmt numFmtId="'+nuevoNf+'" formatCode="'+_wkEscAt(dos)+'"/>')}}}
   if(nuevoF===fid&&nuevoNf===nfId){P.cache[k]=s;return s}
   var nx=xf.replace(/fontId="\d+"/,'fontId="'+nuevoF+'"')
            .replace(/numFmtId="\d+"/,'numFmtId="'+nuevoNf+'"');
@@ -5910,7 +5914,7 @@ function _wkCurvaXml(P){
    '<c:marker val="1"/><c:axId val="411001"/><c:axId val="411002"/></c:lineChart>'+
    '<c:catAx><c:axId val="411001"/><c:scaling><c:orientation val="minMax"/></c:scaling>'+
    '<c:delete val="0"/><c:axPos val="b"/>'+
-   '<c:numFmt formatCode="'+_wkEsc(P.catFmt||'"S"0')+'" sourceLinked="0"/>'+
+   '<c:numFmt formatCode="'+_wkEscAt(P.catFmt||'"S"0')+'" sourceLinked="0"/>'+
    '<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>'+
    '<c:spPr><a:noFill/><a:ln w="9525" cap="flat"><a:solidFill><a:srgbClr val="C7D2E0"/></a:solidFill></a:ln></c:spPr>'+
    _wkTxPr(900,'5C6779')+
@@ -5921,7 +5925,7 @@ function _wkCurvaXml(P){
    '</c:scaling><c:delete val="0"/><c:axPos val="l"/>'+
    '<c:majorGridlines><c:spPr><a:ln w="9525" cap="flat"><a:solidFill>'+
    '<a:srgbClr val="E6EBF2"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>'+
-   '<c:numFmt formatCode="'+_wkEsc(P.valFmt||'0%')+'" sourceLinked="0"/>'+
+   '<c:numFmt formatCode="'+_wkEscAt(P.valFmt||'0%')+'" sourceLinked="0"/>'+
    '<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>'+
    '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>'+_wkTxPr(900,'5C6779')+
    '<c:crossAx val="411001"/><c:crosses val="autoZero"/><c:crossBetween val="between"/>'+
@@ -6516,7 +6520,10 @@ function _wkPanelApp(P){
     x=_wkPonCelda(x,'AJ'+fila,idx(c.cpAcum),false);
     x=_wkPonCelda(x,'AL'+fila,idx(c.crAcum),false)};
   /* la semana la manda la caratula, que aqui se llama solo 'Carátula' */
-  x=x.replace(/'Car[áa]tula \(P\)'!/g,"Carátula!");
+  /* la caratula aqui se llama solo 'Carátula'; se cubren las dos formas de
+     escribir la tilde, que no siempre viene compuesta igual */
+  x=x.replace(/'Car[\u00e1a\u0301]+tula \(P\)'!?/g,"Carátula!")
+     .replace(/Car[\u00e1a\u0301]+tula \(P\)!/g,"Carátula!");
   /* arriba el vigente, debajo la siguiente linea base */
   if(R[0]){x=_wkPonCelda(x,'AC18',R[0].id,true);avance(18,R[0]);costo(35,R[0])}
   if(R[1]){x=_wkPonCelda(x,'AC19',R[1].id,true);avance(19,R[1]);costo(36,R[1])}
@@ -10734,7 +10741,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
