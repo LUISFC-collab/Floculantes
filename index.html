@@ -5324,8 +5324,9 @@ async function _wkBaseFormato(){
   /* Las dos caratulas llevan su dibujo: la verde del reporte y la azul del
      bloque de anexos. Se recoge el arbol entero de cada una. */
   var act={};
-  for(var q=0;q<2;q++){
-    var nm=q?'Car\u00e1tula':'Car\u00e1tula (P)';
+  var CON_DIBUJO=['Car\u00e1tula (P)','Car\u00e1tula','RFI','FCR'];
+  for(var q=0;q<CON_DIBUJO.length;q++){
+    var nm=CON_DIBUJO[q];
     if(!hojas[nm])continue;
     try{act[nm]=await _wkActivosDe(mapa,leer,crudo,hojas[nm])}catch(e){}}
   _WKB={styles:await leer('xl/styles.xml'),ss:await leer('xl/sharedStrings.xml'),
@@ -6946,21 +6947,21 @@ async function _wkLibroApp(semN,corte,ids){
       p6Ult:p6Ult,hojaGG:HGG,celdaGG:'F$86',
       phyAcum:(phy&&phy.acum)||null},comun));
     mete('COSTO',cos.xml,7,null)}
-  /* Las hojas de apoyo van al FINAL: no son del reporte, estan para que el
-     panel tenga de donde leer. */
+  /* El bloque de anexos, al final y con SU caratula delante: la azul */
+  if(base.hojas['Car\u00e1tula']){
+    var acz=(base.activos||{})['Car\u00e1tula']||null;
+    hojas.push(['Carátula',_wkLimpiaSalvoDibujo(base.hojas['Car\u00e1tula']),
+      acz?{relsHoja:acz.rels,partes:acz.partes}:null])}
   if(pan)['STAFFING TABULATION CHART','CONSTRUCTION EQUIPMENT SCHE '].forEach(function(nm){
     if(!pan.hojas[nm])return;
     var a2=pan.activos[nm]||null;
     hojas.push([nm,_wkCorreEstilos(_wkLimpiaSalvoDibujo(pan.hojas[nm]),offPan),
       a2?{relsHoja:a2.rels,partes:a2.partes}:null])});
   ['RFI','FCR'].forEach(function(nm){
-    if(base.hojas[nm])
-      hojas.push([nm,_wkLimpiaSalvoDibujo(base.hojas[nm]),null])});
-  /* la caratula azul, la que abre el bloque de anexos */
-  if(base.hojas['Car\u00e1tula']){
-    var acz=(base.activos||{})['Car\u00e1tula']||null;
-    hojas.push(['Carátula',_wkLimpiaSalvoDibujo(base.hojas['Car\u00e1tula']),
-      acz?{relsHoja:acz.rels,partes:acz.partes}:null])}
+    if(!base.hojas[nm])return;
+    var ax=(base.activos||{})[nm]||null;
+    hojas.push([nm,_wkLimpiaSalvoDibujo(base.hojas[nm]),
+      ax?{relsHoja:ax.rels,partes:ax.partes}:null])});
   return {hojas:hojas,styles:_wkPintorCierra(estilos),ss:base.ss,
     info:{actividades:prog.actividades,
       crons:D.bloques.map(function(b){return b.id}),espina:D.esp.id,
@@ -10974,7 +10975,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824c2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824c3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
