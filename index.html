@@ -4800,8 +4800,10 @@ function _wkAcum(cutISO){
     var fz=null;try{fz=(typeof _fzDe==='function')?_fzDe(p.id):null}catch(e){}
     if(fz&&(fz.fases||[]).length){
       var f=(fz.fases||[]).filter(function(x){return x.cierra})[0]||fz.fases[fz.fases.length-1];
-      var con=false;
-      (f.movs||[]).forEach(function(mv){if(String(mv.f||'')<=cutISO){a+=Number(mv.c)||0;con=true}});
+      var con=false,_mp=(typeof _fzFechasDe==='function')?_fzFechasDe(p.id):null;
+      (f.movs||[]).forEach(function(mv){
+        var _f=(typeof _fzFechaMov==='function')?_fzFechaMov(mv,_mp):(mv.f||'');
+        if(String(_f)<=cutISO){a+=Number(mv.c)||0;con=true}});
       if(!con&&(Number(f.avance)||0)>0)a=Number(f.avance)||0;
       tot=Number(f.cantidad)||0;
     }else if(m&&m.unidad==='glb'){
@@ -10405,7 +10407,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823s1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823s2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -12467,19 +12469,35 @@ try{var _fzPullBase=syncPull;syncPull=async function(){var r=await _fzPullBase.a
 try{setTimeout(function(){try{_fzPull()}catch(e){}},2600)}catch(_fzt){}
 /* el avance de la partida sale de sus partes: aqui se enganchan TODAS las vistas
    para que la tarjeta, el historico y el detalle digan siempre lo mismo */
+/* La fecha que vale de un movimiento de parte: la de la carga que lo genero.
+   La que lleva escrita es la del dia en que se guardo la parte, que no tiene
+   por que ser la del avance -si se define la parte dos dias despues, el
+   suministro se iba al futuro y desaparecia de los cortes anteriores-. */
+function _fzFechasDe(id){
+  var m={};
+  try{((typeof partesOf==='function')?partesOf(id):[]||[]).forEach(function(x){
+    if(x&&x.client_id)m[x.client_id]=x.fecha})}catch(e){}
+  return m}
+function _fzFechaMov(mov,mapa){
+  if(mov&&mov.cid&&mapa&&mapa[mov.cid])return mapa[mov.cid];
+  return (mov&&mov.f)||''}
 function _fzPctAt(id,iso){
   var r=_fzDe(id);if(!r)return null;
-  var tot=0,pts=0;
+  var tot=0,pts=0,mapa=_fzFechasDe(id);
   (r.fases||[]).forEach(function(x){
     var w=Number(x.peso)||0;tot+=w;
     var c=Number(x.cantidad)||0,a=0;
-    (x.movs||[]).forEach(function(m){if(!iso||String(m.f)<=String(iso))a+=Number(m.c)||0});
+    (x.movs||[]).forEach(function(m){
+      if(!iso||String(_fzFechaMov(m,mapa))<=String(iso))a+=Number(m.c)||0});
     var pc=c>0?Math.max(0,Math.min(100,a/c*100)):(a>0?100:0);
     pts+=w*pc/100});
   if(tot<=0)return null;
   return Math.round(pts/tot*10000)/100}
 /* lo cargado de una parte hasta una fecha */
-function _fzAvanceAt(x,iso){var a=0;(x.movs||[]).forEach(function(m){if(!iso||String(m.f)<=String(iso))a+=Number(m.c)||0});return a}
+function _fzAvanceAt(x,iso,mapa){var a=0;
+  (x.movs||[]).forEach(function(m){
+    if(!iso||String(_fzFechaMov(m,mapa))<=String(iso))a+=Number(m.c)||0});
+  return a}
 try{var _pctBaseFz=pctOf;pctOf=function(p){
   try{var r=(p&&p.id)?_fzPct(p.id):null;if(r!=null)return r}catch(e){}
   return _pctBaseFz.apply(this,arguments)}}catch(_fzp){}
@@ -12751,7 +12769,10 @@ async function _fzSumar(id,fid,cant,fecha,cid){
     var r=_fzDe(id);if(!r||!fid||!cant)return;
     var fases=JSON.parse(JSON.stringify(r.fases||[]));
     var toco=false;
-    var f=fecha||((typeof selDate!=='undefined'&&selDate)||(typeof activeDate!=='undefined'&&activeDate)||(typeof todayISO==='function'?todayISO():''));
+    /* la fecha manda la carga: si se conoce su identificador, la suya gana */
+    var f=fecha||'';
+    if(cid){try{var _m=_fzFechasDe(id);if(_m[cid])f=_m[cid]}catch(e){}}
+    if(!f)f=((typeof selDate!=='undefined'&&selDate)||(typeof activeDate!=='undefined'&&activeDate)||(typeof todayISO==='function'?todayISO():''));
     fases.forEach(function(x){if(x.id===fid){
       x.avance=Math.round(((Number(x.avance)||0)+Number(cant))*1e6)/1e6;
       /* el rastro: que dia, cuanto y quien. Asi el calendario lo puede desglosar
@@ -12872,8 +12893,12 @@ async function _fzQuitarPorCid(id,cid){
 function _fzMovsDe(id,fecha){
   var r=_fzDe(id);if(!r)return [];
   var o=[];
+  var mapa=_fzFechasDe(id);
   (r.fases||[]).forEach(function(x){
-    (x.movs||[]).forEach(function(m){if(!fecha||m.f===fecha)o.push({parte:x.nombre,unidad:x.unidad,peso:x.peso,cierra:!!x.cierra,f:m.f,c:m.c,q:m.q,ts:m.ts})})});
+    (x.movs||[]).forEach(function(m){
+      var f=_fzFechaMov(m,mapa);
+      if(!fecha||f===fecha)o.push({parte:x.nombre,unidad:x.unidad,peso:x.peso,
+        cierra:!!x.cierra,f:f,c:m.c,q:m.q,ts:m.ts})})});
   o.sort(function(a,b){return String(b.f).localeCompare(String(a.f))||((b.ts||0)-(a.ts||0))});
   return o}
 /* el desglose por partes que se cuelga del boton del calendario */
