@@ -6540,7 +6540,7 @@ async function _crPlanGuarda(R,cronId,semN){
 /* ---------------- PARA 3WLA: el alimentador del look ahead -------------------
    Una fila por actividad del cronograma vigente, con la forma exacta de la
    hoja 3WLA de la plantilla. */
-function _wkHoja3WLA(semN,bloque,base,R,corte){
+function _wkHoja3WLA(semN,bloque,base,R,corte,valores){
   if(!bloque||!bloque.filas||!bloque.filas.length)return null;
   /* OJO: en la plantilla la hoja se llama «3WLA », con un espacio al final. */
   var _n3=_wkComoSeLlama(base&&base.hojas,'3WLA');
@@ -6707,21 +6707,32 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
        lleva varias partidas, 1 global — asi sus HH no se pierden */
     var VE='IFERROR(IF(VLOOKUP($B'+n+','+P6+'!$B:$K,4,0)="",1,'+
            'VLOOKUP($B'+n+','+P6+'!$B:$K,4,0)),1)';
+    /* con las amarillas fuera, lo que salia de la P6 va como valor */
+    var vCant=Number(f.cant)||0, vUnd=String(f.und||'');
+    if(!(vCant>0)||!vUnd){vCant=1;vUnd='Glb.'}
+    var vHH=Number(f.hh)||0;
+    var vAv=vCant*(Number(f.pctReal)||0);
+    var vRate=vCant>0?(vHH/vCant):0;
     var cs=[
       _wkCelE('A',n,f.qps||'',true,st(CAB.A)),
       _wkCelE('B',n,f.cod||'',true,st(CAB.B)),
-      _wkCelE('C',n,'',true,st(CAB.C),'IFERROR(VLOOKUP($B'+n+','+P6+'!$B:$K,3,0),"")'),
-      _wkCelE('D',n,'',true,st(CAB.D),
-        'IFERROR(IF(VLOOKUP($B'+n+','+P6+'!$B:$K,5,0)="","Glb.",'+
-        'VLOOKUP($B'+n+','+P6+'!$B:$K,5,0)),"Glb.")'),
-      _wkCelE('E',n,'',false,st(CAB.E),VE),
+      valores?_wkCelE('C',n,f.nom||'',true,st(CAB.C))
+             :_wkCelE('C',n,'',true,st(CAB.C),'IFERROR(VLOOKUP($B'+n+','+P6+'!$B:$K,3,0),"")'),
+      valores?_wkCelE('D',n,vUnd,true,st(CAB.D))
+             :_wkCelE('D',n,'',true,st(CAB.D),
+               'IFERROR(IF(VLOOKUP($B'+n+','+P6+'!$B:$K,5,0)="","Glb.",'+
+               'VLOOKUP($B'+n+','+P6+'!$B:$K,5,0)),"Glb.")'),
+      valores?_wkCelE('E',n,vCant,false,st(CAB.E))
+             :_wkCelE('E',n,'',false,st(CAB.E),VE),
       _wkCelE('F',n,'',false,st(CAB.F),'E'+n),
-      _wkCelE('G',n,'',false,st(CAB.G),
-        'IFERROR($E'+n+'*SUM(INDEX('+P6+'!$'+cR0+':$'+cRN+
-        ',MATCH($B'+n+','+P6+'!$B:$B,0),0))/VLOOKUP($B'+n+','+P6+'!$B:$K,6,0),0)'),
+      valores?_wkCelE('G',n,Math.round(vAv*1e6)/1e6,false,st(CAB.G))
+             :_wkCelE('G',n,'',false,st(CAB.G),
+               'IFERROR($E'+n+'*SUM(INDEX('+P6+'!$'+cR0+':$'+cRN+
+               ',MATCH($B'+n+','+P6+'!$B:$B,0),0))/VLOOKUP($B'+n+','+P6+'!$B:$K,6,0),0)'),
       _wkCelE('H',n,'',false,st(CAB.H),'F'+n+'-G'+n),
-      _wkCelE('I',n,'',false,st(CAB.I),
-        'IFERROR(VLOOKUP($B'+n+','+P6+'!$B:$K,6,0)/$E'+n+',0)'),
+      valores?_wkCelE('I',n,Math.round(vRate*1e6)/1e6,false,st(CAB.I))
+             :_wkCelE('I',n,'',false,st(CAB.I),
+               'IFERROR(VLOOKUP($B'+n+','+P6+'!$B:$K,6,0)/$E'+n+',0)'),
       _wkCelE('J',n,'',false,st(CAB.J),'$E'+n+'*$I'+n),
       _wkCelE('K',n,'',false,st(CAB.K),'IF($J$8=0,0,$H'+n+'*$I'+n+'/$J$8)'),
       /* Cumplimiento, Comentario y Razon son de la ACTIVIDAD: van combinados
@@ -8626,7 +8637,7 @@ async function _wkLibroApp(semN,corte,ids){
      propia hoja 3WLA de la plantilla, que es el formato que debe tener. */
   /* PARA 3WLA y el lookahead son hojas del reporte, no alimentadores: se
      arman aqui pero se colocan al final, con las azules */
-  var _hd=null,_look=[];
+  var _hd=null,_hdVal=null,_look=[];
   try{
     var _R=null;
     try{
@@ -8634,6 +8645,8 @@ async function _wkLibroApp(semN,corte,ids){
       await _crPlanGuarda(_R,D.bloques[0].id,semN);
     }catch(_er){try{console.warn('plan a recuperar:',_er)}catch(_e3){}}
     _hd=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte);
+    /* la misma hoja sin depender de la P6, para el entregable suelto */
+    try{_hdVal=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,true)}catch(_ev){}
   }catch(_ehd){try{console.warn('PARA 3WLA no se pudo armar:',_ehd)}catch(_e2){}}
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
   /* La caratula del reporte conserva su nombre del original -`Carátula (P)`-,
@@ -8738,6 +8751,7 @@ async function _wkLibroApp(semN,corte,ids){
     if(look&&_hd)_wkLookHojas(look,semN,_hd,offLook).forEach(function(h){hojas.push(h)});
   }catch(_elk){try{console.warn('lookahead:',_elk)}catch(_e5){}}
   return {hojas:hojas,styles:_wkPintorCierra(estilos),ss:base.ss,
+    hoja3wVal:(_hdVal?_wkPonTab(_hdVal.xml,_WK_AZUL):null),
     info:{actividades:prog.actividades,
       crons:D.bloques.map(function(b){return b.id}),espina:D.esp.id,
       caratula:carXml?'copiada de la plantilla':'armada por el aplicativo',
@@ -11157,6 +11171,7 @@ function _wkExcel(){
     '<div id="_wkCronBox" style="border:1.5px solid #C7D2E0;border-radius:11px;padding:9px 11px;margin-bottom:11px;background:#fff;font-size:12px;color:#5C6779">Buscando cronogramas\u2026</div>'+
     '<div id="_wkPrev" style="font-size:12px;color:#1B2433;background:#F4F7FB;border:1px solid #D7E0EC;border-radius:10px;padding:9px 11px;margin-bottom:11px;line-height:1.5">Calculando el avance al corte\u2026</div>'+
     '<button id="_wkSolo" style="width:100%;background:#0C5132;color:#fff;border:0;border-radius:12px;padding:14px;font-weight:800;font-size:13.5px;cursor:pointer;margin-bottom:9px">⚡ Generar SOLO desde el aplicativo</button>'+
+    '<button id="_wkDos" style="width:100%;background:#1B5E8A;color:#fff;border:0;border-radius:12px;padding:13px;font-weight:800;font-size:12.5px;cursor:pointer;margin-bottom:9px">📑 Los dos entregables por separado (3WLA + WR)</button>'+
     '<div style="text-align:center;font-size:10.5px;color:#8A94A6;margin-bottom:9px">— o con un archivo tuyo —</div>'+
     '<button id="_wkPick" style="width:100%;background:#EAF1FB;color:#1F3864;border:1.5px dashed #7FA0F5;border-radius:11px;padding:13px;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:11px">📄 Elegir el Excel plantilla…</button>'+
     '<input type="file" id="_wkFile" accept=".xlsx" style="display:none">'+
@@ -11218,6 +11233,70 @@ function _wkExcel(){
   /* El libro lo arma el aplicativo: tantas filas como actividades tenga el
      cronograma. No se rellena ninguna plantilla, asi que el formato se
      adapta a los datos y no al reves. */
+  /* Los dos entregables por separado. El libro se arma UNA vez y se reparte:
+     las azules a un archivo y las verdes a otro. */
+  document.getElementById('_wkDos').onclick=async function(){
+    var b=document.getElementById('_wkDos'),msg=document.getElementById('_wkMsg');
+    var t0=b.textContent;b.disabled=true;b.textContent='Armando los dos…';
+    try{
+      var semN=+document.getElementById('_wkSel').value;
+      var corteJue=_wkISO(_wkSem(semN).fin);
+      var hastaHoy=((document.getElementById('_wkCorte')||{}).value!=='jueves');
+      var corte=hastaHoy?((typeof todayISO==='function')?todayISO():corteJue):corteJue;
+      var ids=[].slice.call(document.querySelectorAll('._wkCk:checked')).map(function(k){return k.value});
+      if(!ids.length)throw new Error('marca al menos un cronograma');
+      msg.textContent='Armando el libro (S'+semN+')…';
+      try{if(typeof syncPull==='function')await syncPull()}catch(_e){}
+      await _crCatPull();
+      var LB=await _wkLibroApp(semN,corte,ids);
+      /* el nombre lleva el viernes de la semana elegida, como los tuyos */
+      var vie=_wkISO(_wkSem(semN).ini);
+      var pre=vie.slice(2,4)+vie.slice(5,7)+vie.slice(8,10);
+      var RAIZ='REPOSICIÓN DEL SISTEMA DE DOSIFICACIÓN DE FLOCULANTE_CPQ Columbito';
+      var AZUL={'Carátula':1,'PARA 3WLA':1,'3WLookahead_PPC':1,'3WLookahead_Razones':1};
+      var VERDE={'Carátula (P)':1,'REPORTE SEMANAL':1,'PANEL CONTROL':1,'PROGRAMACION':1,
+        'METRADO':1,'PHYSICAL % PROGRESS':1,'COSTO':1,'STAFFING TABULATION CHART':1,
+        'CONSTRUCTION EQUIPMENT SCHE':1,'RFI':1,'FCR':1,'Registro Fot SEM':1};
+      var lim=function(z){return String(z||'').replace(/\s+$/,'')};
+      var bajar=async function(lista,ocultas,nombre){
+        var partes=_wkPaqueteApp(lista,LB.styles,LB.ss);
+        /* las que van solo para que las formulas resuelvan, escondidas */
+        if(ocultas&&ocultas.length)partes=partes.map(function(pz){
+          if(pz[0]!=='xl/workbook.xml')return pz;
+          var x=pz[1];
+          ocultas.forEach(function(nm){
+            x=x.replace(new RegExp('(<sheet name="'+_wkEscAt(nm).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'"[^>]*?)/>'),
+              function(_t,cab){return cab+' state="hidden"/>'})});
+          return [pz[0],x]});
+        var enc=new TextEncoder(),ent=[];
+        for(var i=0;i<partes.length;i++){
+          var u8=(partes[i][1] instanceof Uint8Array)?partes[i][1]:enc.encode(partes[i][1]);
+          ent.push({nombre:partes[i][0],metodo:8,tiempo:_crZipTs(),
+            crc:_wkCrc32(u8),usz:u8.length,datos:await _wkDeflar(u8)})}
+        var blob=_wkZipArmar(ent);
+        var url=URL.createObjectURL(blob),a=document.createElement('a');
+        a.href=url;a.download=nombre+'.xlsx';
+        document.body.appendChild(a);a.click();
+        setTimeout(function(){try{URL.revokeObjectURL(url);a.remove()}catch(_e2){}},4000)};
+      /* --- el azul: sin ninguna amarilla; PARA 3WLA va con valores --- */
+      var az=LB.hojas.filter(function(h){return AZUL[lim(h[0])]}).map(function(h){
+        return (lim(h[0])==='PARA 3WLA'&&LB.hoja3wVal)?[h[0],LB.hoja3wVal,h[2]]:h});
+      if(!az.length)throw new Error('no se armaron las hojas azules');
+      await bajar(az,null,pre+'_'+RAIZ+'_3WLA');
+      /* --- el verde: las verdes, y las amarillas ocultas para que las
+             formulas sigan resolviendo --- */
+      var vd=LB.hojas.filter(function(h){return VERDE[lim(h[0])]});
+      var am=LB.hojas.filter(function(h){return !VERDE[lim(h[0])]&&!AZUL[lim(h[0])]});
+      if(!vd.length)throw new Error('no se armaron las hojas verdes');
+      await bajar(vd.concat(am),am.map(function(h){return h[0]}),pre+'_'+RAIZ+'_WR');
+      msg.innerHTML='<div style="background:#EAF3EC;border:1px solid #BFD8C6;border-radius:10px;'+
+        'padding:9px 11px;font-size:12px;color:#14532D">✓ Dos archivos: <b>'+
+        az.length+'</b> hojas azules y <b>'+vd.length+'</b> verdes'+
+        (am.length?(' (+'+am.length+' alimentadoras ocultas en el WR)'):'')+'</div>';
+    }catch(e){msg.innerHTML='<div style="background:#FDECEC;border:1px solid #F5C2C0;'+
+      'border-radius:10px;padding:9px 11px;font-size:12px;color:#8B1F1B">⚠ '+
+      _wkEsc((e&&e.message)||String(e))+'</div>'}
+    b.disabled=false;b.textContent=t0};
   document.getElementById('_wkSolo').onclick=async function(){
     var b=document.getElementById('_wkSolo'),msg=document.getElementById('_wkMsg');
     var t0=b.textContent;b.disabled=true;b.textContent='Armando…';
@@ -12750,7 +12829,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824h5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824h6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
