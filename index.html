@@ -5286,6 +5286,8 @@ function _wkEstLinea(i,tipo){
 var _WKB=null;      /* la base, cacheada: {styles, ss, hojas} */
 /* el proyecto y la fecha que llevan las cabeceras de las hojas amarillas */
 var _WKPROY='', _WKFECHA='';
+/* los nombres de cada tramo de WBS del cronograma vigente */
+var _WKWBSNOM={};
 var _WKOFF=0;       /* cuanto hay que correr los indices de _WKS */
 function _S(k){return _WKOFF+_WKS[k]}
 async function _wkBaseFormato(){
@@ -5300,8 +5302,52 @@ async function _wkBaseFormato(){
   var hojas=_wkHojas(await leer('xl/workbook.xml'),await leer('xl/_rels/workbook.xml.rels'));
   var H={};
   for(var n in hojas)if(mapa[hojas[n]])H[n]=await leer(hojas[n]);
-  _WKB={styles:await leer('xl/styles.xml'),ss:await leer('xl/sharedStrings.xml'),hojas:H};
+  /* El dibujo de la caratula: ahi viven los logos y las firmas. Los rotulos
+     son celdas y se copian solos, pero las imagenes no; hay que traerse el
+     dibujo, sus relaciones y los ficheros de imagen, que son binarios. */
+  var crudo=async function(n){var e=mapa[n];if(!e)return null;
+    return e.metodo===8?await _wkInflar(e.datos):e.datos};
+  var dib=null;
+  try{
+    var fh=hojas['Car\u00e1tula (P)'];
+    if(fh){
+      var rh=await leer(fh.replace(/([^/]+)$/,'_rels/$1.rels'));
+      var t=_wkRelDibujo(rh);
+      if(t){
+        var rutaD=_wkResuelve(fh,t);
+        var xmlD=await leer(rutaD);
+        if(xmlD){
+          var relD=await leer(rutaD.replace(/([^/]+)$/,'_rels/$1.rels'));
+          var med={};
+          var re=/<Relationship\b[^>]*\/>/g,mm;
+          while(mm=re.exec(relD||'')){
+            var tg=(mm[0].match(/Target="([^"]*)"/)||[])[1]||'';
+            if(/^(https?:|mailto:)/i.test(tg))continue;
+            if(/TargetMode="External"/.test(mm[0]))continue;
+            var rm=_wkResuelve(rutaD,tg);
+            var by=await crudo(rm);
+            if(by)med[rm]=by}
+          dib={xml:xmlD,rels:relD,medios:med}}}}
+  }catch(e){}
+  _WKB={styles:await leer('xl/styles.xml'),ss:await leer('xl/sharedStrings.xml'),
+    hojas:H, dibujoCaratula:dib};
   return _WKB}
+/* la relacion de tipo dibujo de una hoja, sin fiarse del orden de atributos */
+function _wkRelDibujo(rels){
+  var re=/<Relationship\b[^>]*\/>/g,m;
+  while(m=re.exec(rels||'')){
+    if(!/Type="[^"]*\/drawing"/.test(m[0]))continue;
+    return (m[0].match(/Target="([^"]*)"/)||[])[1]||''}
+  return ''}
+/* resuelve un Target relativo contra la ruta de quien lo declara */
+function _wkResuelve(base,destino){
+  if(!destino)return '';
+  if(destino.charAt(0)==='/')return destino.slice(1);
+  var partes=base.split('/');partes.pop();
+  destino.split('/').forEach(function(x){
+    if(x==='.'||x==='')return;
+    if(x==='..')partes.pop();else partes.push(x)});
+  return partes.join('/')}
 /* Cuenta los elementos de una seccion del styles.xml */
 function _wkCuenta(xml,tag){
   var m=xml.match(new RegExp('<'+tag+' count="(\\d+)"'));
@@ -6187,28 +6233,37 @@ function _wkProgApp(P){
    una sola vez y de estas dos tablas salen tanto las hojas como las formulas
    que las buscan; asi no se puede mover una columna y olvidar la otra parte.
    La cabecera lleva solo el nombre del proyecto y la fecha. */
-var _WKP6={cod:'A',qps:'B',nom:'C',cant:'D',und:'E',hh:'F',costo:'G',
-  dias:'H',ini:'I',fin:'J'};
-var _WKF ={cod:'A',nom:'B',hh:'C',ini:'D',fin:'E',dias:'F',sem0:'G'};
+var _WKP6={cod:'A',qps:'B',wbs:'C',nom:'D',cant:'E',und:'F',hh:'G',costo:'H',
+  dias:'I',ini:'J',fin:'K'};
+var _WKF ={cod:'A',wbs:'B',nom:'C',hh:'D',ini:'E',fin:'F',dias:'G',sem0:'H'};
 function _wkFCol(i){return _wkgCol(_WKF.sem0,i)}      /* la semana i (0..) */
 function _wkP6Num(col){return col.charCodeAt(0)-64}   /* para el VLOOKUP */
 /* La lista de actividades de un cronograma, sobre la espina del reporte.
    Las actividades son SIEMPRE las del cronograma vigente; lo que cambia de una
    linea base a otra son sus fechas y sus HH. Asi todas las listas tienen las
    mismas filas y las formulas valen para cualquiera. */
+/* El WBS legible: la ruta viene del .xer y los nombres del cronograma, asi
+   que se traduce tramo a tramo y lo que no tenga nombre se queda con su ruta. */
+function _wkWbsNom(f,nom){
+  var ruta=String((f&&f.wbs)||'').split(' / ').filter(function(z){return z});
+  if(!ruta.length)return '';
+  return ruta.map(function(_z,i){
+    var k=ruta.slice(0,i+1).join(' / ');
+    return (nom&&nom[k])||ruta[i]}).join(' / ')}
 function _wkHojaP6Esp(id,filas,semanas){
-  var S=_WKS,P=_WKP6,r=[],n=3;
+  var S=_WKS,P=_WKP6,P6NOM=_WKWBSNOM,r=[],n=3;
   r.push('<row r="1">'+_crXlsCel(P.cod,1,_WKPROY||'',true,S.titulo)+
     _crXlsCel(P.nom,1,_WKFECHA?_crASerial(_WKFECHA):'',false,S.fecha)+
     _crXlsCel(P.hh,1,id,true,S.cab)+'</row>');
-  var cab=[[P.cod,'ITEM'],[P.qps,'ITEM QPS'],[P.nom,'PARTIDA'],[P.cant,'CANT.'],
-           [P.und,'UND'],[P.hh,'HH'],[P.costo,'COSTO'],[P.dias,'DURAC. (d)'],
-           [P.ini,'INICIO'],[P.fin,'FIN']];
+  var cab=[[P.cod,'ITEM'],[P.qps,'ITEM QPS'],[P.wbs,'WBS'],[P.nom,'PARTIDA'],
+           [P.cant,'CANT.'],[P.und,'UND'],[P.hh,'HH'],[P.costo,'COSTO'],
+           [P.dias,'DURAC. (d)'],[P.ini,'INICIO'],[P.fin,'FIN']];
   r.push('<row r="2">'+cab.map(function(c){return _crXlsCel(c[0],2,c[1],true,S.cab)}).join('')+'</row>');
   filas.forEach(function(f){
     var v=f.lineas[id],c='';
     c+=_crXlsCel(P.cod,n,f.cod,true,S.texto);
     c+=_crXlsCel(P.qps,n,f.qps||'',true,S.texto);
+    c+=_crXlsCel(P.wbs,n,_wkWbsNom(f,P6NOM),true,S.desc);
     c+=_crXlsCel(P.nom,n,f.nom,true,S.desc);
     c+=_crXlsCel(P.cant,n,(f.cant===''||f.cant==null)?'':f.cant,false,S.num);
     c+=_crXlsCel(P.und,n,f.und||'',true,S.texto);
@@ -6226,10 +6281,11 @@ function _wkHojaP6Esp(id,filas,semanas){
     '<pane xSplit="3" ySplit="2" topLeftCell="D3" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
     '<sheetFormatPr defaultRowHeight="15"/>'+
     '<cols><col min="1" max="2" width="12" customWidth="1"/>'+
-    '<col min="3" max="3" width="62" customWidth="1"/>'+
-    '<col min="4" max="7" width="13" customWidth="1"/>'+
-    '<col min="8" max="8" width="11" customWidth="1"/>'+
-    '<col min="9" max="10" width="13.5" customWidth="1"/></cols>'+
+    '<col min="3" max="3" width="46" customWidth="1"/>'+
+    '<col min="4" max="4" width="62" customWidth="1"/>'+
+    '<col min="5" max="8" width="13" customWidth="1"/>'+
+    '<col min="9" max="9" width="11" customWidth="1"/>'+
+    '<col min="10" max="11" width="13.5" customWidth="1"/></cols>'+
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
     ultima:n-1}}
@@ -6241,7 +6297,7 @@ function _wkFeederEsp(id,filas,semanas){
   r.push('<row r="1">'+_crXlsCel(F.cod,1,_WKPROY||'',true,S.titulo)+
     _crXlsCel(F.hh,1,_WKFECHA?_crASerial(_WKFECHA):'',false,S.fecha)+
     semanas.map(function(s,i){return _crXlsCel(_wkFCol(i),1,'S'+s.n,true,S.cab)}).join('')+'</row>');
-  var cab=[[F.cod,'ITEM'],[F.nom,'PARTIDA'],[F.hh,'HH'],
+  var cab=[[F.cod,'ITEM'],[F.wbs,'WBS'],[F.nom,'PARTIDA'],[F.hh,'HH'],
            [F.ini,'INICIO'],[F.fin,'FIN'],[F.dias,'DURAC. (d)']];
   r.push('<row r="2">'+cab.map(function(c){return _crXlsCel(c[0],2,c[1],true,S.cab)}).join('')+
     semanas.map(function(s,i){return _crXlsCel(_wkFCol(i),2,s.serFin,false,S.fecha)}).join('')+'</row>');
@@ -6251,6 +6307,7 @@ function _wkFeederEsp(id,filas,semanas){
       :f.lineas[id];
     var c='';
     c+=_crXlsCel(F.cod,n,f.cod,true,S.texto);
+    c+=_crXlsCel(F.wbs,n,_wkWbsNom(f,_WKWBSNOM),true,S.desc);
     c+=_crXlsCel(F.nom,n,f.nom,true,S.desc);
     c+=_crXlsCel(F.hh,n,v?Math.round(v.hh*100)/100:0,false,S.num);
     c+=_crXlsCel(F.ini,n,(v&&v.ini)?_crASerial(v.ini):'',false,S.fecha);
@@ -6274,11 +6331,12 @@ function _wkFeederEsp(id,filas,semanas){
     '<pane xSplit="2" ySplit="2" topLeftCell="C3" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
     '<sheetFormatPr defaultRowHeight="15"/>'+
     '<cols><col min="1" max="1" width="12" customWidth="1"/>'+
-    '<col min="2" max="2" width="62" customWidth="1"/>'+
-    '<col min="3" max="3" width="12" customWidth="1"/>'+
-    '<col min="4" max="5" width="13.5" customWidth="1"/>'+
-    '<col min="6" max="6" width="11" customWidth="1"/>'+
-    '<col min="7" max="'+(6+semanas.length)+'" width="11.5" customWidth="1"/></cols>'+
+    '<col min="2" max="2" width="46" customWidth="1"/>'+
+    '<col min="3" max="3" width="62" customWidth="1"/>'+
+    '<col min="4" max="4" width="12" customWidth="1"/>'+
+    '<col min="5" max="6" width="13.5" customWidth="1"/>'+
+    '<col min="7" max="7" width="11" customWidth="1"/>'+
+    '<col min="8" max="'+(7+semanas.length)+'" width="11.5" customWidth="1"/></cols>'+
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
     ultima:n}}
@@ -6312,13 +6370,15 @@ async function _wkDatosLibro(semN,corte,ids){
   try{(DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id)vivas[p.id]=p})}catch(e){}
   var pctA=function(id,f){try{var p=vivas[id];return p?(Number(pctOfAt(p,f))||0)/100:0}catch(e){return 0}};
   var filas=[];
-  esp.tar.slice().sort(function(a,b){return (a.orden||0)-(b.orden||0)}).forEach(function(t){
-    var ms=(t.items||[]).filter(function(i){return esp.u.items[i]!=null});
-    var hhE=0;ms.forEach(function(i){hhE+=esp.u.items[i]/_crVeces(esp.rp,i)});
+  /* Arma una fila del reporte a partir de UNA tarea y del cronograma que la
+     tiene (`due`). Para la espina eso es su propio cronograma; para las
+     actividades que solo existen en una linea base, esa linea. */
+  var armaFila=function(t,due,ms,cod){
+    var hhE=0;ms.forEach(function(i){hhE+=due.u.items[i]/_crVeces(due.rp,i)});
     var lineas={};
     C.forEach(function(cc){
-      var s=(cc.id===esp.id)
-        ? (function(){ /* la espina usa su propia tarea */
+      var s=(cc.id===due.id)
+        ? (function(){ /* el dueno de la tarea usa sus propias fechas */
             var o=sem.map(function(){return 0});
             if(t.ini&&t.fin&&hhE>0){
               var d0=_crASerial(t.ini),nd=Math.max(1,_crASerial(t.fin)-d0+1),pd=hhE/nd,ult=sem.length-1;
@@ -6327,41 +6387,57 @@ async function _wkDatosLibro(semN,corte,ids){
                 else for(var j=0;j<sem.length;j++)if(d>=sem[j].ini&&d<=sem[j].fin){w=j;break}
                 if(w>=0)o[w]+=pd}}
             return o})()
-        : _wkSumaItems(cc.porItem,ms,sem,esp.rp);   /* los demas, por las mismas partidas */
+        : _wkSumaItems(cc.porItem,ms,sem,due.rp);   /* los demas, por las mismas partidas */
       if(!s)return;
       var hh=s.reduce(function(a,b){return a+b},0);
-      if(!(hh>0)&&cc.id!==esp.id)return;
+      if(!(hh>0)&&cc.id!==due.id)return;
       /* la ventana de esa linea base: primera y ultima semana con carga */
       var p=-1,q=-1;s.forEach(function(v,i){if(v>0.000001){if(p<0)p=i;q=i}});
       lineas[cc.id]={hh:hh,sem:s,acum:_wkAcumDe(s,hh),
-        ini:(cc.id===esp.id)?t.ini:(p>=0?sem[p].ini:''),
-        fin:(cc.id===esp.id)?t.fin:(q>=0?sem[q].fin:''),
-        dias:(cc.id===esp.id)?((t.ini&&t.fin)?(_crASerial(t.fin)-_crASerial(t.ini)+1):0)
+        ini:(cc.id===due.id)?t.ini:(p>=0?sem[p].ini:''),
+        fin:(cc.id===due.id)?t.fin:(q>=0?sem[q].fin:''),
+        dias:(cc.id===due.id)?((t.ini&&t.fin)?(_crASerial(t.fin)-_crASerial(t.ini)+1):0)
                              :(p>=0?((q-p+1)*7):0)}});
     /* el avance real de esas partidas, semana a semana */
     var acumReal=sem.map(function(s2){
       if(!(hhE>0))return 0;
       var v=0;ms.forEach(function(i){
-        v+=_crGanadas(esp.rp,i,t.task_code,esp.u.items[i],pctA(i,s2.fin))});
+        v+=_crGanadas(due.rp,i,t.task_code,due.u.items[i],pctA(i,s2.fin))});
       return Math.min(1,v/hhE)});
     /* el avance de cada semana, que es la diferencia con la anterior */
     var semReal=acumReal.map(function(a,i){
       return Math.max(0,Math.round(((a-(i?acumReal[i-1]:0))*hhE)*1e6)/1e6)});
-    var hoy=(typeof todayISO==='function')?todayISO():corte;
     var pr=0;if(hhE>0)ms.forEach(function(i){
-      pr+=_crGanadas(esp.rp,i,t.task_code,esp.u.items[i],pctA(i,corte))});
+      pr+=_crGanadas(due.rp,i,t.task_code,due.u.items[i],pctA(i,corte))});
     /* el costo de la actividad: lo que valen sus partidas, repartido igual
        que las horas cuando una partida cae en varias actividades */
     var costo=0;ms.forEach(function(i){
       var pp=porId[i];if(!pp)return;
-      costo+=(Number(pp.tot)||0)/_crVeces(esp.rp,i)});
+      costo+=(Number(pp.tot)||0)/_crVeces(due.rp,i)});
     var cant='',und='',qps='';
     if(ms.length===1&&porId[ms[0]]){cant=porId[ms[0]].cant;und=porId[ms[0]].und||'';qps=ms[0]}
     else if(ms.length>1)qps='('+ms.length+')';
-    filas.push({cod:t.task_code,qps:qps,nom:String(t.nombre||''),wbs:String(t.wbs||''),
+    filas.push({cod:cod||t.task_code,qps:qps,nom:String(t.nombre||''),wbs:String(t.wbs||''),
       cant:cant,und:und,costo:costo,lineas:lineas,
       hhReal:hhE>0?pr:0,pctReal:hhE>0?Math.min(1,pr/hhE):0,
-      acumReal:acumReal,semReal:semReal})});
+      acumReal:acumReal,semReal:semReal})};
+  var ordena=function(a,b){return (a.orden||0)-(b.orden||0)};
+  esp.tar.slice().sort(ordena).forEach(function(t){
+    armaFila(t,esp,(t.items||[]).filter(function(i){return esp.u.items[i]!=null}))});
+  /* Lo que una linea base tiene y el cronograma vigente no. Sin esto esa linea
+     no llega a sus horas: el LB0 tiene 36 partidas que ninguna tarea del LB1
+     reclama y se quedaban fuera. Van como actividades propias suyas, con el
+     cronograma delante del codigo porque el mismo task_code significa cosas
+     distintas en cada linea base. */
+  var reclamadas={};
+  esp.tar.forEach(function(t){(t.items||[]).forEach(function(i){reclamadas[i]=1})});
+  C.forEach(function(cc){
+    if(cc.id===esp.id)return;
+    cc.tar.slice().sort(ordena).forEach(function(t){
+      var ms=(t.items||[]).filter(function(i){
+        return cc.u.items[i]!=null&&!reclamadas[i]});
+      if(!ms.length)return;
+      armaFila(t,cc,ms,cc.id+'-'+t.task_code)})});
   var hhTot={};C.forEach(function(cc){hhTot[cc.id]=cc.u.hh});
   return {sem:sem,C:C,esp:esp,filas:filas,hhTot:hhTot,
     iSem:Math.max(1,Math.min(sem.length,semN-26))}}
@@ -6388,7 +6464,8 @@ async function _wkLibroApp(semN,corte,ids){
     pctReal:Math.round(pctReal*1e6)/1e6, hhAlcance:hhAlc});
   _WKPROY=DATA.proyecto||'';
   _WKFECHA=corte||'';
-  var HREAL='REAL (aplicativo)';
+  _WKWBSNOM=D.esp.nomWbs||{};
+  var HREAL='REAL';
   var p6Ult={};D.C.forEach(function(c){p6Ult[c.id]=2+D.filas.length});
   D.filas.forEach(function(f,i){f.p6={};D.C.forEach(function(c){f.p6[c.id]=3+i})});
   var prog=_wkProgApp({base:base.hojas['PROGRAMACION'],
@@ -6411,7 +6488,13 @@ async function _wkLibroApp(semN,corte,ids){
   D.C.forEach(function(c){
     mete('P6-'+c.id,_wkHojaP6Esp(c.id,D.filas,sem).xml,3)});
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
-  hojas.push(['Carátula',_wkLimpiaHoja(carXml||car.xml),null]);
+  /* la caratula conserva su dibujo -logos y firmas-; lo que se le quita es
+     la referencia a la configuracion de impresion, que aqui no existe */
+  var carDib=base.dibujoCaratula||null;
+  var carLimpia=_wkLimpiaHoja(carXml||car.xml);
+  if(carDib)carLimpia=carLimpia.replace('</worksheet>','<drawing r:id="rId1"/></worksheet>');
+  hojas.push(['Carátula',carLimpia,carDib?{dibujoXml:carDib.xml,dibujoRels:carDib.rels,
+    medios:carDib.medios}:null]);
   mete('PROGRAMACION',_wkLimpiaHoja(prog.xml),10);
   /* METRADO y PHYSICAL son espejo de PROGRAMACION: siguen su mapa de filas */
   var comun={semanas:sem,iSem:D.iSem,mapa:prog.mapa,ultFila:prog.ultima,
@@ -6454,11 +6537,25 @@ function _wkPaqueteApp(hojas,styles,ss){
       '"application/vnd.openxmlformats-officedocument.drawing+xml"/>'+
       '<Override PartName="/xl/charts/chart'+i+'.xml" ContentType='+
       '"application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>'}).join('');
+  /* las hojas con dibujo de imagenes -la caratula- y las extensiones de sus
+     ficheros, que el Content_Types tiene que declarar o el libro sale roto */
+  var MIME={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',
+    bmp:'image/bmp',emf:'image/x-emf',wmf:'image/x-wmf',tif:'image/tiff',
+    tiff:'image/tiff',svg:'image/svg+xml'};
+  var exts={};
+  hojas.forEach(function(h,i){
+    if(!(h[2]&&h[2].dibujoXml))return;
+    tiposG+='<Override PartName="/xl/drawings/drawing'+(i+1)+'.xml" ContentType='+
+      '"application/vnd.openxmlformats-officedocument.drawing+xml"/>';
+    Object.keys(h[2].medios||{}).forEach(function(r){
+      var e=String(r).split('.').pop().toLowerCase();if(MIME[e])exts[e]=MIME[e]})});
+  var defsG=Object.keys(exts).map(function(e){
+    return '<Default Extension="'+e+'" ContentType="'+exts[e]+'"/>'}).join('');
   var partes=[
     ['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
-      '<Default Extension="xml" ContentType="application/xml"/>'+
+      '<Default Extension="xml" ContentType="application/xml"/>'+defsG+
       '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+
       hojas.map(function(_h,i){return ov(i+1)}).join('')+
       '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+
@@ -6482,11 +6579,22 @@ function _wkPaqueteApp(hojas,styles,ss){
       '</Relationships>'],
     ['xl/styles.xml',styles||_wkEstilosApp()]];
   if(ss)partes.push(['xl/sharedStrings.xml',ss]);
+  var puestos={};
   hojas.forEach(function(h,i){
     partes.push(['xl/worksheets/sheet'+(i+1)+'.xml',h[1]]);
-    if(!(h[2]&&h[2].grafico))return;
     var k=i+1, REL='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+    if(h[2]&&h[2].dibujoXml){
+      /* dibujo de imagenes: se copia tal cual con sus relaciones, y los
+         ficheros conservan su ruta para que los r:embed sigan valiendo */
+      partes.push(['xl/worksheets/_rels/sheet'+k+'.xml.rels',REL+
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing'+k+'.xml"/></Relationships>']);
+      partes.push(['xl/drawings/drawing'+k+'.xml',h[2].dibujoXml]);
+      if(h[2].dibujoRels)partes.push(['xl/drawings/_rels/drawing'+k+'.xml.rels',h[2].dibujoRels]);
+      Object.keys(h[2].medios||{}).forEach(function(r){
+        if(puestos[r])return;puestos[r]=1;partes.push([r,h[2].medios[r]])});
+      return}
+    if(!(h[2]&&h[2].grafico))return;
     partes.push(['xl/worksheets/_rels/sheet'+k+'.xml.rels',REL+
       '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing'+k+'.xml"/></Relationships>']);
     partes.push(['xl/drawings/drawing'+k+'.xml',h[2].dibujo]);
@@ -8892,7 +9000,8 @@ function _wkExcel(){
       var LB=await _wkLibroApp(semN,corte,ids);
       var enc=new TextEncoder(),ent=[],partes=_wkPaqueteApp(LB.hojas,LB.styles,LB.ss);
       for(var i=0;i<partes.length;i++){
-        var u8=enc.encode(partes[i][1]);
+        /* las imagenes ya vienen en bytes; el resto es XML y hay que codificarlo */
+        var u8=(partes[i][1] instanceof Uint8Array)?partes[i][1]:enc.encode(partes[i][1]);
         ent.push({nombre:partes[i][0],metodo:8,tiempo:_crZipTs(),
           crc:_wkCrc32(u8),usz:u8.length,datos:await _wkDeflar(u8)})}
       var blob=_wkZipArmar(ent);
@@ -10407,7 +10516,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823s2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823t1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
