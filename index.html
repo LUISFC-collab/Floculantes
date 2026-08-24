@@ -2543,6 +2543,7 @@ async function _crAlcanceUI(c){
     '<div style="display:flex;gap:7px;margin-bottom:8px;flex-wrap:wrap;align-items:center">'+
     '<span style="font-size:11px;color:#7d8590;font-weight:700">FECHAS:</span>'+
     '<button id="_crFeXer" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">📅 Tomar del cronograma</button>'+
+    '<button id="_crFeVer" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">👁 Ver hojas</button>'+
     '<button id="_crFeExp" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">⬇ Plantilla Excel</button>'+
     '<button id="_crFeGua" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">⬇ Exportar lo guardado</button>'+
     '<button id="_crFeImp" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">⬆ Cargar plantilla</button>'+
@@ -2629,6 +2630,16 @@ async function _crAlcanceUI(c){
       if(!r.filas.length){fmsg('Ninguna tarea del cronograma está mapeada a partidas — usa 🔗 Mapeo primero','#E8C9A0')}
       else{r.filas.forEach(function(f){if(fec[f.item]){fec[f.item].ini=f.ini;fec[f.item].fin=f.fin;fec[f.item].origen='xer'}});
         pinta();fmsg('📅 '+r.n+' partida(s) tomaron las fechas de su tarea — recuerda Guardar','#9FE8B0')}
+    }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8')}
+    b.disabled=false};
+  document.getElementById('_crFeVer').onclick=async function(){
+    var b=this;b.disabled=true;fmsg('Armando las hojas para verlas…');
+    try{
+      /* lo mismo que se exportaria: lo que se ve ahora, guardado o no */
+      var vista={};P.forEach(function(p){
+        vista[p.id]={inc:!!sel[p.id],ini:fec[p.id].ini,fin:fec[p.id].fin,origen:fec[p.id].origen}});
+      await _crVerHojas(c,vista);
+      fmsg('');
     }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8')}
     b.disabled=false};
   document.getElementById('_crFeExp').onclick=async function(){
@@ -4239,6 +4250,129 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs,rel,planes){
       '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>']];
   HOJAS.forEach(function(h,i){partesZip.push(['xl/worksheets/sheet'+(i+1)+'.xml',h[1]])});
   return partesZip}
+/* ---------------- Ver las hojas sin exportarlas ----------------------------
+   El visor NO reconstruye nada: le pide a `_crXlsExport` las mismas hojas que
+   se descargarian y las pinta. Asi lo que se ve aqui y lo que sale en el Excel
+   no pueden diferir, que es justo el sentido de mirarlo antes.
+
+   Los colores de las agrupaciones salen de los rellenos del propio libro, no
+   de una tabla aparte: cada celda lleva su indice de estilo y de ahi se saca
+   su color. Si manana cambia la paleta del Excel, esto cambia con ella. */
+function _crVisParte(partes,ruta){
+  var e=(partes||[]).filter(function(x){return x[0]===ruta})[0];
+  return e?e[1]:''}
+/* el color de fondo de cada indice de estilo, leido del styles del libro */
+function _crVisColores(styles){
+  var fl=[],xf=[];
+  String(styles).replace(/<fills count="\d+">([\s\S]*?)<\/fills>/,function(_t,c){
+    (c.match(/<fill>[\s\S]*?<\/fill>/g)||[]).forEach(function(f){
+      fl.push(((f.match(/fgColor rgb="([0-9A-Fa-f]{6,8})"/)||[])[1]||'').slice(-6))});
+    return _t});
+  String(styles).replace(/<cellXfs count="\d+">([\s\S]*?)<\/cellXfs>/,function(_t,c){
+    (c.match(/<xf[^>]*\/>|<xf[^>]*>[\s\S]*?<\/xf>/g)||[]).forEach(function(x){
+      xf.push(+((x.match(/fillId="(\d+)"/)||[])[1]||0))});
+    return _t});
+  return function(s){
+    var i=xf[+s||0];var c=fl[i==null?0:i];
+    return (c&&!/^0{6}$/.test(c))?('#'+c):''}}
+/* una hoja en filas de celdas, con su valor o su formula y su estilo */
+function _crVisLee(xml){
+  var out=[];
+  String(xml).replace(/<row r="(\d+)"[^>]*?(?:\/>|>([\s\S]*?)<\/row>)/g,function(_t,rs,cuerpo){
+    var d={_r:+rs,cel:{}};
+    String(cuerpo||'').replace(/<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g,
+      function(_c,col,at,inner){
+        inner=inner||'';
+        var f=inner.match(/<f>([\s\S]*?)<\/f>/);
+        var t=inner.match(/<t[^>]*>([\s\S]*?)<\/t>/);
+        var v=inner.match(/<v>([^<]*)<\/v>/);
+        d.cel[col]={f:f?f[1]:null, v:t?t[1]:(v?v[1]:''),
+          s:(at.match(/s="(\d+)"/)||[])[1]||0};
+        return _c});
+    out.push(d);return _t});
+  return out}
+/* Evalua las formulas de AGRUPADO igual que el cuadre: contra ALCANCE y
+   contando solo lo que alli tiene INCLUIR = SI. */
+function _crVisEval(alcFilas,agrFilas){
+  var A=alcFilas.filter(function(d){return d._r>3}).map(function(d){
+    var o={};for(var k in d.cel)o[k]=d.cel[k].v;return o});
+  var suma=function(cs,cc,val){var a=0;A.forEach(function(f){
+    if(String(f[cc]||'')===String(val)&&f.J==='SI')a+=(Number(f[cs])||0)});return a};
+  var cuenta=function(cc,val){var a=0;A.forEach(function(f){
+    if(String(f[cc]||'')===String(val)&&f.J==='SI')a++});return a};
+  var porFila={};agrFilas.forEach(function(d){porFila[d._r]=d});
+  var celda=function(r,c){var d=porFila[r];if(!d)return '';
+    var x=d.cel[c];return x?x.v:''};
+  return function(t){
+    var js=String(t)
+      .replace(/SUMIFS\(ALCANCE!\$([A-Z]):\$[A-Z],ALCANCE!\$([A-Z]):\$[A-Z],\$B(\d+),ALCANCE!\$J:\$J,"SI"\)/g,
+        function(_m,cs,cc,rr){return String(suma(cs,cc,celda(+rr,'B')))})
+      .replace(/SUMIFS\(ALCANCE!\$([A-Z]):\$[A-Z],ALCANCE!\$A:\$A,"([^"]+)",ALCANCE!\$J:\$J,"SI"\)/g,
+        function(_m,cs,it){return String(suma(cs,'A',it))})
+      .replace(/COUNTIFS\(ALCANCE!\$([A-Z]):\$[A-Z],\$B(\d+),ALCANCE!\$J:\$J,"SI"\)/g,
+        function(_m,cc,rr){return String(cuenta(cc,celda(+rr,'B')))})
+      .replace(/COUNTIFS\(ALCANCE!\$A:\$A,"([^"]+)",ALCANCE!\$J:\$J,"SI"\)/g,
+        function(_m,it){return String(cuenta('A',it))});
+    if(/[A-Z]{2,}\(/.test(js))return null;
+    try{var r=Function('return ('+js+')')();
+      return (typeof r==='number'&&isFinite(r))?r:null}catch(e){return null}};}
+/* La pantalla: una pestaña por hoja y la tabla tal cual saldria */
+async function _crVerHojas(cron,vista){
+  var partes=await _crXlsExport(cron,vista);
+  var color=_crVisColores(_crVisParte(partes,'xl/styles.xml'));
+  var HOJAS=[['Hoja 1 · ALCANCE','xl/worksheets/sheet1.xml'],
+             ['Hoja 2 · AGRUPADO','xl/worksheets/sheet2.xml'],
+             ['Hoja 3 · AGRUPACIONES','xl/worksheets/sheet3.xml']];
+  var datos=HOJAS.map(function(h){return _crVisLee(_crVisParte(partes,h[1]))});
+  var ev=_crVisEval(datos[0],datos[1]);
+  var ov=document.getElementById('_crVisOv');if(ov)ov.remove();
+  ov=document.createElement('div');ov.id='_crVisOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;'+
+    'color:#cfe3ff;font:12px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial;'+
+    'display:flex;flex-direction:column;padding:10px;box-sizing:border-box';
+  ov.innerHTML='<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'+
+    '<b style="font-size:14px;color:#8ECBF5">👁 '+esc(cron.cron_id)+' — las hojas que se exportan</b>'+
+    HOJAS.map(function(h,i){
+      return '<button class="_crVisT" data-i="'+i+'" style="background:'+(i?'#243b55':'#1B5E8A')+
+        ';color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">'+
+        esc(h[0])+'</button>'}).join('')+
+    '<span id="_crVisN" style="color:#7d8590;font-size:11px"></span>'+
+    '<button id="_crVisX" style="margin-left:auto;background:#444;color:#fff;border:0;'+
+    'border-radius:8px;padding:8px 12px;font-weight:800">✕ Cerrar</button></div>'+
+    '<div id="_crVisBody" style="flex:1;overflow:auto;background:#0d1117;'+
+    'border:1px solid #1d2c47;border-radius:10px"></div>';
+  document.body.appendChild(ov);
+  document.getElementById('_crVisX').onclick=function(){ov.remove()};
+  function pinta(i){
+    var F=datos[i],H='';
+    /* los encabezados de estas hojas estan en la fila 3 (ALCANCE y AGRUPADO)
+       o en la 1; se detecta buscando la primera fila con varias celdas */
+    var cabF=0;
+    for(var k=0;k<F.length&&k<6;k++)if(Object.keys(F[k].cel).length>3){cabF=k;break}
+    var cols=Object.keys(F[cabF]?F[cabF].cel:{});
+    F.forEach(function(d,k){
+      var td='';
+      cols.forEach(function(c){
+        var x=d.cel[c];
+        var v=x?(x.f?ev(x.f):x.v):'';
+        if(x&&x.f&&v==null)v='ƒ';
+        if(typeof v==='number')v=Math.round(v*100)/100;
+        var bg=x?color(x.s):'';
+        td+='<td style="padding:3px 6px;border:1px solid #16202e;white-space:nowrap;'+
+          'max-width:340px;overflow:hidden;text-overflow:ellipsis'+
+          (bg?(';background:'+bg+';color:#101820'):'')+
+          (k===cabF?';font-weight:800;background:#16243a;color:#8ECBF5':'')+
+          '">'+esc(String(v==null?'':v))+'</td>'});
+      H+='<tr>'+td+'</tr>'});
+    document.getElementById('_crVisBody').innerHTML=
+      '<table style="border-collapse:collapse;font-size:11px">'+H+'</table>';
+    document.getElementById('_crVisN').textContent=F.length+' filas';
+    Array.prototype.forEach.call(ov.querySelectorAll('._crVisT'),function(b){
+      b.style.background=(+b.getAttribute('data-i')===i)?'#1B5E8A':'#243b55'})}
+  Array.prototype.forEach.call(ov.querySelectorAll('._crVisT'),function(b){
+    b.onclick=function(){pinta(+b.getAttribute('data-i'))}});
+  pinta(0);
+  return partes}
 /* Antes de entregar nada: toda fila con sus celdas en orden y sin repetir.
    Si algo no cuadra, se avisa en vez de dar un archivo que Excel querra reparar. */
 function _crRevisaHoja(xml,nombre){
@@ -10975,7 +11109,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824c3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824d1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
