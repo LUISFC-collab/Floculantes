@@ -2300,6 +2300,27 @@ async function _crBorrar(c){
   if(typeof logCambio==='function')logCambio('cronograma',c.cron_id,'eliminado');
   _crInvalida(c.cron_id);await _crPull();}
 
+/* El color de cada especialidad en las barras: apagados, que la barra es
+   fondo y no debe competir con las lineas de la curva. */
+var _CR_COLESP={mecanica:'#1d3550',electrica:'#4a3d1b',civil:'#1d4a3a'};
+function _crColorEsp(e){
+  var k=String(e||'').toLowerCase()
+    .replace(/[áàä]/g,'a').replace(/[éèë]/g,'e').replace(/[íìï]/g,'i')
+    .replace(/[óòö]/g,'o').replace(/[úùü]/g,'u');
+  return _CR_COLESP[k]||'#2b3444'}
+/* Un peso repartido entre sus dias y agregado por semana. Es lo que hace
+   _crCurva por dentro, sacado aparte para poder usarlo por especialidad. */
+function _crReparteSem(ini,fin,w,semanas){
+  var out=semanas.map(function(){return 0});
+  var a=Date.parse(ini+'T00:00:00Z'),b=Date.parse(fin+'T00:00:00Z');
+  if(!isFinite(a)||!isFinite(b)||!(w>0))return out;
+  if(b<a)b=a;
+  var dias=Math.round((b-a)/864e5)+1,pd=w/dias;
+  for(var d=0;d<dias;d++){
+    var f=new Date(a+d*864e5).toISOString().slice(0,10);
+    for(var s=0;s<semanas.length;s++){
+      if(f>=semanas[s].ini&&f<=semanas[s].fin){out[s]+=pd;break}}}
+  return out}
 /* ---------- la curva programada de un cronograma ----------
    Cada tarea reparte su peso entre sus dias; se agrega por semana y se acumula.
    El peso es la HH propia de la tarea; si el cronograma no trae HH (el LB0 no
@@ -3460,6 +3481,24 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
   /* con WBS marcado, la curva se mira a la altura del WBS */
   var tramos=_crTramos(conWbs?'wbs':nivel,tar,alc,u,grupoDe);
   var cur=_crCurva(tramos,u.hh,sem,tramos.map(function(x){return x.peso}));
+  /* de que es el trabajo de cada semana, por especialidad */
+  var porSemEsp=sem.map(function(){return {}}),espOrden=[];
+  (function(){
+    var rp=_crReparto(tar),vis={};
+    tar.forEach(function(t){
+      if(!t.ini||!t.fin)return;
+      var por={};
+      (t.items||[]).forEach(function(i){
+        var h=(Number(u.items[i])||0)/_crVeces(rp,i);
+        if(!(h>0))return;
+        var e=espDe[i]||'(sin especialidad)';
+        por[e]=(por[e]||0)+h});
+      for(var e in por){
+        if(!vis[e]){vis[e]=1;espOrden.push(e)}
+        var v=_crReparteSem(t.ini,t.fin,por[e],sem);
+        for(var s=0;s<sem.length;s++)if(v[s]>0)porSemEsp[s][e]=(porSemEsp[s][e]||0)+v[s]}});
+    /* un orden estable, para que los colores no bailen entre semanas */
+    espOrden.sort()})();
   var carga=_crCarga(tar,u.items);   /* u ya viene filtrado por especialidad */
   var real=_crCurvaReal(u,sem);
   var hoy=(typeof todayISO==='function')?todayISO():'';
@@ -3498,9 +3537,22 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     var x=cx(i);
     var hv=maxSem>0?(cur.porSem[i]/maxSem):0;
     var bw=Math.max(3,casilla*0.62);
-    var by=my+gh-hv*gh*0.55;
-    barras+='<rect x="'+(x-bw/2).toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bw.toFixed(1)+
-      '" height="'+(hv*gh*0.55).toFixed(1)+'" fill="#1d3550"/>';
+    var alto=hv*gh*0.55;
+    var by=my+gh-alto;
+    /* la barra por dentro: un trozo por especialidad, en proporcion a sus
+       horas de esa semana; si no hay desglose, entera como antes */
+    var mez=porSemEsp[i]||{},sumE=0;
+    espOrden.forEach(function(e){sumE+=(mez[e]||0)});
+    if(sumE>0&&alto>0){
+      var yy=my+gh;
+      espOrden.forEach(function(e){
+        var q=mez[e]||0;if(!(q>0))return;
+        var ha=alto*q/sumE;yy-=ha;
+        barras+='<rect x="'+(x-bw/2).toFixed(1)+'" y="'+yy.toFixed(1)+'" width="'+bw.toFixed(1)+
+          '" height="'+ha.toFixed(1)+'" fill="'+_crColorEsp(e)+'"/>'})}
+    else
+      barras+='<rect x="'+(x-bw/2).toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bw.toFixed(1)+
+        '" height="'+alto.toFixed(1)+'" fill="#1d3550"/>';
     /* el % que toca hacer esa semana, sobre su barra */
     var pw=cur.porSem[i]/(cur.pesoTot||1);
     if(pw>0.001&&(pocas||!(i%2)))
@@ -3621,6 +3673,14 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     '<text x="'+(mx+20)+'" y="'+(my-9)+'" fill="#9db4d6" font-size="9">programado</text>'+
     '<rect x="'+(mx+90)+'" y="'+(my-13)+'" width="16" height="2.5" fill="#C0392B"/>'+
     '<text x="'+(mx+110)+'" y="'+(my-9)+'" fill="#F0A3A3" font-size="9">real del aplicativo</text>'+
+    /* de que es cada trozo de las barras */
+    (function(){
+      var x0=mx+205,h='';
+      espOrden.forEach(function(e){
+        h+='<rect x="'+x0+'" y="'+(my-16)+'" width="9" height="9" fill="'+_crColorEsp(e)+'"/>'+
+          '<text x="'+(x0+12)+'" y="'+(my-9)+'" fill="#8899ad" font-size="9">'+esc(e)+'</text>';
+        x0+=12+Math.max(34,String(e).length*5.3)+10});
+      return h})()+
     '</svg></div>'+
     ((duras.length&&nivel==='tarea')?_crNota('duras','Ver las tareas que piden demasiada gente',
       'background:#2a1414;border:1px solid #5A2A2A;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#F0A3A3;line-height:1.6',
@@ -11555,7 +11615,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824e3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824e4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
