@@ -5584,10 +5584,15 @@ var _WK_TINTA='FF0F1E2E';          /* el azul casi negro de los datos */
 /* Un color por cuadro. El vigente en azul -como siempre- y los demas en
    verde, naranja y morado, cada familia con su tono para cada nivel de WBS. */
 var _WK_CUADRO=[
-  {osc:'FF1F3864',cla:'FFDCE6F1',pal:'FFEAF1FB'},
-  {osc:'FF1E6B3C',cla:'FFD4EDDA',pal:'FFEAF7EE'},
-  {osc:'FF9C4A0A',cla:'FFFDE3CE',pal:'FFFDF1E7'},
-  {osc:'FF4B2A70',cla:'FFE5DBF2',pal:'FFF2ECF8'}];
+  {osc:'FFBDD7EE',cla:'FFDDEBF7',pal:'FFEEF5FC'},   /* azul   */
+  {osc:'FFC6E0B4',cla:'FFE2EFDA',pal:'FFF1F7EE'},   /* verde  */
+  {osc:'FFF8CBAD',cla:'FFFCE4D6',pal:'FFFDF2EA'},   /* naranja*/
+  {osc:'FFCCC0DA',cla:'FFE4DFEC',pal:'FFF2EFF7'}];  /* morado */
+/* El estilo de una fila de titulo con el color de SU cuadro. Se le pasa la
+   entrada del mapa, que ya sabe de que cuadro es y a que nivel esta. */
+function _wkTinteCuadro(est,m){
+  if(!m||!m.ib)return est;
+  return _wkFondo(est,_wkColorCuadro(m.ib,m.nivel||0))}
 function _wkColorCuadro(ib,nivel){
   var c=_WK_CUADRO[(ib||0)%_WK_CUADRO.length];
   return nivel<=0?c.osc:(nivel===1?c.cla:c.pal)}
@@ -5780,9 +5785,18 @@ function _wkCostoApp(P){
       ' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(t)+'</t></is></c>'};
     var vac=function(col,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+'/>'};
     if(m.tipo==='blanco'){r.push('<row r="'+n+'"/>');return}
+    if(m.tipo==='res'){
+      var te=function(cl){return _wkTinteCuadro(ePlan.e[cl],m)};
+      COLS.forEach(function(cl){
+        c+=(cl==='C')?cel('C','PROGRAMACION!D'+pr,te('C')):vac(cl,te(cl))});
+      for(var kr=1;kr<=nS;kr++)
+        c+=cel(colC(kr),'IFERROR(SUMIF($F$'+f0+':$F$'+ult+',"'+m.marca+'",'+
+          colC(kr)+'$'+f0+':'+colC(kr)+'$'+ult+'),0)',te(colC(kr)));
+      r.push('<row r="'+n+'"'+ePlan.at+'>'+c+'</row>');return}
     if(m.tipo==='wbs'||m.tipo==='cuadro'||m.tipo==='total'){
-      COLS.forEach(function(col){c+=(col==='C')?cel('C','PROGRAMACION!D'+pr,eWbs.e.C):vac(col,eWbs.e[col])});
-      for(var k=1;k<=nS;k++)c+=vac(colC(k),eWbs.e[colC(k)]);
+      var tw=function(col){return _wkTinteCuadro(eWbs.e[col],m)};
+      COLS.forEach(function(col){c+=(col==='C')?cel('C','PROGRAMACION!D'+pr,tw('C')):vac(col,tw(col))});
+      for(var k=1;k<=nS;k++)c+=vac(colC(k),tw(colC(k)));
       r.push('<row r="'+n+'"'+eWbs.at+'>'+c+'</row>');return}
     var est=(m.tipo==='plan')?ePlan:eReal;
     if(m.tipo==='plan'){
@@ -5974,6 +5988,7 @@ function _wkEstDe(P0,fila){
 function _wkMetradoApp(P){
   var base=P.base, sem=P.semanas, nS=sem.length;
   var colM=function(i){return _wkgCol('P',i)};     /* P = S0, Q.. = semanas */
+  var colS=function(i){return _wkgCol('N',i)};
   var ret={};
   ret['J7']='J9'; ret['K7']='SUM(K10:K'+P.ultFila+')';
   ret['D9']='MIN(D10:D'+P.ultFila+')'; ret['E9']='MAX(E10:E'+P.ultFila+')';
@@ -5988,10 +6003,20 @@ function _wkMetradoApp(P){
     var cel=function(col,f,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+'><f>'+_wkEsc(f)+'</f></c>'};
     var vac=function(col,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+'/>'};
     if(m.tipo==='blanco'){r.push('<row r="'+n+'"/>');return}
-    /* el rotulo del cuadro y su total se miran como un titulo mas */
+    if(m.tipo==='res'){
+      var te=function(cl){return _wkTinteCuadro(ePlan.e[cl],m)};
+      COLS.forEach(function(cl){
+        c+=(cl==='O')?cel('O','PROGRAMACION!D'+n,te('O')):vac(cl,te(cl))});
+      c+=vac(colM(0),te(colM(0)));
+      for(var kr=1;kr<=nS;kr++)
+        c+=cel(colM(kr),'PROGRAMACION!'+colS(kr)+n+'*$G$'+m.tot,te(colM(kr)));
+      r.push('<row r="'+n+'"'+ePlan.at+'>'+c+'</row>');return}
+    /* el rotulo del cuadro y su total se miran como un titulo mas, y llevan
+       el color de su cuadro para que se vea a cual pertenece la fila */
     if(m.tipo==='wbs'||m.tipo==='cuadro'||m.tipo==='total'){
-      COLS.forEach(function(col){c+=(col==='C')?cel('C','PROGRAMACION!D'+n,eWbs.e.C):vac(col,eWbs.e[col])});
-      for(var k=0;k<=nS;k++)c+=vac(colM(k),eWbs.e[colM(k)]);
+      var tw=function(col){return _wkTinteCuadro(eWbs.e[col],m)};
+      COLS.forEach(function(col){c+=(col==='C')?cel('C','PROGRAMACION!D'+n,tw('C')):vac(col,tw(col))});
+      for(var k=0;k<=nS;k++)c+=vac(colM(k),tw(colM(k)));
       r.push('<row r="'+n+'"'+eWbs.at+'>'+c+'</row>');return}
     if(m.tipo==='plan'){
       c+=vac('A',ePlan.e.A);
@@ -6053,9 +6078,17 @@ function _wkPhysicalApp(P){
     var cel=function(col,f,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+'><f>'+_wkEsc(f)+'</f></c>'};
     var vac=function(col,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+'/>'};
     if(m.tipo==='blanco'){r.push('<row r="'+n+'"/>');return}
+    if(m.tipo==='res'){
+      var te=function(cl){return _wkTinteCuadro(ePlan.e[cl],m)};
+      COLS.forEach(function(cl){
+        c+=(cl==='C')?cel('C','PROGRAMACION!D'+pr,te('C')):vac(cl,te(cl))});
+      for(var kr=1;kr<=nS;kr++)
+        c+=cel(colP(kr),'PROGRAMACION!'+_wkgCol('N',kr)+pr,te(colP(kr)));
+      r.push('<row r="'+n+'"'+ePlan.at+'>'+c+'</row>');return}
     if(m.tipo==='wbs'||m.tipo==='cuadro'||m.tipo==='total'){
-      COLS.forEach(function(col){c+=(col==='C')?cel('C','PROGRAMACION!D'+pr,eWbs.e.C):vac(col,eWbs.e[col])});
-      for(var k=0;k<=nS;k++)c+=vac(colP(k),eWbs.e[colP(k)]);
+      var tw=function(col){return _wkTinteCuadro(eWbs.e[col],m)};
+      COLS.forEach(function(col){c+=(col==='C')?cel('C','PROGRAMACION!D'+pr,tw('C')):vac(col,tw(col))});
+      for(var k=0;k<=nS;k++)c+=vac(colP(k),tw(colP(k)));
       r.push('<row r="'+n+'"'+eWbs.at+'>'+c+'</row>');return}
     var est=(m.tipo==='plan')?ePlan:eReal;
     if(m.tipo==='plan'){
@@ -6168,8 +6201,10 @@ function _wkProgApp(P){
     var ini=n0;n0++;                                   /* el rotulo del cuadro */
     var E=_wkEspinaFilas(bl.filas,bl.nomWbs,n0,2);
     n0=E.ultima+1;
-    pos.push({ini:ini,pri:E.lista.length?E.lista[0].r:ini,fin:n0-1,tot:n0});
-    n0++});
+    /* debajo del total, el resumen del cuadro: acumulado y del periodo,
+       del plan y del avance */
+    pos.push({ini:ini,pri:E.lista.length?E.lista[0].r:ini,fin:n0-1,tot:n0,res:n0+1});
+    n0+=5});
   var ultFila=n0-1;
   var cab=[];
   P0.filas.forEach(function(f){
@@ -6213,7 +6248,7 @@ function _wkProgApp(P){
         : val(cx,'',col(cx,0))});
     for(var z=0;z<=nS;z++)c0+=val(colS(z),'',col(colS(z),0));
     r.push('<row r="'+n+'"'+eWbs.at+'>'+c0+'</row>');
-    mapa.push({tipo:'cuadro',r:n,cron:bl.id});n++;
+    mapa.push({tipo:'cuadro',r:n,cron:bl.id,ib:ib,nivel:0});n++;
     var E=_wkEspinaFilas(bl.filas,bl.nomWbs,n,2);
     E.lista.forEach(function(x){
       n=x.r;
@@ -6224,7 +6259,7 @@ function _wkProgApp(P){
             ? cel('D',new Array(x.nivel+1).join('    ')+x.txt,col(cx,x.nivel),true)
             : val(cx,'',col(cx,x.nivel))});
         for(var k2=0;k2<=nS;k2++)cw+=val(colS(k2),'',col(colS(k2),x.nivel));
-        mapa.push({tipo:'wbs',r:n,cron:bl.id});
+        mapa.push({tipo:'wbs',r:n,cron:bl.id,ib:ib,nivel:x.nivel});
         r.push('<row r="'+n+'"'+eWbs.at+'>'+cw+'</row>');return}
       var f=x.f, fp=(P.p6Fila[bl.id]||{})[f.clave];
       var CL=fp?(H6+'!$'+Q.clave+'$'+fp):'""';
@@ -6251,7 +6286,7 @@ function _wkProgApp(P){
       for(var w=1;w<=nS;w++)
         c+=cel(colS(w),'IFERROR(SUMIF('+AP+'!$'+F.clave+':$'+F.clave+','+CL+','+
           AP+'!'+COLF[w-1]+':'+COLF[w-1]+')/$K'+n+'+'+colS(w-1)+n+',0)',ePlan.e[colS(w)]);
-      mapa.push({tipo:'plan',r:n,base:base0,filaReal:filaReal,cron:bl.id});
+      mapa.push({tipo:'plan',r:n,base:base0,filaReal:filaReal,cron:bl.id,ib:ib});
       r.push('<row r="'+n+'"'+ePlan.at+'>'+c+'</row>');
       /* --- la fila del avance real, contra el mismo cuadro --- */
       n=filaReal;
@@ -6264,7 +6299,7 @@ function _wkProgApp(P){
           ? cel(colS(w2),'IFERROR(SUMIF('+RE+'!$'+F.clave+':$'+F.clave+','+CL+','+
               RE+'!'+COLF[w2-1]+':'+COLF[w2-1]+')/$K'+base0+'+'+colS(w2-1)+n+',0)',eReal.e[colS(w2)])
           : val(colS(w2),'',eReal.e[colS(w2)]);
-      mapa.push({tipo:'real',r:n,base:base0,filaReal:filaReal,cron:bl.id});
+      mapa.push({tipo:'real',r:n,base:base0,filaReal:filaReal,cron:bl.id,ib:ib});
       r.push('<row r="'+n+'"'+eReal.at+'>'+c2+'</row>');
       nAct++});
     /* --- el total del cuadro --- */
@@ -6277,9 +6312,32 @@ function _wkProgApp(P){
           cx+'$'+pb.ini+':$'+cx+'$'+pb.fin+'),0)',col(cx,0));
       else ct+=val(cx,'',col(cx,0))});
     for(var k3=0;k3<=nS;k3++)ct+=val(colS(k3),'',col(colS(k3),0));
-    mapa.push({tipo:'total',r:n,cron:bl.id,ini:pb.ini,fin:pb.fin});
+    mapa.push({tipo:'total',r:n,cron:bl.id,ini:pb.ini,fin:pb.fin,ib:ib,nivel:0});
     r.push('<row r="'+n+'"'+eWbs.at+'>'+ct+'</row>');
-    n++});
+    /* --- el resumen del cuadro --- */
+    var RES=[['acum','plan','ACUMULADO PLAN ('+bl.id+')','Prog. '+bl.id],
+             ['acum','real','ACUMULADO ACTUAL ('+bl.id+')','Actual'],
+             ['per','plan','DEL PERIODO PLAN ('+bl.id+')','Prog. '+bl.id],
+             ['per','real','DEL PERIODO ACTUAL ('+bl.id+')','Actual']];
+    RES.forEach(function(z,iz){
+      n=pb.res+iz;
+      var cr='';
+      COLS.forEach(function(cx){
+        cr+=(cx==='D')?cel('D',z[2],col(cx,1),true):val(cx,'',col(cx,1))});
+      cr+=val(colS(0),'',ePlan.e[colS(0)]);
+      for(var w3=1;w3<=nS;w3++){
+        var cc=colS(w3),f3;
+        if(z[0]==='acum'){
+          f3='IFERROR(SUMPRODUCT(($M$'+pb.ini+':$M$'+pb.fin+'="'+z[3]+'")*$K$'+pb.ini+':$K$'+
+             pb.fin+'*'+cc+'$'+pb.ini+':'+cc+'$'+pb.fin+')/$K$'+pb.tot+',0)'}
+        else{
+          var ra=pb.res+(z[1]==='plan'?0:1);
+          f3=(w3===1)?(cc+ra):('IFERROR('+cc+ra+'-'+colS(w3-1)+ra+',"")')}
+        cr+=cel(cc,f3,ePlan.e[cc])}
+      mapa.push({tipo:'res',r:n,cron:bl.id,ib:ib,nivel:1,modo:z[0],cual:z[1],
+        etiqueta:z[2],marca:z[3],ini:pb.ini,fin:pb.fin,tot:pb.tot,res:pb.res});
+      r.push('<row r="'+n+'"'+ePlan.at+'>'+cr+'</row>')});
+    n=pb.res+4});
   var ultCol=_wkgCol('N',nS);
   var enc=base.slice(0,base.indexOf('<sheetData>'));
   enc=enc.replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:'+ultCol+ultFila+'"/>');
@@ -10591,7 +10649,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823v1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823v2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
