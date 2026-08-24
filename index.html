@@ -6208,15 +6208,23 @@ async function _crPlanRecupera(cronId,corte,semN){
       if(u.items[i]!=null)hh+=(Number(u.items[i])||0)/_crVeces(rp,i)});
     var cod=t.task_code;
     plan[cod]={};actual[cod]={};fore[cod]={};back[cod]={};
-    /* la secuencia del respaldo, repartida sobre el calendario */
+    /* La secuencia del cronograma: cada partida se reparte UNA vez, sobre
+       los dias del respaldo si esta en el y, si no, sobre los suyos del LB1.
+       Asi la linea suma exactamente uno, sin colas anadidas aparte. */
     if(hh>0)(t.items||[]).forEach(function(i){
-      var b2=bkSnap[i];if(!b2)return;
       var hi=(Number(u.items[i])||0)/_crVeces(rp,i);
       if(!(hi>0))return;
-      var oc=[];
-      try{oc=(typeof occupiedDays==='function')?occupiedDays(b2.start,b2.dias||1):[b2.start]}
-      catch(_eo2){oc=[b2.start]}
-      var dentro=oc.filter(function(d){return d>=gIni&&d<=gFin});
+      var dentro=[],b2=bkSnap[i];
+      if(b2&&b2.start){
+        var oc=[];
+        try{oc=(typeof occupiedDays==='function')?occupiedDays(b2.start,b2.dias||1):[b2.start]}
+        catch(_eo2){oc=[b2.start]}
+        dentro=oc.filter(function(d){return d>=gIni&&d<=gFin})}
+      if(!dentro.length&&t.ini&&t.fin){
+        var e0=_crASerial(t.ini),e1=_crASerial(t.fin);
+        for(var kk=e0;kk<=e1;kk++){
+          var ff=_crDeSerial(kk);
+          if(ff>=gIni&&ff<=gFin)dentro.push(ff)}}
       if(!dentro.length)return;
       var pdb=(hi/hh)/dentro.length;
       dentro.forEach(function(d){back[cod][d]=(back[cod][d]||0)+pdb})});
@@ -6282,13 +6290,13 @@ async function _crPlanRecupera(cronId,corte,semN){
         fut.forEach(function(d){fore[cod][d]=(fore[cod][d]||0)+pdd})})}
     /* lo que el LB1 deja para DESPUES de la ventana: el plan no acaba al
        recuperar, sigue con el cronograma hasta el final de la obra */
-    if(nd){
+    /* La cola solo cuando NO hay programacion: si la hay, esa programacion ya
+       cubre todo lo que queda y sumarle la cola lo contaria dos veces. */
+    if(nd&&!conProg){
       var pdC=1/nd;
       for(var kC=0;kC<nd;kC++){
         var fC=_crDeSerial(d0+kC);
-        if(fC>vFin&&fC<=gFin){
-          fore[cod][fC]=(fore[cod][fC]||0)+pdC;
-          back[cod][fC]=(back[cod][fC]||0)+pdC}}}
+        if(fC>vFin&&fC<=gFin)fore[cod][fC]=(fore[cod][fC]||0)+pdC}}
     /* y las que arrancan enteras despues de la ventana: no tienen nada que
        recuperar, pero forman parte del plan igual */
     if(saldo<=1e-9&&!priIni&&hh>0&&t.ini&&t.ini>vFin){
@@ -12556,7 +12564,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824g9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824h1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
