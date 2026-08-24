@@ -6175,7 +6175,6 @@ function _wkProgApp(P){
   var COLS=['A','B','C','D','E','F','G','H','I','J','K','L','M'];
   P.bloques.forEach(function(bl,ib){
     var pb=pos[ib], H6="'P6-"+bl.id+"'", AP="'ACTIVITY_PLAN ("+bl.id+")'";
-    var RE="'ACTUAL ("+bl.id+")'";
     /* el color de este cuadro, sobre el estilo que ya traia la hoja */
     var col=function(c,nivel){return ib?_wkFondo(eWbs.e[c],_wkColorCuadro(ib,nivel)):eWbs.e[c]};
     var RG=H6+'!$'+Q.clave+'$3:$'+Q.fin+'$'+(P.p6Ult[bl.id]||3);
@@ -6236,10 +6235,11 @@ function _wkProgApp(P){
       COLS.forEach(function(col){
         c2+=(col==='M')?cel('M','Actual',eReal.e.M,true):val(col,'',eReal.e[col])});
       c2+=val(colS(0),'',eReal.e[colS(0)]);
+      /* el avance sale de la misma lista de la linea, que ya lo trae */
       for(var w2=1;w2<=nS;w2++)
-        c2+=(w2<=P.iSem)
-          ? cel(colS(w2),'IFERROR(SUMIF('+RE+'!$'+F.clave+':$'+F.clave+','+CL+','+
-              RE+'!'+COLF[w2-1]+':'+COLF[w2-1]+')/$K'+base0+'+'+colS(w2-1)+n+',0)',eReal.e[colS(w2)])
+        c2+=(w2<=P.iSem&&fp)
+          ? cel(colS(w2),'IFERROR('+H6+'!'+_wkP6Col(w2-1)+fp+'/$K'+base0+'+'+
+              colS(w2-1)+n+',0)',eReal.e[colS(w2)])
           : val(colS(w2),'',eReal.e[colS(w2)]);
       mapa.push({tipo:'real',r:n,base:base0,filaReal:filaReal,cron:bl.id,ib:ib});
       r.push('<row r="'+n+'"'+eReal.at+'>'+c2+'</row>');
@@ -6275,8 +6275,14 @@ function _wkProgApp(P){
       for(var w3=1;w3<=nS;w3++){
         var cc=colS(w3),f3='';
         if(z[0]==='acum'){
-          f3='IFERROR(SUMPRODUCT(($M$'+pb.ini+':$M$'+pb.fin+'="'+z[3]+'")*$K$'+pb.ini+':$K$'+
-             pb.fin+'*'+cc+'$'+pb.ini+':'+cc+'$'+pb.fin+')/$K$'+pb.tot+',0)'}
+          /* Las HH viven en la fila del PLAN; la del avance las tiene vacias.
+             Por eso el peso se toma siempre de la fila de plan y, cuando lo
+             que se quiere es el avance, se lee la fila de debajo -que es la
+             suya-. Pesar por la fila del avance daba 0 en todo el resumen. */
+          var d1=(z[1]==='real')?1:0;
+          f3='IFERROR(SUMPRODUCT(($M$'+pb.ini+':$M$'+pb.fin+'="Prog. '+bl.id+'")*$K$'+
+             pb.ini+':$K$'+pb.fin+'*'+cc+'$'+(pb.ini+d1)+':'+cc+'$'+(pb.fin+d1)+
+             ')/$K$'+pb.tot+',0)'}
         else if(z[0]==='per'){
           var ra=pb.res+(z[1]==='plan'?0:1);
           f3=(w3===1)?(cc+ra):('IFERROR('+cc+ra+'-'+colS(w3-1)+ra+',"")')}
@@ -6302,7 +6308,8 @@ function _wkProgApp(P){
    el cronograma, que es lo que impide que un A1060 del LB0 case con el del
    LB1: son actividades distintas con el mismo nombre. */
 var _WKP6={clave:'A',cod:'B',qps:'C',nom:'D',cant:'E',und:'F',hh:'G',costo:'H',
-  dias:'I',ini:'J',fin:'K'};
+  dias:'I',ini:'J',fin:'K',sem0:'L'};   /* L en adelante: el avance por semana */
+function _wkP6Col(i){return _wkgCol(_WKP6.sem0,i)}
 var _WKF ={clave:'A',cod:'B',nom:'C',hh:'D',ini:'E',fin:'F',dias:'G',sem0:'H'};
 function _wkFCol(i){return _wkgCol(_WKF.sem0,i)}
 /* el estilo del titulo segun lo hondo que este en el arbol */
@@ -6333,7 +6340,9 @@ function _wkHojaP6Esp(bl,semanas,ib){
   var cab=[[P.clave,'CLAVE'],[P.cod,'ITEM'],[P.qps,'ITEM QPS'],[P.nom,'PARTIDA'],
            [P.cant,'CANT.'],[P.und,'UND'],[P.hh,'HH'],[P.costo,'COSTO'],
            [P.dias,'DURAC. (d)'],[P.ini,'INICIO'],[P.fin,'FIN']];
-  r.push('<row r="2">'+cab.map(function(c){return _crXlsCel(c[0],2,c[1],true,S.cab)}).join('')+'</row>');
+  r.push('<row r="2">'+cab.map(function(c){return _crXlsCel(c[0],2,c[1],true,S.cab)}).join('')+
+    (semanas||[]).map(function(s2,i){return _crXlsCel(_wkP6Col(i),2,
+      'REAL S'+s2.n,true,S.cab)}).join('')+'</row>');
   E.lista.forEach(function(x){
     var n=x.r;
     if(x.tipo==='wbs'){
@@ -6351,11 +6360,16 @@ function _wkHojaP6Esp(bl,semanas,ib){
     c+=_crXlsCel(P.dias,n,f.dias||'',false,S.ent);
     c+=_crXlsCel(P.ini,n,f.ini?_crASerial(f.ini):'',false,S.fecha);
     c+=_crXlsCel(P.fin,n,f.fin?_crASerial(f.fin):'',false,S.fecha);
+    /* el avance real de esta actividad, semana a semana: va aqui mismo para
+       que la lista de una linea base sea UNA sola hoja */
+    (semanas||[]).forEach(function(s2,i){
+      var v=(f.semReal&&f.semReal[i])?Math.round(f.semReal[i]*1e6)/1e6:'';
+      c+=_crXlsCel(_wkP6Col(i),n,v,false,S.num)});
     r.push('<row r="'+n+'">'+c+'</row>')});
   return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
     _wkTab(_WK_AMARILLO)+
-    '<dimension ref="A1:'+P.fin+E.ultima+'"/>'+
+    '<dimension ref="A1:'+_wkP6Col(((semanas||[]).length||1)-1)+E.ultima+'"/>'+
     '<sheetViews><sheetView showGridLines="0" workbookViewId="0">'+
     '<pane xSplit="4" ySplit="2" topLeftCell="E3" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
     '<sheetFormatPr defaultRowHeight="15"/>'+
@@ -6363,7 +6377,8 @@ function _wkHojaP6Esp(bl,semanas,ib){
     '<col min="4" max="4" width="62" customWidth="1"/>'+
     '<col min="5" max="8" width="13" customWidth="1"/>'+
     '<col min="9" max="9" width="11" customWidth="1"/>'+
-    '<col min="10" max="11" width="13.5" customWidth="1"/></cols>'+
+    '<col min="10" max="11" width="13.5" customWidth="1"/>'+
+    '<col min="12" max="'+(11+((semanas||[]).length||1))+'" width="11.5" customWidth="1"/></cols>'+
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
     filaDe:(function(){var m={};E.lista.forEach(function(x){
@@ -6569,8 +6584,7 @@ async function _wkLibroApp(semN,corte,ids){
   /* cada cuadro con su plan y su avance, por separado */
   D.bloques.forEach(function(bl,ib){
     bl.ib=ib;
-    mete('ACTIVITY_PLAN ('+bl.id+')',_wkFeederEsp([bl],sem,false).xml,3);
-    mete('ACTUAL ('+bl.id+')',_wkFeederEsp([bl],sem,true).xml,3)});
+    mete('ACTIVITY_PLAN ('+bl.id+')',_wkFeederEsp([bl],sem,false).xml,3)});
   D.bloques.forEach(function(bl){mete('P6-'+bl.id,p6[bl.id],3)});
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
   /* la caratula conserva su dibujo -logos y firmas-; lo que se le quita es
@@ -10602,7 +10616,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823x1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823y1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
