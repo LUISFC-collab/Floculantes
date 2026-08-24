@@ -6279,7 +6279,7 @@ async function _crPlanGuarda(R,cronId,semN){
 /* ---------------- PARA 3WLA: el alimentador del look ahead -------------------
    Una fila por actividad del cronograma vigente, con la forma exacta de la
    hoja 3WLA de la plantilla. */
-function _wkHoja3WLA(semN,bloque,base,R){
+function _wkHoja3WLA(semN,bloque,base,R,corte){
   if(!bloque||!bloque.filas||!bloque.filas.length)return null;
   /* OJO: en la plantilla la hoja se llama «3WLA », con un espacio al final. */
   var _n3=_wkComoSeLlama(base&&base.hojas,'3WLA');
@@ -6290,106 +6290,122 @@ function _wkHoja3WLA(semN,bloque,base,R){
     var v=_wkEstiloDe(T,ref);
     return v!==''?v:((alt==null||alt==='')?'':String(alt))};
   var W=(typeof _WKS!=='undefined'&&_WKS)?_WKS:{};
-  /* la hoja amarilla de la que cuelgan las formulas */
   var P6="'P6-"+String(bloque.id).replace(/'/g,"''")+"'";
   var nSem=((typeof _wkSemanas==='function'?_wkSemanas():[])||[]).length||18;
   var cR0=_WKP6.sem0,cRN=_wkP6Col(nSem-1);
-  /* estilos base */
   var stTit=E('C9',W.wbs1),stTit2=E('C10',W.wbs2);
   var stSem=E('M4',W.cabSem),stFec=W.fecha||E('M5'),stDia=E('M6',W.cabSem);
-  var stTotJ=E('J8',W.num),stTotK=E('K8',W.pct);
   var CAB={A:E('A19',W.texto),B:E('B19',W.texto),C:E('C19',W.texto),D:E('D19',W.texto),
            E:E('E19',W.num),F:E('F19',W.num),G:E('G19',W.num),H:E('H19',W.num),
            I:E('I19',W.num),J:E('J19',W.num),K:E('K19',W.pct),L:E('L19',W.texto)};
   var stCabF={B:E('B7',W.cab),C:E('C7',W.cab),D:E('D7',W.cab),E:E('E7',W.cab),
               F:E('F7',W.cab),G:E('G7',W.cab),H:E('H7',W.cab),I:E('I7',W.cab),
               J:E('J7',W.cab),K:E('K7',W.cab),L:E('L7',W.cab)};
-  var stDato=E('P19',W.num),stPct=E('K19',W.pct);
-  /* un color por linea: el suave para toda la fila, el fuerte para la casilla
-     que trae valor, y el borde en el tono de la linea */
+  var stDato=E('P19',W.num),stPct=E('K19',W.pct),stTotJ=E('J8',W.num),stTotK=E('K8',W.pct);
   var COL=[{sua:'FFDCE9FB',fue:'FFA9C9F5',bor:'FF2E5C9A'},
            {sua:'FFDFF4E7',fue:'FF9EDCB8',bor:'FF1E7A46'},
            {sua:'FFFBE3EE',fue:'FFF3B4D0',bor:'FFA83A6B'}];
-  var GRIS='FFB9C4D4';
+  var GRIS='FFB9C4D4', FINDE='FFF7DCDC', FINDEB='FFC98A8A';
   var memo={};
   var tinta=function(st,fill,bor){
     var k=st+'|'+fill+'|'+bor;
     if(memo[k]==null)memo[k]=_wkBordeFondo(st,fill,bor);
     return memo[k]};
   var LET=['V','S','D','L','M','M','J'];
-  var BLQ=[12,21,30];                          /* M, V y AE */
+  var BLQ=[12,21,30];
   var ROT=['ITEM','DESCRIPTION','Und','CANTIDAD CONTRACTUAL','CANTIDAD FORE CAST',
            'AVANCE ACUMULADO','SALDO','Rate','HH Contractuales','% Restante','LÍNEA'];
   var COLS='BCDEFGHIJKL'.split('');
-  var filas=[],merges=[];
-  function fila(r,cs){filas.push('<row r="'+r+'">'+cs.join('')+'</row>')}
-  /* --- fila 1: el titulo, de una pieza --- */
-  fila(1,[_wkCelE('A',1,'PARA 3WLA — '+(bloque.nombre||bloque.id)+
-    ' · semanas S'+semN+' a S'+(semN+2),true,W.titulo)]);
-  merges.push('A1:L1');
-  fila(2,[_wkCelE('A',2,'Cantidades, unidad y ritmo salen por fórmula de la hoja P6-'+
-    bloque.id+'. Cada actividad va en tres líneas: lo programado, lo ejecutado y el plan a recuperar.',
-    true,W.subtitulo)]);
-  merges.push('A2:L2');
-  /* --- filas 4, 5 y 6: la cabecera de las tres semanas --- */
+  var LINEAS=R?['PROGRAMADO SEM. ANT.','ACTUAL','FORECAST']:['PROGRAMADO'];
+  var filas=[],merges=[],altos={};
+  function fila(r,cs,alto){
+    filas.push('<row r="'+r+'"'+(alto?(' ht="'+alto+'" customHeight="1"'):'')+'>'+cs.join('')+'</row>')}
+  /* ---- cabecera: los logos a la izquierda y al lado los datos ---- */
+  var stNom=W.titulo,stDat=W.subtitulo;
+  var fecha=corte||'';
+  fila(1,[_wkCelE('D',1,String(_WKPROY||bloque.nombre||''),true,stNom)],26);
+  fila(2,[_wkCelE('D',2,'Reporte semanal · SEMANA '+semN+
+    '  ·  mira las semanas S'+semN+' a S'+(semN+2),true,stDat)],18);
+  fila(3,[_wkCelE('D',3,'Fecha del reporte: '+
+    (fecha?fecha.split('-').reverse().join('/'):'—')+
+    '  ·  cronograma '+bloque.id,true,stDat)],18);
+  merges.push('A1:C3');merges.push('D1:L1');merges.push('D2:L2');merges.push('D3:L3');
+  /* ---- filas 4, 5 y 6 ---- */
   var f4=[],f5=[],f6=[];
   BLQ.forEach(function(c0,b){
     var sm=_wkSem(semN+b);
     f4.push(_wkCelE(_wkColL(c0),4,'SEMANA '+(semN+b),true,stSem));
-    /* la celda unida necesita las demas declaradas, aunque vayan vacias */
     for(var q=1;q<7;q++)f4.push(_wkCelE(_wkColL(c0+q),4,'',false,stSem));
     merges.push(_wkColL(c0)+'4:'+_wkColL(c0+6)+'4');
     for(var d=0;d<7;d++){
-      f5.push(_wkCelE(_wkColL(c0+d),5,sm.ini+d,false,stFec));
-      f6.push(_wkCelE(_wkColL(c0+d),6,LET[d],true,stDia))}
-    /* y los dos rotulos de porcentaje del bloque */
+      var findes=(d===1||d===2);            /* sabado y domingo */
+      f5.push(_wkCelE(_wkColL(c0+d),5,sm.ini+d,false,
+        findes?tinta(stFec,FINDE,FINDEB):stFec));
+      f6.push(_wkCelE(_wkColL(c0+d),6,LET[d],true,
+        findes?tinta(stDia,FINDE,FINDEB):stDia))}
     f4.push(_wkCelE(_wkColL(c0+7),4,'',false,stSem));
     f4.push(_wkCelE(_wkColL(c0+8),4,'',false,stSem))});
-  fila(4,f4);fila(5,f5);fila(6,f6);
-  /* --- fila 7: los rotulos --- */
+  fila(4,f4);fila(5,f5,17);fila(6,f6);
+  /* ---- fila 7: rotulos ---- */
   var f7=COLS.map(function(c,k){return _wkCelE(c,7,ROT[k],true,stCabF[c])});
   BLQ.forEach(function(c0,b){
     f7.push(_wkCelE(_wkColL(c0+7),7,'% S'+(semN+b),true,stCabF.K));
     f7.push(_wkCelE(_wkColL(c0+8),7,'% ACUM',true,stCabF.K))});
-  fila(7,f7);
-  /* --- el cuerpo: titulos de WBS y tres lineas por actividad --- */
-  var prev=[],cuerpo=[],r0=9;
+  fila(7,f7,30);
+  /* ---- el cuerpo ---- */
+  var prev=[],cuerpo=[],r0=8+LINEAS.length;     /* 8,9,10 son el resumen */
   bloque.filas.forEach(function(f){
     var ruta=String(f.wbs||'').split(' / ').filter(function(z){return z});
     var i0=0;while(i0<ruta.length&&i0<prev.length&&ruta[i0]===prev[i0])i0++;
     for(var q=i0;q<ruta.length;q++){
       var rj=ruta.slice(0,q+1).join(' / ');
       cuerpo.push({tit:String((bloque.nomWbs||{})[rj]||ruta[q]).toUpperCase(),niv:q})}
-    prev=ruta;cuerpo.push({f:f})});
-  var LINEAS=R?['PROGRAMADO SEM. ANT.','ACTUAL','FORECAST']:['PROGRAMADO'];
-  var cuerpo2=[];
-  cuerpo.forEach(function(z){
-    if(z.tit!=null){cuerpo2.push(z);return}
-    LINEAS.forEach(function(L,k){cuerpo2.push({f:z.f,linea:L,k:k})})});
-  cuerpo=cuerpo2;
+    prev=ruta;
+    LINEAS.forEach(function(L,k){cuerpo.push({f:f,linea:L,k:k})})});
   var nFin=r0+cuerpo.length-1;
-  fila(8,[_wkCelE('J',8,'',false,stTotJ,'SUM(J'+r0+':J'+nFin+')'),
-          _wkCelE('K',8,'',false,stTotK,'SUM(K'+r0+':K'+nFin+')')]);
-  /* los rangos de dias, que hacen falta para el acumulado */
   var rangos=function(hasta,n){
     var o=[];
     for(var b=0;b<=hasta;b++)o.push(_wkColL(BLQ[b])+n+':'+_wkColL(BLQ[b]+6)+n);
     return o.join(',')};
+  /* ---- filas 8..10: el resumen, una por concepto ---- */
+  var RL='$L$'+r0+':$L$'+nFin, RJ='$J$'+r0+':$J$'+nFin, RK='$K$'+r0+':$K$'+nFin;
+  LINEAS.forEach(function(L,k){
+    var n=8+k,C=COL[k]||COL[0];
+    var q='"'+L+'"';
+    var cs=[_wkCelE('I',n,'',true,tinta(stCabF.I,C.sua,C.bor)),
+            _wkCelE('J',n,'',false,tinta(stTotJ,C.sua,C.bor),'SUMIF('+RL+','+q+','+RJ+')'),
+            _wkCelE('K',n,'',false,tinta(stTotK,C.sua,C.bor),'SUMIF('+RL+','+q+','+RK+')'),
+            _wkCelE('L',n,L,true,tinta(CAB.L,C.sua,C.bor))];
+    BLQ.forEach(function(c0,b){
+      var T1=_wkColL(c0+7),U1=_wkColL(c0+8);
+      /* ponderado por HH: una actividad de 500 horas no puede pesar lo mismo
+         que una de 3 */
+      cs.push(_wkCelE(T1,n,'',false,tinta(stPct,C.sua,C.bor),
+        'IFERROR(SUMPRODUCT(('+RL+'='+q+')*'+RJ+'*$'+T1+'$'+r0+':$'+T1+'$'+nFin+')/'+
+        'SUMIF('+RL+','+q+','+RJ+'),0)'));
+      cs.push(_wkCelE(U1,n,'',false,tinta(stPct,C.sua,C.bor),
+        'IFERROR(SUMPRODUCT(('+RL+'='+q+')*'+RJ+'*$'+U1+'$'+r0+':$'+U1+'$'+nFin+')/'+
+        'SUMIF('+RL+','+q+','+RJ+'),0)'))});
+    fila(n,cs)});
+  /* ---- las actividades ---- */
   var n=r0,nFilas=0;
   cuerpo.forEach(function(z){
     if(z.tit!=null){
       fila(n,[_wkCelE('C',n,z.tit,true,z.niv?stTit2:stTit)]);n++;return}
     var f=z.f,C=COL[z.k||0]||COL[0];
-    var st=function(base){return tinta(base,C.sua,GRIS)};
-    var V=function(campo,col){
-      return 'IFERROR(VLOOKUP($B'+n+','+P6+'!$B:$K,'+col+',0),'+
-        (campo==='txt'?'""':'0')+')'};
+    var st=function(b2){return tinta(b2,C.sua,GRIS)};
+    /* la cantidad: la de la P6 y, si esa actividad no tiene una propia porque
+       lleva varias partidas, 1 global — asi sus HH no se pierden */
+    var VE='IFERROR(IF(VLOOKUP($B'+n+','+P6+'!$B:$K,4,0)="",1,'+
+           'VLOOKUP($B'+n+','+P6+'!$B:$K,4,0)),1)';
     var cs=[
       _wkCelE('A',n,f.qps||'',true,st(CAB.A)),
       _wkCelE('B',n,f.cod||'',true,st(CAB.B)),
-      _wkCelE('C',n,'',true,st(CAB.C),V('txt',3)),
-      _wkCelE('D',n,'',true,st(CAB.D),V('txt',5)),
-      _wkCelE('E',n,'',false,st(CAB.E),V('num',4)),
+      _wkCelE('C',n,'',true,st(CAB.C),'IFERROR(VLOOKUP($B'+n+','+P6+'!$B:$K,3,0),"")'),
+      _wkCelE('D',n,'',true,st(CAB.D),
+        'IFERROR(IF(VLOOKUP($B'+n+','+P6+'!$B:$K,5,0)="","Glb.",'+
+        'VLOOKUP($B'+n+','+P6+'!$B:$K,5,0)),"Glb.")'),
+      _wkCelE('E',n,'',false,st(CAB.E),VE),
       _wkCelE('F',n,'',false,st(CAB.F),'E'+n),
       _wkCelE('G',n,'',false,st(CAB.G),
         'IFERROR($E'+n+'*SUM(INDEX('+P6+'!$'+cR0+':$'+cRN+
@@ -6400,7 +6416,6 @@ function _wkHoja3WLA(semN,bloque,base,R){
       _wkCelE('J',n,'',false,st(CAB.J),'$E'+n+'*$I'+n),
       _wkCelE('K',n,'',false,st(CAB.K),'IF($J$8=0,0,$H'+n+'*$I'+n+'/$J$8)'),
       _wkCelE('L',n,z.linea||'',true,st(CAB.L))];
-    /* el dia a dia de esta linea, en la unidad de la actividad */
     var mapa=null;
     if(!R){mapa={};
       if(f.ini&&f.fin){var d0=_crASerial(f.ini),d1=_crASerial(f.fin),nd=Math.max(1,d1-d0+1);
@@ -6411,10 +6426,10 @@ function _wkHoja3WLA(semN,bloque,base,R){
     BLQ.forEach(function(c0,b){
       var sm=_wkSem(semN+b);
       for(var d=0;d<7;d++){
-        var fe=_wkISO(sm.ini+d),v=mapa[fe];
-        /* con valor: relleno fuerte y borde del color de la linea */
-        cs.push(_wkCelE(_wkColL(c0+d),n,(v>1e-9)?(cant*v):'',false,
-          (v>1e-9)?tinta(stDato,C.fue,C.bor):st(stDato)))}
+        var fe=_wkISO(sm.ini+d),v=mapa[fe],findes=(d===1||d===2);
+        var est=(v>1e-9)?tinta(stDato,C.fue,C.bor)
+                        :(findes?tinta(stDato,FINDE,FINDEB):st(stDato));
+        cs.push(_wkCelE(_wkColL(c0+d),n,(v>1e-9)?(cant*v):'',false,est))}
       cs.push(_wkCelE(_wkColL(c0+7),n,'',false,tinta(stPct,C.sua,GRIS),
         'IFERROR(SUM('+_wkColL(c0)+n+':'+_wkColL(c0+6)+n+')/$E'+n+',0)'));
       cs.push(_wkCelE(_wkColL(c0+8),n,'',false,tinta(stPct,C.sua,C.bor),
@@ -6422,9 +6437,10 @@ function _wkHoja3WLA(semN,bloque,base,R){
     fila(n,cs);n++;nFilas++});
   var ult=_wkColL(BLQ[2]+8);
   var xml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
-    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '+
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
     _wkTab(_WK_AMARILLO)+
-    '<dimension ref="A1:'+ult+Math.max(9,n-1)+'"/>'+
+    '<dimension ref="A1:'+ult+Math.max(10,n-1)+'"/>'+
     '<sheetViews><sheetView showGridLines="0" workbookViewId="0">'+
     '<pane xSplit="3" ySplit="7" topLeftCell="D8" activePane="bottomRight" state="frozen"/>'+
     '</sheetView></sheetViews>'+
@@ -6432,16 +6448,51 @@ function _wkHoja3WLA(semN,bloque,base,R){
     '<cols><col min="1" max="1" width="12" customWidth="1"/>'+
     '<col min="2" max="2" width="11" customWidth="1"/>'+
     '<col min="3" max="3" width="46" customWidth="1"/>'+
-    '<col min="4" max="4" width="8" customWidth="1"/>'+
+    '<col min="4" max="4" width="9" customWidth="1"/>'+
     '<col min="5" max="11" width="13" customWidth="1"/>'+
     '<col min="12" max="12" width="22" customWidth="1"/>'+
-    '<col min="13" max="'+(BLQ[2]+9)+'" width="9" customWidth="1"/></cols>'+
+    '<col min="13" max="'+(BLQ[2]+9)+'" width="11.5" customWidth="1"/></cols>'+
     '<sheetData>'+filas.join('')+'</sheetData>'+
     (merges.length?('<mergeCells count="'+merges.length+'">'+
       merges.map(function(m){return '<mergeCell ref="'+m+'"/>'}).join('')+'</mergeCells>'):'')+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'+
+    '<drawing r:id="rId1"/>'+
     '</worksheet>';
   return {xml:xml,filas:nFilas,ini:r0,fin:nFin}}
+/* Los dos logos de la caratula, arriba a la izquierda de PARA 3WLA. Se
+   reutilizan los MISMOS ficheros que ya lleva el libro -image8 y image9-, sin
+   duplicarlos: el empaquetador los pone una sola vez. */
+function _wk3wLogos(base){
+  var car=_wkComoSeLlama(base&&base.hojas,'Car\u00e1tula (P)');
+  var a=(base.activos||{})[car];
+  if(!a||!a.partes)return null;
+  var quiere=['xl/media/image8.png','xl/media/image9.png'];
+  var medios={},rels='',n=0,anc='';
+  var EMU=[[1352662,482599],[1340826,566722]];
+  quiere.forEach(function(ruta,k){
+    if(!a.partes[ruta])return;
+    n++;medios[ruta]=a.partes[ruta];
+    rels+='<Relationship Id="rId'+n+'" Type="http://schemas.openxmlformats.org/'+
+      'officeDocument/2006/relationships/image" Target="../media/'+ruta.split('/').pop()+'"/>';
+    anc+='<xdr:oneCellAnchor><xdr:from><xdr:col>'+(k?2:0)+'</xdr:col><xdr:colOff>36000</xdr:colOff>'+
+      '<xdr:row>0</xdr:row><xdr:rowOff>36000</xdr:rowOff></xdr:from>'+
+      '<xdr:ext cx="'+EMU[k][0]+'" cy="'+EMU[k][1]+'"/>'+
+      '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="'+(n+1)+'" name="Logo '+n+'"/>'+
+      '<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>'+
+      '<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId'+n+'"/>'+
+      '<a:stretch><a:fillRect/></a:stretch></xdr:blipFill>'+
+      '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+EMU[k][0]+'" cy="'+EMU[k][1]+'"/></a:xfrm>'+
+      '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>'+
+      '<xdr:clientData/></xdr:oneCellAnchor>'});
+  if(!n)return null;
+  return {
+    dibujoXml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" '+
+      'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'+anc+'</xdr:wsDr>',
+    dibujoRels:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      rels+'</Relationships>',
+    medios:medios}}
 function _wkHojaCron(cronos,actual,semanas){
   var C0=7;                                   /* las semanas empiezan en la col H */
   var filas=[],r=0;
@@ -8210,8 +8261,8 @@ async function _wkLibroApp(semN,corte,ids){
       _R=await _crPlanRecupera(D.bloques[0].id,corte,semN);
       await _crPlanGuarda(_R,D.bloques[0].id,semN);
     }catch(_er){try{console.warn('plan a recuperar:',_er)}catch(_e3){}}
-    var _hd=_wkHoja3WLA(semN,D.bloques[0],base,_R);
-    if(_hd)hojas.push(['PARA 3WLA',_hd.xml,null]);
+    var _hd=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte);
+    if(_hd)hojas.push(['PARA 3WLA',_hd.xml,_wk3wLogos(base)]);
   }catch(_ehd){try{console.warn('PARA 3WLA no se pudo armar:',_ehd)}catch(_e2){}}
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
   /* La caratula del reporte conserva su nombre del original -`Carátula (P)`-,
@@ -12323,7 +12374,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824f9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824g1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
