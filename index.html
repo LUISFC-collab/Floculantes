@@ -6420,7 +6420,9 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
            'AVANCE ACUMULADO','SALDO','Rate','HH Contractuales','% Restante','LÍNEA'];
   var COLS='BCDEFGHIJKL'.split('');
   var LINEAS=R?['PROGRAMADO SEM. ANT.','ACTUAL','FORECAST']:['PROGRAMADO'];
-  if(R&&R.hayBack)LINEAS.push('BACK_CRONOGRAMAS');
+  /* la cuarta linea se llama como el cronograma en CRONOGRAMAS, no como la
+     pantalla de donde sale */
+  if(R&&R.hayBack)LINEAS.push(String(bloque.id||'RESPALDO'));
   var filas=[],merges=[],altos={};
   function fila(r,cs,alto){
     filas.push('<row r="'+r+'"'+(alto?(' ht="'+alto+'" customHeight="1"'):'')+'>'+cs.join('')+'</row>')}
@@ -6500,12 +6502,13 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
          de la semana que cada fila deja ya calculadas. Multiplicar columnas
          hace que un solo texto perdido en el rango devuelva #VALUE! y el
          IFERROR lo convierta en un cero mudo. */
-      /* de que columna se pondera: la de la semana o la del acumulado */
+      /* cada cifra bajo su rotulo: el % de la semana en la primera columna
+         del resumen y el acumulado en la segunda */
       var FUE=acum?U1:T1;
-      cs.push(_wkCelE(T1,n,'',false,tinta(stPct,PLOMO,PLOMOB),
-        'IFERROR(SUMPRODUCT(('+RL+'='+q+')*'+RJ+'*$'+FUE+'$'+r0+':$'+FUE+'$'+nFin+')/'+
-        'SUMIF('+RL+','+q+','+RJ+'),0)'));
-      cs.push(_wkCelE(U1,n,'',false,tinta(stPct,PLOMO,PLOMOB)))});
+      var f=' IFERROR(SUMPRODUCT(('+RL+'='+q+')*'+RJ+'*$'+FUE+'$'+r0+':$'+FUE+'$'+nFin+')/'+
+        'SUMIF('+RL+','+q+','+RJ+'),0)';
+      cs.push(_wkCelE(T1,n,'',false,tinta(stPct,PLOMO,PLOMOB),acum?null:f.slice(1)));
+      cs.push(_wkCelE(U1,n,'',false,tinta(stPct,PLOMO,PLOMOB),acum?f.slice(1):null))});
     fila(n,cs)};
   LINEAS.forEach(function(_L,k){ponResumen(k,false)});
   LINEAS.forEach(function(_L,k){ponResumen(k,true)});
@@ -12511,7 +12514,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824g5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824g6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
