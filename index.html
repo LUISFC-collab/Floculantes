@@ -5766,10 +5766,6 @@ function _wkCostoApp(P){
   var H6="'P6-"+espina+"'";
   var RG=H6+'!$'+_WKP6.cod+'$3:$'+_WKP6.fin+'$'+(P.p6Ult||3);
   var CAB=H6+'!$'+_WKP6.cod+'$2:$'+_WKP6.fin+'$2';
-  /* el pie: acumulado y del periodo, por linea */
-  var pie0=ult+2, nL=lineas.length+1;
-  var fAcum=function(i){return pie0+i}, fPer=function(i){return pie0+nL+1+i};
-  var etiq=function(i){return i<lineas.length?('Prog. '+lineas[i]):'Actual'};
   var ret={};
   /* los totales de la cabecera suman SOLO la linea vigente: con varias lineas
      base, sumar la columna entera contaria cada actividad una vez por linea */
@@ -5778,6 +5774,9 @@ function _wkCostoApp(P){
   var C=_wkCabeceraDe(base,f0-1,ret), P0=C.P0, r=C.filas.slice();
   var eWbs=_wkEstDe(P0,f0), ePlan=_wkEstDe(P0,f0+4), eReal=_wkEstDe(P0,f0+5);
   var COLS=['A','B','C','D','E','F'];
+  /* el total de gastos generales, que el resumen de cada cuadro reparte por
+     avance. Se declara aqui porque el recorrido de abajo ya lo necesita. */
+  var TOTGG=(P.hojaGG?("'"+P.hojaGG+"'!"):'GG!')+'$'+(P.celdaGG||'F$86');
   P.mapa.forEach(function(m){
     var n=m.r+D, pr=m.r, c='';
     var cel=function(col,f,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+'><f>'+_wkEsc(f)+'</f></c>'};
@@ -5789,9 +5788,22 @@ function _wkCostoApp(P){
       var te=function(cl){return _wkTinteCuadro(ePlan.e[cl],m)};
       COLS.forEach(function(cl){
         c+=(cl==='C')?cel('C','PROGRAMACION!D'+pr,te('C')):vac(cl,te(cl))});
-      for(var kr=1;kr<=nS;kr++)
-        c+=cel(colC(kr),'IFERROR(SUMIF($F$'+f0+':$F$'+ult+',"'+m.marca+'",'+
-          colC(kr)+'$'+f0+':'+colC(kr)+'$'+ult+'),0)',te(colC(kr)));
+      /* el acumulado del cuadro sale de sumar sus filas; el gasto general va
+         por avance -el % de PHYSICAL por el total de la hoja GG- y el total
+         es la suma de los dos */
+      var base0=m.res+D, prAc=m.res+(m.cual==='plan'?0:1);
+      for(var kr=1;kr<=nS;kr++){
+        var cc=colC(kr),fq;
+        if(m.modo==='acum')
+          fq='IFERROR(SUMIF($F$'+(m.ini+D)+':$F$'+(m.fin+D)+',"'+m.marca+'",'+
+             cc+'$'+(m.ini+D)+':'+cc+'$'+(m.fin+D)+'),0)';
+        else if(m.modo==='per')
+          fq=(kr===1)?(cc+(base0)):('IFERROR('+cc+(base0)+'-'+colC(kr-1)+(base0)+',"")');
+        else if(m.modo==='gg')
+          fq='IFERROR('+_wkPhyHoja()+'!'+_wkgCol('O',kr)+'$'+prAc+'*'+TOTGG+',"")';
+        else
+          fq='IFERROR('+cc+(m.res+D+(m.cual==='plan'?0:1))+'+'+cc+(m.res+D+(m.cual==='plan'?4:5))+',"")';
+        c+=cel(cc,fq,te(cc))}
       r.push('<row r="'+n+'"'+ePlan.at+'>'+c+'</row>');return}
     if(m.tipo==='wbs'||m.tipo==='cuadro'||m.tipo==='total'){
       var tw=function(col){return _wkTinteCuadro(eWbs.e[col],m)};
@@ -5815,61 +5827,12 @@ function _wkCostoApp(P){
     for(var w=1;w<=nS;w++)
       c+=cel(colC(w),'$D'+(m.base+D)+'*PROGRAMACION!'+_wkgCol('N',w)+pr,est.e[colC(w)]);
     r.push('<row r="'+n+'"'+est.at+'>'+c+'</row>')});
-  /* ---- el pie, formulado ---- */
-  var rango=function(col){return '$'+col+'$'+f0+':$'+col+'$'+ult};
-  var titulo=function(i){return i<lineas.length?('ACUMULADO '+lineas[i]):'ACUMULADO REAL'};
-  var titulo2=function(i){return i<lineas.length?('DEL PERIODO '+lineas[i]):'DEL PERIODO REAL'};
-  var celF=function(col,n,f,e){return '<c r="'+col+n+'"'+(e?(' s="'+e+'"'):'')+'><f>'+_wkEsc(f)+'</f></c>'};
-  var celT=function(col,n,t,e){return '<c r="'+col+n+'"'+(e?(' s="'+e+'"'):'')+
-    ' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(t)+'</t></is></c>'};
-  for(var i=0;i<nL;i++){
-    var n1=fAcum(i), et=etiq(i), esReal=(i===lineas.length), c1='';
-    c1+=celT('C',n1,titulo(i),ePlan.e.C);
-    for(var w1=1;w1<=nS;w1++){
-      var cc=colC(w1);
-      c1+=celF(cc,n1,(esReal&&w1>P.iSem)?'""'
-        :('IFERROR(SUMIF('+rango('F')+',"'+et+'",'+cc+'$'+f0+':'+cc+'$'+ult+'),0)'),ePlan.e[cc])}
-    r.push('<row r="'+n1+'">'+c1+'</row>')}
-  for(var j=0;j<nL;j++){
-    var n2=fPer(j), na=fAcum(j), c2='';
-    c2+=celT('C',n2,titulo2(j),ePlan.e.C);
-    for(var w2=1;w2<=nS;w2++){
-      var cd=colC(w2);
-      c2+=celF(cd,n2,(w2===1)?(cd+na):('IFERROR('+cd+na+'-'+colC(w2-1)+na+',"")'),ePlan.e[cd])}
-    r.push('<row r="'+n2+'">'+c2+'</row>')}
-  /* ---- el gasto general, que va por avance ----
-     El % acumulado de cada linea ya esta en el pie de PHYSICAL, pesado por las
-     HH de cada actividad; aqui solo se multiplica por el total de gastos
-     generales de la hoja GG. Pasada la semana de corte el real no tiene %, y
-     entonces esta fila tampoco pone nada. */
-  var fGG=function(i){return fPer(nL-1)+2+i};
-  var titulo3=function(i){return i<lineas.length?('GASTO GENERAL '+lineas[i]):'GASTO GENERAL REAL'};
-  var TOT=(P.hojaGG?("'"+P.hojaGG+"'!"):'GG!')+'$'+(P.celdaGG||'F$86');
-  for(var g=0;g<nL;g++){
-    var n3=fGG(g), c3='';
-    c3+=celT('C',n3,titulo3(g),ePlan.e.C);
-    for(var w3=1;w3<=nS;w3++){
-      var ce=colC(w3), pf=(P.phyAcum&&P.phyAcum[g]);
-      c3+=celF(ce,n3, pf
-        ? ('IFERROR('+_wkPhyHoja()+'!'+_wkgCol('O',w3)+'$'+pf+'*'+TOT+',"")')
-        : '""', ePlan.e[ce])}
-    r.push('<row r="'+n3+'">'+c3+'</row>')}
-  /* y la suma de cada concepto con su gasto general */
-  var fTot=function(i){return fGG(nL-1)+2+i};
-  var titulo4=function(i){return i<lineas.length?('TOTAL '+lineas[i]+' + GG'):'TOTAL REAL + GG'};
-  for(var q=0;q<nL;q++){
-    var n4=fTot(q), c4='';
-    c4+=celT('C',n4,titulo4(q),ePlan.e.C);
-    for(var w4=1;w4<=nS;w4++){
-      var cf=colC(w4);
-      c4+=celF(cf,n4,'IFERROR('+cf+fAcum(q)+'+'+cf+fGG(q)+',"")',ePlan.e[cf])}
-    r.push('<row r="'+n4+'">'+c4+'</row>')}
-  var ultPie=fTot(nL-1);
+  var ultPie=P.ultFila+D;
   var enc=base.slice(0,base.indexOf('<sheetData>'))
     .replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:'+ultCol+ultPie+'"/>');
   var pie=_wkLimpiaCola(base.slice(base.indexOf('</sheetData>')+12));
-  pie=pie.replace(/<autoFilter ref="[^"]*"[^>]*\/>/,'<autoFilter ref="A'+(f0-1)+':'+ultCol+ult+'"/>');
-  return {xml:enc+'<sheetData>'+r.join('')+'</sheetData>'+pie, ultima:ult,
+  pie=pie.replace(/<autoFilter ref="[^"]*"[^>]*\/>/,'<autoFilter ref="A'+(f0-1)+':'+ultCol+ultPie+'"/>');
+  return {xml:enc+'<sheetData>'+r.join('')+'</sheetData>'+pie, ultima:ultPie,
     ultimaPie:ultPie}}
 /* el nombre de la hoja, entrecomillado porque lleva espacios y un % */
 function _wkPhyHoja(){return "'PHYSICAL % PROGRESS'"}
@@ -6060,16 +6023,18 @@ function _wkPhysicalApp(P){
     if(m.tipo==='plan'&&lineas.indexOf(m.cron)<0)lineas.push(m.cron)});
   /* el pie: una fila de acumulado por linea -mas la del avance- y otra del
      periodo por cada una. Empieza dos filas por debajo de los datos. */
-  var pie0=ult+2, nL=lineas.length+1;
-  var fAcum=function(i){return pie0+i}, fPer=function(i){return pie0+nL+1+i};
-  var etiq=function(i){return i<lineas.length?('Prog. '+lineas[i]):'Actual'};
   var espina=lineas.length?lineas[0]:'';
+  /* el encabezado mira al resumen del PRIMER cuadro, que es el vigente */
+  var resDe=function(cual){
+    var e=null;P.mapa.forEach(function(m){
+      if(e||m.tipo!=='res'||m.modo!=='acum'||m.cual!==cual)return;e=m});
+    return e?(e.r+D):10};
   var ret={};
   ret['F9']='SUM(F10:F'+ult+')';
   ret['F10']='IFERROR(SUMIF($N$'+f0+':$N$'+ult+',"Prog. '+espina+'",$F$'+f0+':$F$'+ult+'),0)';
   var MT0='MATCH("Fecha de corte",$P$5:$'+_wkgCol('O',nS)+'$5,0)';
-  ret['G10']='IFERROR(INDEX(P'+fAcum(lineas.length-1)+':'+_wkgCol('O',nS)+fAcum(lineas.length-1)+','+MT0+'),0)';
-  ret['H10']='IFERROR(INDEX(P'+fAcum(lineas.length)+':'+_wkgCol('O',nS)+fAcum(lineas.length)+','+MT0+'),0)';
+  ret['G10']='IFERROR(INDEX(P'+resDe('plan')+':'+_wkgCol('O',nS)+resDe('plan')+','+MT0+'),0)';
+  ret['H10']='IFERROR(INDEX(P'+resDe('real')+':'+_wkgCol('O',nS)+resDe('real')+','+MT0+'),0)';
   var C=_wkCabeceraDe(base,14,ret), P0=C.P0, r=C.filas.slice();
   var eWbs=_wkEstDe(P0,11), ePlan=_wkEstDe(P0,15), eReal=_wkEstDe(P0,16);
   var COLS=['A','B','C','D','E','F','G','H','I','J','K','L','M','N'];
@@ -6117,56 +6082,27 @@ function _wkPhysicalApp(P){
       c+=cel(colP(w),'PROGRAMACION!'+_wkgCol('N',w)+pr,est.e[colP(w)]);
     r.push('<row r="'+n+'"'+est.at+'>'+c+'</row>')});
   var ultCol=colP(nS);
-  /* ---- el pie: las sumatorias, todas formuladas ----
-     El acumulado de una linea es el de sus actividades pesado por las HH que
-     cada una vale (columna F), que es justo lo que hace el SUMPRODUCT. Pasado
-     el corte, el avance real deja la celda vacia a proposito: asi la curva se
-     corta en la semana del reporte en vez de desplomarse a cero, y la hoja no
-     se llena de #N/D -por eso vacia y no NA(), que hace lo mismo en el grafico
-     pero se ve-. El grafico lleva dispBlanksAs="gap", que es lo que abre el
-     hueco. */
-  var rango=function(c){return '$'+c+'$'+f0+':$'+c+'$'+ult};
-  var titulo=function(i){return i<lineas.length?('ACUMULADO '+lineas[i]):'ACUMULADO REAL'};
-  var titulo2=function(i){return i<lineas.length?('DEL PERIODO '+lineas[i]):'DEL PERIODO REAL'};
-  var celF=function(col,n,f,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+
-    '><f>'+_wkEsc(f)+'</f></c>'};
-  var celT=function(col,n,t,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+
-    ' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(t)+'</t></is></c>'};
-  for(var i=0;i<nL;i++){
-    var n1=fAcum(i), et=etiq(i), esReal=(i===lineas.length), c1='';
-    c1+=celT('C',n1,titulo(i),ePlan.e.C);
-    for(var w=1;w<=nS;w++){
-      var cc=colP(w);
-      var f=(esReal&&w>P.iSem)?'""'
-        :('IFERROR(SUMPRODUCT(('+rango('N')+'="'+et+'")*'+rango('F')+'*'+cc+'$'+f0+':'+cc+'$'+ult+
-          ')/SUMIF('+rango('N')+',"'+et+'",'+rango('F')+'),0)');
-      c1+=celF(cc,n1,f,ePlan.e[cc])}
-    r.push('<row r="'+n1+'">'+c1+'</row>')}
-  for(var j=0;j<nL;j++){
-    var n2=fPer(j), na=fAcum(j), c2='';
-    c2+=celT('C',n2,titulo2(j),ePlan.e.C);
-    for(var w2=1;w2<=nS;w2++){
-      var cd=colP(w2);
-      var f2=(w2===1)?(cd+na):('IFERROR('+cd+na+'-'+colP(w2-1)+na+',"")');
-      c2+=celF(cd,n2,f2,ePlan.e[cd])}
-    r.push('<row r="'+n2+'">'+c2+'</row>')}
-  var ultPie=fPer(nL-1);
+  var ultPie=P.ultFila+D;
   var enc=base.slice(0,base.indexOf('<sheetData>'))
     .replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:'+ultCol+ultPie+'"/>');
   var pie=_wkLimpiaCola(base.slice(base.indexOf('</sheetData>')+12));
   pie=pie.replace(/<autoFilter ref="[^"]*"[^>]*\/>/,'<autoFilter ref="A8:'+ultCol+ult+'"/>');
   pie=pie.replace('</worksheet>','<drawing r:id="rId1"/></worksheet>');
-  /* la curva: una serie por linea base y la del avance, marcada */
-  var series=[];
-  for(var k=0;k<nL;k++){
-    var col=(k<lineas.length)?_WK_SERIE[k%_WK_SERIE.length]:['E0721C','28575'];
-    series.push({nombre:titulo(k),fila:fAcum(k),color:col[0],ancho:col[1],
-      guion:(k<lineas.length-1)?'dash':'', marca:(k===lineas.length)})}
+  /* La curva sale de los resumenes de cada cuadro: por cada uno, su plan y su
+     avance. El plan discontinuo y el avance con marcadores, los dos del color
+     de su cuadro, para que se lean en pareja. */
+  var series=[],acum=[];
+  P.mapa.forEach(function(m){
+    if(m.tipo!=='res'||m.modo!=='acum')return;
+    var cl=_WK_SERIE[(m.ib||0)%_WK_SERIE.length];
+    acum.push({cron:m.cron,cual:m.cual,fila:m.r+D});
+    series.push({nombre:m.etiqueta,fila:m.r+D,color:cl[0],
+      ancho:(m.cual==='real')?'28575':'22225',
+      guion:(m.cual==='plan')?'dash':'', marca:(m.cual==='real')})});
   var grafico=_wkCurvaXml({hoja:'PHYSICAL % PROGRESS',titulo:'CURVA DE AVANCE FÍSICO — % ACUMULADO',
     series:series,filaCat:7,colIni:colP(1),colFin:ultCol,colNom:'C',
     catFmt:'"S"0',valFmt:'0%',valMax:1,valUnit:0.1});
-  var dibujo=_wkDibujoXml({col0:1,fila0:ultPie+1,col1:15,fila1:ultPie+27,nombre:'Curva de avance'});
-  var acum=[];for(var q=0;q<nL;q++)acum.push(fAcum(q));
+  var dibujo=_wkDibujoXml({col0:1,fila0:ultPie+2,col1:15,fila1:ultPie+28,nombre:'Curva de avance'});
   return {xml:enc+'<sheetData>'+r.join('')+'</sheetData>'+pie, ultima:ult,
     ultimaPie:ultPie, grafico:grafico, dibujo:dibujo, acum:acum, lineas:lineas}}
 /* ------------------------- PROGRAMACION -----------------------------------
@@ -6204,7 +6140,7 @@ function _wkProgApp(P){
     /* debajo del total, el resumen del cuadro: acumulado y del periodo,
        del plan y del avance */
     pos.push({ini:ini,pri:E.lista.length?E.lista[0].r:ini,fin:n0-1,tot:n0,res:n0+1});
-    n0+=5});
+    n0+=9});
   var ultFila=n0-1;
   var cab=[];
   P0.filas.forEach(function(f){
@@ -6318,7 +6254,11 @@ function _wkProgApp(P){
     var RES=[['acum','plan','ACUMULADO PLAN ('+bl.id+')','Prog. '+bl.id],
              ['acum','real','ACUMULADO ACTUAL ('+bl.id+')','Actual'],
              ['per','plan','DEL PERIODO PLAN ('+bl.id+')','Prog. '+bl.id],
-             ['per','real','DEL PERIODO ACTUAL ('+bl.id+')','Actual']];
+             ['per','real','DEL PERIODO ACTUAL ('+bl.id+')','Actual'],
+             ['gg','plan','GASTO GENERAL PLAN ('+bl.id+')','Prog. '+bl.id],
+             ['gg','real','GASTO GENERAL ACTUAL ('+bl.id+')','Actual'],
+             ['tgg','plan','TOTAL PLAN + GG ('+bl.id+')','Prog. '+bl.id],
+             ['tgg','real','TOTAL ACTUAL + GG ('+bl.id+')','Actual']];
     RES.forEach(function(z,iz){
       n=pb.res+iz;
       var cr='';
@@ -6326,18 +6266,20 @@ function _wkProgApp(P){
         cr+=(cx==='D')?cel('D',z[2],col(cx,1),true):val(cx,'',col(cx,1))});
       cr+=val(colS(0),'',ePlan.e[colS(0)]);
       for(var w3=1;w3<=nS;w3++){
-        var cc=colS(w3),f3;
+        var cc=colS(w3),f3='';
         if(z[0]==='acum'){
           f3='IFERROR(SUMPRODUCT(($M$'+pb.ini+':$M$'+pb.fin+'="'+z[3]+'")*$K$'+pb.ini+':$K$'+
              pb.fin+'*'+cc+'$'+pb.ini+':'+cc+'$'+pb.fin+')/$K$'+pb.tot+',0)'}
-        else{
+        else if(z[0]==='per'){
           var ra=pb.res+(z[1]==='plan'?0:1);
           f3=(w3===1)?(cc+ra):('IFERROR('+cc+ra+'-'+colS(w3-1)+ra+',"")')}
-        cr+=cel(cc,f3,ePlan.e[cc])}
+        /* las de gasto general solo tienen sentido en COSTO: aqui se dejan
+           vacias, pero la fila existe para que las cuatro hojas casen */
+        cr+=f3?cel(cc,f3,ePlan.e[cc]):val(cc,'',ePlan.e[cc])}
       mapa.push({tipo:'res',r:n,cron:bl.id,ib:ib,nivel:1,modo:z[0],cual:z[1],
         etiqueta:z[2],marca:z[3],ini:pb.ini,fin:pb.fin,tot:pb.tot,res:pb.res});
       r.push('<row r="'+n+'"'+ePlan.at+'>'+cr+'</row>')});
-    n=pb.res+4});
+    n=pb.res+8});
   var ultCol=_wkgCol('N',nS);
   var enc=base.slice(0,base.indexOf('<sheetData>'));
   enc=enc.replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:'+ultCol+ultFila+'"/>');
@@ -10649,7 +10591,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823v2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823w1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
