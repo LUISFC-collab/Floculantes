@@ -6213,6 +6213,27 @@ async function _crPlanRecupera(cronId,corte,semN){
     Object.keys(actual[cod]).forEach(function(f){
       fore[cod][f]=actual[cod][f];
       if(!priIni||f<priIni)priIni=f});
+    /* de aqui en adelante manda la PROGRAMACION de cada partida: el forecast
+       no es una reparticion inventada, es lo que se ha programado hacer */
+    var conProg=false;
+    if(hh>0&&typeof state!=='undefined'&&state.prog){
+      (t.items||[]).forEach(function(i){
+        var pr=state.prog[i];if(!pr||!pr.start)return;
+        var hi=(Number(u.items[i])||0)/_crVeces(rp,i);
+        if(!(hi>0))return;
+        var oc=[];
+        try{oc=(typeof occupiedDays==='function')?occupiedDays(pr.start,pr.dias||1):[pr.start]}
+        catch(_eo){oc=[pr.start]}
+        /* solo lo que queda por hacer, y solo despues del corte */
+        var fut=oc.filter(function(d){return d>corte&&d>=vIni&&d<=vFin});
+        if(!fut.length)return;
+        var hecho=0;
+        try{var a2=_crAvanceDe([i],corte,{cod:cod,rp:rp});hecho=Math.max(0,Math.min(100,a2.pct||0))/100}catch(_ea){}
+        var queda=Math.max(0,1-hecho)*hi/hh;
+        if(!(queda>1e-9))return;
+        conProg=true;
+        var pdd=queda/fut.length;
+        fut.forEach(function(d){fore[cod][d]=(fore[cod][d]||0)+pdd})})}
     if(saldo>1e-9&&hh>=0){
       /* la ventana de esta actividad: no antes del dia siguiente al corte, ni
          antes de lo que el propio LB1 decia */
@@ -6221,8 +6242,10 @@ async function _crPlanRecupera(cronId,corte,semN){
       var libres=_crASerial(vFin)-_crASerial(rIni)+1;
       var dur=Math.max(1,Math.min(nd||1,libres));
       if(dur>libres)dur=libres;
-      var pdf=saldo/dur;
-      for(var k3=0;k3<dur;k3++)fore[cod][_crDeSerial(_crASerial(rIni)+k3)]=pdf;
+      /* si no hay programacion de donde leer, se reparte el saldo */
+      if(!conProg){
+        var pdf=saldo/dur;
+        for(var k3=0;k3<dur;k3++)fore[cod][_crDeSerial(_crASerial(rIni)+k3)]=pdf}
       /* la secuencia arranca donde empezo el trabajo de verdad, no en el
          corte: si esta actividad ya venia avanzando, el plan la incluye desde
          ese dia y por eso sale cumplida */
@@ -6275,6 +6298,22 @@ async function _crPlanGuarda(R,cronId,semN){
     state.backcron.unshift(fila);
     _bkcSave();_bkcPush(fila);
   }catch(_e){}
+  /* y a la programacion de cada especialidad: sin esto el forecast no tiene de
+     donde leer. Solo se rellena lo que NO estaba programado; lo que ya tenia
+     programacion se respeta, que sera de alguien que la puso a mano. */
+  try{
+    state.prog=state.prog||{};
+    var n=0;
+    R.partidas.forEach(function(a){
+      if(!a||!a._id||!a.start)return;
+      if(state.prog[a._id]&&state.prog[a._id].start)return;
+      state.prog[a._id]={start:a.start,dias:a.dias||1,disc:a.disc||''};n++});
+    if(n){
+      if(typeof KPR!=='undefined')store.set(KPR,state.prog);
+      if(typeof logCambio==='function')logCambio('PLANEAMIENTO','plan a recuperar',n+' actividad(es)');
+      if(typeof syncNow==='function')syncNow(true)}
+    fila.programadas=n;
+  }catch(_e2){}
   return fila}
 /* ---------------- PARA 3WLA: el alimentador del look ahead -------------------
    Una fila por actividad del cronograma vigente, con la forma exacta de la
@@ -6312,7 +6351,12 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
     if(memo[k]==null)memo[k]=_wkBordeFondo(st,fill,bor);
     return memo[k]};
   var LET=['V','S','D','L','M','M','J'];
-  var BLQ=[12,21,30];
+  /* la rejilla entera del proyecto; solo se ven la del corte y las dos que
+     siguen, las demas van ocultas */
+  var SEMS=((typeof _wkSemanas==='function'?_wkSemanas():[])||[]).map(function(z){return z.n});
+  if(!SEMS.length)SEMS=[semN,semN+1,semN+2];
+  var VIS={};VIS[semN]=1;VIS[semN+1]=1;VIS[semN+2]=1;
+  var BLQ=SEMS.map(function(_s,q){return 12+q*9});
   var ROT=['ITEM','DESCRIPTION','Und','CANTIDAD CONTRACTUAL','CANTIDAD FORE CAST',
            'AVANCE ACUMULADO','SALDO','Rate','HH Contractuales','% Restante','LÍNEA'];
   var COLS='BCDEFGHIJKL'.split('');
@@ -6324,8 +6368,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
   var stNom=W.titulo,stDat=W.subtitulo;
   var fecha=corte||'';
   fila(1,[_wkCelE('D',1,String(_WKPROY||bloque.nombre||''),true,stNom)],26);
-  fila(2,[_wkCelE('D',2,'Reporte semanal · SEMANA '+semN+
-    '  ·  mira las semanas S'+semN+' a S'+(semN+2),true,stDat)],18);
+  fila(2,[_wkCelE('D',2,'Reporte semanal · SEMANA '+semN,true,stDat)],18);
   fila(3,[_wkCelE('D',3,'Fecha del reporte: '+
     (fecha?fecha.split('-').reverse().join('/'):'—')+
     '  ·  cronograma '+bloque.id,true,stDat)],18);
@@ -6333,8 +6376,8 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
   /* ---- filas 4, 5 y 6 ---- */
   var f4=[],f5=[],f6=[];
   BLQ.forEach(function(c0,b){
-    var sm=_wkSem(semN+b);
-    f4.push(_wkCelE(_wkColL(c0),4,'SEMANA '+(semN+b),true,stSem));
+    var sm=_wkSem(SEMS[b]);
+    f4.push(_wkCelE(_wkColL(c0),4,'SEMANA '+SEMS[b],true,stSem));
     for(var q=1;q<7;q++)f4.push(_wkCelE(_wkColL(c0+q),4,'',false,stSem));
     merges.push(_wkColL(c0)+'4:'+_wkColL(c0+6)+'4');
     for(var d=0;d<7;d++){
@@ -6349,7 +6392,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
   /* ---- fila 7: rotulos ---- */
   var f7=COLS.map(function(c,k){return _wkCelE(c,7,ROT[k],true,stCabF[c])});
   BLQ.forEach(function(c0,b){
-    f7.push(_wkCelE(_wkColL(c0+7),7,'% S'+(semN+b),true,stCabF.K));
+    f7.push(_wkCelE(_wkColL(c0+7),7,'% S'+SEMS[b],true,stCabF.K));
     f7.push(_wkCelE(_wkColL(c0+8),7,'% ACUM',true,stCabF.K))});
   fila(7,f7,30);
   /* ---- el cuerpo ---- */
@@ -6391,7 +6434,13 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
   var n=r0,nFilas=0;
   cuerpo.forEach(function(z){
     if(z.tit!=null){
-      fila(n,[_wkCelE('C',n,z.tit,true,z.niv?stTit2:stTit)]);n++;return}
+      /* la banda entera pintada, no una celda suelta en medio del vacio */
+      var fT=z.niv?'FFEAF0FA':'FFD6E4F7';
+      var eT=tinta(z.niv?stTit2:stTit,fT,'FF8FA8C8');
+      var bs=[];
+      'ABCDEFGHIJKL'.split('').forEach(function(cc){
+        bs.push(_wkCelE(cc,n,(cc==='C')?z.tit:'',cc==='C',eT))});
+      fila(n,bs,18);n++;return}
     var f=z.f,C=COL[z.k||0]||COL[0];
     var st=function(b2){return tinta(b2,C.sua,GRIS)};
     /* la cantidad: la de la P6 y, si esa actividad no tiene una propia porque
@@ -6424,7 +6473,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
     var cant=Number(f.cant)||0,und=String(f.und||'');
     if(!(cant>0)||!und)cant=1;
     BLQ.forEach(function(c0,b){
-      var sm=_wkSem(semN+b);
+      var sm=_wkSem(SEMS[b]);
       for(var d=0;d<7;d++){
         var fe=_wkISO(sm.ini+d),v=mapa[fe],findes=(d===1||d===2);
         var est=(v>1e-9)?tinta(stDato,C.fue,C.bor)
@@ -6435,7 +6484,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
       cs.push(_wkCelE(_wkColL(c0+8),n,'',false,tinta(stPct,C.sua,C.bor),
         'IFERROR(SUM('+rangos(b,n)+')/$E'+n+',0)'))});
     fila(n,cs);n++;nFilas++});
-  var ult=_wkColL(BLQ[2]+8);
+  var ult=_wkColL(BLQ[BLQ.length-1]+8);   /* la ultima semana, no la tercera */
   var xml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '+
     'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
@@ -6451,7 +6500,10 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
     '<col min="4" max="4" width="9" customWidth="1"/>'+
     '<col min="5" max="11" width="13" customWidth="1"/>'+
     '<col min="12" max="12" width="22" customWidth="1"/>'+
-    '<col min="13" max="'+(BLQ[2]+9)+'" width="11.5" customWidth="1"/></cols>'+
+    BLQ.map(function(c0,b){
+      var oculta=!VIS[SEMS[b]];
+      return '<col min="'+(c0+1)+'" max="'+(c0+9)+'" width="11.5" customWidth="1"'+
+        (oculta?' hidden="1"':'')+'/>'}).join('')+'</cols>'+
     '<sheetData>'+filas.join('')+'</sheetData>'+
     (merges.length?('<mergeCells count="'+merges.length+'">'+
       merges.map(function(m){return '<mergeCell ref="'+m+'"/>'}).join('')+'</mergeCells>'):'')+
@@ -12374,7 +12426,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824g1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824g2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
