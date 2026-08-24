@@ -2553,11 +2553,8 @@ async function _crAlcanceUI(c){
     '<button id="_crAlcOk" style="margin-top:9px;background:#1B5E8A;color:#fff;border:0;border-radius:10px;padding:13px;font-weight:800;font-size:13.5px">💾 Guardar alcance</button>';
   document.body.appendChild(ov);
   /* de quien es cada partida, para saber cuales quedan sueltas */
-  window._crDueno={};window._crTarDe={};window._crTarN={};
-  try{(await _crTareas(c.cron_id)).forEach(function(t){
-    window._crTarN[t.task_code]=(t.items||[]).length;
-    (t.items||[]).forEach(function(i){window._crDueno[i]=t.task_code;
-      (window._crTarDe[i]||(window._crTarDe[i]=[])).push(t.task_code)})})}catch(_ed){}
+  try{await _crMapasDe(c.cron_id)}catch(_ed){window._crDueno={};window._crTarDe={};
+    window._crTarN={};window._crTarIt={}}
   _crHoja=1;_crH2=null;_crAbre={};_crRes='';_crResIt='';_crVaA='';_crVaP='';
   var P=_crPartidas(),sel={},fec={},hhx={};
   P.forEach(function(p){var a=alc[p.id];sel[p.id]=a?a.inc:_crPorDefecto(p);
@@ -2602,6 +2599,24 @@ async function _crAlcanceUI(c){
         '<span style="color:#5a6b85;font-size:11px">→</span>'+
         '<input type="date" class="_crNoTog" data-fin="'+esc(p.id)+'" value="'+esc(fec[p.id].fin)+'" style="background:#0b1220;color:#cfe3ff;border:1px solid #24344f;border-radius:6px;padding:3px 5px;font-size:10.5px;font-family:inherit">'+
         (fec[p.id].origen?('<span style="color:#5a6b85;font-size:10px">'+esc(fec[p.id].origen)+'</span>'):'')+
+        /* con quien esta agrupada, y los mandos para cambiarlo */
+        (function(){
+          var T=_crTarMandaDe(p.id);
+          var otras=T?((window._crTarIt||{})[T]||[]).filter(function(z){return z!==p.id}):[];
+          var h='<span class="_crNoTog _crMas" data-mas="'+esc(p.id)+'" '+
+            'title="Agrupar con otra partida" style="cursor:pointer;display:inline-block;'+
+            'margin-left:4px;padding:1px 7px;border-radius:6px;font-size:11.5px;font-weight:900;'+
+            'background:#152436;border:1px solid #2b4162;color:#8ECBF5">+</span>';
+          if(T)h+='<span style="color:#5a6b85;font-size:10px;margin-left:4px">'+esc(T)+'</span>';
+          /* los codigos, solo para saber con quien va; quitarlas se hace en
+             la hoja 2, que es donde se ve el grupo entero */
+          otras.slice(0,8).forEach(function(z){
+            h+='<span style="display:inline-block;margin-left:4px;padding:1px 6px;'+
+              'border-radius:6px;font-size:10px;font-weight:800;'+
+              'background:#1c2440;border:1px solid #33447a;color:#A9C0FF">'+esc(z)+'</span>'});
+          if(otras.length>8)h+='<span style="color:#5a6b85;font-size:10px;margin-left:4px">+'+
+            (otras.length-8)+' más</span>';
+          return h})()+
         '</span></span>'+
         '<span style="flex:none;color:'+(propio?'#C39BD3':'#9FE8B0')+';font-size:11px;font-weight:800">'+hMe+' hh</span>'+
         /* de un vistazo: si esta partida entra o no en el alcance */
@@ -2637,6 +2652,26 @@ async function _crAlcanceUI(c){
           var z=ev.target;while(z&&z!==d&&!z.getAttribute('data-ver'))z=z.parentNode;
           if(z&&z!==d&&z.getAttribute('data-ver'))return;
           var tc=d.getAttribute('data-tc');_crAbre[tc]=!_crAbre[tc];pinta()}});
+      B.querySelectorAll('._crQui').forEach(function(d){
+        d.onclick=async function(ev){
+          ev.stopPropagation();
+          var z=d.getAttribute('data-qui'),T=d.getAttribute('data-quit');
+          var pp=((P||[]).filter(function(q){return q.id===z})[0]||{});
+          if(!confirm('¿Quitar '+z+' de la actividad '+T+'?\n\n'+
+            (pp.nom||'')+'\n\nDeja de estar agrupada con las demás. '+
+            'Sus '+(pp.hh||0)+' hh se quedan sin actividad que las planifique '+
+            'hasta que la agrupes en otra.'))return;
+          try{
+            fmsg('Quitando…');
+            var it=((window._crTarIt||{})[T]||[]).filter(function(k){return k!==z});
+            await _crGuardaMapeo(c.cron_id,[{task_code:T,items:it}]);
+            var tar=await _crMapasDe(c.cron_id);if(_crH2)_crH2.tar=tar;
+            var q=((window._crTarDe||{})[z]||[]).length;
+            pinta();
+            fmsg('✓ '+z+' fuera de '+T+
+              (q?(' — sigue en '+q+' actividad(es)'):' — ya no está en ninguna actividad'),
+              q?'#9FE8B0':'#E8C9A0');
+          }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8')}}});
       B.querySelectorAll('[data-ver]').forEach(function(d){
         d.onclick=function(ev){
           ev.stopPropagation();
@@ -2673,6 +2708,29 @@ async function _crAlcanceUI(c){
           var bv=document.getElementById('_crFeVer');
           if(bv)bv.textContent='👁 Ver hoja 1 · ALCANCE';
           pinta();
+        }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8')}}});
+    B.querySelectorAll('._crMas').forEach(function(d){
+      d.onclick=async function(ev){
+        ev.stopPropagation();
+        var id=d.getAttribute('data-mas'),T=_crTarMandaDe(id);
+        var ya=T?((window._crTarIt||{})[T]||[]):[];
+        var x=await _crPickPartida(P,[id].concat(ya),'Agrupar '+id+' con…');
+        if(!x)return;
+        try{
+          fmsg('Agrupando…');
+          var destino=T,mete=x;
+          if(!destino){destino=_crTarMandaDe(x);mete=id}
+          if(!destino){
+            fmsg('⚠ Ninguna de las dos está atada a una actividad — átalas en 🔗 Mapeo','#E8C9A0');return}
+          var it=((window._crTarIt||{})[destino]||[]).slice();
+          if(it.indexOf(mete)<0)it.push(mete);
+          await _crGuardaMapeo(c.cron_id,[{task_code:destino,items:it}]);
+          var tar=await _crMapasDe(c.cron_id);if(_crH2)_crH2.tar=tar;
+          var n=((window._crTarDe||{})[mete]||[]).length;
+          pinta();
+          fmsg('✓ '+mete+' agrupada en '+destino+
+            (n>1?(' — ojo: queda en '+n+' actividades y sus HH se reparten entre ellas'):''),
+            n>1?'#E8C9A0':'#9FE8B0');
         }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8')}}});
     B.querySelectorAll('[data-ini]').forEach(function(i){
       i.onclick=function(ev){ev.stopPropagation()};
@@ -2919,6 +2977,66 @@ var _crHoja=1, _crH2=null;
 /* Que actividades estan abiertas en la hoja 2, cual se ha marcado al llegar
    desde una partida y cual hay que traer a la vista de una sola vez. */
 var _crAbre={}, _crRes='', _crResIt='', _crVaA='', _crVaP='';
+/* De quien es cada partida y que lleva cada actividad. Se rehace entero cada
+   vez que se toca el mapeo, para que la lista no ensene lo de antes. */
+async function _crMapasDe(cronId){
+  var tar=await _crTareas(cronId);
+  window._crDueno={};window._crTarDe={};window._crTarN={};window._crTarIt={};
+  tar.forEach(function(t){
+    window._crTarN[t.task_code]=(t.items||[]).length;
+    window._crTarIt[t.task_code]=(t.items||[]).slice();
+    (t.items||[]).forEach(function(i){
+      window._crDueno[i]=t.task_code;
+      (window._crTarDe[i]||(window._crTarDe[i]=[])).push(t.task_code)})});
+  return tar}
+/* La actividad que manda para una partida: la que la agrupa con otras si la
+   hay, y si no la primera que la reclame. */
+function _crTarMandaDe(id){
+  var tcs=(window._crTarDe||{})[id]||[];
+  return tcs.filter(function(t){return (window._crTarN||{})[t]>1})[0]||tcs[0]||''}
+/* Un selector de partida, para agrupar sin salir de la lista. */
+function _crPickPartida(P,excl,titulo){
+  return new Promise(function(res){
+    var fuera={};(excl||[]).forEach(function(z){if(z)fuera[z]=1});
+    var ov=document.createElement('div');ov.id='_crPickOv';
+    ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;'+
+      'color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;'+
+      'display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
+    ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'+
+      '<b style="flex:1;font-size:14px;color:#8ECBF5;overflow-wrap:anywhere">'+esc(titulo||'Elegir partida')+'</b>'+
+      '<button id="_crPkX" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;'+
+        'padding:7px 12px;font-weight:800;font-size:13px">✕</button></div>'+
+      '<input id="_crPkB" placeholder="Buscar código o nombre…" '+
+        'style="background:#0d1117;color:#cfe3ff;border:1px solid #1d2c47;border-radius:9px;'+
+        'padding:9px 11px;font-size:13px;font-family:inherit;margin-bottom:8px">'+
+      '<div id="_crPkL" style="flex:1;overflow:auto;background:#0d1117;border:1px solid #1d2c47;'+
+        'border-radius:10px;padding:6px;-webkit-overflow-scrolling:touch"></div>';
+    document.body.appendChild(ov);
+    var cerrar=function(v){try{ov.remove()}catch(e){}res(v||null)};
+    var lista=function(){
+      var q=_crNrm(document.getElementById('_crPkB').value||''),H='';
+      (P||[]).forEach(function(p){
+        if(fuera[p.id])return;
+        if(q&&_crNrm(p.id+' '+p.nom).indexOf(q)<0)return;
+        var t=_crTarMandaDe(p.id);
+        H+='<div class="_crPk" data-pk="'+esc(p.id)+'" style="display:flex;gap:8px;'+
+          'align-items:baseline;padding:7px 8px;border-bottom:1px solid #16202e;cursor:pointer">'+
+          '<b style="flex:none;font-size:11.5px;color:#8ECBF5;min-width:66px">'+esc(p.id)+'</b>'+
+          '<span style="flex:1;min-width:90px;font-size:11.5px;overflow-wrap:anywhere">'+esc(p.nom)+'</span>'+
+          '<span style="flex:none;font-size:10.5px;font-weight:800;color:#9FE8B0">'+p.hh+' hh</span>'+
+          '<span style="flex:none;min-width:58px;text-align:center;padding:1px 6px;border-radius:6px;'+
+            'font-size:9.5px;font-weight:800;'+
+            (t?'background:#152436;border:1px solid #24344f;color:#8ECBF5'
+              :'background:#1a1f28;border:1px solid #2b3444;color:#7d8590')+
+            '">'+esc(t||'sin tarea')+'</span></div>'});
+      var L=document.getElementById('_crPkL');
+      L.innerHTML=H||'<div style="padding:14px;color:#7d8590;text-align:center">Sin coincidencias</div>';
+      L.querySelectorAll('._crPk').forEach(function(d){
+        d.onclick=function(){cerrar(d.getAttribute('data-pk'))}})};
+    document.getElementById('_crPkX').onclick=function(){cerrar(null)};
+    document.getElementById('_crPkB').oninput=lista;
+    lista();
+    try{document.getElementById('_crPkB').focus()}catch(e){}})}
 /* La hoja 2 tal como sale en el Excel: los titulos de WBS y, bajo cada uno,
    sus tareas con las partidas que reclaman. Las agrupaciones van con su color,
    el mismo que se ve en el resto del aplicativo. */
@@ -2995,12 +3113,13 @@ function _crPintaHoja2(D,P,sel,fec){
     var hh=hhs[k];
     var chips={};ms.forEach(function(i){var g=grupoDe[i];if(g)chips[g]=1});
     var info=!(t.items||[]).length;
-    var nIt=(t.items||[]).length, abrible=nIt>1;
+    var nIt=(t.items||[]).length, abrible=nIt>1, sola=(nIt===1);
     var marc=(_crRes&&_crRes===t.task_code);
     H+='<div data-tc="'+esc(t.task_code)+'"'+(abrible?' data-abre="1"':'')+
+      (sola?(' data-ver="'+esc(t.items[0])+'" title="Ver '+esc(t.items[0])+' en la hoja 1 · ALCANCE"'):'')+
       ' style="display:flex;gap:8px;align-items:flex-start;padding:6px 8px;'+
       'margin-left:'+(ruta.length*13)+'px;border-bottom:1px solid #16202e;'+
-      (abrible?'cursor:pointer;':'')+
+      (abrible||sola?'cursor:pointer;':'')+
       (marc?'background:#241a33;border-left:3px solid #A66BD6;border-radius:7px;':'')+'">'+
       '<b style="flex:none;color:#8ECBF5;font-size:11px;min-width:54px">'+esc(t.task_code)+'</b>'+
       '<span style="flex:1;min-width:120px;overflow-wrap:anywhere">'+
@@ -3018,8 +3137,8 @@ function _crPintaHoja2(D,P,sel,fec){
       '<span style="flex:none;font-size:11px;font-weight:800;color:'+
         (info?'#7d8590':(hh>0?'#9FE8B0':'#E8C9A0'))+'">'+
         (info?'informativa':(Math.round(hh*100)/100)+' hh')+'</span>'+
-      (abrible?('<span style="flex:none;width:14px;text-align:center;color:#7d8590;'+
-        'font-size:11px">'+(_crAbre[t.task_code]?'▾':'▸')+'</span>'):'')+'</div>';
+      '<span style="flex:none;width:14px;text-align:center;color:#7d8590;font-size:11px">'+
+        (abrible?(_crAbre[t.task_code]?'▾':'▸'):(sola?'↦':''))+'</span></div>';
     /* abierta: que partidas del alcance esta contando, y cuales no */
     if(abrible&&_crAbre[t.task_code]){
       H+='<div style="margin:0 0 6px '+(ruta.length*13+16)+'px;padding:5px 0 2px;'+
@@ -3042,7 +3161,12 @@ function _crPintaHoja2(D,P,sel,fec){
                    :'background:#2a1c1c;border:1px solid #4a2a2a;color:#FFB4A8')+
             '">'+(dentro?'CUENTA':'FUERA')+'</span>'+
           '<span style="flex:none;width:12px;text-align:center;color:#7d8590;'+
-            'font-size:10px">↦</span></div>'});
+            'font-size:10px">↦</span>'+
+          '<span class="_crQui" data-qui="'+esc(i)+'" data-quit="'+esc(t.task_code)+'" '+
+            'title="Quitar '+esc(i)+' de la agrupación" '+
+            'style="flex:none;width:19px;text-align:center;cursor:pointer;'+
+            'border-radius:5px;font-size:11px;font-weight:900;color:#FFB4A8;'+
+            'background:#2a1c1c;border:1px solid #4a2a2a">✕</span></div>'});
       H+='</div>'}});
   if(!orden.length)return '<div style="padding:14px;color:#7d8590;text-align:center">Sin tareas</div>';
   H+='<div style="display:flex;gap:8px;align-items:center;margin-top:8px;'+
@@ -11326,7 +11450,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824d6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824d7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
