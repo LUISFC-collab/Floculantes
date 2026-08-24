@@ -6545,6 +6545,33 @@ var _WK_TIPO=[
 function _wkTipoDe(ruta){
   for(var i=0;i<_WK_TIPO.length;i++)if(_WK_TIPO[i][0].test(ruta))return _WK_TIPO[i][1];
   return ''}
+/* ---------------- Una serie mas en el grafico del panel --------------------
+   Para meter el LB0 en la misma grafica sin tocarle el formato, la serie no se
+   escribe: se CLONA la que ya hay y se le cambian solo tres cosas -las filas a
+   las que mira, su nombre y su color-. Asi el trazo, el grosor y todo lo demas
+   quedan exactamente como estaban.
+
+   El identificador unico hay que renovarlo, pero SOLO su valor: quitar el
+   extLst entero se lleva por delante las categorias y los valores. */
+function _wkClonaSerie(ser,P){
+  var s=String(ser);
+  s=s.replace(/<c:idx val="\d+"\/>/,'<c:idx val="'+P.idx+'"/>')
+     .replace(/<c:order val="\d+"\/>/,'<c:order val="'+P.idx+'"/>');
+  if(P.filas)s=_wkChartFilas(s,P.hoja,P.filas);
+  if(P.color&&P.viejo)s=s.split('val="'+P.viejo+'"').join('val="'+P.color+'"');
+  if(P.nombre!=null)s=s.replace(/<c:tx><c:v>[\s\S]*?<\/c:v><\/c:tx>/,
+    '<c:tx><c:v>'+_wkEsc(P.nombre)+'</c:v></c:tx>');
+  /* un identificador nuevo, cambiando solo su valor */
+  s=s.replace(/(c16:uniqueId val=")[^"]*(")/,function(t,a,b){
+    return a+'{'+('0000000'+(P.idx+9000).toString(16).toUpperCase()).slice(-8)+
+      '-B7F0-4990-BB87-840E784478FA}'+b});
+  return s}
+/* Mete las series clonadas detras de la ultima que haya en ese tipo de grafico */
+function _wkMeteSeries(chart,tipo,nuevas){
+  if(!nuevas.length)return chart;
+  var re=new RegExp('(<c:'+tipo+'>[\\s\\S]*<\\/c:ser>)');
+  if(!re.test(chart))return chart;
+  return chart.replace(re,'$1'+nuevas.join(''))}
 /* El grafico del panel mira a las filas del resumen: se reapuntan a las que
    ese cuadro tiene en este libro. Se cambian SOLO las filas nombradas, no el
    resto del grafico, para que su aspecto no se mueva. */
@@ -6892,22 +6919,33 @@ async function _wkLibroApp(semN,corte,ids){
     var chg={};
     var hp=_wkPanelApp({base:pan.hojas['PANEL CONTROL'],res:resRS,semanas:sem,
       off:offPan,iSem:D.iSem,chart:chg});
-    /* el grafico va en una pieza aparte: se reapunta ahi */
+    /* El grafico va en una pieza aparte. Primero se reapunta al cuadro vigente
+       y despues se le anaden las lineas base clonando SUS series, para no
+       inventar formato: solo cambian las filas, el nombre y el color. */
     if(ap&&chg.cambios)Object.keys(ap.partes).forEach(function(rp){
       if(!/^xl\/charts\/chart\d+\.xml$/.test(rp))return;
-      ap.partes[rp]=_wkChartFilas(ap.partes[rp],'PHYSICAL % PROGRESS',chg.cambios)});
+      var ch=_wkChartFilas(ap.partes[rp],'PHYSICAL % PROGRESS',chg.cambios);
+      var sers=ch.match(/<c:ser>[\s\S]*?<\/c:ser>/g)||[];
+      if(sers.length>=2&&resRS.length>1){
+        var PAL=[['1F6FB2','7030A0'],['9C4A0A','008080'],['4B2A70','B03A2E']];
+        var nuevas=[],n0=sers.length;
+        for(var q=1;q<resRS.length;q++){
+          var c=resRS[q], col=PAL[(q-1)%PAL.length];
+          nuevas.push(_wkClonaSerie(sers[0],{idx:n0++,hoja:'PHYSICAL % PROGRESS',
+            filas:(function(){var f={};f[resRS[0].pAcum]=c.pAcum;return f})(),
+            viejo:'00B050',color:col[0],nombre:'Programado ('+c.id+')'}));
+          nuevas.push(_wkClonaSerie(sers[1],{idx:n0++,hoja:'PHYSICAL % PROGRESS',
+            filas:(function(){var f={};f[resRS[0].rAcum]=c.rAcum;return f})(),
+            viejo:'C00000',color:col[1]}))}
+        ch=_wkMeteSeries(ch,'lineChart',nuevas)}
+      /* la primera serie lleva el nombre escrito a mano: que diga el suyo */
+      ch=ch.replace(/<c:tx><c:v>Programado \([^<]*\)<\/c:v><\/c:tx>/,
+        '<c:tx><c:v>Programado ('+_wkEsc(resRS[0].id)+')</c:v></c:tx>');
+      ap.partes[rp]=ch});
     hojas.push(['REPORTE SEMANAL',hp.xml,
       ap?{relsHoja:ap.rels,partes:ap.partes}:null]);
     /* las dos hojas que sus graficos leen, con su formato */
-    ['STAFFING TABULATION CHART','CONSTRUCTION EQUIPMENT SCHE '].forEach(function(nm){
-      if(!pan.hojas[nm])return;
-      var a2=pan.activos[nm]||null;
-      hojas.push([nm,_wkCorreEstilos(_wkLimpiaSalvoDibujo(pan.hojas[nm]),offPan),
-        a2?{relsHoja:a2.rels,partes:a2.partes}:null])})}
-  /* el panel cuenta RFI y FCR: sin esas hojas sus formulas quedarian colgando */
-  ['RFI','FCR'].forEach(function(nm){
-    if(base.hojas[nm])
-      hojas.push([nm,_wkReapuntaCaratula(_wkLimpiaHoja(base.hojas[nm])),null])});
+  }
   mete('PROGRAMACION',_wkLimpiaHoja(prog.xml),10);
   /* METRADO y PHYSICAL son espejo de PROGRAMACION: siguen su mapa de filas */
   var comun={semanas:sem,iSem:D.iSem,mapa:prog.mapa,ultFila:prog.ultima,
@@ -6926,6 +6964,16 @@ async function _wkLibroApp(semN,corte,ids){
       p6Ult:p6Ult,hojaGG:HGG,celdaGG:'F$86',
       phyAcum:(phy&&phy.acum)||null},comun));
     mete('COSTO',cos.xml,7,null)}
+  /* Las hojas de apoyo van al FINAL: no son del reporte, estan para que el
+     panel tenga de donde leer. */
+  if(pan)['STAFFING TABULATION CHART','CONSTRUCTION EQUIPMENT SCHE '].forEach(function(nm){
+    if(!pan.hojas[nm])return;
+    var a2=pan.activos[nm]||null;
+    hojas.push([nm,_wkCorreEstilos(_wkLimpiaSalvoDibujo(pan.hojas[nm]),offPan),
+      a2?{relsHoja:a2.rels,partes:a2.partes}:null])});
+  ['RFI','FCR'].forEach(function(nm){
+    if(base.hojas[nm])
+      hojas.push([nm,_wkReapuntaCaratula(_wkLimpiaHoja(base.hojas[nm])),null])});
   return {hojas:hojas,styles:_wkPintorCierra(estilos),ss:base.ss,
     info:{actividades:prog.actividades,
       crons:D.bloques.map(function(b){return b.id}),espina:D.esp.id,
@@ -10939,7 +10987,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824b4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824c1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
