@@ -5489,6 +5489,225 @@ function _wkCaratulaApp(info){
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
     ultima:ult, celdaSemana:'C17'}}
+/* ---------------- El pintor: la letra de los datos, oscura ------------------
+   Donde hay dato tiene que verse que lo hay. En vez de repintar las hojas a
+   mano -que romperia el formato de las verdes- se deriva de cada estilo otro
+   igual pero con la letra oscura y, si la celda es numero, con dos decimales.
+   Los rellenos, los bordes y la alineacion se quedan como estaban.
+
+   Se abre antes de generar las hojas, se pide un estilo por celda y al final
+   se cierra: ahi es cuando las fuentes y los estilos nuevos entran en el
+   styles.xml. Por eso el libro se arma primero y los estilos se sellan luego. */
+var _WKPINTA=null;
+var _WK_TINTA='FF0F1E2E';          /* el azul casi negro de los datos */
+/* los formatos que Excel trae de fabrica, para saber que decimales llevan */
+var _WKNFB={0:'General',1:'0',2:'0.00',3:'#,##0',4:'#,##0.00',9:'0%',10:'0.00%',
+  11:'0.00E+00',12:'# ?/?',13:'# ??/??',14:'dd/mm/yyyy',15:'d-mmm-yy',16:'d-mmm',
+  17:'mmm-yy',18:'h:mm AM/PM',19:'h:mm:ss AM/PM',20:'h:mm',21:'h:mm:ss',
+  22:'m/d/yy h:mm',37:'#,##0 ;(#,##0)',38:'#,##0 ;[Red](#,##0)',
+  39:'#,##0.00;(#,##0.00)',40:'#,##0.00;[Red](#,##0.00)',45:'mm:ss',
+  46:'[h]:mm:ss',47:'mmss.0',48:'##0.0E+0',49:'@'};
+/* Saca los bloques hijos de una seccion del styles */
+function _wkSaca(xml,tag,hijo){
+  var m=xml.match(new RegExp('<'+tag+' count="\\d+"[^>]*>([\\s\\S]*?)</'+tag+'>'));
+  if(!m)return [];
+  var uno=new RegExp('<'+hijo+'(?:\\s[^>]*?)?(?:/>|>[\\s\\S]*?</'+hijo+'>)','g');
+  return m[1].match(uno)||[]}
+/* Dos decimales, sin estropear fechas ni lo que ya los trae */
+function _wkDosDec(code){
+  if(!code||code==='General')return '#,##0.00';
+  var limpio=String(code).replace(/\[[^\]]*\]/g,'').replace(/"[^"]*"/g,'').replace(/\\./g,'');
+  if(/[dmyhs]/i.test(limpio))return code;        /* es fecha u hora: no se toca */
+  if(/\.[0#]/.test(code))                        /* ya trae decimales: se completan a dos */
+    return code.replace(/\.([0#]+)/g,function(_t,d){
+      return '.'+(d.length>=2?d:(d+new Array(3-d.length).join('0')))});
+  return String(code).replace(/([#,]*0)(?![0#.])/g,'$1.00')}
+function _wkPintorAbre(styles){
+  var nfm={};(styles.match(/<numFmt [^>]*\/>/g)||[]).forEach(function(t){
+    var id=+(t.match(/numFmtId="(\d+)"/)||[])[1];
+    var c=(t.match(/formatCode="([^"]*)"/)||[])[1];
+    if(id!=null)nfm[id]=_wkDesEsc(c||'')});
+  _WKPINTA={fuentes:_wkSaca(styles,'fonts','font'),
+    xfs:_wkSaca(styles,'cellXfs','xf'),
+    codigos:nfm, usados:{},
+    nuevasF:[],nuevosX:[],nuevosNf:[],cache:{},
+    nF:_wkCuenta(styles,'fonts'), nX:_wkCuenta(styles,'cellXfs'), sig:300};
+  (styles.match(/numFmtId="(\d+)"/g)||[]).forEach(function(t){
+    _WKPINTA.usados[+t.match(/\d+/)[0]]=1})}
+function _wkDesEsc(s){return String(s).replace(/&quot;/g,'"').replace(/&lt;/g,'<')
+  .replace(/&gt;/g,'>').replace(/&amp;/g,'&')}
+/* Una fuente clara -la de las cabeceras en fondo oscuro- no se oscurece */
+function _wkFuenteClara(f){
+  var m=/<color[^>]*rgb="([0-9A-Fa-f]{8})"/.exec(f||'');
+  if(m){var r=parseInt(m[1].slice(2,4),16),g=parseInt(m[1].slice(4,6),16),b=parseInt(m[1].slice(6,8),16);
+    return (r*0.299+g*0.587+b*0.114)>150}
+  return /<color[^>]*theme="0"/.test(f||'')}
+/* Devuelve el estilo gemelo con la letra oscura (y dos decimales si es numero) */
+function _wkPinta(s,num){
+  var P=_WKPINTA;if(!P)return s;
+  s=(s==null||s==='')?0:+s;
+  if(!(s>=0)||s>=P.nX+P.nuevosX.length)return s;
+  var k=s+'|'+(num?1:0);
+  if(P.cache[k]!=null)return P.cache[k];
+  var xf=P.xfs[s];if(!xf){P.cache[k]=s;return s}
+  var fid=+((xf.match(/fontId="(\d+)"/)||[])[1]||0);
+  var fuente=P.fuentes[fid]||'';
+  var nuevoF=fid;
+  if(!_wkFuenteClara(fuente)){
+    var osc=/<color[^>]*\/>/.test(fuente)
+      ? fuente.replace(/<color[^>]*\/>/,'<color rgb="'+_WK_TINTA+'"/>')
+      : fuente.replace('<font>','<font><color rgb="'+_WK_TINTA+'"/>');
+    if(osc===fuente)osc=fuente.replace('</font>','<color rgb="'+_WK_TINTA+'"/></font>');
+    var i=P.nuevasF.indexOf(osc);
+    if(i<0){P.nuevasF.push(osc);i=P.nuevasF.length-1}
+    nuevoF=P.nF+i}
+  var nfId=+((xf.match(/numFmtId="(\d+)"/)||[])[1]||0), nuevoNf=nfId;
+  if(num){
+    var code=(P.codigos[nfId]!=null)?P.codigos[nfId]:(_WKNFB[nfId]||'General');
+    var dos=_wkDosDec(code);
+    if(dos!==code){
+      var yaB=null;
+      Object.keys(_WKNFB).forEach(function(id){if(_WKNFB[id]===dos&&yaB==null)yaB=+id});
+      var yaC=null;
+      Object.keys(P.codigos).forEach(function(id){if(P.codigos[id]===dos&&yaC==null)yaC=+id});
+      if(yaC!=null)nuevoNf=yaC;
+      else if(yaB!=null)nuevoNf=yaB;
+      else{while(P.usados[P.sig])P.sig++;nuevoNf=P.sig++;P.usados[nuevoNf]=1;
+        P.codigos[nuevoNf]=dos;
+        P.nuevosNf.push('<numFmt numFmtId="'+nuevoNf+'" formatCode="'+_wkEsc(dos)+'"/>')}}}
+  if(nuevoF===fid&&nuevoNf===nfId){P.cache[k]=s;return s}
+  var nx=xf.replace(/fontId="\d+"/,'fontId="'+nuevoF+'"')
+           .replace(/numFmtId="\d+"/,'numFmtId="'+nuevoNf+'"');
+  if(!/applyFont=/.test(nx))nx=nx.replace('<xf ','<xf applyFont="1" ');
+  else nx=nx.replace(/applyFont="0"/,'applyFont="1"');
+  if(num){if(!/applyNumberFormat=/.test(nx))nx=nx.replace('<xf ','<xf applyNumberFormat="1" ');
+    else nx=nx.replace(/applyNumberFormat="0"/,'applyNumberFormat="1"')}
+  var j=P.nuevosX.indexOf(nx);
+  if(j<0){P.nuevosX.push(nx);j=P.nuevosX.length-1}
+  var idx=P.nX+j;P.cache[k]=idx;return idx}
+/* Recorre una hoja y le cambia el estilo a toda celda con contenido, de la
+   fila `desde` para abajo: las cabeceras se quedan como estan. */
+function _wkPintaHoja(xml,desde){
+  if(!_WKPINTA)return xml;
+  return xml.replace(/<row r="(\d+)"([^>]*?)(\/>|>([\s\S]*?)<\/row>)/g,function(t,rs,at,cierre,cuerpo){
+    if(+rs<desde||cierre==='/>')return t;
+    var nc=cuerpo.replace(/<c r="([A-Z]+\d+)"([^>]*?)(\/>|>([\s\S]*?)<\/c>)/g,
+      function(t2,ref,cat,cie,dentro){
+        if(cie==='/>'||!dentro)return t2;             /* celda vacia: se deja */
+        var num=!/t="(inlineStr|s|str|b|e)"/.test(cat);
+        var s=(cat.match(/s="(\d+)"/)||[])[1];
+        var ns=_wkPinta(s==null?0:+s,num);
+        var cat2=/s="\d+"/.test(cat)?cat.replace(/s="\d+"/,'s="'+ns+'"')
+                                    :(' s="'+ns+'"'+cat);
+        return '<c r="'+ref+'"'+cat2+'>'+dentro+'</c>'});
+    return '<row r="'+rs+'"'+at+'>'+nc+'</row>'})}
+/* Sella el styles con lo que haya pedido el pintor */
+function _wkPintorCierra(styles){
+  var P=_WKPINTA;if(!P)return styles;
+  var x=styles;
+  x=_wkMete(x,'numFmts',P.nuevosNf);
+  x=_wkMete(x,'fonts',P.nuevasF);
+  x=_wkMete(x,'cellXfs',P.nuevosX);
+  return x}
+/* Igual, pero sobre la hoja entera */
+function _wkLimpiaHoja(xml){
+  var i=String(xml).indexOf('</sheetData>');
+  if(i<0)return _wkLimpiaCola(xml);
+  return xml.slice(0,i+12)+_wkLimpiaCola(xml.slice(i+12))}
+/* Las hojas heredadas traen referencias a dibujos y a configuraciones de
+   impresion que aqui no existen; si se dejan, el archivo sale "reparado". */
+function _wkLimpiaCola(pie){
+  return String(pie)
+    .replace(/<drawing[^>]*\/>/g,'')
+    .replace(/<legacyDrawing[^>]*\/>/g,'')
+    .replace(/<legacyDrawingHF[^>]*\/>/g,'')
+    .replace(/<picture[^>]*\/>/g,'')
+    .replace(/<oleObjects>[\s\S]*?<\/oleObjects>/g,'')
+    .replace(/<controls>[\s\S]*?<\/controls>/g,'')
+    .replace(/<tableParts[^>]*\/>|<tableParts[^>]*>[\s\S]*?<\/tableParts>/g,'')
+    .replace(/(<pageSetup\b[^>]*?)\s+r:id="[^"]*"/g,'$1')}
+/* ---------------- La curva de avance fisico --------------------------------
+   Un grafico de lineas hecho a mano: no hay ninguno que copiar porque estas
+   hojas las genera el aplicativo desde cero. Lee las filas de sumatoria del
+   pie de PHYSICAL, que son formulas, asi que la curva se mueve sola cuando
+   cambia el cronograma o el avance. */
+var _WK_SERIE=[['1F6FB2','22225'],['E0721C','25400'],['2E7D5B','22225'],
+               ['8E44AD','22225'],['B03A2E','22225'],['117A8B','22225']];
+var _WK_GRIS='9AA7B8';
+function _wkTxPr(sz,col){
+  return '<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="'+sz+'">'+
+    '<a:solidFill><a:srgbClr val="'+col+'"/></a:solidFill>'+
+    '<a:latin typeface="Calibri"/></a:defRPr></a:pPr><a:endParaRPr lang="es-ES"/></a:p></c:txPr>'}
+/* series: [{nombre, fila, color, ancho, guion, marca}] ; cat: fila de las semanas */
+function _wkCurvaXml(P){
+  var H="'"+P.hoja.replace(/'/g,"''")+"'";
+  var c0=P.colIni, c1=P.colFin;
+  var sers=P.series.map(function(s,i){
+    var ln='<a:ln w="'+(s.ancho||'22225')+'" cap="rnd"><a:solidFill><a:srgbClr val="'+
+      s.color+'"/></a:solidFill>'+(s.guion?'<a:prstDash val="'+s.guion+'"/>':'')+'<a:round/></a:ln>';
+    var mk=s.marca
+      ? '<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr><a:solidFill>'+
+        '<a:srgbClr val="'+s.color+'"/></a:solidFill><a:ln w="9525"><a:solidFill>'+
+        '<a:srgbClr val="FFFFFF"/></a:solidFill></a:ln></c:spPr></c:marker>'
+      : '<c:marker><c:symbol val="none"/></c:marker>';
+    return '<c:ser><c:idx val="'+i+'"/><c:order val="'+i+'"/>'+
+      '<c:tx><c:strRef><c:f>'+H+'!$'+P.colNom+'$'+s.fila+'</c:f></c:strRef></c:tx>'+
+      '<c:spPr>'+ln+'<a:effectLst/></c:spPr>'+mk+
+      '<c:cat><c:numRef><c:f>'+H+'!$'+c0+'$'+P.filaCat+':$'+c1+'$'+P.filaCat+'</c:f></c:numRef></c:cat>'+
+      '<c:val><c:numRef><c:f>'+H+'!$'+c0+'$'+s.fila+':$'+c1+'$'+s.fila+'</c:f></c:numRef></c:val>'+
+      '<c:smooth val="0"/></c:ser>'}).join('');
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+   '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" '+
+   'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '+
+   'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
+   '<c:roundedCorners val="0"/><c:chart>'+
+   '<c:title><c:tx><c:rich><a:bodyPr rot="0" spcFirstLastPara="1" vertOverflow="ellipsis" vert="horz" wrap="square" anchor="ctr" anchorCtr="1"/><a:lstStyle/>'+
+   '<a:p><a:pPr><a:defRPr sz="1200" b="1"><a:solidFill><a:srgbClr val="1F3864"/></a:solidFill>'+
+   '<a:latin typeface="Calibri"/></a:defRPr></a:pPr>'+
+   '<a:r><a:rPr lang="es-ES" sz="1200" b="1"/><a:t>'+_wkEsc(P.titulo)+'</a:t></a:r></a:p>'+
+   '</c:rich></c:tx><c:overlay val="0"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:title>'+
+   '<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/>'+
+   '<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>'+sers+
+   '<c:marker val="1"/><c:axId val="411001"/><c:axId val="411002"/></c:lineChart>'+
+   '<c:catAx><c:axId val="411001"/><c:scaling><c:orientation val="minMax"/></c:scaling>'+
+   '<c:delete val="0"/><c:axPos val="b"/>'+
+   '<c:numFmt formatCode="&quot;S&quot;0" sourceLinked="0"/>'+
+   '<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>'+
+   '<c:spPr><a:noFill/><a:ln w="9525" cap="flat"><a:solidFill><a:srgbClr val="C7D2E0"/></a:solidFill></a:ln></c:spPr>'+
+   _wkTxPr(900,'5C6779')+
+   '<c:crossAx val="411002"/><c:crosses val="autoZero"/><c:auto val="1"/>'+
+   '<c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>'+
+   '<c:valAx><c:axId val="411002"/><c:scaling><c:orientation val="minMax"/>'+
+   '<c:max val="1"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>'+
+   '<c:majorGridlines><c:spPr><a:ln w="9525" cap="flat"><a:solidFill>'+
+   '<a:srgbClr val="E6EBF2"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>'+
+   '<c:numFmt formatCode="0%" sourceLinked="0"/>'+
+   '<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>'+
+   '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>'+_wkTxPr(900,'5C6779')+
+   '<c:crossAx val="411001"/><c:crosses val="autoZero"/><c:crossBetween val="between"/>'+
+   '<c:majorUnit val="0.1"/></c:valAx>'+
+   '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>'+
+   '<c:legend><c:legendPos val="b"/><c:overlay val="0"/>'+
+   '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>'+_wkTxPr(900,'1F3864')+'</c:legend>'+
+   '<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>'+
+   '<c:spPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>'+
+   '<a:ln w="9525"><a:solidFill><a:srgbClr val="D8E0EA"/></a:solidFill></a:ln></c:spPr>'+
+   '</c:chartSpace>'}
+/* El marco que ancla el grafico a la hoja */
+function _wkDibujoXml(D){
+  var an=function(tag,col,fila){return '<xdr:'+tag+'><xdr:col>'+col+'</xdr:col><xdr:colOff>0</xdr:colOff>'+
+    '<xdr:row>'+fila+'</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:'+tag+'>'};
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+   '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" '+
+   'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'+
+   '<xdr:twoCellAnchor>'+an('from',D.col0,D.fila0)+an('to',D.col1,D.fila1)+
+   '<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr>'+
+   '<xdr:cNvPr id="2" name="'+_wkEsc(D.nombre||'Curva')+'"/><xdr:cNvGraphicFramePr/>'+
+   '</xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>'+
+   '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">'+
+   '<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" '+
+   'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/>'+
+   '</a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>'}
 /* --------------------- METRADO y PHYSICAL % PROGRESS -----------------------
    Las dos son espejo de PROGRAMACION: METRADO copia sus filas una a una y
    PHYSICAL las mismas con un desplazamiento de uno. Por eso el generador de
@@ -5573,9 +5792,23 @@ function _wkPhysicalApp(P){
      lista crece o mengua, sigue cuadrando. */
   var D=(P.filaIni||15)-((P.mapa[0]&&P.mapa[0].r)||10);
   var ult=P.ultFila+D;
+  var f0=P.filaIni||15;
+  /* las lineas que hay, en el orden en que las escribe PROGRAMACION; la
+     ultima es la espina, el cronograma vigente */
+  var lineas=[];P.mapa.forEach(function(m){
+    if(m.tipo==='plan'&&lineas.indexOf(m.cron)<0)lineas.push(m.cron)});
+  /* el pie: una fila de acumulado por linea -mas la del avance- y otra del
+     periodo por cada una. Empieza dos filas por debajo de los datos. */
+  var pie0=ult+2, nL=lineas.length+1;
+  var fAcum=function(i){return pie0+i}, fPer=function(i){return pie0+nL+1+i};
+  var etiq=function(i){return i<lineas.length?('Prog. '+lineas[i]):'Actual'};
+  var espina=lineas.length?lineas[lineas.length-1]:'';
   var ret={};
   ret['F9']='SUM(F10:F'+ult+')';
-  ret['F10']='SUMIFS($F$11:$F$'+ult+',$N$11:$N$'+ult+',"Prog.")';
+  ret['F10']='IFERROR(SUMIF($N$'+f0+':$N$'+ult+',"Prog. '+espina+'",$F$'+f0+':$F$'+ult+'),0)';
+  var MT0='MATCH("Fecha de corte",$P$5:$'+_wkgCol('O',nS)+'$5,0)';
+  ret['G10']='IFERROR(INDEX(P'+fAcum(lineas.length-1)+':'+_wkgCol('O',nS)+fAcum(lineas.length-1)+','+MT0+'),0)';
+  ret['H10']='IFERROR(INDEX(P'+fAcum(lineas.length)+':'+_wkgCol('O',nS)+fAcum(lineas.length)+','+MT0+'),0)';
   var C=_wkCabeceraDe(base,14,ret), P0=C.P0, r=C.filas.slice();
   var eWbs=_wkEstDe(P0,11), ePlan=_wkEstDe(P0,15), eReal=_wkEstDe(P0,16);
   var COLS=['A','B','C','D','E','F','G','H','I','J','K','L','M','N'];
@@ -5614,10 +5847,53 @@ function _wkPhysicalApp(P){
       c+=cel(colP(w),'PROGRAMACION!'+_wkgCol('N',w)+pr,est.e[colP(w)]);
     r.push('<row r="'+n+'"'+est.at+'>'+c+'</row>')});
   var ultCol=colP(nS);
+  /* ---- el pie: las sumatorias, todas formuladas ----
+     El acumulado de una linea es el de sus actividades pesado por las HH que
+     cada una vale (columna F), que es justo lo que hace el SUMPRODUCT. Pasado
+     el corte, el avance real devuelve NA() a proposito: asi la curva se corta
+     en la semana del reporte en vez de desplomarse a cero. */
+  var rango=function(c){return '$'+c+'$'+f0+':$'+c+'$'+ult};
+  var titulo=function(i){return i<lineas.length?('ACUMULADO '+lineas[i]):'ACUMULADO REAL'};
+  var titulo2=function(i){return i<lineas.length?('DEL PERIODO '+lineas[i]):'DEL PERIODO REAL'};
+  var celF=function(col,n,f,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+
+    '><f>'+_wkEsc(f)+'</f></c>'};
+  var celT=function(col,n,t,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+
+    ' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(t)+'</t></is></c>'};
+  for(var i=0;i<nL;i++){
+    var n1=fAcum(i), et=etiq(i), esReal=(i===lineas.length), c1='';
+    c1+=celT('C',n1,titulo(i),ePlan.e.C);
+    for(var w=1;w<=nS;w++){
+      var cc=colP(w);
+      var f=(esReal&&w>P.iSem)?'NA()'
+        :('IFERROR(SUMPRODUCT(('+rango('N')+'="'+et+'")*'+rango('F')+'*'+cc+'$'+f0+':'+cc+'$'+ult+
+          ')/SUMIF('+rango('N')+',"'+et+'",'+rango('F')+'),0)');
+      c1+=celF(cc,n1,f,ePlan.e[cc])}
+    r.push('<row r="'+n1+'">'+c1+'</row>')}
+  for(var j=0;j<nL;j++){
+    var n2=fPer(j), na=fAcum(j), c2='';
+    c2+=celT('C',n2,titulo2(j),ePlan.e.C);
+    for(var w2=1;w2<=nS;w2++){
+      var cd=colP(w2);
+      var f2=(w2===1)?(cd+na):('IFERROR('+cd+na+'-'+colP(w2-1)+na+',NA())');
+      c2+=celF(cd,n2,f2,ePlan.e[cd])}
+    r.push('<row r="'+n2+'">'+c2+'</row>')}
+  var ultPie=fPer(nL-1);
   var enc=base.slice(0,base.indexOf('<sheetData>'))
-    .replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:'+ultCol+ult+'"/>');
-  var pie=base.slice(base.indexOf('</sheetData>')+12);
-  return {xml:enc+'<sheetData>'+r.join('')+'</sheetData>'+pie, ultima:ult}}
+    .replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:'+ultCol+ultPie+'"/>');
+  var pie=_wkLimpiaCola(base.slice(base.indexOf('</sheetData>')+12));
+  pie=pie.replace(/<autoFilter ref="[^"]*"[^>]*\/>/,'<autoFilter ref="A8:'+ultCol+ult+'"/>');
+  pie=pie.replace('</worksheet>','<drawing r:id="rId1"/></worksheet>');
+  /* la curva: una serie por linea base y la del avance, marcada */
+  var series=[];
+  for(var k=0;k<nL;k++){
+    var col=(k<lineas.length)?_WK_SERIE[k%_WK_SERIE.length]:['E0721C','28575'];
+    series.push({nombre:titulo(k),fila:fAcum(k),color:col[0],ancho:col[1],
+      guion:(k<lineas.length-1)?'dash':'', marca:(k===lineas.length)})}
+  var grafico=_wkCurvaXml({hoja:'PHYSICAL % PROGRESS',titulo:'CURVA DE AVANCE FÍSICO — % ACUMULADO',
+    series:series,filaCat:7,colIni:colP(1),colFin:ultCol,colNom:'C'});
+  var dibujo=_wkDibujoXml({col0:1,fila0:ultPie+1,col1:15,fila1:ultPie+27,nombre:'Curva de avance'});
+  return {xml:enc+'<sheetData>'+r.join('')+'</sheetData>'+pie, ultima:ult,
+    ultimaPie:ultPie, grafico:grafico, dibujo:dibujo}}
 /* ------------------------- PROGRAMACION -----------------------------------
    Los encabezados no se rehacen: se COPIAN las filas 1 a 9 de la hoja
    original, con sus estilos, sus anchos y sus fechas. De la 10 en adelante se
@@ -5914,6 +6190,7 @@ async function _wkLibroApp(semN,corte,ids){
   var base=await _wkBaseFormato();
   var fus=_wkFusionaEstilos(base.styles);
   _wkOffsetEstilos(fus.off);
+  _wkPintorAbre(fus.xml);
   var D=await _wkDatosLibro(semN,corte,ids);
   var sem=D.sem;
   var pctReal=0,hhAlc=D.esp.u.hh;
@@ -5943,23 +6220,30 @@ async function _wkLibroApp(semN,corte,ids){
   /* el orden que pide el reporte: primero los alimentadores, luego las
      listas de actividades, y al final la caratula y la programacion */
   var hojas=[];
+  /* `desde` es la primera fila de datos: de ahi para abajo el pintor pone la
+     letra oscura y los dos decimales, y las cabeceras se quedan como estan */
+  var mete=function(nombre,xml,desde,extra){
+    hojas.push([nombre,_wkPintaHoja(xml,desde),extra||null])};
   D.C.forEach(function(c){
-    hojas.push(['ACTIVITY_PLAN ('+c.id+')',_wkFeederEsp(c.id,D.filas,sem).xml])});
-  hojas.push([HREAL,_wkFeederEsp('__REAL__',D.filas,sem).xml]);
+    mete('ACTIVITY_PLAN ('+c.id+')',_wkFeederEsp(c.id,D.filas,sem).xml,3)});
+  mete(HREAL,_wkFeederEsp('__REAL__',D.filas,sem).xml,3);
   D.C.forEach(function(c){
-    hojas.push(['P6-'+c.id,_wkHojaP6Esp(c.id,D.filas,sem).xml])});
-  hojas.push(['Carátula',carXml||car.xml]);
-  hojas.push(['PROGRAMACION',prog.xml]);
+    mete('P6-'+c.id,_wkHojaP6Esp(c.id,D.filas,sem).xml,3)});
+  /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
+  hojas.push(['Carátula',_wkLimpiaHoja(carXml||car.xml),null]);
+  mete('PROGRAMACION',_wkLimpiaHoja(prog.xml),10);
   /* METRADO y PHYSICAL son espejo de PROGRAMACION: siguen su mapa de filas */
   var comun={semanas:sem,iSem:D.iSem,mapa:prog.mapa,ultFila:prog.ultima,
     colFeeder:sem.map(function(x,i){return _wkFCol(i)})};
   if(base.hojas['METRADO'])
-    hojas.push(['METRADO',_wkMetradoApp(Object.assign({
-      base:base.hojas['METRADO']},comun)).xml]);
-  if(base.hojas['PHYSICAL % PROGRESS'])
-    hojas.push(['PHYSICAL % PROGRESS',_wkPhysicalApp(Object.assign({
-      base:base.hojas['PHYSICAL % PROGRESS'],filaIni:15},comun)).xml]);
-  return {hojas:hojas,styles:fus.xml,ss:base.ss,
+    mete('METRADO',_wkLimpiaHoja(_wkMetradoApp(Object.assign({
+      base:base.hojas['METRADO']},comun)).xml),10);
+  var phy=null;
+  if(base.hojas['PHYSICAL % PROGRESS']){
+    phy=_wkPhysicalApp(Object.assign({
+      base:base.hojas['PHYSICAL % PROGRESS'],filaIni:15},comun));
+    mete('PHYSICAL % PROGRESS',phy.xml,15,{grafico:phy.grafico,dibujo:phy.dibujo})}
+  return {hojas:hojas,styles:_wkPintorCierra(fus.xml),ss:base.ss,
     info:{actividades:prog.actividades,
       crons:D.C.map(function(c){return c.id}),espina:D.esp.id,
       caratula:carXml?'copiada de la plantilla':'armada por el aplicativo',
@@ -5968,6 +6252,13 @@ async function _wkLibroApp(semN,corte,ids){
 function _wkPaqueteApp(hojas,styles,ss){
   var ov=function(i){return '<Override PartName="/xl/worksheets/sheet'+i+
     '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'};
+  /* las hojas que llevan grafico arrastran tres piezas mas y sus tipos */
+  var conG=[];hojas.forEach(function(h,i){if(h[2]&&h[2].grafico)conG.push(i+1)});
+  var tiposG=conG.map(function(i){
+    return '<Override PartName="/xl/drawings/drawing'+i+'.xml" ContentType='+
+      '"application/vnd.openxmlformats-officedocument.drawing+xml"/>'+
+      '<Override PartName="/xl/charts/chart'+i+'.xml" ContentType='+
+      '"application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>'}).join('');
   var partes=[
     ['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
@@ -5977,7 +6268,7 @@ function _wkPaqueteApp(hojas,styles,ss){
       hojas.map(function(_h,i){return ov(i+1)}).join('')+
       '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+
       (ss?'<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>':'')+
-      '</Types>'],
+      tiposG+'</Types>'],
     ['_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
       '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
@@ -5996,7 +6287,17 @@ function _wkPaqueteApp(hojas,styles,ss){
       '</Relationships>'],
     ['xl/styles.xml',styles||_wkEstilosApp()]];
   if(ss)partes.push(['xl/sharedStrings.xml',ss]);
-  hojas.forEach(function(h,i){partes.push(['xl/worksheets/sheet'+(i+1)+'.xml',h[1]])});
+  hojas.forEach(function(h,i){
+    partes.push(['xl/worksheets/sheet'+(i+1)+'.xml',h[1]]);
+    if(!(h[2]&&h[2].grafico))return;
+    var k=i+1, REL='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+    partes.push(['xl/worksheets/_rels/sheet'+k+'.xml.rels',REL+
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing'+k+'.xml"/></Relationships>']);
+    partes.push(['xl/drawings/drawing'+k+'.xml',h[2].dibujo]);
+    partes.push(['xl/drawings/_rels/drawing'+k+'.xml.rels',REL+
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart'+k+'.xml"/></Relationships>']);
+    partes.push(['xl/charts/chart'+k+'.xml',h[2].grafico])});
   return partes}
 /* ---------------- Una hoja P6 por cronograma, hecha por la app -------------
    La plantilla trae UNA hoja 'P6-2' con la lista de actividades, y esa lista
@@ -9911,7 +10212,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823n3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823p1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
