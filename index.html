@@ -6487,6 +6487,137 @@ function _wkFeederEsp(bloques,semanas,real){
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
     ultima:n-1}}
+/* ---------------- Los adornos de una hoja copiada --------------------------
+   Una hoja del libro guia no es solo su XML: el PANEL CONTROL, por ejemplo,
+   tiene casi todo lo que se ve en su DIBUJO -dos formas, dos imagenes y tres
+   graficos-. Si se copia la hoja sin eso, sale en blanco.
+
+   Aqui se recoge el arbol entero: la hoja, su dibujo, los graficos del dibujo,
+   los estilos y colores de cada grafico y las imagenes. Se recorre siguiendo
+   las relaciones, sin dar por hecho que piezas hay, y se conservan las RUTAS
+   originales para que las relaciones internas sigan valiendo tal cual. */
+async function _wkActivosDe(mapa,leer,crudo,rutaHoja){
+  var relsHoja=await leer(rutaHoja.replace(/([^/]+)$/,'_rels/$1.rels'));
+  if(!relsHoja)return null;
+  /* la configuracion de impresora no se lleva: es un binario que no aporta */
+  var limpio=relsHoja.replace(/<Relationship\b[^>]*printerSettings[^>]*\/>/g,'');
+  var partes={},cola=[];
+  var mete=function(base,rels){
+    var re=/<Relationship\b[^>]*\/>/g,m;
+    while(m=re.exec(rels||'')){
+      if(/TargetMode="External"/.test(m[0]))continue;
+      var tg=(m[0].match(/Target="([^"]*)"/)||[])[1]||'';
+      if(!tg||/^(https?:|mailto:)/i.test(tg))continue;
+      var r=_wkResuelve(base,tg);
+      if(partes[r]===undefined){partes[r]=null;cola.push(r)}}};
+  mete(rutaHoja,limpio);
+  while(cola.length){
+    var r=cola.shift();
+    var esBin=/\.(png|jpe?g|gif|bmp|emf|wmf|tiff?|svg|bin)$/i.test(r);
+    if(esBin){var by=await crudo(r);if(by)partes[r]=by;else delete partes[r];continue}
+    var x=await leer(r);
+    if(!x){delete partes[r];continue}
+    partes[r]=x;
+    mete(r,await leer(r.replace(/([^/]+)$/,'_rels/$1.rels')));
+    /* las relaciones de cada pieza viajan con ella */
+    var rr=await leer(r.replace(/([^/]+)$/,'_rels/$1.rels'));
+    if(rr)partes[r.replace(/([^/]+)$/,'_rels/$1.rels')]=rr}
+  return {rels:limpio,partes:partes}}
+/* El tipo de contenido de cada pieza, que el Content_Types tiene que declarar */
+var _WK_TIPO=[
+  [/^xl\/drawings\/drawing\d*\.xml$/,'application/vnd.openxmlformats-officedocument.drawing+xml'],
+  [/^xl\/charts\/chart\d*\.xml$/,'application/vnd.openxmlformats-officedocument.drawingml.chart+xml'],
+  [/^xl\/charts\/style\d*\.xml$/,'application/vnd.ms-office.chartstyle+xml'],
+  [/^xl\/charts\/colors\d*\.xml$/,'application/vnd.ms-office.chartcolorstyle+xml']];
+function _wkTipoDe(ruta){
+  for(var i=0;i<_WK_TIPO.length;i++)if(_WK_TIPO[i][0].test(ruta))return _WK_TIPO[i][1];
+  return ''}
+/* El grafico del panel mira a las filas del resumen: se reapuntan a las que
+   ese cuadro tiene en este libro. Se cambian SOLO las filas nombradas, no el
+   resto del grafico, para que su aspecto no se mueva. */
+function _wkChartFilas(xml,hoja,cambios){
+  var x=String(xml),H="'"+hoja+"'";
+  Object.keys(cambios).forEach(function(vieja){
+    var nueva=cambios[vieja];
+    var re=new RegExp('('+H.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+
+      '!\\$[A-Z]+\\$)'+vieja+'(?![0-9])','g');
+    x=x.replace(re,'$1'+nueva)});
+  return x}
+/* ---------------- El panel del reporte, con nuestros datos ------------------
+   La hoja viene de OTRO libro -el Contractor Weekly Report-, con su formato
+   entero: su dibujo, sus tres graficos y sus dos imagenes. Se trae tal cual y
+   despues se le cambian las conexiones para que mire a NUESTRAS hojas.
+
+   Sus estilos son los de aquel libro, asi que hay que fusionarlos con los de
+   este y correr los indices de la hoja: es lo mismo que ya se hace con los
+   estilos del aplicativo, pero con un juego que viene de fuera. */
+var _WKPAN=null;
+async function _wkPanelBase(){
+  if(_WKPAN)return _WKPAN;
+  var res=await fetch('panel.xlsx?v='+encodeURIComponent(typeof APP_VER!=='undefined'?APP_VER:''),
+    {cache:'no-store'});
+  if(!res.ok)return null;
+  var ent=_wkZipLeer(await res.arrayBuffer()),mapa={};
+  ent.forEach(function(e){mapa[e.nombre]=e});
+  var dec=new TextDecoder();
+  var leer=async function(n){var e=mapa[n];if(!e)return '';
+    return dec.decode(e.metodo===8?await _wkInflar(e.datos):e.datos)};
+  var crudo=async function(n){var e=mapa[n];if(!e)return null;
+    return e.metodo===8?await _wkInflar(e.datos):e.datos};
+  var hojas=_wkHojas(await leer('xl/workbook.xml'),await leer('xl/_rels/workbook.xml.rels'));
+  var H={},A={};
+  for(var n in hojas)if(mapa[hojas[n]]){
+    H[n]=await leer(hojas[n]);
+    A[n]=await _wkActivosDe(mapa,leer,crudo,hojas[n])}
+  _WKPAN={styles:await leer('xl/styles.xml'),hojas:H,activos:A};
+  return _WKPAN}
+/* Mete OTRO juego de estilos en el nuestro y devuelve cuanto hay que correr
+   cada indice. Igual que la fusion de los estilos del aplicativo, pero para
+   un juego que viene de fuera y del que no sabemos nada de antemano. */
+function _wkFusionaOtro(base,otro){
+  var HIJO={fonts:'font',fills:'fill',borders:'border',cellXfs:'xf',dxfs:'dxf'};
+  var saca=function(x,tag){
+    var m=x.match(new RegExp('<'+tag+' count="\\d+"[^>]*>([\\s\\S]*?)</'+tag+'>'));
+    if(!m)return [];
+    var h=HIJO[tag]||tag;
+    var uno=new RegExp('<'+h+'(?:\\s[^>]*?)?(?:/>|>[\\s\\S]*?</'+h+'>)','g');
+    return m[1].match(uno)||[]};
+  var off={font:_wkCuenta(base,'fonts'),fill:_wkCuenta(base,'fills'),
+    border:_wkCuenta(base,'borders'),xf:_wkCuenta(base,'cellXfs'),
+    dxf:_wkCuenta(base,'dxfs')};
+  var F=saca(otro,'fonts'),FI=saca(otro,'fills'),B=saca(otro,'borders');
+  var X=saca(otro,'cellXfs'),DX=saca(otro,'dxfs');
+  /* los formatos propios del otro libro (164 en adelante) se renumeran */
+  var usados={};(base.match(/numFmtId="(\d+)"/g)||[]).forEach(function(t){
+    usados[+t.match(/\d+/)[0]]=1});
+  var mapaNf={},sig=400;
+  var NF=(otro.match(/<numFmt [^>]*\/>/g)||[]).map(function(t){
+    var id=+t.match(/numFmtId="(\d+)"/)[1],nid=id;
+    if(usados[id]){while(usados[sig])sig++;nid=sig++}
+    usados[nid]=1;mapaNf[id]=nid;
+    return t.replace(/numFmtId="\d+"/,'numFmtId="'+nid+'"')});
+  X=X.map(function(t){
+    return t.replace(/fontId="(\d+)"/,function(_t,d){return 'fontId="'+(off.font+ +d)+'"'})
+            .replace(/fillId="(\d+)"/,function(_t,d){return 'fillId="'+(off.fill+ +d)+'"'})
+            .replace(/borderId="(\d+)"/,function(_t,d){return 'borderId="'+(off.border+ +d)+'"'})
+            .replace(/numFmtId="(\d+)"/,function(_t,d){
+              var id=+d;return 'numFmtId="'+(mapaNf[id]!=null?mapaNf[id]:id)+'"'})});
+  var x=base;
+  x=_wkMete(x,'numFmts',NF);
+  x=_wkMete(x,'fonts',F);
+  x=_wkMete(x,'fills',FI);
+  x=_wkMete(x,'borders',B);
+  x=_wkMete(x,'cellXfs',X);
+  x=_wkMete(x,'dxfs',DX);
+  return {xml:x,off:off}}
+/* Corre los indices de estilo de una hoja que viene de fuera */
+function _wkCorreEstilos(xml,off){
+  var x=String(xml).replace(/<c r="([A-Z]+\d+)"([^>]*?)s="(\d+)"/g,function(t,ref,at,s){
+    return '<c r="'+ref+'"'+at+'s="'+(off.xf+ +s)+'"'});
+  x=x.replace(/(<row\b[^>]*?\ss=")(\d+)(")/g,function(t,a,s,b){return a+(off.xf+ +s)+b});
+  x=x.replace(/(<col\b[^>]*?\bstyle=")(\d+)(")/g,function(t,a,s,b){return a+(off.xf+ +s)+b});
+  x=x.replace(/(<cfRule\b[^>]*?\bdxfId=")(\d+)(")/g,function(t,a,s,b){return a+(off.dxf+ +s)+b});
+  return x}
 /* ---------------- REPORTE SEMANAL ------------------------------------------
    Es el PANEL CONTROL del libro guia, copiado tal cual: su formato, sus
    combinaciones y sus formulas. Lo unico que se toca son las FILAS a las que
@@ -6509,7 +6640,7 @@ function _wkPonCelda(xml,ref,contenido,txt,quitaEstilo){
         ? '<c r="'+ref+'"'+at+' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(contenido)+'</t></is></c>'
         : '<c r="'+ref+'"'+at+'><f>'+_wkEsc(contenido)+'</f></c>'})+b})}
 function _wkPanelApp(P){
-  var x=P.base, R=P.res||[];
+  var x=_wkCorreEstilos(P.base,P.off||{xf:0,dxf:0}), R=P.res||[];
   var PHY="'PHYSICAL % PROGRESS'", ult=_wkgCol('O',(P.semanas||[]).length);
   /* las cuatro celdas de avance de una linea, con SUS filas */
   var avance=function(fila,c){
@@ -6648,7 +6779,14 @@ async function _wkLibroApp(semN,corte,ids){
   var base=await _wkBaseFormato();
   var fus=_wkFusionaEstilos(base.styles);
   _wkOffsetEstilos(fus.off);
-  _wkPintorAbre(fus.xml);
+  var estilos=fus.xml;
+  /* el panel trae sus propios estilos: se juntan AHORA, antes de que el pintor
+     empiece a derivar los suyos, o unos pisarian a los otros */
+  var pan=null,offPan={xf:0,dxf:0};
+  try{pan=await _wkPanelBase()}catch(_ep){}
+  if(pan&&pan.styles){var fu2=_wkFusionaOtro(estilos,pan.styles);
+    estilos=fu2.xml;offPan=fu2.off}
+  _wkPintorAbre(estilos);
   var D=await _wkDatosLibro(semN,corte,ids);
   var sem=D.sem;
   var pctReal=0,hhAlc=D.esp.u.hh;
@@ -6727,9 +6865,19 @@ async function _wkLibroApp(semN,corte,ids){
     x.pPer=x.perPlan+dPhy;   x.rPer=x.perReal+dPhy;
     x.cpAcum=x.acumPlan+dCosto; x.crAcum=x.acumReal+dCosto;
     x.cpPer=x.perPlan+dCosto;   x.crPer=x.perReal+dCosto});
-  if(base.hojas['PANEL CONTROL'])
+  /* El panel, con su formato entero: su dibujo, sus graficos y sus imagenes */
+  if(pan&&pan.hojas['PANEL CONTROL']){
+    var ap=pan.activos['PANEL CONTROL']||null;
     hojas.push(['REPORTE SEMANAL',
-      _wkPanelApp({base:base.hojas['PANEL CONTROL'],res:resRS,semanas:sem}).xml,null]);
+      _wkPanelApp({base:pan.hojas['PANEL CONTROL'],res:resRS,semanas:sem,
+        off:offPan,iSem:D.iSem}).xml,
+      ap?{relsHoja:ap.rels,partes:ap.partes}:null]);
+    /* las dos hojas que sus graficos leen, con su formato */
+    ['STAFFING TABULATION CHART','CONSTRUCTION EQUIPMENT SCHE '].forEach(function(nm){
+      if(!pan.hojas[nm])return;
+      var a2=pan.activos[nm]||null;
+      hojas.push([nm,_wkCorreEstilos(_wkLimpiaHoja(pan.hojas[nm]),offPan),
+        a2?{relsHoja:a2.rels,partes:a2.partes}:null])})}
   /* el panel cuenta RFI y FCR: sin esas hojas sus formulas quedarian colgando */
   ['RFI','FCR'].forEach(function(nm){
     if(base.hojas[nm])
@@ -6752,7 +6900,7 @@ async function _wkLibroApp(semN,corte,ids){
       p6Ult:p6Ult,hojaGG:HGG,celdaGG:'F$86',
       phyAcum:(phy&&phy.acum)||null},comun));
     mete('COSTO',cos.xml,7,null)}
-  return {hojas:hojas,styles:_wkPintorCierra(fus.xml),ss:base.ss,
+  return {hojas:hojas,styles:_wkPintorCierra(estilos),ss:base.ss,
     info:{actividades:prog.actividades,
       crons:D.bloques.map(function(b){return b.id}),espina:D.esp.id,
       caratula:carXml?'copiada de la plantilla':'armada por el aplicativo',
@@ -6780,6 +6928,17 @@ function _wkPaqueteApp(hojas,styles,ss){
       '"application/vnd.openxmlformats-officedocument.drawing+xml"/>';
     Object.keys(h[2].medios||{}).forEach(function(r){
       var e=String(r).split('.').pop().toLowerCase();if(MIME[e])exts[e]=MIME[e]})});
+  /* las hojas que traen sus piezas tal cual: cada una declara su tipo, y las
+     imagenes su extension */
+  var vistas={};
+  hojas.forEach(function(h,i){
+    if(!(h[2]&&h[2].partes))return;
+    Object.keys(h[2].partes).forEach(function(r){
+      if(vistas[r])return;vistas[r]=1;
+      if(/\.rels$/.test(r))return;
+      var tp=_wkTipoDe(r);
+      if(tp)tiposG+='<Override PartName="/'+r+'" ContentType="'+tp+'"/>';
+      else{var e=String(r).split('.').pop().toLowerCase();if(MIME[e])exts[e]=MIME[e]}})});
   var defsG=Object.keys(exts).map(function(e){
     return '<Default Extension="'+e+'" ContentType="'+exts[e]+'"/>'}).join('');
   var partes=[
@@ -6815,6 +6974,13 @@ function _wkPaqueteApp(hojas,styles,ss){
     partes.push(['xl/worksheets/sheet'+(i+1)+'.xml',h[1]]);
     var k=i+1, REL='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+    if(h[2]&&h[2].partes){
+      /* la hoja trae sus piezas con sus rutas originales: sus relaciones
+         internas siguen valiendo y no hay que reescribir ninguna */
+      if(h[2].relsHoja)partes.push(['xl/worksheets/_rels/sheet'+k+'.xml.rels',h[2].relsHoja]);
+      Object.keys(h[2].partes).forEach(function(r){
+        if(puestos[r])return;puestos[r]=1;partes.push([r,h[2].partes[r]])});
+      return}
     if(h[2]&&h[2].dibujoXml){
       /* dibujo de imagenes: se copia tal cual con sus relaciones, y los
          ficheros conservan su ruta para que los r:embed sigan valiendo */
@@ -10747,7 +10913,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824b1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
