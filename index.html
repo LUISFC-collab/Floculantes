@@ -2712,24 +2712,27 @@ async function _crAlcanceUI(c){
     B.querySelectorAll('._crMas').forEach(function(d){
       d.onclick=async function(ev){
         ev.stopPropagation();
-        var id=d.getAttribute('data-mas'),T=_crTarMandaDe(id);
-        var ya=T?((window._crTarIt||{})[T]||[]):[];
-        var x=await _crPickPartida(P,[id].concat(ya),'Agrupar '+id+' con…');
-        if(!x)return;
+        var id=d.getAttribute('data-mas');
+        var destino;
         try{
-          fmsg('Agrupando…');
-          var destino=T,mete=x;
-          if(!destino){destino=_crTarMandaDe(x);mete=id}
-          if(!destino){
-            fmsg('⚠ Ninguna de las dos está atada a una actividad — átalas en 🔗 Mapeo','#E8C9A0');return}
+          fmsg('Leyendo las actividades…');
+          destino=await _crPickTarea(await _crTareas(c.cron_id),id,
+            '¿En qué actividad agrupamos '+id+'?');
+          fmsg('');
+        }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8');return}
+        if(!destino)return;
+        try{
           var it=((window._crTarIt||{})[destino]||[]).slice();
-          if(it.indexOf(mete)<0)it.push(mete);
+          if(it.indexOf(id)>=0){fmsg('Ya estaba en '+destino,'#9db4d6');return}
+          fmsg('Agrupando…');
+          it.push(id);
           await _crGuardaMapeo(c.cron_id,[{task_code:destino,items:it}]);
           var tar=await _crMapasDe(c.cron_id);if(_crH2)_crH2.tar=tar;
-          var n=((window._crTarDe||{})[mete]||[]).length;
+          var n=((window._crTarDe||{})[id]||[]).length;
           pinta();
-          fmsg('✓ '+mete+' agrupada en '+destino+
-            (n>1?(' — ojo: queda en '+n+' actividades y sus HH se reparten entre ellas'):''),
+          fmsg('✓ '+id+' agrupada en '+destino+
+            (n>1?(' — ojo: queda en '+n+' actividades y sus HH se reparten entre ellas; '+
+                  'quítala de la otra con la ✕ en la hoja 2'):''),
             n>1?'#E8C9A0':'#9FE8B0');
         }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8')}}});
     B.querySelectorAll('[data-ini]').forEach(function(i){
@@ -2994,19 +2997,21 @@ async function _crMapasDe(cronId){
 function _crTarMandaDe(id){
   var tcs=(window._crTarDe||{})[id]||[];
   return tcs.filter(function(t){return (window._crTarN||{})[t]>1})[0]||tcs[0]||''}
-/* Un selector de partida, para agrupar sin salir de la lista. */
-function _crPickPartida(P,excl,titulo){
+/* El selector de actividad: a cual se mete la partida. */
+function _crPickTarea(tar,idP,titulo){
   return new Promise(function(res){
-    var fuera={};(excl||[]).forEach(function(z){if(z)fuera[z]=1});
+    var P=_crPartidas(),porId={};P.forEach(function(q){porId[q.id]=q});
+    var rp=_crReparto(tar);
+    var lst=(tar||[]).slice().sort(function(a,b){return (a.orden||0)-(b.orden||0)});
     var ov=document.createElement('div');ov.id='_crPickOv';
     ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;'+
       'color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;'+
       'display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
     ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'+
-      '<b style="flex:1;font-size:14px;color:#8ECBF5;overflow-wrap:anywhere">'+esc(titulo||'Elegir partida')+'</b>'+
+      '<b style="flex:1;font-size:14px;color:#8ECBF5;overflow-wrap:anywhere">'+esc(titulo||'Elegir actividad')+'</b>'+
       '<button id="_crPkX" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;'+
         'padding:7px 12px;font-weight:800;font-size:13px">✕</button></div>'+
-      '<input id="_crPkB" placeholder="Buscar código o nombre…" '+
+      '<input id="_crPkB" placeholder="Buscar actividad por código, nombre o WBS…" '+
         'style="background:#0d1117;color:#cfe3ff;border:1px solid #1d2c47;border-radius:9px;'+
         'padding:9px 11px;font-size:13px;font-family:inherit;margin-bottom:8px">'+
       '<div id="_crPkL" style="flex:1;overflow:auto;background:#0d1117;border:1px solid #1d2c47;'+
@@ -3015,20 +3020,29 @@ function _crPickPartida(P,excl,titulo){
     var cerrar=function(v){try{ov.remove()}catch(e){}res(v||null)};
     var lista=function(){
       var q=_crNrm(document.getElementById('_crPkB').value||''),H='';
-      (P||[]).forEach(function(p){
-        if(fuera[p.id])return;
-        if(q&&_crNrm(p.id+' '+p.nom).indexOf(q)<0)return;
-        var t=_crTarMandaDe(p.id);
-        H+='<div class="_crPk" data-pk="'+esc(p.id)+'" style="display:flex;gap:8px;'+
-          'align-items:baseline;padding:7px 8px;border-bottom:1px solid #16202e;cursor:pointer">'+
-          '<b style="flex:none;font-size:11.5px;color:#8ECBF5;min-width:66px">'+esc(p.id)+'</b>'+
-          '<span style="flex:1;min-width:90px;font-size:11.5px;overflow-wrap:anywhere">'+esc(p.nom)+'</span>'+
-          '<span style="flex:none;font-size:10.5px;font-weight:800;color:#9FE8B0">'+p.hh+' hh</span>'+
-          '<span style="flex:none;min-width:58px;text-align:center;padding:1px 6px;border-radius:6px;'+
-            'font-size:9.5px;font-weight:800;'+
-            (t?'background:#152436;border:1px solid #24344f;color:#8ECBF5'
-              :'background:#1a1f28;border:1px solid #2b3444;color:#7d8590')+
-            '">'+esc(t||'sin tarea')+'</span></div>'});
+      lst.forEach(function(t){
+        var w=String(t.wbs||'').split(' / ').filter(function(z){return z});
+        if(q&&_crNrm(t.task_code+' '+(t.nombre||'')+' '+(t.wbs||'')).indexOf(q)<0)return;
+        var its=(t.items||[]),ya=its.indexOf(idP)>=0;
+        var hh=0;its.forEach(function(k){
+          var pp=porId[k];if(pp)hh+=(Number(pp.hh)||0)/_crVeces(rp,k)});
+        H+='<div class="_crPk" data-pk="'+esc(t.task_code)+'" style="display:flex;gap:8px;'+
+          'align-items:flex-start;padding:7px 8px;border-bottom:1px solid #16202e;'+
+          'cursor:pointer'+(ya?';background:#14261d':'')+'">'+
+          '<b style="flex:none;font-size:11.5px;color:#8ECBF5;min-width:54px">'+esc(t.task_code)+'</b>'+
+          '<span style="flex:1;min-width:110px;font-size:11.5px;overflow-wrap:anywhere">'+
+            esc(String(t.nombre||''))+
+            '<br><span style="color:#5a6b85;font-size:10.5px">'+
+              (w.length?(esc(w[w.length-1])+' · '):'')+
+              esc(t.ini||'—')+' → '+esc(t.fin||'—')+' · '+
+              its.length+' partida'+(its.length===1?'':'s')+
+            '</span></span>'+
+          '<span style="flex:none;font-size:10.5px;font-weight:800;color:#9FE8B0">'+
+            (Math.round(hh*100)/100)+' hh</span>'+
+          (ya?('<span style="flex:none;min-width:62px;text-align:center;padding:1px 6px;'+
+            'border-radius:6px;font-size:9.5px;font-weight:800;background:#14261d;'+
+            'border:1px solid #1d3a2a;color:#9FE8B0">YA ESTÁ</span>'):'')+
+          '</div>'});
       var L=document.getElementById('_crPkL');
       L.innerHTML=H||'<div style="padding:14px;color:#7d8590;text-align:center">Sin coincidencias</div>';
       L.querySelectorAll('._crPk').forEach(function(d){
@@ -11450,7 +11464,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824d7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824d8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
