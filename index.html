@@ -5613,9 +5613,10 @@ function _wkComoSeLlama(hojas,quiero){
 /* Mete una hoja de la plantilla tal cual, con su dibujo si sus piezas estan.
    Si no estan hay que QUITAR el dibujo: un <drawing> que apunta a una relacion
    que no existe es justo lo que hace que Excel pida reparar el libro. */
-function _wkConDibujo(hojas,nom,base){
+function _wkConDibujo(hojas,nom,base,borrar){
   var a=(base.activos||{})[nom]||null;
   var x=_wkLimpiaSalvoDibujo(base.hojas[nom]);
+  if(borrar&&borrar.length)x=_wkBorraCeldas(x,borrar);
   if(a)hojas.push([nom,x,{relsHoja:a.rels,partes:a.partes}]);
   else hojas.push([nom,String(x).replace(/<drawing\b[^>]*\/>/g,''),null])}
 function _wkXmlTxt(t){return String(t||'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&')}
@@ -5813,6 +5814,147 @@ function _wkCel(col,r,v,texto){
   if(texto)return '<c r="'+col+r+'" t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(v)+'</t></is></c>';
   if(v==null||v==='')return '';
   return '<c r="'+col+r+'"><v>'+(Math.round(Number(v)*1e8)/1e8)+'</v></c>'}
+/* Quita del XML de una hoja las celdas que se le digan, con su valor y con
+   su formato. Acepta sueltas ('Q31') y rangos rectangulares ('C34:H37'). */
+function _wkBorraCeldas(xml,refs){
+  var fuera={};
+  (refs||[]).forEach(function(r){
+    var m=String(r).match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);
+    if(!m)return;
+    if(!m[3]){fuera[m[1]+m[2]]=1;return}
+    var c0=_wkOrdenNum(m[1]),c1=_wkOrdenNum(m[3]);
+    var f0=+m[2],f1=+m[4];
+    if(c1<c0){var t=c0;c0=c1;c1=t}
+    if(f1<f0){var t2=f0;f0=f1;f1=t2}
+    for(var c=c0;c<=c1;c++)for(var f=f0;f<=f1;f++)fuera[_wkColL(c)+f]=1});
+  return String(xml).replace(/<c r="([A-Z]+\d+)"(?:[^>]*?)(?:\/>|>[\s\S]*?<\/c>)/g,
+    function(todo,ref){return fuera[ref]?'':todo})}
+/* el numero de columna de una letra: A=0, B=1 ... AA=26 */
+function _wkOrdenNum(L){
+  var n=0;L=String(L).toUpperCase();
+  for(var i=0;i<L.length;i++)n=n*26+(L.charCodeAt(i)-64);
+  return n-1}
+/* ---------------- La hoja de datos: el avance en crudo ----------------------
+   Una fila por partida y linea, una columna por dia. Las cantidades van en la
+   unidad de la partida; en las de unidad glb, en porcentaje. */
+function _wkHojaDatos(){
+  var semanas=_wkSemanas();
+  if(!semanas.length)return null;
+  var ini=semanas[0].ini,fin=semanas[semanas.length-1].fin;
+  var dias=[],t1=Date.parse(fin+'T00:00:00Z');
+  for(var t=Date.parse(ini+'T00:00:00Z');t<=t1;t+=864e5)
+    dias.push(new Date(t).toISOString().slice(0,10));
+  var CAB=['WBS','N°','Código','Actividad','Especialidad','Área','Sistema',
+           'Alcance','Línea','Unidad','Metrado','Antes del '+ini];
+  var C0=CAB.length;
+  var filas=[],n=1;
+  function fila(r,cs){filas.push('<row r="'+r+'">'+cs.join('')+'</row>')}
+  fila(1,[_wkCel('A',1,'DATOS DEL APLICATIVO — avance diario por partida',true)]);
+  fila(2,[_wkCel('A',2,'Del '+ini+' al '+fin+'. Cada partida sale dos veces: '+
+    'PROGRAMADA (lo que dice el cronograma del aplicativo) y EJECUTADA (lo cargado en los partes). '+
+    'Las cantidades van en la unidad de la partida; las de unidad glb, en porcentaje.',true)]);
+  var cab=CAB.map(function(h,i){return _wkCel(_wkColL(i),4,h,true)});
+  dias.forEach(function(d,i){cab.push(_wkCel(_wkColL(C0+i),4,d,true))});
+  cab.push(_wkCel(_wkColL(C0+dias.length),4,'Acumulado al '+fin,true));
+  cab.push(_wkCel(_wkColL(C0+dias.length+1),4,'% al '+fin,true));
+  fila(4,cab);
+  n=5;
+  /* todas las partidas de las tres especialidades, en el orden del gantt:
+     por area y, dentro, por sistema */
+  var lista=[];
+  ((typeof DISC!=='undefined'&&DISC.length)?DISC:['Mecanica','Electrica','Civil'])
+    .forEach(function(d){
+      ((typeof acts==='function')?acts(d):[]).forEach(function(q){
+        lista.push({p:q,esp:d})})});
+  var mapa={},orden=[];
+  lista.forEach(function(z){
+    var ar=((typeof areaOf==='function')?areaOf(z.p):'')||'(sin área)';
+    var k=ar+'§§'+(z.p.sistema||'(sin sistema)');
+    if(!mapa[k]){mapa[k]=[];orden.push(k)}
+    mapa[k].push(z)});
+  var AR=(typeof AREAS!=='undefined'&&AREAS&&AREAS.length)?AREAS.slice():[];
+  var ix=function(a){var i=AR.indexOf(a);return i<0?999:i};
+  orden.sort(function(x,y){
+    var ax=x.split('§§')[0],ay=y.split('§§')[0];
+    if(ax===ay)return 0;
+    var d=ix(ax)-ix(ay);return d?d:(ax<ay?-1:1)});
+  var nA=0,nS=0,curA=null,nP=0,nFilas=0;
+  orden.forEach(function(k){
+    var pp=k.split('§§'),arN=pp[0],syN=pp[1]||'';
+    if(curA!==arN){curA=arN;nA++;nS=0}
+    nS++;nP=0;
+    mapa[k].forEach(function(z){
+      var p=z.p;
+      nP++;
+      var wbs=nA+'.'+nS+'.'+nP;
+      var m=(typeof metaOf==='function')?metaOf(p.id):null;
+      var u=(m&&m.unidad)||'';
+      var glb=(u==='glb');
+      var tot=glb?100:((m&&m.total>0)?m.total:0);
+      var num=(window._cardNum&&window._cardNum[p.id])||'';
+      var cod=(typeof codeOf==='function')?codeOf(p):p.id;
+      var nom=(typeof pNom==='function')?pNom(p):(p.nombre||'');
+      var alc='';
+      try{alc=_alcInfo(_alcDe(p.id)).n||''}catch(_ea){}
+      /* lo ejecutado: el salto de cada dia, sin contar los cuadres */
+      var real={},hayR=false;
+      dias.forEach(function(dd){
+        var dl;
+        if(glb)dl=(pctOfAt(p,dd)-pctOfAt(p,_prevDay(dd)));
+        else{
+          dl=(acumCantAt(p.id,dd)-acumCantAt(p.id,_prevDay(dd)));
+          if(dl>0)(partesOf(p.id)||[]).forEach(function(x){
+            if(x&&x.fecha===dd&&x.tipo==='cant'&&esCuadre(x))dl-=(+x.cant||0)});
+          if(dl<0)dl=0}
+        if(dl>0.0001){real[dd]=dl;hayR=true}});
+      /* lo programado: el total repartido entre los dias que ocupa */
+      var prog={},pr=(typeof state!=='undefined'&&state.prog)?state.prog[p.id]:null;
+      var antesP=0,acumP=0;
+      if(pr&&pr.start&&tot>0){
+        var occ=(typeof occupiedDays==='function')?occupiedDays(pr.start,pr.dias||1):[];
+        var pd=occ.length?(tot/occ.length):0;
+        occ.forEach(function(dd){
+          if(dd<ini)antesP+=pd;
+          if(dd<=fin)acumP+=pd;
+          if(dd>=ini&&dd<=fin)prog[dd]=pd})}
+      function pon(linea,mapaDia,antes,acum,pct){
+        var cs=[_wkCel('A',n,wbs,true),_wkCel('B',n,num,true),_wkCel('C',n,cod,true),
+                _wkCel('D',n,nom,true),_wkCel('E',n,z.esp,true),_wkCel('F',n,arN,true),
+                _wkCel('G',n,syN,true),_wkCel('H',n,alc,true),_wkCel('I',n,linea,true),
+                _wkCel('J',n,u,true),_wkCel('K',n,tot||''),_wkCel('L',n,antes||'')];
+        dias.forEach(function(dd,i){
+          var v=mapaDia[dd];
+          if(v>0.0001)cs.push(_wkCel(_wkColL(C0+i),n,Math.round(v*1e4)/1e4))});
+        cs.push(_wkCel(_wkColL(C0+dias.length),n,Math.round((acum||0)*1e4)/1e4));
+        cs.push(_wkCel(_wkColL(C0+dias.length+1),n,Math.round((pct||0)*100)/100));
+        fila(n,cs);n++;nFilas++}
+      if(pr&&pr.start)
+        pon('PROGRAMADA',prog,Math.min(tot,antesP),Math.min(tot,acumP),
+            tot>0?Math.min(100,acumP/tot*100):0);
+      var antesR=glb?pctOfAt(p,_prevDay(ini)):acumCantAt(p.id,_prevDay(ini));
+      var acumR=glb?pctOfAt(p,fin):acumCantAt(p.id,fin);
+      pon('EJECUTADA',real,antesR,acumR,pctOfAt(p,fin))})});
+  var ult=_wkColL(C0+dias.length+1);
+  var xml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    _wkTab(_WK_AMARILLO)+
+    '<dimension ref="A1:'+ult+Math.max(4,n-1)+'"/>'+
+    '<sheetViews><sheetView workbookViewId="0">'+
+    '<pane xSplit="4" ySplit="4" topLeftCell="E5" activePane="bottomRight" state="frozen"/>'+
+    '</sheetView></sheetViews>'+
+    '<sheetFormatPr defaultRowHeight="15"/>'+
+    '<cols><col min="1" max="1" width="9" customWidth="1"/>'+
+    '<col min="2" max="3" width="13" customWidth="1"/>'+
+    '<col min="4" max="4" width="44" customWidth="1"/>'+
+    '<col min="5" max="8" width="15" customWidth="1"/>'+
+    '<col min="9" max="9" width="13" customWidth="1"/>'+
+    '<col min="10" max="12" width="12" customWidth="1"/>'+
+    '<col min="13" max="'+(C0+dias.length+2)+'" width="10" customWidth="1"/></cols>'+
+    '<sheetData>'+filas.join('')+'</sheetData>'+
+    '<autoFilter ref="A4:'+ult+Math.max(4,n-1)+'"/>'+
+    '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'+
+    '</worksheet>';
+  return {xml:xml,filas:nFilas,dias:dias.length}}
 function _wkHojaCron(cronos,actual,semanas){
   var C0=7;                                   /* las semanas empiezan en la col H */
   var filas=[],r=0;
@@ -7535,6 +7677,11 @@ async function _wkLibroApp(semN,corte,ids){
     HGG='GG';
     hojas.push([HGG,_wkPonTab(_wkPintaHoja(_wkLimpiaHoja(
       base.hojas['GG'].replace('<f>+QPS!V263</f>','<f>COSTO!$D$6</f>')),13),_WK_AMARILLO),null])}
+  /* el avance en crudo, para poder trabajar la data sin volver a exportarla */
+  try{
+    var _hd=_wkHojaDatos();
+    if(_hd)hojas.push(['DATOS APP',_wkPonTab(_wkPintaHoja(_hd.xml,5),_WK_AMARILLO),null]);
+  }catch(_ehd){try{console.warn('DATOS APP no se pudo armar:',_ehd)}catch(_e2){}}
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
   /* La caratula del reporte conserva su nombre del original -`Carátula (P)`-,
      y con eso las referencias de las demas hojas resuelven solas. Su dibujo
@@ -7629,7 +7776,9 @@ async function _wkLibroApp(semN,corte,ids){
   if(_nfo)_wkConDibujo(hojas,_nfo,base);
   /* Y detras de todas las verdes, la caratula azul: la que abre los anexos. */
   var _ncz=_wkComoSeLlama(base.hojas,'Car\u00e1tula');
-  if(_ncz)_wkConDibujo(hojas,_ncz,base);
+  /* Q31 arrastraba el encargo de otra obra y C34:H37 son celdas vacias que
+     solo llevan formato: fuera las dos cosas. */
+  if(_ncz)_wkConDibujo(hojas,_ncz,base,['Q31','C34:H37']);
   return {hojas:hojas,styles:_wkPintorCierra(estilos),ss:base.ss,
     info:{actividades:prog.actividades,
       crons:D.bloques.map(function(b){return b.id}),espina:D.esp.id,
@@ -11643,7 +11792,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824e7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824e8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
