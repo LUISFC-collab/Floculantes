@@ -8760,8 +8760,19 @@ async function _wkLibroApp(semN,corte,ids){
 function _wkPaqueteApp(hojas,styles,ss){
   var ov=function(i){return '<Override PartName="/xl/worksheets/sheet'+i+
     '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'};
+  /* Las piezas copiadas conservan su nombre original; las generadas se
+     numeran POR ENCIMA de ellas. Si se numeraran por la posicion de la hoja,
+     en un libro partido una generada puede llamarse igual que una copiada, y
+     dos entradas con el mismo nombre hacen que Excel pida reparar. */
+  var _tope=0;
+  hojas.forEach(function(h){
+    if(!(h[2]&&h[2].partes))return;
+    Object.keys(h[2].partes).forEach(function(r){
+      var m=/(?:drawing|chart)(\d+)\.xml$/.exec(r);
+      if(m&&(+m[1])>_tope)_tope=+m[1]})});
+  var NUM=function(i){return _tope+i+1};
   /* las hojas que llevan grafico arrastran tres piezas mas y sus tipos */
-  var conG=[];hojas.forEach(function(h,i){if(h[2]&&h[2].grafico)conG.push(i+1)});
+  var conG=[];hojas.forEach(function(h,i){if(h[2]&&h[2].grafico)conG.push(NUM(i))});
   var tiposG=conG.map(function(i){
     return '<Override PartName="/xl/drawings/drawing'+i+'.xml" ContentType='+
       '"application/vnd.openxmlformats-officedocument.drawing+xml"/>'+
@@ -8775,7 +8786,7 @@ function _wkPaqueteApp(hojas,styles,ss){
   var exts={};
   hojas.forEach(function(h,i){
     if(!(h[2]&&h[2].dibujoXml))return;
-    tiposG+='<Override PartName="/xl/drawings/drawing'+(i+1)+'.xml" ContentType='+
+    tiposG+='<Override PartName="/xl/drawings/drawing'+NUM(i)+'.xml" ContentType='+
       '"application/vnd.openxmlformats-officedocument.drawing+xml"/>';
     Object.keys(h[2].medios||{}).forEach(function(r){
       var e=String(r).split('.').pop().toLowerCase();if(MIME[e])exts[e]=MIME[e]})});
@@ -8823,7 +8834,8 @@ function _wkPaqueteApp(hojas,styles,ss){
   var puestos={};
   hojas.forEach(function(h,i){
     partes.push(['xl/worksheets/sheet'+(i+1)+'.xml',h[1]]);
-    var k=i+1, REL='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    /* `k` nombra la hoja; `g` nombra sus piezas generadas */
+    var k=i+1, g=NUM(i), REL='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
     if(h[2]&&h[2].partes){
       /* la hoja trae sus piezas con sus rutas originales: sus relaciones
@@ -8836,19 +8848,19 @@ function _wkPaqueteApp(hojas,styles,ss){
       /* dibujo de imagenes: se copia tal cual con sus relaciones, y los
          ficheros conservan su ruta para que los r:embed sigan valiendo */
       partes.push(['xl/worksheets/_rels/sheet'+k+'.xml.rels',REL+
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing'+k+'.xml"/></Relationships>']);
-      partes.push(['xl/drawings/drawing'+k+'.xml',h[2].dibujoXml]);
-      if(h[2].dibujoRels)partes.push(['xl/drawings/_rels/drawing'+k+'.xml.rels',h[2].dibujoRels]);
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing'+g+'.xml"/></Relationships>']);
+      partes.push(['xl/drawings/drawing'+g+'.xml',h[2].dibujoXml]);
+      if(h[2].dibujoRels)partes.push(['xl/drawings/_rels/drawing'+g+'.xml.rels',h[2].dibujoRels]);
       Object.keys(h[2].medios||{}).forEach(function(r){
         if(puestos[r])return;puestos[r]=1;partes.push([r,h[2].medios[r]])});
       return}
     if(!(h[2]&&h[2].grafico))return;
     partes.push(['xl/worksheets/_rels/sheet'+k+'.xml.rels',REL+
-      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing'+k+'.xml"/></Relationships>']);
-    partes.push(['xl/drawings/drawing'+k+'.xml',h[2].dibujo]);
-    partes.push(['xl/drawings/_rels/drawing'+k+'.xml.rels',REL+
-      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart'+k+'.xml"/></Relationships>']);
-    partes.push(['xl/charts/chart'+k+'.xml',h[2].grafico])});
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing'+g+'.xml"/></Relationships>']);
+    partes.push(['xl/drawings/drawing'+g+'.xml',h[2].dibujo]);
+    partes.push(['xl/drawings/_rels/drawing'+g+'.xml.rels',REL+
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart'+g+'.xml"/></Relationships>']);
+    partes.push(['xl/charts/chart'+g+'.xml',h[2].grafico])});
   return partes}
 /* ---------------- Una hoja P6 por cronograma, hecha por la app -------------
    La plantilla trae UNA hoja 'P6-2' con la lista de actividades, y esa lista
@@ -12829,7 +12841,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824h6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824h7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
