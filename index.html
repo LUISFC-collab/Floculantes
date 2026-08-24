@@ -6121,10 +6121,131 @@ function _wkCelE(col,r,v,texto,st,formula){
     return a+' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(v)+'</t></is></c>'}
   if(v==null||v==='')return st?(a+'/>'):'';
   return a+'><v>'+(Math.round(Number(v)*1e8)/1e8)+'</v></c>'}
+/* ---------------- El plan a recuperar ----------------------------------------
+   Tres semanas para volver a la curva del LB1. De cada actividad se toma lo
+   que el LB1 pedia tener hecho al cerrar la tercera semana, se le resta lo
+   hecho al corte, y ese saldo se coloca dentro de la ventana conservando su
+   orden y su duracion, comprimida solo lo justo para que quepa.
+
+   Devuelve, por codigo de actividad, el reparto diario de las tres lineas
+   -programado, actual y forecast- en FRACCION de la actividad (0 a 1), y la
+   secuencia por partida lista para guardar como respaldo. */
+async function _crPlanRecupera(cronId,corte,semN){
+  var tar=await _crTareas(cronId),alc=await _crAlc(cronId);
+  var u=_crUniverso(cronId,alc),rp=_crReparto(tar);
+  var P=_crPartidas(),porId={};P.forEach(function(q){porId[q.id]=q});
+  var s0=_wkSem(semN),s2=_wkSem(semN+2);
+  var vIni=_wkISO(s0.ini),vFin=_wkISO(s2.fin);
+  var dias=[];
+  for(var d=s0.ini;d<=s2.fin;d++)dias.push(_wkISO(d));
+  /* se recupera a partir del dia siguiente al corte; lo anterior ya paso */
+  var desde=_crDeSerial(_crASerial(corte)+1);
+  if(desde<vIni)desde=vIni;
+  var plan={},actual={},fore={},recup=[],porPart={};
+  tar.forEach(function(t){
+    var hh=0;(t.items||[]).forEach(function(i){
+      if(u.items[i]!=null)hh+=(Number(u.items[i])||0)/_crVeces(rp,i)});
+    var cod=t.task_code;
+    plan[cod]={};actual[cod]={};fore[cod]={};
+    /* --- lo que el LB1 pedia esos dias --- */
+    var d0=t.ini?_crASerial(t.ini):0,d1=t.fin?_crASerial(t.fin):0;
+    var nd=(d0&&d1)?Math.max(1,d1-d0+1):0;
+    if(nd){
+      var pd=1/nd;
+      for(var k=0;k<nd;k++){
+        var f=_crDeSerial(d0+k);
+        if(f>=vIni&&f<=vFin)plan[cod][f]=pd}}
+    /* --- lo ejecutado, dia a dia --- */
+    var ant=null;
+    dias.forEach(function(f){
+      if(f>corte)return;
+      var a=_crAvanceDe(t.items||[],f,{cod:cod,rp:rp});
+      var v=Math.max(0,Math.min(100,a.pct||0))/100;
+      if(ant==null){
+        var pre=_crAvanceDe(t.items||[],_crDeSerial(_crASerial(f)-1),{cod:cod,rp:rp});
+        ant=Math.max(0,Math.min(100,pre.pct||0))/100}
+      var dl=v-ant;ant=v;
+      if(dl>1e-9)actual[cod][f]=dl});
+    /* --- el saldo que hay que recuperar --- */
+    var hecho=Math.max(0,Math.min(100,
+      (_crAvanceDe(t.items||[],corte,{cod:cod,rp:rp}).pct)||0))/100;
+    var obj=0;
+    if(nd){var pasados=0;
+      for(var k2=0;k2<nd;k2++)if(_crDeSerial(d0+k2)<=vFin)pasados++;
+      obj=pasados/nd}
+    var saldo=Math.max(0,obj-hecho);
+    /* lo que ya paso, el plan lo da por hecho: son las cumplidas del PPC */
+    var priIni='';
+    Object.keys(actual[cod]).forEach(function(f){
+      fore[cod][f]=actual[cod][f];
+      if(!priIni||f<priIni)priIni=f});
+    if(saldo>1e-9&&hh>=0){
+      /* la ventana de esta actividad: no antes del dia siguiente al corte, ni
+         antes de lo que el propio LB1 decia */
+      var rIni=(t.ini&&t.ini>desde)?t.ini:desde;
+      if(rIni>vFin)rIni=desde;
+      var libres=_crASerial(vFin)-_crASerial(rIni)+1;
+      var dur=Math.max(1,Math.min(nd||1,libres));
+      if(dur>libres)dur=libres;
+      var pdf=saldo/dur;
+      for(var k3=0;k3<dur;k3++)fore[cod][_crDeSerial(_crASerial(rIni)+k3)]=pdf;
+      /* la secuencia arranca donde empezo el trabajo de verdad, no en el
+         corte: si esta actividad ya venia avanzando, el plan la incluye desde
+         ese dia y por eso sale cumplida */
+      var sIni=(priIni&&priIni<rIni)?priIni:rIni;
+      var sDur=Math.max(1,_crASerial(rIni)+dur-_crASerial(sIni));
+      recup.push({cod:cod,nom:String(t.nombre||''),ini:sIni,dias:sDur,
+                  desdeCorte:rIni,diasRecupera:dur,
+                  saldo:Math.round(saldo*1e4)/1e4,hh:Math.round(hh*100)/100,
+                  hhSaldo:Math.round(hh*saldo*100)/100});
+      (t.items||[]).forEach(function(i){
+        if(u.items[i]==null)return;
+        var y=porPart[i];
+        if(!y||sIni<y.start)porPart[i]={_id:i,start:sIni,dias:sDur,
+          disc:String((porId[i]&&porId[i].esp)||'')}})}
+    else if(priIni){
+      /* sin saldo: se cumplio lo que tocaba, y aun asi entra en el plan para
+         que cuente como cumplida en el PPC */
+      var ult=priIni;
+      Object.keys(actual[cod]).forEach(function(f){if(f>ult)ult=f});
+      var dd=Math.max(1,_crASerial(ult)-_crASerial(priIni)+1);
+      recup.push({cod:cod,nom:String(t.nombre||''),ini:priIni,dias:dd,
+                  desdeCorte:'',diasRecupera:0,saldo:0,
+                  hh:Math.round(hh*100)/100,hhSaldo:0});
+      (t.items||[]).forEach(function(i){
+        if(u.items[i]==null)return;
+        var y=porPart[i];
+        if(!y||priIni<y.start)porPart[i]={_id:i,start:priIni,dias:dd,
+          disc:String((porId[i]&&porId[i].esp)||'')}})}});
+  return {dias:dias,vIni:vIni,vFin:vFin,desde:desde,
+          plan:plan,actual:actual,fore:fore,recup:recup,
+          partidas:Object.keys(porPart).map(function(k){return porPart[k]})}}
+/* Guarda el plan como respaldo, con la forma que ya tienen los respaldos: una
+   entrada por partida con su arranque y sus dias. Se fecha en el jueves de la
+   semana ANTERIOR a la ventana, que es cuando se habria emitido. */
+async function _crPlanGuarda(R,cronId,semN){
+  if(!R||!R.partidas.length)return null;
+  var snap={},discs=[];
+  R.partidas.forEach(function(a){
+    var d=a.disc||'(sin especialidad)';
+    if(!snap[d]){snap[d]=[];discs.push(d)}
+    snap[d].push(a)});
+  var fecha=_wkISO(_wkSem(semN-1).fin);
+  var fila={id:'REC'+semN+'-'+cronId+'-'+fecha.replace(/-/g,''),
+    nombre:'Plan a recuperar '+cronId+' · S'+semN+' a S'+(semN+2),
+    discs:discs,snap:snap,cronocuad:{},
+    autor:(state.user&&state.user.supervisor)||'',
+    ts:(typeof nowSrv==='function'?nowSrv():Date.now()),fecha:fecha,compartido:true};
+  try{
+    state.backcron=(state.backcron||[]).filter(function(x){return x&&x.id!==fila.id});
+    state.backcron.unshift(fila);
+    _bkcSave();_bkcPush(fila);
+  }catch(_e){}
+  return fila}
 /* ---------------- PARA 3WLA: el alimentador del look ahead -------------------
    Una fila por actividad del cronograma vigente, con la forma exacta de la
    hoja 3WLA de la plantilla. */
-function _wkHoja3WLA(semN,bloque,base){
+function _wkHoja3WLA(semN,bloque,base,R){
   if(!bloque||!bloque.filas||!bloque.filas.length)return null;
   /* OJO: en la plantilla la hoja se llama «3WLA », con un espacio al final.
      Buscarla por el nombre exacto devuelve undefined y la hoja sale en crudo. */
@@ -6180,6 +6301,13 @@ function _wkHoja3WLA(semN,bloque,base){
     }
     prev=ruta;
     cuerpo.push({f:f})});
+  /* tres lineas por actividad: lo programado, lo ejecutado y el plan */
+  var LINEAS=R?['PROGRAMADO SEM. ANT.','ACTUAL','FORECAST']:['PROGRAMADO'];
+  var cuerpo2=[];
+  cuerpo.forEach(function(z){
+    if(z.tit!=null){cuerpo2.push(z);return}
+    LINEAS.forEach(function(L,k){cuerpo2.push({f:z.f,linea:L,k:k})})});
+  cuerpo=cuerpo2;
   /* primero hay que saber donde acaba, porque los totales miran el rango */
   var nFin=r0+cuerpo.length-1;
   var totJ='SUM(J'+r0+':J'+nFin+')', totK='SUM(K'+r0+':K'+nFin+')';
@@ -6210,16 +6338,19 @@ function _wkHoja3WLA(semN,bloque,base){
       _wkCelE('I',n,rate,false,CAB.I),
       _wkCelE('J',n,'',false,CAB.J,'E'+n+'*I'+n),
       _wkCelE('K',n,'',false,CAB.K,'IF($J$8=0,0,H'+n+'*I'+n+'/$J$8)'),
-      _wkCelE('L',n,frente,true,CAB.L)];
-    /* lo de cada dia: la cantidad repartida entre los dias que ocupa */
-    if(f.ini&&f.fin&&cant>0){
-      var d0=_crASerial(f.ini),d1=_crASerial(f.fin);
-      var nd=Math.max(1,d1-d0+1),pd=cant/nd;
-      BLQ.forEach(function(c0,b){
-        var sm=_wkSem(semN+b);
-        for(var d=0;d<7;d++){
-          var ser=sm.ini+d;
-          if(ser>=d0&&ser<=d1)cs.push(_wkCelE(_wkColL(c0+d),n,pd,false,stDato))}})}
+      _wkCelE('L',n,z.linea||frente,true,CAB.L)];
+    /* el dia a dia de esta linea, en la unidad de la actividad */
+    var mapa=null;
+    if(!R){
+      mapa={};
+      if(f.ini&&f.fin){var d0=_crASerial(f.ini),d1=_crASerial(f.fin),nd=Math.max(1,d1-d0+1);
+        for(var q=0;q<nd;q++)mapa[_crDeSerial(d0+q)]=1/nd}}
+    else mapa=(z.k===0?R.plan:z.k===1?R.actual:R.fore)[f.cod]||{};
+    BLQ.forEach(function(c0,b){
+      var sm=_wkSem(semN+b);
+      for(var d=0;d<7;d++){
+        var fe=_wkISO(sm.ini+d),v=mapa[fe];
+        if(v>1e-9)cs.push(_wkCelE(_wkColL(c0+d),n,cant*v,false,stDato))}});
     fila(n,cs);n++});
   var ult=_wkColL(BLQ[2]+6);
   var xml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
@@ -7966,7 +8097,13 @@ async function _wkLibroApp(semN,corte,ids){
   /* el alimentador del look ahead. No se repinta: ya lleva los estilos de la
      propia hoja 3WLA de la plantilla, que es el formato que debe tener. */
   try{
-    var _hd=_wkHoja3WLA(semN,D.bloques[0],base);
+    /* el plan a recuperar: tres semanas para volver a la curva del vigente */
+    var _R=null;
+    try{
+      _R=await _crPlanRecupera(D.bloques[0].id,corte,semN);
+      await _crPlanGuarda(_R,D.bloques[0].id,semN);
+    }catch(_er){try{console.warn('plan a recuperar:',_er)}catch(_e3){}}
+    var _hd=_wkHoja3WLA(semN,D.bloques[0],base,_R);
     if(_hd)hojas.push(['PARA 3WLA',_hd.xml,null]);
   }catch(_ehd){try{console.warn('PARA 3WLA no se pudo armar:',_ehd)}catch(_e2){}}
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
@@ -12079,7 +12216,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824f3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824f4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -16200,8 +16337,56 @@ function _bkcOverlay(){var ov=document.getElementById('_bkcOv');if(ov)ov.remove(
 function _bkcShell(inner){return '<div style="background:#16171A;color:#E7E1EA;width:100%;max-width:560px;border-radius:16px 16px 0 0;max-height:88vh;overflow:auto;border-top:2px solid #B8801E">'+inner+'</div>'}
 function _bkcHead(t,sub){return '<div style="display:flex;align-items:center;padding:13px 14px;border-bottom:1px solid #26232b;position:sticky;top:0;background:#16171A;z-index:2"><div style="min-width:0"><b style="font-size:15px;color:#EFC98A">'+esc(t)+'</b>'+(sub?('<div style="font-size:11px;color:#9a8fa2;margin-top:2px">'+esc(sub)+'</div>'):'')+'</div><button id="_bkcX" style="margin-left:auto;background:#26232b;color:#E7E1EA;border:0;border-radius:8px;padding:8px 12px;font-weight:700;flex-shrink:0">Cerrar</button></div>'}
 function _showBackCron(){if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return}var ov=_bkcOverlay();var n=(state.backcron&&state.backcron.length)||0;ov.innerHTML=_bkcShell(_bkcHead('BACK_CRONOGRAMAS','Guarda y consulta la secuencia del cronograma')+'<div style="padding:16px 14px;display:flex;flex-direction:column;gap:11px"><button id="_bkcCrear" class="admGlass" style="margin:0"><span class="admpz admpz-heart" style="color:#EFC98A;-webkit-text-stroke:.5px #B8801E"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E0A44B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Crear respaldo</span></button><button id="_bkcVerBtn" class="admGlass" style="margin:0"><span class="admpz" style="color:#CFE3FF;-webkit-text-stroke:.5px #5B84E6"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7FA0F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h5l2 2h9a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>Cargar / Ver respaldos <i id="_bkcVerN" style="font-style:normal;color:#9a8fa2">'+(n?('('+n+')'):'')+'</i></span></button><button id="_bkcAplBtn" class="admGlass" style="margin:0"><span class="admpz" style="color:#EFC98A;-webkit-text-stroke:.5px #B8801E"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E0A44B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2" fill="#16171A"/><circle cx="14" cy="12" r="2" fill="#16171A"/><circle cx="10" cy="18" r="2" fill="#16171A"/></svg>Aplicar línea base / cronograma al planeamiento</span></button></div>');document.getElementById('_bkcX').onclick=function(){ov.remove()};document.getElementById('_bkcCrear').onclick=_bkcCrear;document.getElementById('_bkcVerBtn').onclick=_bkcVer;var _bkAp=document.getElementById('_bkcAplBtn');if(_bkAp)_bkAp.onclick=_bkcAplicarView;_bkcPull(function(){var el=document.getElementById('_bkcVerN');if(el){var m=(state.backcron&&state.backcron.length)||0;el.textContent=m?('('+m+')'):''}})}
-function _bkcAplicarView(){var ov=document.getElementById('_bkcOv')||_bkcOverlay();var opts='<option value="__base0__">📐 Línea base 0 — fechas originales aprobadas (catálogo)</option>';(state.backcron||[]).slice().sort(function(a,b){return (b.ts||0)-(a.ts||0)}).forEach(function(bk){var tot=0;Object.keys(bk.snap||{}).forEach(function(d){tot+=(bk.snap[d]||[]).length});if(tot)opts+='<option value="'+esc(bk.id)+'">'+esc(bk.nombre)+' ('+tot+' act'+(bk.fecha?(' · '+bk.fecha):'')+')</option>'});var inner=_bkcHead('Aplicar planeamiento','Elige de dónde tomar las fechas Inicio/Fin de las tarjetas')+'<div style="padding:14px"><div style="font-size:12px;color:#c9bfd2;margin-bottom:7px;font-weight:700">Fuente del planeamiento</div><select id="_bkcBaseSel" style="width:100%;box-sizing:border-box;padding:11px 12px;border-radius:10px;border:1px solid #3a3442;background:#0f1014;color:#fff;font-size:14px;font-weight:700;margin-bottom:12px">'+opts+'</select><div style="font-size:11px;color:#9a8fa2;margin-bottom:14px;line-height:1.45">Al aplicar, se escribe el <b style="color:#EFC98A">Inicio / Fin (el «programado»)</b> de cada tarjeta según la fuente elegida. Cambia el planeamiento en todos lados (modal, %, forecast) y se sincroniza a todos.</div><button id="_bkcAplGo" class="admGlass" style="margin:0"><span class="admpz admpz-heart" style="color:#EFC98A;-webkit-text-stroke:.5px #B8801E">Aplicar a las tarjetas</span></button><button id="_bkcBack" style="width:100%;margin-top:9px;background:#26232b;color:#c9bfd2;border:0;border-radius:10px;padding:11px;font-weight:700">Volver</button></div>';ov.innerHTML=_bkcShell(inner);document.getElementById('_bkcX').onclick=function(){ov.remove()};document.getElementById('_bkcBack').onclick=_showBackCron;document.getElementById('_bkcAplGo').onclick=function(){var v=document.getElementById('_bkcBaseSel').value;_bkcAplicarPlan(v)}}
-function _bkcAplicarPlan(srcId){if(!((typeof esAdmin==='function'&&esAdmin())||(typeof puedeAcc==='function'&&puedeAcc('plan_fechas')))){if(typeof _gateAcc==='function')_gateAcc('plan_fechas','Cambiar planificación');return}var n=0;function setEdit(id,ini,fin){if(!id)return;var cur=state.edits[id]||{};cur.inicio=ini||'';cur.fin=fin||'';cur.ts=(typeof nowSrv==='function'?nowSrv():Date.now());state.edits[id]=cur;n++}if(srcId==='__base0__'){if(!confirm('¿Aplicar la LÍNEA BASE 0 (fechas originales aprobadas del catálogo) como planeamiento de TODAS las actividades?\n\nSobrescribe el Inicio/Fin actual de cada tarjeta.'))return;(DATA.partidas||[]).forEach(function(b){if(b&&b.id)setEdit(b.id,b.inicio||'',b.fin||'')})}else{var bk=(state.backcron||[]).filter(function(z){return z.id===srcId})[0];if(!bk){toast('No se encontró el cronograma');return}if(!confirm('¿Aplicar el cronograma "'+bk.nombre+'" como planeamiento?\n\nEscribe el Inicio/Fin de cada tarjeta según ese cronograma.'))return;Object.keys(bk.snap||{}).forEach(function(d){(bk.snap[d]||[]).forEach(function(e){var id=e._id||e.partida_id;if(!id||!e.start)return;var occ=(typeof occupiedDays==='function')?occupiedDays(e.start,e.dias||1):[e.start];var fin=(occ&&occ.length)?occ[occ.length-1]:e.start;setEdit(id,e.start,fin)})})}try{store.set(KE,state.edits)}catch(e){}if(typeof logCambio==='function')logCambio('PLANEAMIENTO',(srcId==='__base0__'?'línea base 0':'cronograma'),n+' actividad(es)');if(typeof syncNow==='function')syncNow(true);try{if(typeof renderList==='function'&&!$('scrList').classList.contains('hidden'))renderList()}catch(e){}try{if(typeof renderDiario==='function'&&!$('scrDiario').classList.contains('hidden'))renderDiario()}catch(e){}if(typeof toast==='function')toast('✓ Planeamiento aplicado a '+n+' actividad(es)');var _ov=document.getElementById('_bkcOv');if(_ov)_ov.remove()}
+function _bkcAplicarView(){var ov=document.getElementById('_bkcOv')||_bkcOverlay();
+  /* los cronogramas cargados: de ahi sale el programado de las cartillas */
+  var opts='';
+  try{(_crLista()||[]).forEach(function(c){
+    opts+='<option value="cron:'+esc(c.cron_id)+'">📅 '+esc(c.cron_id)+' — '+
+      esc(String(c.nombre||'').slice(0,48))+'</option>'})}catch(_ec){}
+  opts+='<option value="__base0__">📐 Línea base 0 — fechas originales aprobadas (catálogo)</option>';(state.backcron||[]).slice().sort(function(a,b){return (b.ts||0)-(a.ts||0)}).forEach(function(bk){var tot=0;Object.keys(bk.snap||{}).forEach(function(d){tot+=(bk.snap[d]||[]).length});if(tot)opts+='<option value="'+esc(bk.id)+'">'+esc(bk.nombre)+' ('+tot+' act'+(bk.fecha?(' · '+bk.fecha):'')+')</option>'});var inner=_bkcHead('Aplicar planeamiento','Elige de dónde tomar las fechas Inicio/Fin de las tarjetas')+'<div style="padding:14px"><div style="font-size:12px;color:#c9bfd2;margin-bottom:7px;font-weight:700">Fuente del planeamiento</div><select id="_bkcBaseSel" style="width:100%;box-sizing:border-box;padding:11px 12px;border-radius:10px;border:1px solid #3a3442;background:#0f1014;color:#fff;font-size:14px;font-weight:700;margin-bottom:12px">'+opts+'</select><div style="font-size:11px;color:#9a8fa2;margin-bottom:14px;line-height:1.45">Al aplicar, se escribe el <b style="color:#EFC98A">Inicio / Fin (el «programado»)</b> de cada tarjeta según la fuente elegida. Cambia el planeamiento en todos lados (modal, %, forecast) y se sincroniza a todos.</div><button id="_bkcAplGo" class="admGlass" style="margin:0"><span class="admpz admpz-heart" style="color:#EFC98A;-webkit-text-stroke:.5px #B8801E">Aplicar a las tarjetas</span></button><button id="_bkcBack" style="width:100%;margin-top:9px;background:#26232b;color:#c9bfd2;border:0;border-radius:10px;padding:11px;font-weight:700">Volver</button></div>';ov.innerHTML=_bkcShell(inner);document.getElementById('_bkcX').onclick=function(){ov.remove()};document.getElementById('_bkcBack').onclick=_showBackCron;document.getElementById('_bkcAplGo').onclick=function(){var v=document.getElementById('_bkcBaseSel').value;_bkcAplicarPlan(v)};
+  /* si la lista de cronogramas aun no estaba leida, se anaden al llegar */
+  try{_crPull().then(function(L){
+    var sel=document.getElementById('_bkcBaseSel');if(!sel||!L||!L.length)return;
+    var hay={};[].forEach.call(sel.options,function(o){hay[o.value]=1});
+    var falta='';
+    L.forEach(function(c){
+      if(hay['cron:'+c.cron_id])return;
+      falta+='<option value="cron:'+esc(c.cron_id)+'">📅 '+esc(c.cron_id)+' — '+
+        esc(String(c.nombre||'').slice(0,48))+'</option>'});
+    if(falta)sel.innerHTML=falta+sel.innerHTML})}catch(_ep){}}
+async function _bkcAplicarPlan(srcId){if(!((typeof esAdmin==='function'&&esAdmin())||(typeof puedeAcc==='function'&&puedeAcc('plan_fechas')))){if(typeof _gateAcc==='function')_gateAcc('plan_fechas','Cambiar planificación');return}var n=0;function setEdit(id,ini,fin){if(!id)return;var cur=state.edits[id]||{};cur.inicio=ini||'';cur.fin=fin||'';cur.ts=(typeof nowSrv==='function'?nowSrv():Date.now());state.edits[id]=cur;n++}if(String(srcId).indexOf('cron:')===0){
+    var _cid=String(srcId).slice(5);
+    if(!confirm('¿Aplicar el cronograma '+_cid+' como planeamiento?\n\n'+
+      'Escribe el Inicio/Fin de cada tarjeta con las fechas que esa partida '+
+      'tiene en el alcance de '+_cid+'.\n\nLas que ese cronograma deja fuera '+
+      'del alcance no se tocan.'))return;
+    var _alc={},_tar=[];
+    try{_alc=await _crAlc(_cid);_tar=await _crTareas(_cid)}
+    catch(_e1){if(typeof toast==='function')toast('No se pudo leer '+_cid);return}
+    /* si la partida no trae fechas propias, valen las de la actividad que la
+       reclama: es la misma regla que sigue el resto del aplicativo */
+    var _deT={};
+    _tar.forEach(function(t){(t.items||[]).forEach(function(i){
+      if(!_deT[i]&&t.ini&&t.fin)_deT[i]={ini:t.ini,fin:t.fin}})});
+    var _fuera=0,_sinFecha=0;
+    _crPartidas().forEach(function(pp){
+      var a=_alc[pp.id];
+      var inc=a?a.inc:_crPorDefecto(pp);
+      if(!inc){_fuera++;return}
+      var ini=(a&&a.ini)||'',fin=(a&&a.fin)||'';
+      if(!ini||!fin){var d=_deT[pp.id];if(d){ini=ini||d.ini;fin=fin||d.fin}}
+      if(!ini&&!fin){_sinFecha++;return}
+      setEdit(pp.id,ini,fin||ini)});
+    try{store.set(KE,state.edits)}catch(_e2){}
+    if(typeof logCambio==='function')logCambio('PLANEAMIENTO','cronograma '+_cid,n+' actividad(es)');
+    if(typeof syncNow==='function')syncNow(true);
+    try{if(typeof renderList==='function'&&!$('scrList').classList.contains('hidden'))renderList()}catch(_e3){}
+    try{if(typeof renderDiario==='function'&&!$('scrDiario').classList.contains('hidden'))renderDiario()}catch(_e4){}
+    if(typeof toast==='function')toast('✓ '+_cid+' aplicado a '+n+' actividad(es)'+
+      (_sinFecha?(' · '+_sinFecha+' sin fecha'):'')+(_fuera?(' · '+_fuera+' fuera del alcance'):''));
+    var _o2=document.getElementById('_bkcOv');if(_o2)_o2.remove();
+    return}
+  if(srcId==='__base0__'){if(!confirm('¿Aplicar la LÍNEA BASE 0 (fechas originales aprobadas del catálogo) como planeamiento de TODAS las actividades?\n\nSobrescribe el Inicio/Fin actual de cada tarjeta.'))return;(DATA.partidas||[]).forEach(function(b){if(b&&b.id)setEdit(b.id,b.inicio||'',b.fin||'')})}else{var bk=(state.backcron||[]).filter(function(z){return z.id===srcId})[0];if(!bk){toast('No se encontró el cronograma');return}if(!confirm('¿Aplicar el cronograma "'+bk.nombre+'" como planeamiento?\n\nEscribe el Inicio/Fin de cada tarjeta según ese cronograma.'))return;Object.keys(bk.snap||{}).forEach(function(d){(bk.snap[d]||[]).forEach(function(e){var id=e._id||e.partida_id;if(!id||!e.start)return;var occ=(typeof occupiedDays==='function')?occupiedDays(e.start,e.dias||1):[e.start];var fin=(occ&&occ.length)?occ[occ.length-1]:e.start;setEdit(id,e.start,fin)})})}try{store.set(KE,state.edits)}catch(e){}if(typeof logCambio==='function')logCambio('PLANEAMIENTO',(srcId==='__base0__'?'línea base 0':'cronograma'),n+' actividad(es)');if(typeof syncNow==='function')syncNow(true);try{if(typeof renderList==='function'&&!$('scrList').classList.contains('hidden'))renderList()}catch(e){}try{if(typeof renderDiario==='function'&&!$('scrDiario').classList.contains('hidden'))renderDiario()}catch(e){}if(typeof toast==='function')toast('✓ Planeamiento aplicado a '+n+' actividad(es)');var _ov=document.getElementById('_bkcOv');if(_ov)_ov.remove()}
 function _bkcCrear(){var ov=document.getElementById('_bkcOv')||_bkcOverlay();var rows=_bkcDiscs().map(function(d){var n=_bkcCount(d);var col=_dcol(d);return '<label style="display:flex;align-items:center;gap:11px;padding:12px 13px;border:1px solid #26232b;border-radius:11px;background:#14161b;margin-bottom:9px;cursor:'+(n?'pointer':'default')+';opacity:'+(n?'1':'.5')+'"><input type="checkbox" class="_bkcChk" data-d="'+esc(d)+'" '+(n?'checked':'disabled')+' style="width:19px;height:19px;accent-color:#B8801E"><span style="width:22px;height:22px;color:'+col+'">'+(discIcon[d]||'')+'</span><span style="font-weight:800;font-size:14px;color:#E7E1EA">'+esc(d)+'</span><span style="margin-left:auto;font-size:12px;color:#9a8fa2">'+n+' actividad(es)</span></label>'}).join('');var inner=_bkcHead('Crear respaldo','Marca las especialidades y ponle un nombre a la fila')+'<div style="padding:14px"><div style="font-size:12px;color:#c9bfd2;margin-bottom:7px;font-weight:700">Nombre del respaldo (para las 3 carpetas)</div><input id="_bkcNom" type="text" placeholder="Ej: SEMANA 1" style="width:100%;box-sizing:border-box;padding:11px 12px;border-radius:10px;border:1px solid #3a3442;background:#0f1014;color:#fff;font-size:14px;font-weight:700;margin-bottom:14px"><div style="font-size:12px;color:#c9bfd2;margin-bottom:7px;font-weight:700">Especialidades a respaldar</div>'+rows+'<button id="_bkcGo" class="admGlass" style="margin:6px 0 0"><span class="admpz admpz-heart" style="color:#EFC98A;-webkit-text-stroke:.5px #B8801E">Guardar respaldo</span></button><button id="_bkcBack" style="width:100%;margin-top:9px;background:#26232b;color:#c9bfd2;border:0;border-radius:10px;padding:11px;font-weight:700">Volver</button></div>';ov.innerHTML=_bkcShell(inner);document.getElementById('_bkcX').onclick=function(){ov.remove()};document.getElementById('_bkcBack').onclick=_showBackCron;document.getElementById('_bkcGo').onclick=_bkcGuardar}
 function _bkcGuardar(){var el=document.getElementById('_bkcNom');var nom=(el&&el.value||'').trim();if(!nom){toast('Ponle un nombre al respaldo (ej: SEMANA 1)');return}var chks=Array.prototype.slice.call(document.querySelectorAll('._bkcChk')).filter(function(c){return c.checked});if(!chks.length){toast('Marca al menos una especialidad');return}var discs=chks.map(function(c){return c.getAttribute('data-d')});var snap={};discs.forEach(function(d){snap[d]=_bkcSnap(d)});var row={id:uuid(),nombre:nom,ts:(typeof nowSrv==='function'?nowSrv():Date.now()),fecha:(typeof todayISO==='function'?todayISO():''),autor:(state.user&&state.user.supervisor)||'',discs:discs,snap:snap,compartido:false,calend:(function(){try{return JSON.parse(JSON.stringify(state.calend||{}))}catch(e){return {}}})(),cronocuad:(function(){try{var _all=(typeof _cronoCuadAll==='function')?_cronoCuadAll():(state.cronoCuad||{});var _o={};discs.forEach(function(d){if(_all&&_all[d])_o[d]=_all[d]});return JSON.parse(JSON.stringify(_o))}catch(e){return {}}})()};state.backcron=state.backcron||[];state.backcron.unshift(row);_bkcSave();_bkcPush(row);var tot=discs.reduce(function(a,d){return a+snap[d].length},0);toast('Respaldo "'+nom+'" guardado ('+discs.length+' especialidad(es), '+tot+' actividad(es))');_bkcVer()}
 function _bkcVer(){var ov=document.getElementById('_bkcOv')||_bkcOverlay();var list=(state.backcron||[]).slice().sort(function(a,b){return (b.ts||0)-(a.ts||0)});var body=list.length?list.map(function(bk){var fold=_bkcDiscs().map(function(d){var has=bk.snap&&bk.snap[d]&&bk.snap[d].length;var col=_dcol(d);return '<div class="bkcFolder '+(has?'full':'empty')+'" '+(has?('data-bk="'+esc(bk.id)+'" data-d="'+esc(d)+'"'):'')+' style="'+(has?('border-color:'+col+'66'):'')+'"><span style="width:22px;height:22px;color:'+(has?col:'#5a5560')+'">'+(discIcon[d]||'')+'</span><span style="font-size:11px;font-weight:800;color:'+(has?'#E7E1EA':'#5a5560')+'">'+esc(d)+'</span><span style="font-size:10px;color:'+(has?col:'#4a454f')+'">'+(has?(bk.snap[d].length+' act'):'vacio')+'</span></div>'}).join('');return '<div style="border:1px solid #26232b;border-radius:13px;padding:12px;margin-bottom:11px;background:#131319"><div style="display:flex;align-items:center;gap:8px;margin-bottom:9px"><b style="font-size:14.5px;color:#EFC98A">'+esc(bk.nombre)+'</b><span style="margin-left:auto;font-size:10.5px;color:#8a8090;text-align:right">'+esc(bk.fecha||'')+' - '+esc(_cfHora(bk.ts))+(bk.autor?('<br>'+esc(bk.autor)):'')+'</span></div><div style="display:flex;gap:8px">'+fold+'</div><label style="display:flex;align-items:center;gap:9px;margin-top:9px;background:#14210f;border:1px solid #3d5226;border-radius:9px;padding:8px 10px;cursor:pointer"><input type="checkbox" class="_bkcShr" data-bk="'+esc(bk.id)+'"'+(bk.compartido?' checked':'')+' style="width:17px;height:17px;accent-color:#7DC855;margin:0"><span style="font-size:11.5px;color:#CBE8B5;font-weight:700">👁 Compartir esta semana — todos podrán incluirla al exportar</span></label><button class="_bkcDel" data-bk="'+esc(bk.id)+'" style="width:100%;margin-top:9px;background:#2a1620;color:#f5b8c8;border:1px solid #5e2740;border-radius:9px;padding:8px;font-weight:700;font-size:11.5px">Borrar este respaldo</button></div>'}).join(''):'<div style="padding:30px 20px;text-align:center;color:#9a8fa2;font-size:13px">Aun no hay respaldos. Toca Crear respaldo.</div>';ov.innerHTML=_bkcShell(_bkcHead('Respaldos guardados','Toca una carpeta llena para ver esa secuencia')+'<div style="padding:14px">'+body+'<button id="_bkcBack" style="width:100%;margin-top:4px;background:#26232b;color:#c9bfd2;border:0;border-radius:10px;padding:11px;font-weight:700">Volver</button></div>');document.getElementById('_bkcX').onclick=function(){ov.remove()};document.getElementById('_bkcBack').onclick=_showBackCron;Array.prototype.forEach.call(ov.querySelectorAll('.bkcFolder.full'),function(f){f.onclick=function(){_bkcVerFolder(f.getAttribute('data-bk'),f.getAttribute('data-d'))}});Array.prototype.forEach.call(ov.querySelectorAll('._bkcDel'),function(b){b.onclick=function(){_bkcBorrar(b.getAttribute('data-bk'))}});Array.prototype.forEach.call(ov.querySelectorAll('._bkcShr'),function(ch){ch.onchange=function(){_bkcShare(ch.getAttribute('data-bk'),ch.checked)}})}
