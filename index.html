@@ -2543,7 +2543,7 @@ async function _crAlcanceUI(c){
     '<div style="display:flex;gap:7px;margin-bottom:8px;flex-wrap:wrap;align-items:center">'+
     '<span style="font-size:11px;color:#7d8590;font-weight:700">FECHAS:</span>'+
     '<button id="_crFeXer" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">📅 Tomar del cronograma</button>'+
-    '<button id="_crFeVer" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">👁 Ver hojas</button>'+
+    '<button id="_crFeVer" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">👁 Ver hoja 2 · AGRUPADO</button>'+
     '<button id="_crFeExp" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">⬇ Plantilla Excel</button>'+
     '<button id="_crFeGua" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">⬇ Exportar lo guardado</button>'+
     '<button id="_crFeImp" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;font-size:11.5px">⬆ Cargar plantilla</button>'+
@@ -2601,6 +2601,7 @@ async function _crAlcanceUI(c){
         '</span></span>'+
         '<span style="flex:none;color:'+(propio?'#C39BD3':'#9FE8B0')+';font-size:11px;font-weight:800">'+hMe+' hh</span></div>'});
     var B=document.getElementById('_crAlcBody');
+    if(_crHoja===2&&_crH2){B.innerHTML=_crPintaHoja2(_crH2,P,sel,fec);return}
     B.innerHTML=H||'<div style="padding:14px;color:#7d8590;text-align:center">Sin coincidencias</div>';
     B.querySelectorAll('._crIt').forEach(function(d){d.onclick=function(ev){
       /* los campos de fecha no deben marcar ni desmarcar la partida */
@@ -2633,13 +2634,18 @@ async function _crAlcanceUI(c){
     }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8')}
     b.disabled=false};
   document.getElementById('_crFeVer').onclick=async function(){
-    var b=this;b.disabled=true;fmsg('Armando las hojas para verlas…');
+    var b=this;b.disabled=true;
     try{
-      /* lo mismo que se exportaria: lo que se ve ahora, guardado o no */
-      var vista={};P.forEach(function(p){
-        vista[p.id]={inc:!!sel[p.id],ini:fec[p.id].ini,fin:fec[p.id].fin,origen:fec[p.id].origen}});
-      await _crVerHojas(c,vista);
-      fmsg('');
+      _crHoja=(_crHoja===2)?1:2;
+      if(_crHoja===2&&!_crH2){                    /* se carga una sola vez */
+        fmsg('Leyendo el cronograma…');
+        _crH2={tar:await _crTareas(c.cron_id),gs:[],nom:{}};
+        try{_crH2.gs=await _agDe(c.cron_id)}catch(_e){}
+        try{(await _crWbsDe(c.cron_id)).forEach(function(w){
+          if(w.nombre)_crH2.nom[w.ruta]=w.nombre})}catch(_e){}
+        fmsg('')}
+      b.textContent=(_crHoja===2)?'👁 Ver hoja 1 · ALCANCE':'👁 Ver hoja 2 · AGRUPADO';
+      pinta();
     }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8')}
     b.disabled=false};
   document.getElementById('_crFeExp').onclick=async function(){
@@ -2834,6 +2840,57 @@ function _crSemDe(tar){
     out.push({n:n,ini:_crSemISO(f-6),fin:_crSemISO(f),serial:f})}
   return out}
 /* cuantas horas por dia pide cada tarea: el termometro de si es realista */
+/* Que hoja se esta mirando en la pantalla de alcance, y lo que la hoja 2
+   necesita -tareas, agrupaciones y titulos de WBS-, cargado una sola vez. */
+var _crHoja=1, _crH2=null;
+/* La hoja 2 tal como sale en el Excel: los titulos de WBS y, bajo cada uno,
+   sus tareas con las partidas que reclaman. Las agrupaciones van con su color,
+   el mismo que se ve en el resto del aplicativo. */
+function _crPintaHoja2(D,P,sel,fec){
+  var porId={};(P||[]).forEach(function(p){porId[p.id]=p});
+  var grupoDe={},nomG={},colG={};
+  (D.gs||[]).forEach(function(g,i){
+    (g.miembros||[]).forEach(function(m){grupoDe[m]=g.grupo_id});
+    nomG[g.grupo_id]=g.nombre||g.grupo_id;
+    colG[g.grupo_id]=_crColorG(g.grupo_id,g.orden!=null?g.orden:i,g.color)});
+  var rp=_crReparto(D.tar);
+  var H='',prev=[];
+  D.tar.slice().sort(function(a,b){return (a.orden||0)-(b.orden||0)}).forEach(function(t){
+    /* los titulos de WBS, solo cuando cambian */
+    var ruta=String(t.wbs||'').split(' / ').filter(function(z){return z});
+    var i0=0;while(i0<ruta.length&&i0<prev.length&&ruta[i0]===prev[i0])i0++;
+    for(var j=i0;j<ruta.length;j++){
+      var rj=ruta.slice(0,j+1).join(' / ');
+      H+='<div style="margin:'+(j?'6px':'11px')+' 0 3px '+(j*13)+'px;font-weight:800;'+
+        'font-size:'+(j?11:12)+'px;color:'+(j?'#8ECBF5':'#9FE8B0')+';letter-spacing:.02em">'+
+        esc(String(D.nom[rj]||ruta[j]).toUpperCase())+'</div>'}
+    prev=ruta;
+    /* las partidas que esta tarea reclama y estan marcadas */
+    var ms=(t.items||[]).filter(function(i){return sel[i]});
+    var fuera=(t.items||[]).filter(function(i){return !sel[i]});
+    var hh=0;ms.forEach(function(i){
+      var pp=porId[i];if(pp)hh+=(Number(pp.hh)||0)/_crVeces(rp,i)});
+    var chips={};ms.forEach(function(i){var g=grupoDe[i];if(g)chips[g]=1});
+    var info=!(t.items||[]).length;
+    H+='<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 8px;'+
+      'margin-left:'+(ruta.length*13)+'px;border-bottom:1px solid #16202e">'+
+      '<b style="flex:none;color:#8ECBF5;font-size:11px;min-width:54px">'+esc(t.task_code)+'</b>'+
+      '<span style="flex:1;min-width:120px;overflow-wrap:anywhere">'+
+        esc(String(t.nombre||''))+
+        '<br><span style="color:#5a6b85;font-size:10.5px">'+
+          esc(t.ini||'—')+' → '+esc(t.fin||'—')+
+          (ms.length?(' · '+ms.length+' partida'+(ms.length>1?'s':'')):'')+
+          (fuera.length?('<span style="color:#E8C9A0"> · '+fuera.length+' fuera del alcance</span>'):'')+
+        '</span>'+
+        (Object.keys(chips).length?('<br>'+Object.keys(chips).map(function(g){
+          return '<span style="display:inline-block;margin:3px 4px 0 0;padding:1px 7px;'+
+            'border-radius:999px;font-size:10px;font-weight:800;color:#101820;'+
+            'background:'+(colG[g]||'#8DD6ED')+'">'+esc(nomG[g]||g)+'</span>'}).join('')):'')+
+      '</span>'+
+      '<span style="flex:none;font-size:11px;font-weight:800;color:'+
+        (info?'#7d8590':(hh>0?'#9FE8B0':'#E8C9A0'))+'">'+
+        (info?'informativa':(Math.round(hh*100)/100)+' hh')+'</span></div>'});
+  return H||'<div style="padding:14px;color:#7d8590;text-align:center">Sin tareas</div>'}
 /* un color estable por agrupacion, para reconocerlas de un vistazo */
 var _CR_PAL=['#5AF696','#8DD6ED','#ED7EF0','#F8C199','#88A1E3','#D4E7A1','#C79AFA',
              '#F5B7B1','#A3E4D7','#F9E79F','#AEB6BF','#7FB3D5'];
@@ -11109,7 +11166,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824d1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824d2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
