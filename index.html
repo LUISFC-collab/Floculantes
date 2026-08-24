@@ -6168,6 +6168,127 @@ function _crLaborables(desde,hasta){
     try{ok=(typeof esLaborable==='function')?!!esLaborable(f):true}catch(_e){}
     if(ok)out.push(f)}
   return out}
+/* ---------------- El lookahead: PPC y Razones -------------------------------
+   Se leen del extracto que va con el aplicativo y se rellenan con lo nuestro. */
+var _WKLOOK=null, _WK_AZUL='FF0070C0';
+async function _wkLookBase(){
+  if(_WKLOOK)return _WKLOOK;
+  var res=await fetch('lookahead.xlsx?v='+encodeURIComponent(typeof APP_VER!=='undefined'?APP_VER:''),
+    {cache:'no-store'});
+  if(!res.ok)return null;
+  var ent=_wkZipLeer(await res.arrayBuffer()),mapa={};
+  ent.forEach(function(e){mapa[e.nombre]=e});
+  var dec=new TextDecoder();
+  var leer=async function(n){var e=mapa[n];if(!e)return '';
+    return dec.decode(e.metodo===8?await _wkInflar(e.datos):e.datos)};
+  var crudo=async function(n){var e=mapa[n];if(!e)return null;
+    return e.metodo===8?await _wkInflar(e.datos):e.datos};
+  var hojas=_wkHojas(await leer('xl/workbook.xml'),await leer('xl/_rels/workbook.xml.rels'));
+  var H={},A={};
+  for(var n in hojas)if(mapa[hojas[n]]){
+    H[n]=await leer(hojas[n]);
+    A[n]=await _wkActivosDe(mapa,leer,crudo,hojas[n])}
+  _WKLOOK={styles:await leer('xl/styles.xml'),hojas:H,activos:A};
+  return _WKLOOK}
+/* el estilo con el que la hoja pinta esa celda */
+function _wkEstiloEn(xml,ref){return _wkEstiloDe(xml,ref)}
+/* Escribe en una celda que YA existe -o la crea en su sitio- conservando el
+   estilo salvo que se le de otro. `q` es {t:texto} | {f:formula} | {v:numero}
+   | {} para dejarla vacia. */
+function _wkPonEn(xml,ref,q,estilo){
+  var col=ref.replace(/\d+$/,''), fil=+ref.replace(/^[A-Z]+/,'');
+  var st=(estilo!=null&&estilo!=='')?String(estilo):_wkEstiloDe(xml,ref);
+  var dentro='';
+  var cab='<c r="'+ref+'"'+(st?(' s="'+st+'"'):'');
+  if(q&&q.t!=null&&q.t!==''){cab+=' t="inlineStr"';dentro='<is><t xml:space="preserve">'+_wkEsc(q.t)+'</t></is>'}
+  else if(q&&q.f)dentro='<f>'+_wkEsc(q.f)+'</f>';
+  else if(q&&q.v!=null&&q.v!=='')dentro='<v>'+(Math.round(Number(q.v)*1e8)/1e8)+'</v>';
+  var nueva=dentro?(cab+'>'+dentro+'</c>'):(cab+'/>');
+  var pat=new RegExp('<c r="'+ref+'"(?:[^>]*?)(?:/>|>[\\s\\S]*?</c>)');
+  /* por FUNCION: en un reemplazo de texto, el $1 de un $16 se toma por grupo */
+  if(pat.test(xml))return xml.replace(pat,function(){return nueva});
+  /* no existia: se mete en su fila, en orden de columna */
+  var rp=new RegExp('(<row r="'+fil+'"[^>]*>)([\\s\\S]*?)(</row>)');
+  var m=xml.match(rp);
+  if(!m)return xml;
+  var cuerpo=m[2],puesto=false,re2=/<c r="([A-Z]+)\d+"/g,mm,idx=null;
+  while((mm=re2.exec(cuerpo))){
+    if(_wkOrdenNum(mm[1])>_wkOrdenNum(col)){idx=mm.index;break}}
+  cuerpo=(idx!=null)?(cuerpo.slice(0,idx)+nueva+cuerpo.slice(idx)):(cuerpo+nueva);
+  var todo=m[1]+cuerpo+m[3];
+  return xml.replace(rp,function(){return todo})}
+/* Las dos hojas, estiradas a nuestras semanas y con nuestras cuentas.
+   `L3` es lo que devuelve la hoja PARA 3WLA: donde empieza y acaba su data y
+   en que columna cae el % de cada semana. */
+function _wkLookHojas(look,semN,L3,off){
+  if(!look||!L3)return [];
+  var P="'PARA 3WLA'!";
+  var r0=L3.r0,nF=L3.nFin,SEMS=L3.SEMS,BLQ=L3.BLQ;
+  var nSem=SEMS.length;
+  var RO=P+'$O$'+r0+':$O$'+nF;
+  var Tb=function(b,d){var c=_wkColL(BLQ[b]+7);
+    return P+'$'+c+'$'+(r0+(d||0))+':$'+c+'$'+(nF+(d||0))};
+  var out=[];
+  /* ---- PPC ---- */
+  var nPPC=_wkComoSeLlama(look.hojas,'3WLookahead_PPC');
+  if(nPPC){
+    var x=_wkCorreEstilos(look.hojas[nPPC],off);
+    /* el estilo de la primera semana, de una del medio y de la ultima */
+    var EST={};
+    [7,8,9,10,11].forEach(function(r){
+      EST[r]={ini:_wkEstiloDe(x,'C'+r),med:_wkEstiloDe(x,'D'+r),fin:_wkEstiloDe(x,'O'+r)}});
+    for(var b=0;b<nSem;b++){
+      var col=_wkColL(2+b);
+      var cual=(b===0)?'ini':((b===nSem-1)?'fin':'med');
+      x=_wkPonEn(x,'C7'.replace('C',col),{t:'S'+SEMS[b]},EST[7][cual]);
+      x=_wkPonEn(x,col+'8',{f:'SUMPRODUCT(('+RO+'="PROG. SEM. ANT.")*('+Tb(b)+'>0))'},EST[8][cual]);
+      x=_wkPonEn(x,col+'9',{f:'SUMPRODUCT(('+RO+'="PROG. SEM. ANT.")*('+Tb(b)+'>0)*('+Tb(b,1)+'>='+Tb(b)+'))'},EST[9][cual]);
+      x=_wkPonEn(x,col+'10',{f:'SUMPRODUCT(('+RO+'="ACTUAL")*('+Tb(b)+'>0)*('+Tb(b,-1)+'=0))'},EST[10][cual]);
+      x=_wkPonEn(x,col+'11',{f:'IFERROR('+col+'9/'+col+'8,0)'},EST[11][cual])}
+    /* lo que sobra de las 13 originales, si nuestras semanas fueran menos */
+    for(var b2=nSem;b2<13;b2++){
+      var c2=_wkColL(2+b2);
+      [7,8,9,10,11].forEach(function(r){x=_wkPonEn(x,c2+r,{},EST[r].med)})}
+    x=_wkPonEn(x,'C3',{t:String(_WKPROY||'')});
+    x=_wkPonEn(x,'C5',{v:_crASerial(L3.corte||'')||''});
+    var ultC=_wkColL(2+nSem-1);
+    x=x.replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A2:'+ultC+'11"/>');
+    x=_wkPonTab(x,_WK_AZUL);
+    var aP=look.activos[nPPC]||null;
+    if(aP&&aP.partes)Object.keys(aP.partes).forEach(function(r){
+      if(/charts\/chart\d+\.xml$/.test(r))
+        aP.partes[r]=String(aP.partes[r]).replace(/\$O\$(7|8|9|11)/g,
+          function(_t,fila){return '$'+ultC+'$'+fila})});
+    out.push([nPPC,x,aP?{relsHoja:aP.rels,partes:aP.partes}:null])}
+  /* ---- Razones ---- */
+  var nRZ=_wkComoSeLlama(look.hojas,'3WLookahead_Razones');
+  if(nRZ){
+    var y=_wkCorreEstilos(look.hojas[nRZ],off);
+    var eS7=_wkEstiloDe(y,'D7'),eSd=_wkEstiloDe(y,'D8');
+    var bAct=SEMS.indexOf(semN);if(bAct<0)bAct=0;
+    for(var b3=0;b3<nSem;b3++){
+      var c3=_wkColL(2+b3);
+      y=_wkPonEn(y,c3+'7',{t:'S'+SEMS[b3]},eS7);
+      for(var r3=8;r3<=18;r3++){
+        var q=(b3===bAct)
+          ?{f:'COUNTIFS('+P+'$N$'+r0+':$N$'+nF+',$B'+r3+','+P+'$L$'+r0+':$L$'+nF+',"NO")'}
+          :{};
+        y=_wkPonEn(y,c3+r3,q,eSd)}}
+    /* el TOTAL pasa al final de las semanas */
+    var colT=_wkColL(2+nSem);
+    y=_wkPonEn(y,colT+'7',{t:'TOTAL'},eS7);
+    for(var r4=8;r4<=18;r4++)
+      y=_wkPonEn(y,colT+r4,{f:'SUM(C'+r4+':'+_wkColL(1+nSem)+r4+')'},eSd);
+    /* y el acumulado por razon mira ese TOTAL nuevo */
+    var nuevoTot='$'+colT+'$8:$'+colT+'$18';
+    y=y.replace(/\$L\$8:\$L\$18/g,function(){return nuevoTot});
+    y=_wkPonEn(y,'C3',{t:String(_WKPROY||'')});
+    y=_wkPonEn(y,'C5',{v:_crASerial(L3.corte||'')||''});
+    y=y.replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="B1:'+colT+'21"/>');
+    y=_wkPonTab(y,_WK_AZUL);
+    var aR=look.activos[nRZ]||null;
+    out.push([nRZ,y,aR?{relsHoja:aR.rels,partes:aR.partes}:null])}
+  return out}
 /* ---------------- El plan a recuperar ----------------------------------------
    Tres semanas para volver a la curva del LB1. De cada actividad se toma lo
    que el LB1 pedia tener hecho al cerrar la tercera semana, se le resta lo
@@ -6682,7 +6803,8 @@ function _wkHoja3WLA(semN,bloque,base,R,corte){
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'+
     '<drawing r:id="rId1"/>'+
     '</worksheet>';
-  return {xml:xml,filas:nFilas,ini:r0,fin:nFin}}
+  return {xml:xml,filas:nFilas,ini:r0,fin:nFin,
+          r0:r0,nFin:nFin,SEMS:SEMS,BLQ:BLQ,corte:corte}}
 /* Los dos logos de la caratula, arriba a la izquierda de PARA 3WLA. Se
    reutilizan los MISMOS ficheros que ya lleva el libro -image8 y image9-, sin
    duplicarlos: el empaquetador los pone una sola vez. */
@@ -8442,6 +8564,12 @@ async function _wkLibroApp(semN,corte,ids){
   try{pan=await _wkPanelBase()}catch(_ep){}
   if(pan&&pan.styles){var fu2=_wkFusionaOtro(estilos,pan.styles);
     estilos=fu2.xml;offPan=fu2.off}
+  /* y los del lookahead, por lo mismo: el pintor cuenta desde el final y no
+     puede colarse nadie por delante despues de que abra */
+  var look=null,offLook={xf:0,dxf:0};
+  try{look=await _wkLookBase()}catch(_el0){}
+  if(look&&look.styles){var fu3=_wkFusionaOtro(estilos,look.styles);
+    estilos=fu3.xml;offLook=fu3.off}
   _wkPintorAbre(estilos);
   var D=await _wkDatosLibro(semN,corte,ids);
   var sem=D.sem;
@@ -8496,15 +8624,16 @@ async function _wkLibroApp(semN,corte,ids){
       base.hojas['GG'].replace('<f>+QPS!V263</f>','<f>COSTO!$D$6</f>')),13),_WK_AMARILLO),null])}
   /* el alimentador del look ahead. No se repinta: ya lleva los estilos de la
      propia hoja 3WLA de la plantilla, que es el formato que debe tener. */
+  /* PARA 3WLA y el lookahead son hojas del reporte, no alimentadores: se
+     arman aqui pero se colocan al final, con las azules */
+  var _hd=null,_look=[];
   try{
-    /* el plan a recuperar: tres semanas para volver a la curva del vigente */
     var _R=null;
     try{
       _R=await _crPlanRecupera(D.bloques[0].id,corte,semN);
       await _crPlanGuarda(_R,D.bloques[0].id,semN);
     }catch(_er){try{console.warn('plan a recuperar:',_er)}catch(_e3){}}
-    var _hd=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte);
-    if(_hd)hojas.push(['PARA 3WLA',_hd.xml,_wk3wLogos(base)]);
+    _hd=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte);
   }catch(_ehd){try{console.warn('PARA 3WLA no se pudo armar:',_ehd)}catch(_e2){}}
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
   /* La caratula del reporte conserva su nombre del original -`Carátula (P)`-,
@@ -8603,6 +8732,11 @@ async function _wkLibroApp(semN,corte,ids){
   /* Q31 arrastraba el encargo de otra obra y C34:H37 son celdas vacias que
      solo llevan formato: fuera las dos cosas. */
   if(_ncz)_wkConDibujo(hojas,_ncz,base,['Q31','C34:H37']);
+  /* las azules del lookahead, detras de la caratula */
+  if(_hd)hojas.push(['PARA 3WLA',_wkPonTab(_hd.xml,_WK_AZUL),_wk3wLogos(base)]);
+  try{
+    if(look&&_hd)_wkLookHojas(look,semN,_hd,offLook).forEach(function(h){hojas.push(h)});
+  }catch(_elk){try{console.warn('lookahead:',_elk)}catch(_e5){}}
   return {hojas:hojas,styles:_wkPintorCierra(estilos),ss:base.ss,
     info:{actividades:prog.actividades,
       crons:D.bloques.map(function(b){return b.id}),espina:D.esp.id,
@@ -12616,7 +12750,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824h4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824h5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
