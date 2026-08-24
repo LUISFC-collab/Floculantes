@@ -5482,118 +5482,210 @@ function _wkCaratulaApp(info){
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
     ultima:ult, celdaSemana:'C17'}}
-/* ------------------------- PROGRAMACION ----------------------------------- */
+/* ------------------------- PROGRAMACION -----------------------------------
+   Los encabezados no se rehacen: se COPIAN las filas 1 a 9 de la hoja
+   original, con sus estilos, sus anchos y sus fechas. De la 10 en adelante se
+   generan las filas, tantas como actividades tenga el cronograma.
+
+   Y va todo FORMULADO, con las mismas formulas que la hoja original:
+     C,D,H,I,K   leen la lista de actividades   -> 'P6-<id>'
+     E,F,G       VLOOKUP contra esa misma lista
+     J,L         cocientes contra $H y contra $K$9
+     O..AF       SUMIF contra el alimentador    -> 'ACTIVITY_PLAN (<id>)'
+   Para que el SUMIF valga en todas las lineas, los alimentadores se indexan
+   por el codigo de la actividad del cronograma VIGENTE, no por el suyo: LB0 y
+   LB1 no comparten codigos, solo partidas, y la suma ya viene resuelta por
+   partidas desde _wkDatosLibro. La lista propia de cada uno queda en su P6. */
 function _wkProgApp(P){
-  var S=_WKS;
-  var COLS=['A','B','C','D','E','F','G','H','I','J','K','L'];
-  var CAB=['COD. P6','CODIGO QPS','PARTIDA','LÍNEA','INICIO','FIN','DURAC. (d)',
-           'CANT.','UND','HH','PESO','ACUM.'];
+  var base=P.base;                      /* la hoja original, para los encabezados */
   var sem=P.semanas, nS=sem.length;
-  var col=function(i){return _wkgCol('M',i)};
-  var r=[],n=1;
-  r.push('<row r="1" ht="21" customHeight="1">'+_crXlsCel('A',1,'PROGRAMACIÓN',true,S.titulo)+'</row>');
-  r.push('<row r="2" ht="28" customHeight="1">'+_crXlsCel('A',2,
-    P.espina.id+' · '+P.crons.length+' línea(s) base y el avance real. '+
-    'Hay tantas filas como actividades tenga el cronograma.',true,S.subtitulo)+
-    _crXlsCel('E',2,'SEMANA',true,S.etiq)+
-    '<c r="F2" s="'+S.cabSem+'"><f>\'Carátula\'!$C$17</f></c>'+
-    _crXlsCel('G',2,'del',true,S.etiq)+
-    '<c r="H2" s="'+S.fecha+'"><f>\'Carátula\'!$C$18</f></c>'+
-    _crXlsCel('I',2,'al',true,S.etiq)+
-    '<c r="J2" s="'+S.fecha+'"><f>\'Carátula\'!$E$18</f></c>'+
-    '</row>');
-  var c3='',c4='';
-  CAB.forEach(function(h,i){c3+=_crXlsCel(COLS[i],3,h,true,S.cab)});
-  c3+=_crXlsCel('M',3,'S0',true,S.cabSem);
-  sem.forEach(function(s,i){c3+=_crXlsCel(col(i+1),3,'S'+s.n,true,S.cabSem)});
-  CAB.forEach(function(h,i){c4+=_crXlsCel(COLS[i],4,'',true,S.cabSem)});
-  c4+=_crXlsCel('M',4,'',true,S.cabSem);
-  sem.forEach(function(s,i){c4+=_crXlsCel(col(i+1),4,s.serFin,false,S.fecha)});
-  r.push('<row r="3" ht="30" customHeight="1">'+c3+'</row>');
-  r.push('<row r="4">'+c4+'</row>');
-  n=5;
-  var nAct=0,prev=[],priAct=0;
-  var vacias=function(desde,est){var o='';for(var i=desde;i<COLS.length;i++)o+=_crXlsCel(COLS[i],n,'',true,est);return o};
+  var COLF=P.colFeeder;                 /* columnas de semana del alimentador */
+  /* las columnas de semana de la hoja: N es S0 y de O en adelante las semanas */
+  var colS=function(i){return _wkgCol('N',i)};   /* i=0 -> N (S0), i=1 -> O (S27) */
+  /* --- 1) la cabecera, copiada --- */
+  var P0=_wkPartirFilas(base);
+  var cab=[],estilo={};
+  var estDe=function(f){       /* los estilos de una fila de la hoja original */
+    var e={},at='';
+    P0.filas.forEach(function(x){if(x.r!==f||x.cuerpo==null)return;
+      at=x.at;
+      _wkCeldas(x.cuerpo).forEach(function(c){
+        var s2=(c.at.match(/s="(\d+)"/)||[])[1];if(s2)e[c.col]=s2})});
+    return {e:e,at:at}};
+  P0.filas.forEach(function(f){
+    if(f.r>9)return;
+    if(f.cuerpo==null){cab.push('<row r="'+f.r+'"'+f.at+'/>');return}
+    var cs=_wkCeldas(f.cuerpo).map(function(c){
+      /* el titulo de la fila 5 y los totales de la 9 se reapuntan */
+      if(f.r===5&&c.col==='D')
+        return '<c r="D5"'+c.at.replace(/\s*t="[^"]*"/,'')+' t="inlineStr"><is><t xml:space="preserve">'+
+          _wkEsc(P.titulo)+'</t></is></c>';
+      if(f.r===9&&(c.col==='K'||c.col==='L'))
+        return '<c r="'+c.col+'9"'+c.at.replace(/\s*t="[^"]*"/,'')+'><f>SUM('+c.col+'10:'+c.col+P.ultFila+')</f></c>';
+      return _wkArmaCelda(c)}).join('');
+    cab.push('<row r="'+f.r+'"'+f.at+'>'+cs+'</row>')});
+  var eWbs=estDe(11), ePlan=estDe(14), eReal=estDe(15);
+  var r=cab.slice(),n=10;
+  var cel=function(col,cont,est,txt){
+    var e=est?(' s="'+est+'"'):'';
+    if(cont===''||cont==null)return '<c r="'+col+n+'"'+e+'/>';
+    if(txt)return '<c r="'+col+n+'"'+e+' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(cont)+'</t></is></c>';
+    return '<c r="'+col+n+'"'+e+'><f>'+_wkEsc(cont)+'</f></c>'};
+  var val=function(col,v,est){
+    var e=est?(' s="'+est+'"'):'';
+    if(v===''||v==null)return '<c r="'+col+n+'"'+e+'/>';
+    return '<c r="'+col+n+'"'+e+'><v>'+v+'</v></c>'};
+  var COLS=['A','B','C','D','E','F','G','H','I','J','K','L','M'];
+  /* --- 2) los titulos de WBS --- */
+  var prev=[],nAct=0,pri=0;
   P.filas.forEach(function(f){
     var ruta=String(f.wbs||'').split(' / ').filter(function(z){return z});
     var i0=0;while(i0<ruta.length&&i0<prev.length&&ruta[i0]===prev[i0])i0++;
     for(var j=i0;j<ruta.length;j++){
       var rj=ruta.slice(0,j+1).join(' / ');
-      var est=(j===0)?S.wbs1:((j===1)?S.wbs2:S.wbs3);
-      var c=_crXlsCel('A',n,'',true,est)+_crXlsCel('B',n,'',true,est)+
-        _crXlsCel('C',n,new Array(j+1).join('    ')+String(P.nomWbs[rj]||ruta[j]).toUpperCase(),true,est);
-      for(var k=3;k<COLS.length;k++)c+=_crXlsCel(COLS[k],n,'',true,est);
-      c+=_crXlsCel('M',n,'',true,est);
-      sem.forEach(function(_s,i2){c+=_crXlsCel(col(i2+1),n,'',true,est)});
-      r.push('<row r="'+n+'">'+c+'</row>');n++}
-    prev=ruta;
-    if(!priAct)priAct=n;
-    P.crons.forEach(function(cr,k){
-      var v=f.lineas[cr.id],e=_wkEstLinea(k);
       var c='';
-      c+=_crXlsCel('A',n,(k===0)?f.cod:'',true,S.texto);
-      c+=_crXlsCel('B',n,(k===0)?(f.qps||''):'',true,S.texto);
-      c+=_crXlsCel('C',n,(k===0)?(new Array(ruta.length+1).join('    ')+f.nom):'',true,S.texto);
-      c+=_crXlsCel('D',n,cr.id,true,e.et);
-      c+=_crXlsCel('E',n,v?_crASerial(v.ini):'',false,e.fecha);
-      c+=_crXlsCel('F',n,v?_crASerial(v.fin):'',false,e.fecha);
-      c+=_crXlsCel('G',n,(v&&v.dias)?v.dias:'',false,S.ent);
-      c+=_crXlsCel('H',n,(k===0&&f.cant!==''&&f.cant!=null)?f.cant:'',false,S.num);
-      c+=_crXlsCel('I',n,(k===0)?(f.und||''):'',true,S.texto);
-      c+=_crXlsCel('J',n,v?Math.round(v.hh*100)/100:'',false,e.num);
-      c+=_crXlsCel('K',n,(v&&P.hhTot[cr.id]>0)?Math.round(v.hh/P.hhTot[cr.id]*1e6)/1e6:'',false,e.pct);
-      c+=_crXlsCel('L',n,'',false,e.pct);
-      c+=_crXlsCel('M',n,0,false,e.pct);
-      sem.forEach(function(_s,i2){
-        c+=_crXlsCel(col(i2+1),n,(v&&v.acum[i2]!=null)?Math.round(v.acum[i2]*1e6)/1e6:'',false,e.pct)});
-      r.push('<row r="'+n+'">'+c+'</row>');n++});
-    var e2=_wkEstLinea(0,'actual'),c2='';
-    c2+=_crXlsCel('A',n,'',true,S.texto)+_crXlsCel('B',n,'',true,S.texto)+_crXlsCel('C',n,'',true,S.texto);
-    c2+=_crXlsCel('D',n,'Actual',true,e2.et);
-    c2+=_crXlsCel('E',n,'',false,e2.fecha)+_crXlsCel('F',n,'',false,e2.fecha);
-    c2+=_crXlsCel('G',n,'',false,S.ent)+_crXlsCel('H',n,'',false,S.num)+_crXlsCel('I',n,'',true,S.texto);
-    c2+=_crXlsCel('J',n,Math.round((f.hhReal||0)*100)/100,false,e2.num);
-    c2+=_crXlsCel('K',n,'',false,e2.pct);
-    c2+=_crXlsCel('L',n,Math.round((f.pctReal||0)*1e6)/1e6,false,e2.pct);
-    c2+=_crXlsCel('M',n,0,false,e2.pct);
-    sem.forEach(function(_s,i2){
-      var v2=(f.acumReal&&(i2+1)<=P.iSem)?Math.round(f.acumReal[i2]*1e6)/1e6:'';
-      c2+=_crXlsCel(col(i2+1),n,v2,false,e2.pct)});
-    r.push('<row r="'+n+'">'+c2+'</row>');n++;
+      COLS.forEach(function(col){
+        c+=(col==='D')
+          ? cel('D',new Array(j+1).join('    ')+String(P.nomWbs[rj]||ruta[j]).toUpperCase(),eWbs.e.D,true)
+          : val(col,'',eWbs.e[col])});
+      for(var k2=0;k2<=nS;k2++)c+=val(colS(k2),'',eWbs.e[colS(k2)]);
+      r.push('<row r="'+n+'"'+eWbs.at+'>'+c+'</row>');n++}
+    prev=ruta;
+    if(!pri)pri=n;
+    /* --- 3) una fila por cronograma, toda formulada --- */
+    var base0=n, filaReal=n+P.crons.length;
+    P.crons.forEach(function(cr,k){
+      var H6="'P6-"+cr.id+"'", AP="'ACTIVITY_PLAN ("+cr.id+")'";
+      var fp=f.p6[cr.id];                 /* la fila de esa actividad en su P6 */
+      var c='';
+      c+=val('A','',ePlan.e.A);
+      c+=(k===0)?cel('B','MAX(O'+filaReal+':'+_wkgCol('N',nS)+filaReal+')',ePlan.e.B)
+                :val('B','',ePlan.e.B);
+      c+=(k===0&&fp)?cel('C',H6+'!E'+fp,ePlan.e.C):val('C','',ePlan.e.C);
+      c+=(k===0&&fp)?cel('D',H6+'!F'+fp,ePlan.e.D):val('D','',ePlan.e.D);
+      c+=fp?cel('E','VLOOKUP($C'+base0+','+H6+'!$E$3:$I$'+P.p6Ult[cr.id]+
+            ',MATCH('+H6+'!$H$2,'+H6+'!$E$2:$I$2,0),FALSE)',ePlan.e.E):val('E','',ePlan.e.E);
+      c+=fp?cel('F','VLOOKUP($C'+base0+','+H6+'!$E$3:$I$'+P.p6Ult[cr.id]+
+            ',MATCH('+H6+'!$I$2,'+H6+'!$E$2:$I$2,0),FALSE)',ePlan.e.F):val('F','',ePlan.e.F);
+      c+=fp?cel('G','VLOOKUP($C'+base0+','+H6+'!$E$3:$I$'+P.p6Ult[cr.id]+',3,FALSE)',ePlan.e.G)
+           :val('G','',ePlan.e.G);
+      c+=(k===0&&fp)?cel('H',H6+'!B'+fp,ePlan.e.H):val('H','',ePlan.e.H);
+      c+=(k===0&&fp)?cel('I',H6+'!C'+fp,ePlan.e.I):val('I','',ePlan.e.I);
+      c+=cel('J','IFERROR($K'+n+'/$H'+base0+',0)',ePlan.e.J);
+      c+=cel('K','IFERROR(SUMIF('+AP+'!$B:$B,$C'+base0+','+AP+'!$F:$F),0)',ePlan.e.K);
+      c+=cel('L','IFERROR($K'+n+'/$K$9,0)',ePlan.e.L);
+      c+=cel('M','Prog. '+cr.id,ePlan.e.M,true);
+      c+=val(colS(0),'',ePlan.e[colS(0)]);
+      for(var w=1;w<=nS;w++)
+        c+=cel(colS(w),'IFERROR(SUMIF('+AP+'!$B:$B,$C'+base0+','+AP+'!'+COLF[w-1]+':'+COLF[w-1]+
+          ')/$K'+n+'+'+colS(w-1)+n+',0)',ePlan.e[colS(w)]);
+      r.push('<row r="'+n+'"'+ePlan.at+'>'+c+'</row>');n++});
+    /* --- 4) la del avance real, contra el alimentador REAL --- */
+    var RE="'"+P.hojaReal+"'",c2='';
+    COLS.forEach(function(col){
+      c2+=(col==='M')?cel('M','Actual',eReal.e.M,true):val(col,'',eReal.e[col])});
+    c2+=val(colS(0),'',eReal.e[colS(0)]);
+    for(var w2=1;w2<=nS;w2++)
+      c2+=(w2<=P.iSem)
+        ? cel(colS(w2),'IFERROR(SUMIF('+RE+'!$B:$B,$C'+base0+','+RE+'!'+COLF[w2-1]+':'+COLF[w2-1]+
+            ')/$K'+base0+'+'+colS(w2-1)+n+',0)',eReal.e[colS(w2)])
+        : val(colS(w2),'',eReal.e[colS(w2)]);
+    r.push('<row r="'+n+'"'+eReal.at+'>'+c2+'</row>');n++;
     nAct++});
-  /* el total, formulado contra las filas de cada linea base */
-  var ultFila=n-1;
-  var tot='';
-  tot+=_crXlsCel('A',n,'',true,S.total)+_crXlsCel('B',n,'',true,S.total);
-  tot+=_crXlsCel('C',n,'TOTAL — '+nAct+' actividades',true,S.total);
-  tot+=_crXlsCel('D',n,'',true,S.total)+_crXlsCel('E',n,'',true,S.total)+
-       _crXlsCel('F',n,'',true,S.total)+_crXlsCel('G',n,'',true,S.total)+
-       _crXlsCel('H',n,'',true,S.total)+_crXlsCel('I',n,'',true,S.total);
-  tot+='<c r="J'+n+'" s="'+S.totalNum+'"><f>SUMIFS(J'+priAct+':J'+ultFila+',$D'+priAct+':$D'+ultFila+',"'+
-    _wkEsc(P.crons[0].id)+'")</f></c>';
-  tot+=_crXlsCel('K',n,'',true,S.total)+_crXlsCel('L',n,'',true,S.total)+_crXlsCel('M',n,'',true,S.total);
-  sem.forEach(function(_s,i2){tot+=_crXlsCel(col(i2+1),n,'',true,S.total)});
-  r.push('<row r="'+n+'">'+tot+'</row>');
-  var ultCol=col(nS);
+  var ultCol=_wkgCol('N',nS);
+  var x=P0.cab.replace('<sheetData>','')+'';
+  /* la cabecera de la hoja original (cols, vistas, formato) se conserva */
+  var enc=base.slice(0,base.indexOf('<sheetData>'));
+  enc=enc.replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:'+ultCol+(n-1)+'"/>');
+  var pie=base.slice(base.indexOf('</sheetData>')+12);
+  pie=pie.replace(/<autoFilter ref="[^"]*"[^>]*\/>/,'<autoFilter ref="A6:'+ultCol+(n-1)+'"/>');
+  return {xml:enc+'<sheetData>'+r.join('')+'</sheetData>'+pie,
+    actividades:nAct, ultima:n-1, priAct:pri}}
+/* La lista de actividades de un cronograma, sobre la espina del reporte.
+   Las actividades son SIEMPRE las del cronograma vigente; lo que cambia de una
+   linea base a otra son sus fechas y sus HH. Asi cada P6 tiene las mismas
+   filas y las formulas de PROGRAMACION valen para todas. */
+function _wkHojaP6Esp(id,filas,semanas){
+  var S=_WKS,r=[],n=3;
+  var c1=_crXlsCel('A',1,'ACTIVIDADES SEGÚN '+id+' — mismas actividades del reporte, '+
+    'con las fechas y las HH que les da este cronograma.',true,S.subtitulo);
+  r.push('<row r="1">'+c1+'</row>');
+  var cab=['ITEM QPS','CANT.','UND','HH','ITEM','PARTIDA','DURAC. (d)','INICIO','FIN'];
+  var c2='';cab.forEach(function(h,i){c2+=_crXlsCel(String.fromCharCode(65+i),2,h,true,S.cab)});
+  r.push('<row r="2">'+c2+'</row>');
+  filas.forEach(function(f){
+    var v=f.lineas[id];
+    var c='';
+    c+=_crXlsCel('A',n,f.qps||'',true,S.texto);
+    c+=_crXlsCel('B',n,(f.cant===''||f.cant==null)?'':f.cant,false,S.num);
+    c+=_crXlsCel('C',n,f.und||'',true,S.texto);
+    c+=_crXlsCel('D',n,v?Math.round(v.hh*100)/100:'',false,S.num);
+    c+=_crXlsCel('E',n,f.cod,true,S.texto);
+    c+=_crXlsCel('F',n,f.nom,true,S.texto);
+    c+=_crXlsCel('G',n,(v&&v.dias)?v.dias:'',false,S.ent);
+    c+=_crXlsCel('H',n,v?_crASerial(v.ini):'',false,S.fecha);
+    c+=_crXlsCel('I',n,v?_crASerial(v.fin):'',false,S.fecha);
+    r.push('<row r="'+n+'">'+c+'</row>');n++});
   return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    _wkTab(_WK_VERDE)+
-    '<dimension ref="A1:'+ultCol+n+'"/>'+
-    '<sheetViews><sheetView showGridLines="0" workbookViewId="0">'+
-    '<pane xSplit="4" ySplit="4" topLeftCell="E5" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
+    _wkTab(_WK_AMARILLO)+
+    '<dimension ref="A1:I'+(n-1)+'"/>'+
+    '<sheetViews><sheetView workbookViewId="0">'+
+    '<pane xSplit="6" ySplit="2" topLeftCell="G3" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
     '<sheetFormatPr defaultRowHeight="15"/>'+
-    '<cols><col min="1" max="2" width="13" customWidth="1"/>'+
-    '<col min="3" max="3" width="58" customWidth="1"/>'+
-    '<col min="4" max="4" width="9" customWidth="1"/>'+
-    '<col min="5" max="6" width="12" customWidth="1"/>'+
-    '<col min="7" max="9" width="10" customWidth="1"/>'+
-    '<col min="10" max="12" width="11" customWidth="1"/>'+
-    '<col min="13" max="'+(12+nS+1)+'" width="9" customWidth="1"/></cols>'+
+    '<cols><col min="1" max="1" width="13" customWidth="1"/>'+
+    '<col min="2" max="5" width="11" customWidth="1"/>'+
+    '<col min="6" max="6" width="54" customWidth="1"/>'+
+    '<col min="7" max="9" width="12" customWidth="1"/></cols>'+
     '<sheetData>'+r.join('')+'</sheetData>'+
-    '<autoFilter ref="A3:'+ultCol+ultFila+'"/>'+
-    '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>'+
-    '<pageSetup orientation="landscape" paperSize="9" scale="55"/></worksheet>',
-    actividades:nAct, ultima:n}}
+    '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
+    ultima:n-1}}
+/* El alimentador de un cronograma, indexado por el codigo de la actividad del
+   reporte: es lo que permite que el SUMIF de PROGRAMACION valga para todas las
+   lineas, porque LB0 y LB1 no comparten codigos, solo partidas. */
+function _wkFeederEsp(id,filas,semanas,quePasa){
+  var S=_WKS,r=[],n=3;
+  r.push('<row r="1">'+_crXlsCel('A',1,quePasa,true,S.subtitulo)+
+    semanas.map(function(s){return _crXlsCel(s.col,1,'S'+s.n,true,S.cab)}).join('')+'</row>');
+  var c2=_crXlsCel('B',2,'ITEM',true,S.cab)+_crXlsCel('C',2,'PARTIDA',true,S.cab)+
+    _crXlsCel('F',2,'HH',true,S.cab)+_crXlsCel('G',2,'INICIO',true,S.cab)+
+    _crXlsCel('H',2,'FIN',true,S.cab)+_crXlsCel('I',2,'DURAC. (d)',true,S.cab)+
+    semanas.map(function(s){return _crXlsCel(s.col,2,s.serFin,false,S.fecha)}).join('');
+  r.push('<row r="2">'+c2+'</row>');
+  var tot=semanas.map(function(){return 0}),tH=0;
+  filas.forEach(function(f){
+    var v=(id==='__REAL__')?{hh:f.hhReal,sem:f.semReal,ini:'',fin:'',dias:0}:f.lineas[id];
+    var c='';
+    c+=_crXlsCel('B',n,f.cod,true,S.texto);
+    c+=_crXlsCel('C',n,f.nom,true,S.texto);
+    c+=_crXlsCel('F',n,v?Math.round(v.hh*100)/100:0,false,S.num);
+    c+=_crXlsCel('G',n,(v&&v.ini)?_crASerial(v.ini):'',false,S.fecha);
+    c+=_crXlsCel('H',n,(v&&v.fin)?_crASerial(v.fin):'',false,S.fecha);
+    c+=_crXlsCel('I',n,(v&&v.dias)?v.dias:'',false,S.ent);
+    semanas.forEach(function(s,i){
+      var x=(v&&v.sem&&v.sem[i])?Math.round(v.sem[i]*1e6)/1e6:'';
+      if(x!==''){tot[i]+=x}
+      c+=_crXlsCel(s.col,n,x,false,S.num)});
+    if(v)tH+=v.hh;
+    r.push('<row r="'+n+'">'+c+'</row>');n++});
+  var ct=_crXlsCel('C',n,'TOTAL',true,S.total)+
+    _crXlsCel('F',n,Math.round(tH*100)/100,false,S.totalNum)+
+    semanas.map(function(s,i){return _crXlsCel(s.col,n,Math.round(tot[i]*1e6)/1e6,false,S.totalNum)}).join('');
+  r.push('<row r="'+n+'">'+ct+'</row>');
+  return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    _wkTab(_WK_AMARILLO)+
+    '<dimension ref="A1:'+semanas[semanas.length-1].col+n+'"/>'+
+    '<sheetViews><sheetView workbookViewId="0">'+
+    '<pane xSplit="3" ySplit="2" topLeftCell="D3" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
+    '<sheetFormatPr defaultRowHeight="15"/>'+
+    '<cols><col min="2" max="2" width="12" customWidth="1"/>'+
+    '<col min="3" max="3" width="52" customWidth="1"/>'+
+    '<col min="6" max="9" width="11" customWidth="1"/>'+
+    '<col min="14" max="'+(13+semanas.length)+'" width="9" customWidth="1"/></cols>'+
+    '<sheetData>'+r.join('')+'</sheetData>'+
+    '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>',
+    ultima:n}}
 /* Junta los datos y arma el libro. La espina es el ULTIMO cronograma marcado
    -el vigente- y de el salen las actividades; los demas aportan su linea. */
 async function _wkDatosLibro(semN,corte,ids){
@@ -5638,7 +5730,7 @@ async function _wkDatosLibro(semN,corte,ids){
       if(!(hh>0)&&cc.id!==esp.id)return;
       /* la ventana de esa linea base: primera y ultima semana con carga */
       var p=-1,q=-1;s.forEach(function(v,i){if(v>0.000001){if(p<0)p=i;q=i}});
-      lineas[cc.id]={hh:hh,acum:_wkAcumDe(s,hh),
+      lineas[cc.id]={hh:hh,sem:s,acum:_wkAcumDe(s,hh),
         ini:(cc.id===esp.id)?t.ini:(p>=0?sem[p].ini:''),
         fin:(cc.id===esp.id)?t.fin:(q>=0?sem[q].fin:''),
         dias:(cc.id===esp.id)?((t.ini&&t.fin)?(_crASerial(t.fin)-_crASerial(t.ini)+1):0)
@@ -5648,6 +5740,9 @@ async function _wkDatosLibro(semN,corte,ids){
       if(!(hhE>0))return 0;
       var v=0;ms.forEach(function(i){v+=(esp.u.items[i]/_crVeces(esp.rp,i))*pctA(i,s2.fin)});
       return Math.min(1,v/hhE)});
+    /* el avance de cada semana, que es la diferencia con la anterior */
+    var semReal=acumReal.map(function(a,i){
+      return Math.max(0,Math.round(((a-(i?acumReal[i-1]:0))*hhE)*1e6)/1e6)});
     var hoy=(typeof todayISO==='function')?todayISO():corte;
     var pr=0;if(hhE>0)ms.forEach(function(i){pr+=(esp.u.items[i]/_crVeces(esp.rp,i))*pctA(i,corte)});
     var cant='',und='',qps='';
@@ -5655,7 +5750,8 @@ async function _wkDatosLibro(semN,corte,ids){
     else if(ms.length>1)qps='('+ms.length+')';
     filas.push({cod:t.task_code,qps:qps,nom:String(t.nombre||''),wbs:String(t.wbs||''),
       cant:cant,und:und,lineas:lineas,
-      hhReal:hhE>0?pr:0,pctReal:hhE>0?Math.min(1,pr/hhE):0,acumReal:acumReal})});
+      hhReal:hhE>0?pr:0,pctReal:hhE>0?Math.min(1,pr/hhE):0,
+      acumReal:acumReal,semReal:semReal})});
   var hhTot={};C.forEach(function(cc){hhTot[cc.id]=cc.u.hh});
   return {sem:sem,C:C,esp:esp,filas:filas,hhTot:hhTot,
     iSem:Math.max(1,Math.min(sem.length,semN-26))}}
@@ -5679,18 +5775,29 @@ async function _wkLibroApp(semN,corte,ids){
     crons:D.C.map(function(c){return {id:c.id,nombre:c.nombre,nAct:c.tar.length,
       hh:c.u.hh,ini:c.ini,fin:c.fin}}),
     pctReal:Math.round(pctReal*1e6)/1e6, hhAlcance:hhAlc});
-  var prog=_wkProgApp({espina:{id:D.esp.id},crons:D.C.map(function(c){return {id:c.id}}),
+  var HREAL='REAL (aplicativo)';
+  var p6Ult={};D.C.forEach(function(c){p6Ult[c.id]=2+D.filas.length});
+  D.filas.forEach(function(f,i){f.p6={};D.C.forEach(function(c){f.p6[c.id]=3+i})});
+  var prog=_wkProgApp({base:base.hojas['PROGRAMACION'],
+    espina:{id:D.esp.id},crons:D.C.map(function(c){return {id:c.id}}),
     semanas:sem,sem:semN,corte:corte,iSem:D.iSem,filas:D.filas,
-    nomWbs:D.esp.nomWbs,hhTot:D.hhTot});
+    nomWbs:D.esp.nomWbs,hhTot:D.hhTot,p6Ult:p6Ult,hojaReal:HREAL,
+    colFeeder:sem.map(function(x){return x.col}),
+    titulo:(DATA.proyecto||'')+' — '+D.C.map(function(c){return c.id}).join(' / '),
+    ultFila:9+D.filas.length*(D.C.length+1)+40});
   /* el orden que pide el reporte: primero los alimentadores, luego las
      listas de actividades, y al final la caratula y la programacion */
   var hojas=[];
   D.C.forEach(function(c){
-    var fil=_crPlanSemanal(c.tar,c.u.items,sem);
     hojas.push(['ACTIVITY_PLAN ('+c.id+')',
-      _crHojaPlan({cron_id:c.id,nombre:c.nombre},fil,sem,_WKS)])});
+      _wkFeederEsp(c.id,D.filas,sem,
+        'PLAN '+c.id+' — HH por semana de cada actividad del reporte. '+
+        'Va indexado por el código de la actividad vigente, no por el de '+c.id+
+        ': las líneas base no comparten códigos, solo partidas.').xml])});
+  hojas.push([HREAL,_wkFeederEsp('__REAL__',D.filas,sem,
+    'AVANCE REAL del aplicativo — HH ejecutadas por semana, al corte '+corte+'.').xml]);
   D.C.forEach(function(c){
-    hojas.push(['P6-'+c.id,_wkHojaP6({cron_id:c.id},c.tar,c.u.items,sem).xml])});
+    hojas.push(['P6-'+c.id,_wkHojaP6Esp(c.id,D.filas,sem).xml])});
   hojas.push(['Carátula',carXml||car.xml]);
   hojas.push(['PROGRAMACION',prog.xml]);
   return {hojas:hojas,styles:fus.xml,ss:base.ss,
@@ -9645,7 +9752,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823k7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823m1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
