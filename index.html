@@ -5726,6 +5726,13 @@ function _wkPintorCierra(styles){
   x=_wkMete(x,'fills',P.rellenos||[]);
   x=_wkMete(x,'cellXfs',P.nuevosX);
   return x}
+/* Le pone -o le cambia- el color de pestana a una hoja ya hecha. El sheetPr
+   tiene que ir el PRIMERO dentro de <worksheet> o el archivo sale roto. */
+function _wkPonTab(xml,rgb){
+  var t=_wkTab(rgb);
+  if(/<sheetPr[\s>]/.test(xml))
+    return xml.replace(/<sheetPr(?:\s[^>]*?)?>[\s\S]*?<\/sheetPr>|<sheetPr(?:\s[^>]*?)?\/>/,t);
+  return xml.replace(/(<worksheet[^>]*>)/,'$1'+t)}
 /* Igual, pero sobre la hoja entera */
 function _wkLimpiaHoja(xml){
   var i=String(xml).indexOf('</sheetData>');
@@ -6593,6 +6600,15 @@ async function _wkLibroApp(semN,corte,ids){
     bl.ib=ib;
     mete('ACTIVITY_PLAN ('+bl.id+')',_wkFeederEsp([bl],sem,false).xml,3)});
   D.bloques.forEach(function(bl){mete('P6-'+bl.id,p6[bl.id],3)});
+  /* La hoja de gastos generales va aqui, con las de apoyo: de ella sale el
+     total que el gasto general de COSTO reparte por avance. Su unica
+     referencia de fuera -el costo directo, que sacaba de la hoja QPS- se
+     reapunta al total de COSTO para que no quede colgando. */
+  var HGG=null;
+  if(base.hojas['GG']){
+    HGG='GG';
+    hojas.push([HGG,_wkPonTab(_wkPintaHoja(_wkLimpiaHoja(
+      base.hojas['GG'].replace('<f>+QPS!V263</f>','<f>COSTO!$D$6</f>')),13),_WK_AMARILLO),null])}
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
   /* la caratula conserva su dibujo -logos y firmas-; lo que se le quita es
      la referencia a la configuracion de impresion, que aqui no existe */
@@ -6613,15 +6629,6 @@ async function _wkLibroApp(semN,corte,ids){
     phy=_wkPhysicalApp(Object.assign({
       base:base.hojas['PHYSICAL % PROGRESS'],filaIni:15},comun));
     mete('PHYSICAL % PROGRESS',phy.xml,15,{grafico:phy.grafico,dibujo:phy.dibujo})}
-  /* la hoja de gastos generales, tal cual: es gris, va entera y de ella sale
-     el total que el gasto general de COSTO reparte por avance. Su unica
-     referencia de fuera -el costo directo, que sacaba de la hoja QPS- se
-     reapunta al total de COSTO para que no quede colgando. */
-  var HGG=null;
-  if(base.hojas['GG']&&phy){
-    HGG='GG';
-    hojas.push([HGG,_wkPintaHoja(_wkLimpiaHoja(
-      base.hojas['GG'].replace('<f>+QPS!V263</f>','<f>COSTO!$D$6</f>')),13),null])}
   if(base.hojas['COSTO']){
     var cos=_wkCostoApp(Object.assign({base:base.hojas['COSTO'],filaIni:7,
       desfasePhy:15-10,
@@ -10623,7 +10630,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823y2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823y3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
