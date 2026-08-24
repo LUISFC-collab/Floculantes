@@ -5581,6 +5581,16 @@ function _wkCaratulaApp(info){
    styles.xml. Por eso el libro se arma primero y los estilos se sellan luego. */
 var _WKPINTA=null;
 var _WK_TINTA='FF0F1E2E';          /* el azul casi negro de los datos */
+/* Un color por cuadro. El vigente en azul -como siempre- y los demas en
+   verde, naranja y morado, cada familia con su tono para cada nivel de WBS. */
+var _WK_CUADRO=[
+  {osc:'FF1F3864',cla:'FFDCE6F1',pal:'FFEAF1FB'},
+  {osc:'FF1E6B3C',cla:'FFD4EDDA',pal:'FFEAF7EE'},
+  {osc:'FF9C4A0A',cla:'FFFDE3CE',pal:'FFFDF1E7'},
+  {osc:'FF4B2A70',cla:'FFE5DBF2',pal:'FFF2ECF8'}];
+function _wkColorCuadro(ib,nivel){
+  var c=_WK_CUADRO[(ib||0)%_WK_CUADRO.length];
+  return nivel<=0?c.osc:(nivel===1?c.cla:c.pal)}
 /* los formatos que Excel trae de fabrica, para saber que decimales llevan */
 var _WKNFB={0:'General',1:'0',2:'0.00',3:'#,##0',4:'#,##0.00',9:'0%',10:'0.00%',
   11:'0.00E+00',12:'# ?/?',13:'# ??/??',14:'dd/mm/yyyy',15:'d-mmm-yy',16:'d-mmm',
@@ -5611,8 +5621,9 @@ function _wkPintorAbre(styles){
   _WKPINTA={fuentes:_wkSaca(styles,'fonts','font'),
     xfs:_wkSaca(styles,'cellXfs','xf'),
     codigos:nfm, usados:{},
-    nuevasF:[],nuevosX:[],nuevosNf:[],cache:{},
-    nF:_wkCuenta(styles,'fonts'), nX:_wkCuenta(styles,'cellXfs'), sig:300};
+    nuevasF:[],nuevosX:[],nuevosNf:[],rellenos:[],cache:{},
+    nF:_wkCuenta(styles,'fonts'), nFi:_wkCuenta(styles,'fills'),
+    nX:_wkCuenta(styles,'cellXfs'), sig:300};
   (styles.match(/numFmtId="(\d+)"/g)||[]).forEach(function(t){
     _WKPINTA.usados[+t.match(/\d+/)[0]]=1})}
 function _wkDesEsc(s){return String(s).replace(/&quot;/g,'"').replace(/&lt;/g,'<')
@@ -5666,6 +5677,25 @@ function _wkPinta(s,num){
   var j=P.nuevosX.indexOf(nx);
   if(j<0){P.nuevosX.push(nx);j=P.nuevosX.length-1}
   var idx=P.nX+j;P.cache[k]=idx;return idx}
+/* El mismo estilo pero con otro relleno. Sirve para dar color a un cuadro sin
+   tocar su tipo de letra ni sus bordes: se clona el xf y solo cambia el fill. */
+function _wkFondo(s,rgb){
+  var P=_WKPINTA;if(!P||!rgb)return s;
+  s=(s==null||s==='')?0:+s;
+  var k='F'+s+'|'+rgb;
+  if(P.cache[k]!=null)return P.cache[k];
+  var xf=P.xfs[s];if(!xf){P.cache[k]=s;return s}
+  P.rellenos=P.rellenos||[];
+  var fl='<fill><patternFill patternType="solid"><fgColor rgb="'+rgb+
+    '"/><bgColor indexed="64"/></patternFill></fill>';
+  var i=P.rellenos.indexOf(fl);
+  if(i<0){P.rellenos.push(fl);i=P.rellenos.length-1}
+  var nx=xf.replace(/fillId="\d+"/,'fillId="'+(P.nFi+i)+'"');
+  if(!/applyFill=/.test(nx))nx=nx.replace('<xf ','<xf applyFill="1" ');
+  else nx=nx.replace(/applyFill="0"/,'applyFill="1"');
+  var j=P.nuevosX.indexOf(nx);
+  if(j<0){P.nuevosX.push(nx);j=P.nuevosX.length-1}
+  var idx=P.nX+j;P.cache[k]=idx;return idx}
 /* Recorre una hoja y le cambia el estilo a toda celda con contenido, de la
    fila `desde` para abajo: las cabeceras se quedan como estan. */
 function _wkPintaHoja(xml,desde){
@@ -5688,6 +5718,7 @@ function _wkPintorCierra(styles){
   var x=styles;
   x=_wkMete(x,'numFmts',P.nuevosNf);
   x=_wkMete(x,'fonts',P.nuevasF);
+  x=_wkMete(x,'fills',P.rellenos||[]);
   x=_wkMete(x,'cellXfs',P.nuevosX);
   return x}
 /* Igual, pero sobre la hoja entera */
@@ -6119,7 +6150,6 @@ function _wkProgApp(P){
   var COLF=P.colFeeder;
   var colS=function(i){return _wkgCol('N',i)};   /* N es S0 y de O en adelante */
   var F=_WKF, Q=_WKP6;
-  var RE="'"+P.hojaReal+"'";
   /* --- 1) la cabecera, copiada --- */
   var P0=_wkPartirFilas(base);
   var estDe=function(f){
@@ -6168,17 +6198,20 @@ function _wkProgApp(P){
   var COLS=['A','B','C','D','E','F','G','H','I','J','K','L','M'];
   P.bloques.forEach(function(bl,ib){
     var pb=pos[ib], H6="'P6-"+bl.id+"'", AP="'ACTIVITY_PLAN ("+bl.id+")'";
+    var RE="'ACTUAL ("+bl.id+")'";
+    /* el color de este cuadro, sobre el estilo que ya traia la hoja */
+    var col=function(c,nivel){return ib?_wkFondo(eWbs.e[c],_wkColorCuadro(ib,nivel)):eWbs.e[c]};
     var RG=H6+'!$'+Q.clave+'$3:$'+Q.fin+'$'+(P.p6Ult[bl.id]||3);
     var CAB=H6+'!$'+Q.clave+'$2:$'+Q.fin+'$2';
     /* una fila en blanco entre cuadros, para que se vea que no se tocan */
     if(ib){r.push('<row r="'+n+'"/>');mapa.push({tipo:'blanco',r:n});n++}
     /* el rotulo del cuadro */
     var c0='';
-    COLS.forEach(function(col){
-      c0+=(col==='D')
-        ? cel('D',bl.id+' — PLAN vs AVANCE REAL'+(bl.nombre?(' · '+bl.nombre):''),eWbs.e.D,true)
-        : val(col,'',eWbs.e[col])});
-    for(var z=0;z<=nS;z++)c0+=val(colS(z),'',eWbs.e[colS(z)]);
+    COLS.forEach(function(cx){
+      c0+=(cx==='D')
+        ? cel('D',bl.id+' — PLAN vs AVANCE REAL'+(bl.nombre?(' · '+bl.nombre):''),col(cx,0),true)
+        : val(cx,'',col(cx,0))});
+    for(var z=0;z<=nS;z++)c0+=val(colS(z),'',col(colS(z),0));
     r.push('<row r="'+n+'"'+eWbs.at+'>'+c0+'</row>');
     mapa.push({tipo:'cuadro',r:n,cron:bl.id});n++;
     var E=_wkEspinaFilas(bl.filas,bl.nomWbs,n,2);
@@ -6186,11 +6219,11 @@ function _wkProgApp(P){
       n=x.r;
       if(x.tipo==='wbs'){
         var cw='';
-        COLS.forEach(function(col){
-          cw+=(col==='D')
-            ? cel('D',new Array(x.nivel+1).join('    ')+x.txt,eWbs.e.D,true)
-            : val(col,'',eWbs.e[col])});
-        for(var k2=0;k2<=nS;k2++)cw+=val(colS(k2),'',eWbs.e[colS(k2)]);
+        COLS.forEach(function(cx){
+          cw+=(cx==='D')
+            ? cel('D',new Array(x.nivel+1).join('    ')+x.txt,col(cx,x.nivel),true)
+            : val(cx,'',col(cx,x.nivel))});
+        for(var k2=0;k2<=nS;k2++)cw+=val(colS(k2),'',col(colS(k2),x.nivel));
         mapa.push({tipo:'wbs',r:n,cron:bl.id});
         r.push('<row r="'+n+'"'+eWbs.at+'>'+cw+'</row>');return}
       var f=x.f, fp=(P.p6Fila[bl.id]||{})[f.clave];
@@ -6237,13 +6270,13 @@ function _wkProgApp(P){
     /* --- el total del cuadro --- */
     n=pb.tot;
     var ct='';
-    COLS.forEach(function(col){
-      if(col==='D')ct+=cel('D','TOTAL '+bl.id,eWbs.e.D,true);
-      else if(col==='K'||col==='L')
-        ct+=cel(col,'IFERROR(SUMIF($M$'+pb.ini+':$M$'+pb.fin+',"Prog. '+bl.id+'",$'+
-          col+'$'+pb.ini+':$'+col+'$'+pb.fin+'),0)',eWbs.e[col]);
-      else ct+=val(col,'',eWbs.e[col])});
-    for(var k3=0;k3<=nS;k3++)ct+=val(colS(k3),'',eWbs.e[colS(k3)]);
+    COLS.forEach(function(cx){
+      if(cx==='D')ct+=cel('D','TOTAL '+bl.id,col(cx,0),true);
+      else if(cx==='K'||cx==='L')
+        ct+=cel(cx,'IFERROR(SUMIF($M$'+pb.ini+':$M$'+pb.fin+',"Prog. '+bl.id+'",$'+
+          cx+'$'+pb.ini+':$'+cx+'$'+pb.fin+'),0)',col(cx,0));
+      else ct+=val(cx,'',col(cx,0))});
+    for(var k3=0;k3<=nS;k3++)ct+=val(colS(k3),'',col(colS(k3),0));
     mapa.push({tipo:'total',r:n,cron:bl.id,ini:pb.ini,fin:pb.fin});
     r.push('<row r="'+n+'"'+eWbs.at+'>'+ct+'</row>');
     n++});
@@ -6263,7 +6296,9 @@ var _WKP6={clave:'A',cod:'B',qps:'C',nom:'D',cant:'E',und:'F',hh:'G',costo:'H',
 var _WKF ={clave:'A',cod:'B',nom:'C',hh:'D',ini:'E',fin:'F',dias:'G',sem0:'H'};
 function _wkFCol(i){return _wkgCol(_WKF.sem0,i)}
 /* el estilo del titulo segun lo hondo que este en el arbol */
-function _wkEstWbs(n){return _WKS[n<=0?'wbs1':(n===1?'wbs2':'wbs3')]}
+function _wkEstWbs(n,ib){
+  var base=_WKS[n<=0?'wbs1':(n===1?'wbs2':'wbs3')];
+  return ib?_wkFondo(base,_wkColorCuadro(ib,n)):base}
 /* Los titulos de WBS y las actividades de UN cuadro, en el orden del
    cronograma y empezando en la fila que se le diga. */
 function _wkEspinaFilas(filas,nomWbs,desde,paso){
@@ -6279,7 +6314,7 @@ function _wkEspinaFilas(filas,nomWbs,desde,paso){
     out.push({tipo:'act',r:n,f:f});n+=p});
   return {lista:out,ultima:n-1}}
 /* La lista de actividades de un cronograma: la suya, no la de otro. */
-function _wkHojaP6Esp(bl,semanas){
+function _wkHojaP6Esp(bl,semanas,ib){
   var S=_WKS,P=_WKP6,r=[];
   var E=_wkEspinaFilas(bl.filas,bl.nomWbs,3);
   r.push('<row r="1">'+_crXlsCel(P.clave,1,_WKPROY||'',true,S.titulo)+
@@ -6293,7 +6328,7 @@ function _wkHojaP6Esp(bl,semanas){
     var n=x.r;
     if(x.tipo==='wbs'){
       r.push('<row r="'+n+'">'+_crXlsCel(P.clave,n,
-        new Array(x.nivel+1).join('    ')+x.txt,true,_wkEstWbs(x.nivel))+'</row>');return}
+        new Array(x.nivel+1).join('    ')+x.txt,true,_wkEstWbs(x.nivel,ib))+'</row>');return}
     var f=x.f,c='';
     c+=_crXlsCel(P.clave,n,f.clave,true,S.texto);
     c+=_crXlsCel(P.cod,n,f.cod,true,S.texto);
@@ -6336,18 +6371,19 @@ function _wkFeederEsp(bloques,semanas,real){
            [F.ini,'INICIO'],[F.fin,'FIN'],[F.dias,'DURAC. (d)']];
   r.push('<row r="2">'+cab.map(function(c){return _crXlsCel(c[0],2,c[1],true,S.cab)}).join('')+
     semanas.map(function(s,i){return _crXlsCel(_wkFCol(i),2,s.serFin,false,S.fecha)}).join('')+'</row>');
-  (bloques||[]).forEach(function(bl,ib){
-    if(ib)n++;                       /* una fila en blanco entre cuadros */
+  (bloques||[]).forEach(function(bl,ibX){
+    var ib=(bl.ib==null)?ibX:bl.ib;
+    if(ibX)n++;                      /* una fila en blanco entre cuadros */
     var E=_wkEspinaFilas(bl.filas,bl.nomWbs,n);
     var tot=semanas.map(function(){return 0}),tH=0;
     r.push('<row r="'+n+'">'+_crXlsCel(F.clave,n,bl.id+(real?' — AVANCE REAL':' — PLAN'),
-      true,S.wbs1)+'</row>');n++;
+      true,_wkEstWbs(0,ib))+'</row>');n++;
     E=_wkEspinaFilas(bl.filas,bl.nomWbs,n);
     E.lista.forEach(function(x){
       var m=x.r;
       if(x.tipo==='wbs'){
         r.push('<row r="'+m+'">'+_crXlsCel(F.clave,m,
-          new Array(x.nivel+1).join('    ')+x.txt,true,_wkEstWbs(x.nivel))+'</row>');return}
+          new Array(x.nivel+1).join('    ')+x.txt,true,_wkEstWbs(x.nivel,ib))+'</row>');return}
       var f=x.f,c='';
       var hh=real?f.hhReal:f.hh, ss=real?f.semReal:f.sem;
       c+=_crXlsCel(F.clave,m,f.clave,true,S.texto);
@@ -6500,16 +6536,17 @@ async function _wkLibroApp(semN,corte,ids){
   _WKPROY=DATA.proyecto||'';
   _WKFECHA=corte||'';
   _WKWBSNOM=D.esp.nomWbs||{};
-  var HREAL='REAL';
+  
   /* cada cuadro arma su lista y de ella sale en que fila cae cada actividad */
   var p6={},p6Ult={},p6Fila={};
-  D.bloques.forEach(function(bl){
-    var h=_wkHojaP6Esp(bl,sem);
+  D.bloques.forEach(function(bl,ib){
+    bl.ib=ib;
+    var h=_wkHojaP6Esp(bl,sem,ib);
     p6[bl.id]=h.xml;p6Ult[bl.id]=h.ultima;p6Fila[bl.id]=h.filaDe});
   var prog=_wkProgApp({base:base.hojas['PROGRAMACION'],
     espina:{id:D.esp.id},bloques:D.bloques,
     semanas:sem,sem:semN,corte:corte,iSem:D.iSem,
-    hhTot:D.hhTot,p6Ult:p6Ult,p6Fila:p6Fila,hojaReal:HREAL,
+    hhTot:D.hhTot,p6Ult:p6Ult,p6Fila:p6Fila,
     colFeeder:sem.map(function(x,i){return _wkFCol(i)}),
     titulo:(DATA.proyecto||'')+' — '+D.C.map(function(c){return c.id}).join(' / ')});
   /* el orden que pide el reporte: primero los alimentadores, luego las
@@ -6519,10 +6556,11 @@ async function _wkLibroApp(semN,corte,ids){
      letra oscura y los dos decimales, y las cabeceras se quedan como estan */
   var mete=function(nombre,xml,desde,extra){
     hojas.push([nombre,_wkPintaHoja(xml,desde),extra||null])};
-  D.bloques.forEach(function(bl){
-    mete('ACTIVITY_PLAN ('+bl.id+')',_wkFeederEsp([bl],sem,false).xml,3)});
-  /* la hoja REAL es una sola, pero por dentro tambien va por cuadros */
-  mete(HREAL,_wkFeederEsp(D.bloques,sem,true).xml,3);
+  /* cada cuadro con su plan y su avance, por separado */
+  D.bloques.forEach(function(bl,ib){
+    bl.ib=ib;
+    mete('ACTIVITY_PLAN ('+bl.id+')',_wkFeederEsp([bl],sem,false).xml,3);
+    mete('ACTUAL ('+bl.id+')',_wkFeederEsp([bl],sem,true).xml,3)});
   D.bloques.forEach(function(bl){mete('P6-'+bl.id,p6[bl.id],3)});
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
   /* la caratula conserva su dibujo -logos y firmas-; lo que se le quita es
@@ -10553,7 +10591,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823u2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823v1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
