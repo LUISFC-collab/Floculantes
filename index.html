@@ -5375,12 +5375,17 @@ function _wkPlanPorItem(tar,uItems,semanas){
           if(dia>=semanas[j].ini&&dia<=semanas[j].fin){w=j;break}
         if(w>=0)fila[w]+=porDia}})});
   return out}
-/* Suma el reparto de un puñado de partidas */
-function _wkSumaItems(porItem,items,semanas){
+/* Suma el reparto de un puñado de partidas.
+   `veces` dice entre cuantas actividades del cronograma vigente se reparte
+   cada una: sin eso, una partida que va en dos actividades -la movilizacion,
+   que se parte entre la de entrada y la de salida- aportaria sus horas
+   enteras a las dos y la linea base sumaria de mas. */
+function _wkSumaItems(porItem,items,semanas,veces){
   var out=semanas.map(function(){return 0}),hay=false;
   (items||[]).forEach(function(i){
     var f=porItem[i];if(!f)return;hay=true;
-    f.forEach(function(v,k){out[k]+=v})});
+    var d=(veces&&veces[i]>1)?veces[i]:1;
+    f.forEach(function(v,k){out[k]+=v/d})});
   return hay?out:null}
 /* El acumulado en fraccion, a partir de un reparto semanal y su total */
 function _wkAcumDe(sem,total){
@@ -5724,7 +5729,7 @@ async function _wkDatosLibro(semN,corte,ids){
                 else for(var j=0;j<sem.length;j++)if(d>=sem[j].ini&&d<=sem[j].fin){w=j;break}
                 if(w>=0)o[w]+=pd}}
             return o})()
-        : _wkSumaItems(cc.porItem,ms,sem);   /* los demas, por las mismas partidas */
+        : _wkSumaItems(cc.porItem,ms,sem,esp.rp);   /* los demas, por las mismas partidas */
       if(!s)return;
       var hh=s.reduce(function(a,b){return a+b},0);
       if(!(hh>0)&&cc.id!==esp.id)return;
@@ -9752,7 +9757,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823m1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823m2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
