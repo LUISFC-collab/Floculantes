@@ -11290,21 +11290,22 @@ function _wkExcel(){
         a.href=url;a.download=nombre+'.xlsx';
         document.body.appendChild(a);a.click();
         setTimeout(function(){try{URL.revokeObjectURL(url);a.remove()}catch(_e2){}},4000)};
-      /* --- el azul: sin ninguna amarilla; PARA 3WLA va con valores --- */
-      var az=LB.hojas.filter(function(h){return AZUL[lim(h[0])]}).map(function(h){
-        return (lim(h[0])==='PARA 3WLA'&&LB.hoja3wVal)?[h[0],LB.hoja3wVal,h[2]]:h});
+      /* Cada archivo ensena SUS hojas y lleva las demas OCULTAS. La portada
+         azul, por ejemplo, saca sus rotulos de la Caratula (P): sin ella
+         delante o detras, se llena de #REF!. Ocultas, todo sigue formulado y
+         solo se ve lo que toca. */
+      var az=LB.hojas.filter(function(h){return AZUL[lim(h[0])]});
+      var azOc=LB.hojas.filter(function(h){return !AZUL[lim(h[0])]});
       if(!az.length)throw new Error('no se armaron las hojas azules');
-      await bajar(az,null,pre+'_'+RAIZ+'_3WLA');
-      /* --- el verde: las verdes, y las amarillas ocultas para que las
-             formulas sigan resolviendo --- */
+      await bajar(az.concat(azOc),azOc.map(function(h){return h[0]}),pre+'_'+RAIZ+'_3WLA');
       var vd=LB.hojas.filter(function(h){return VERDE[lim(h[0])]});
-      var am=LB.hojas.filter(function(h){return !VERDE[lim(h[0])]&&!AZUL[lim(h[0])]});
+      var vdOc=LB.hojas.filter(function(h){return !VERDE[lim(h[0])]});
       if(!vd.length)throw new Error('no se armaron las hojas verdes');
-      await bajar(vd.concat(am),am.map(function(h){return h[0]}),pre+'_'+RAIZ+'_WR');
+      await bajar(vd.concat(vdOc),vdOc.map(function(h){return h[0]}),pre+'_'+RAIZ+'_WR');
       msg.innerHTML='<div style="background:#EAF3EC;border:1px solid #BFD8C6;border-radius:10px;'+
         'padding:9px 11px;font-size:12px;color:#14532D">✓ Dos archivos: <b>'+
-        az.length+'</b> hojas azules y <b>'+vd.length+'</b> verdes'+
-        (am.length?(' (+'+am.length+' alimentadoras ocultas en el WR)'):'')+'</div>';
+        az.length+'</b> hojas a la vista en el 3WLA y <b>'+vd.length+'</b> en el WR; '+
+        'el resto viaja oculto para que las fórmulas resuelvan.</div>';
     }catch(e){msg.innerHTML='<div style="background:#FDECEC;border:1px solid #F5C2C0;'+
       'border-radius:10px;padding:9px 11px;font-size:12px;color:#8B1F1B">⚠ '+
       _wkEsc((e&&e.message)||String(e))+'</div>'}
@@ -12841,7 +12842,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824h7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824h8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
