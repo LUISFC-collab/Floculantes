@@ -5755,6 +5755,19 @@ function _wkReapuntaCaratula(xml){
   return String(xml)
     .replace(/'Car[\u00e1a\u0301]+tula \(P\)'!/g,"'Carátula'!")
     .replace(/Car[\u00e1a\u0301]+tula \(P\)!/g,"'Carátula'!")}
+/* Como `_wkLimpiaHoja`, pero DEJANDO el dibujo. Para las hojas cuyo contenido
+   es el dibujo -el panel es casi todo formas, imagenes y graficos- quitarlo es
+   dejarlas en blanco. Se quita solo lo que no viaja: la impresora. */
+function _wkLimpiaSalvoDibujo(xml){
+  var i=String(xml).indexOf('</sheetData>');
+  if(i<0)return xml;
+  var pie=xml.slice(i+12)
+    .replace(/<legacyDrawing[^>]*\/>/g,'')
+    .replace(/<legacyDrawingHF[^>]*\/>/g,'')
+    .replace(/<oleObjects>[\s\S]*?<\/oleObjects>/g,'')
+    .replace(/<controls>[\s\S]*?<\/controls>/g,'')
+    .replace(/(<pageSetup\b[^>]*?)\s+r:id="[^"]*"/g,'$1');
+  return xml.slice(0,i+12)+pie}
 /* Igual, pero sobre la hoja entera */
 function _wkLimpiaHoja(xml){
   var i=String(xml).indexOf('</sheetData>');
@@ -6660,6 +6673,10 @@ function _wkPanelApp(P){
     x=_wkPonCelda(x,'AL'+fila,idx(c.crAcum),false)};
   /* la semana la manda la caratula, que aqui se llama solo 'Carátula' */
   x=_wkReapuntaCaratula(x);
+  /* el grafico del panel mira al resumen del cuadro vigente */
+  if(R[0]&&P.chart){
+    var cam={};cam[218]=R[0].pAcum;cam[219]=R[0].rAcum;
+    P.chart.cambios=cam}
   /* arriba el vigente, debajo la siguiente linea base */
   if(R[0]){x=_wkPonCelda(x,'AC18',R[0].id,true);avance(18,R[0]);costo(35,R[0])}
   if(R[1]){x=_wkPonCelda(x,'AC19',R[1].id,true);avance(19,R[1]);costo(36,R[1])}
@@ -6671,7 +6688,8 @@ function _wkPanelApp(P){
   if(R[1]){
     x=_wkPonCelda(x,'AF22','IFERROR(AH19/AF19,0)',false);
     x=_wkPonCelda(x,'AL22','IFERROR(AL19/AJ19,0)',false)}
-  x=_wkLimpiaHoja(x);
+  /* el dibujo se queda: es lo que se ve de esta hoja */
+  x=_wkLimpiaSalvoDibujo(x);
   x=_wkPonTab(x,_WK_VERDE);
   return {xml:x}}
 /* ---------------- Un cuadro cerrado por cronograma --------------------------
@@ -6868,15 +6886,20 @@ async function _wkLibroApp(semN,corte,ids){
   /* El panel, con su formato entero: su dibujo, sus graficos y sus imagenes */
   if(pan&&pan.hojas['PANEL CONTROL']){
     var ap=pan.activos['PANEL CONTROL']||null;
-    hojas.push(['REPORTE SEMANAL',
-      _wkPanelApp({base:pan.hojas['PANEL CONTROL'],res:resRS,semanas:sem,
-        off:offPan,iSem:D.iSem}).xml,
+    var chg={};
+    var hp=_wkPanelApp({base:pan.hojas['PANEL CONTROL'],res:resRS,semanas:sem,
+      off:offPan,iSem:D.iSem,chart:chg});
+    /* el grafico va en una pieza aparte: se reapunta ahi */
+    if(ap&&chg.cambios)Object.keys(ap.partes).forEach(function(rp){
+      if(!/^xl\/charts\/chart\d+\.xml$/.test(rp))return;
+      ap.partes[rp]=_wkChartFilas(ap.partes[rp],'PHYSICAL % PROGRESS',chg.cambios)});
+    hojas.push(['REPORTE SEMANAL',hp.xml,
       ap?{relsHoja:ap.rels,partes:ap.partes}:null]);
     /* las dos hojas que sus graficos leen, con su formato */
     ['STAFFING TABULATION CHART','CONSTRUCTION EQUIPMENT SCHE '].forEach(function(nm){
       if(!pan.hojas[nm])return;
       var a2=pan.activos[nm]||null;
-      hojas.push([nm,_wkCorreEstilos(_wkLimpiaHoja(pan.hojas[nm]),offPan),
+      hojas.push([nm,_wkCorreEstilos(_wkLimpiaSalvoDibujo(pan.hojas[nm]),offPan),
         a2?{relsHoja:a2.rels,partes:a2.partes}:null])})}
   /* el panel cuenta RFI y FCR: sin esas hojas sus formulas quedarian colgando */
   ['RFI','FCR'].forEach(function(nm){
@@ -10913,7 +10936,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824b1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824b2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
