@@ -5321,30 +5321,15 @@ async function _wkBaseFormato(){
      dibujo, sus relaciones y los ficheros de imagen, que son binarios. */
   var crudo=async function(n){var e=mapa[n];if(!e)return null;
     return e.metodo===8?await _wkInflar(e.datos):e.datos};
-  var dib=null;
-  try{
-    var fh=hojas['Car\u00e1tula (P)'];
-    if(fh){
-      var rh=await leer(fh.replace(/([^/]+)$/,'_rels/$1.rels'));
-      var t=_wkRelDibujo(rh);
-      if(t){
-        var rutaD=_wkResuelve(fh,t);
-        var xmlD=await leer(rutaD);
-        if(xmlD){
-          var relD=await leer(rutaD.replace(/([^/]+)$/,'_rels/$1.rels'));
-          var med={};
-          var re=/<Relationship\b[^>]*\/>/g,mm;
-          while(mm=re.exec(relD||'')){
-            var tg=(mm[0].match(/Target="([^"]*)"/)||[])[1]||'';
-            if(/^(https?:|mailto:)/i.test(tg))continue;
-            if(/TargetMode="External"/.test(mm[0]))continue;
-            var rm=_wkResuelve(rutaD,tg);
-            var by=await crudo(rm);
-            if(by)med[rm]=by}
-          dib={xml:xmlD,rels:relD,medios:med}}}}
-  }catch(e){}
+  /* Las dos caratulas llevan su dibujo: la verde del reporte y la azul del
+     bloque de anexos. Se recoge el arbol entero de cada una. */
+  var act={};
+  for(var q=0;q<2;q++){
+    var nm=q?'Car\u00e1tula':'Car\u00e1tula (P)';
+    if(!hojas[nm])continue;
+    try{act[nm]=await _wkActivosDe(mapa,leer,crudo,hojas[nm])}catch(e){}}
   _WKB={styles:await leer('xl/styles.xml'),ss:await leer('xl/sharedStrings.xml'),
-    hojas:H, dibujoCaratula:dib};
+    hojas:H, activos:act};
   return _WKB}
 /* la relacion de tipo dibujo de una hoja, sin fiarse del orden de atributos */
 function _wkRelDibujo(rels){
@@ -6702,22 +6687,20 @@ function _wkPanelApp(P){
     x=_wkPonCelda(x,'AJ'+fila,idx(c.cpAcum),false);
     x=_wkPonCelda(x,'AL'+fila,idx(c.crAcum),false)};
   /* la semana la manda la caratula, que aqui se llama solo 'Carátula' */
-  x=_wkReapuntaCaratula(x);
   /* el grafico del panel mira al resumen del cuadro vigente */
   if(R[0]&&P.chart){
     var cam={};cam[218]=R[0].pAcum;cam[219]=R[0].rAcum;
     P.chart.cambios=cam}
   /* arriba el vigente, debajo la siguiente linea base */
   if(R[0]){x=_wkPonCelda(x,'AC18',R[0].id,true);avance(18,R[0]);costo(35,R[0])}
-  if(R[1]){x=_wkPonCelda(x,'AC19',R[1].id,true);avance(19,R[1]);costo(36,R[1])}
+  /* la fila 19 es la segunda linea que el original ya tenia -viene oculta y
+     asi se queda-. En la 36 y la 22 el original no escribe nada, y meter algo
+     ahi sacaba asteriscos: no se tocan. */
+  if(R[1]){x=_wkPonCelda(x,'AC19',R[1].id,true);avance(19,R[1])}
   else x=_wkPonCelda(x,'AC19','',true);
   /* los rotulos que nombran al cronograma de referencia */
   ['AC20','AC32'].forEach(function(rf){
     x=_wkPonCelda(x,rf,'RESPECTO AL CRONOGRAMA '+((R[0]&&R[0].id)||''),true)});
-  /* SPI y CPI de la segunda linea, como los de la primera */
-  if(R[1]){
-    x=_wkPonCelda(x,'AF22','IFERROR(AH19/AF19,0)',false);
-    x=_wkPonCelda(x,'AL22','IFERROR(AL19/AJ19,0)',false)}
   /* el dibujo se queda: es lo que se ve de esta hoja */
   x=_wkLimpiaSalvoDibujo(x);
   x=_wkPonTab(x,_WK_VERDE);
@@ -6887,13 +6870,12 @@ async function _wkLibroApp(semN,corte,ids){
     hojas.push([HGG,_wkPonTab(_wkPintaHoja(_wkLimpiaHoja(
       base.hojas['GG'].replace('<f>+QPS!V263</f>','<f>COSTO!$D$6</f>')),13),_WK_AMARILLO),null])}
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
-  /* la caratula conserva su dibujo -logos y firmas-; lo que se le quita es
-     la referencia a la configuracion de impresion, que aqui no existe */
-  var carDib=base.dibujoCaratula||null;
-  var carLimpia=_wkLimpiaHoja(carXml||car.xml);
-  if(carDib)carLimpia=carLimpia.replace('</worksheet>','<drawing r:id="rId1"/></worksheet>');
-  hojas.push(['Carátula',carLimpia,carDib?{dibujoXml:carDib.xml,dibujoRels:carDib.rels,
-    medios:carDib.medios}:null]);
+  /* La caratula del reporte conserva su nombre del original -`Carátula (P)`-,
+     y con eso las referencias de las demas hojas resuelven solas. Su dibujo
+     -logos y firmas- va con ella. */
+  var acp=(base.activos||{})['Car\u00e1tula (P)']||null;
+  hojas.push(['Carátula (P)',_wkLimpiaSalvoDibujo(carXml||car.xml),
+    acp?{relsHoja:acp.rels,partes:acp.partes}:null]);
   /* La portada de numeros. Necesita saber en que fila quedo cada resumen, y
      eso solo lo sabe PROGRAMACION, asi que se arma con su mapa. */
   var resRS=[],dCosto=7-10;
@@ -6973,7 +6955,12 @@ async function _wkLibroApp(semN,corte,ids){
       a2?{relsHoja:a2.rels,partes:a2.partes}:null])});
   ['RFI','FCR'].forEach(function(nm){
     if(base.hojas[nm])
-      hojas.push([nm,_wkReapuntaCaratula(_wkLimpiaHoja(base.hojas[nm])),null])});
+      hojas.push([nm,_wkLimpiaSalvoDibujo(base.hojas[nm]),null])});
+  /* la caratula azul, la que abre el bloque de anexos */
+  if(base.hojas['Car\u00e1tula']){
+    var acz=(base.activos||{})['Car\u00e1tula']||null;
+    hojas.push(['Carátula',_wkLimpiaSalvoDibujo(base.hojas['Car\u00e1tula']),
+      acz?{relsHoja:acz.rels,partes:acz.partes}:null])}
   return {hojas:hojas,styles:_wkPintorCierra(estilos),ss:base.ss,
     info:{actividades:prog.actividades,
       crons:D.bloques.map(function(b){return b.id}),espina:D.esp.id,
@@ -10987,7 +10974,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824c1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824c2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
