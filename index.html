@@ -2590,6 +2590,15 @@ async function _crAlcanceUI(c){
         '<span style="flex:none;width:19px;height:19px;border-radius:5px;border:2px solid '+(on?'#3FD592':'#33415c')+';background:'+(on?'#1E7A46':'transparent')+';color:#fff;font-size:12px;font-weight:900;text-align:center;line-height:16px">'+(on?'✓':'')+'</span>'+
         '<span style="flex:1;min-width:0"><b style="color:#8ECBF5;font-size:11.5px">'+esc(p.id)+'</b> '+
         '<span style="color:#cfe3ff;font-size:11.5px;overflow-wrap:anywhere">'+esc(p.nom)+'</span>'+
+        /* si esta en varias actividades, sus horas se parten entre ellas */
+        (function(){
+          var n=((window._crTarDe||{})[p.id]||[]).length;
+          if(n<2)return '';
+          return '<span class="_crNoTog _crDiv" data-div="'+esc(p.id)+'" '+
+            'title="Ver entre qué actividades se reparte" '+
+            'style="cursor:pointer;display:inline-block;margin-left:5px;padding:1px 6px;'+
+            'border-radius:6px;font-size:10px;font-weight:800;background:#2a2314;'+
+            'border:1px solid #4a3c1d;color:#E8C9A0">(considerada en '+n+' actividades)</span>'})()+
         (p.ret?'<span style="color:#F0A3A3;font-size:10.5px;font-weight:800"> · retirada del alcance</span>':'')+
         (p.off?'<span style="color:#E8C9A0;font-size:10.5px"> · HH apagadas</span>':'')+
         (p.nva?'<span style="color:#8DD6ED;font-size:10.5px;font-weight:800"> · adicional</span>':'')+
@@ -2700,15 +2709,26 @@ async function _crAlcanceUI(c){
         ev.stopPropagation();
         var tc=d.getAttribute('data-ir');
         try{
-          if(!_crH2){
-            fmsg('Leyendo el cronograma…');
-            _crH2={tar:await _crTareas(c.cron_id),gs:[],nom:{}};
-            try{_crH2.gs=await _agDe(c.cron_id)}catch(_e){}
-            try{(await _crWbsDe(c.cron_id)).forEach(function(w){
-              if(w.nombre)_crH2.nom[w.ruta]=w.nombre})}catch(_e){}
-            fmsg('')}
+          if(!_crH2){fmsg('Leyendo el cronograma…');
+            await _crCargaH2(c.cron_id);fmsg('')}
           _crHoja=2;_crRes=tc;_crResIt=d.getAttribute('data-irp');
           _crAbre[tc]=true;_crVaA=tc;
+          var bv=document.getElementById('_crFeVer');
+          if(bv)bv.textContent='👁 Ver hoja 1 · ALCANCE';
+          pinta();
+        }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8')}}});
+    B.querySelectorAll('._crDiv').forEach(function(d){
+      d.onclick=async function(ev){
+        ev.stopPropagation();
+        var id=d.getAttribute('data-div');
+        try{
+          fmsg('Leyendo las actividades…');
+          var tar=await _crTareas(c.cron_id);
+          fmsg('');
+          var t=await _crVerReparto(tar,id,P);
+          if(!t)return;
+          fmsg('Leyendo el cronograma…');await _crCargaH2(c.cron_id);fmsg('');
+          _crHoja=2;_crRes=t;_crResIt=id;_crAbre[t]=true;_crVaA=t;
           var bv=document.getElementById('_crFeVer');
           if(bv)bv.textContent='👁 Ver hoja 1 · ALCANCE';
           pinta();
@@ -2775,13 +2795,8 @@ async function _crAlcanceUI(c){
     var b=this;b.disabled=true;
     try{
       _crHoja=(_crHoja===2)?1:2;
-      if(_crHoja===2&&!_crH2){                    /* se carga una sola vez */
-        fmsg('Leyendo el cronograma…');
-        _crH2={tar:await _crTareas(c.cron_id),gs:[],nom:{}};
-        try{_crH2.gs=await _agDe(c.cron_id)}catch(_e){}
-        try{(await _crWbsDe(c.cron_id)).forEach(function(w){
-          if(w.nombre)_crH2.nom[w.ruta]=w.nombre})}catch(_e){}
-        fmsg('')}
+      if(_crHoja===2&&!_crH2){fmsg('Leyendo el cronograma…');
+        await _crCargaH2(c.cron_id);fmsg('')}
       b.textContent=(_crHoja===2)?'👁 Ver hoja 1 · ALCANCE':'👁 Ver hoja 2 · AGRUPADO';
       pinta();
     }catch(e){fmsg('⚠ '+((e&&e.message)||e),'#FFB4A8')}
@@ -3001,6 +3016,61 @@ async function _crMapasDe(cronId){
 function _crTarMandaDe(id){
   var tcs=(window._crTarDe||{})[id]||[];
   return tcs.filter(function(t){return (window._crTarN||{})[t]>1})[0]||tcs[0]||''}
+/* Lo que la hoja 2 necesita, cargado una sola vez. */
+async function _crCargaH2(cronId){
+  if(_crH2)return _crH2;
+  var d={tar:await _crTareas(cronId),gs:[],nom:{}};
+  try{d.gs=await _agDe(cronId)}catch(_e){}
+  try{(await _crWbsDe(cronId)).forEach(function(w){
+    if(w.nombre)d.nom[w.ruta]=w.nombre})}catch(_e){}
+  _crH2=d;return d}
+/* Entre que actividades se parte una partida, y cuanto se lleva cada una.
+   Devuelve la actividad elegida, para poder saltar a ella. */
+function _crVerReparto(tar,idP,P){
+  return new Promise(function(res){
+    var pp=((P||[]).filter(function(q){return q.id===idP})[0]||{});
+    var mias=(tar||[]).filter(function(t){return (t.items||[]).indexOf(idP)>=0})
+      .sort(function(a,b){var x=String(a.ini||''),y=String(b.ini||'');
+        return x!==y?(x<y?-1:1):((a.orden||0)-(b.orden||0))});
+    var trozo=(Number(pp.hh)||0)/(mias.length||1);
+    var ov=document.createElement('div');ov.id='_crDivOv';
+    ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;'+
+      'color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;'+
+      'display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
+    var H='<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px">'+
+      '<b style="flex:1;font-size:14px;color:#8ECBF5;overflow-wrap:anywhere">'+
+        esc(idP)+' se reparte entre '+mias.length+' actividades</b>'+
+      '<button id="_crDvX" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;'+
+        'padding:7px 12px;font-weight:800;font-size:13px">✕</button></div>'+
+      '<div style="font-size:11.5px;color:#9db4d6;margin-bottom:8px;overflow-wrap:anywhere">'+
+        esc(pp.nom||'')+' · <b style="color:#9FE8B0">'+(Number(pp.hh)||0)+' hh</b> en total, '+
+        'a <b style="color:#9FE8B0">'+(Math.round(trozo*100)/100)+' hh</b> por actividad.</div>'+
+      '<div id="_crDvL" style="flex:1;overflow:auto;background:#0d1117;border:1px solid #1d2c47;'+
+        'border-radius:10px;padding:6px">';
+    mias.forEach(function(t,k){
+      var w=String(t.wbs||'').split(' / ').filter(function(z){return z});
+      H+='<div class="_crDv" data-dv="'+esc(t.task_code)+'" style="display:flex;gap:8px;'+
+        'align-items:flex-start;padding:8px;border-bottom:1px solid #16202e;cursor:pointer">'+
+        '<b style="flex:none;font-size:11.5px;color:#8ECBF5;min-width:54px">'+esc(t.task_code)+'</b>'+
+        '<span style="flex:1;min-width:110px;font-size:11.5px;overflow-wrap:anywhere">'+
+          esc(String(t.nombre||''))+
+          '<br><span style="color:#5a6b85;font-size:10.5px">'+
+            (w.length?(esc(w[w.length-1])+' · '):'')+
+            esc(t.ini||'—')+' → '+esc(t.fin||'—')+
+            ((mias.length>1&&k===0)?' · la primera en el tiempo':'')+
+            ((mias.length>1&&k===mias.length-1)?' · la última':'')+
+          '</span></span>'+
+        '<span style="flex:none;font-size:11px;font-weight:800;color:#9FE8B0">'+
+          (Math.round(trozo*100)/100)+' hh</span>'+
+        '<span style="flex:none;width:12px;text-align:center;color:#7d8590;font-size:10px">↦</span>'+
+        '</div>'});
+    H+='</div>';
+    ov.innerHTML=H;
+    document.body.appendChild(ov);
+    var cerrar=function(v){try{ov.remove()}catch(e){}res(v||null)};
+    document.getElementById('_crDvX').onclick=function(){cerrar(null)};
+    ov.querySelectorAll('._crDv').forEach(function(d){
+      d.onclick=function(){cerrar(d.getAttribute('data-dv'))}})})}
 /* El selector de actividad: a cual se mete la partida. */
 function _crPickTarea(tar,idP,titulo){
   return new Promise(function(res){
@@ -11475,7 +11545,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824d9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824e1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
