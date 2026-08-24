@@ -3696,8 +3696,9 @@ function _crPlanSemanal(tar,uItems,semanas){
   out.plegadoIni=Math.round(plegadoIni*100)/100;
   return out}
 /* La hoja, clavada al formato de la que ya trae la plantilla. */
-function _crHojaPlan(cron,filas,semanas){
+function _crHojaPlan(cron,filas,semanas,est){
   var r=[];
+  var E=est||{};
   var c1='';
   c1+=_crXlsCel('A',1,'PLAN '+cron.cron_id+' — HH PROGRAMADAS POR SEMANA (generado por el aplicativo). '+
     'Semanas viernes-jueves, corte jueves. La S27 va en la columna N, que es donde la esperan las fórmulas del libro.'+
@@ -3705,42 +3706,42 @@ function _crHojaPlan(cron,filas,semanas){
       semanas[semanas.length-1].n+' se sumaron a esa última columna, para que la curva cierre dentro del cuadro del reporte.'):'')+
     ((filas.plegadoIni>0)?(' Y '+filas.plegadoIni+' hh anteriores a la S'+semanas[0].n+
       ' se sumaron a la primera.'):''),true);
-  semanas.forEach(function(s){c1+=_crXlsCel(s.col,1,'S'+s.n,true)});
+  semanas.forEach(function(s){c1+=_crXlsCel(s.col,1,'S'+s.n,true,E.cab)});
   r.push('<row r="1">'+c1+'</row>');
   /* fila 2: los encabezados y el jueves de cierre de cada semana. El de la
      primera va en J, como en la plantilla original. */
   var c2='';
   c2+=_crXlsCel('A',2,filas.length,false);
-  c2+=_crXlsCel('C',2,'PARTIDA',true);
-  c2+=_crXlsCel('D',2,'CANT.',true);
-  c2+=_crXlsCel('E',2,'UND',true);
-  c2+=_crXlsCel('F',2,'HH',true);
-  c2+=_crXlsCel('G',2,'INICIO',true);
-  c2+=_crXlsCel('H',2,'FIN',true);
-  c2+=_crXlsCel('I',2,'DURAC. (d)',true);
-  c2+=_crXlsCel('J',2,semanas[0].serFin,false);
+  c2+=_crXlsCel('C',2,'PARTIDA',true,E.cab);
+  c2+=_crXlsCel('D',2,'CANT.',true,E.cab);
+  c2+=_crXlsCel('E',2,'UND',true,E.cab);
+  c2+=_crXlsCel('F',2,'HH',true,E.cab);
+  c2+=_crXlsCel('G',2,'INICIO',true,E.cab);
+  c2+=_crXlsCel('H',2,'FIN',true,E.cab);
+  c2+=_crXlsCel('I',2,'DURAC. (d)',true,E.cab);
+  c2+=_crXlsCel('J',2,semanas[0].serFin,false,E.fecha);
   semanas.forEach(function(s,i){
     if(i===0)return;
-    c2+=_crXlsCel(s.col,2,s.serFin,false)});
+    c2+=_crXlsCel(s.col,2,s.serFin,false,E.fecha)});
   r.push('<row r="2">'+c2+'</row>');
   var n=3;
   filas.forEach(function(f){
     var c='';
-    c+=_crXlsCel('B',n,f.cod,true);
-    c+=_crXlsCel('C',n,f.nom,true);
-    c+=_crXlsCel('F',n,f.hh,false);
-    c+=_crXlsCel('G',n,_crASerial(f.ini),false);
-    c+=_crXlsCel('H',n,_crASerial(f.fin),false);
-    c+=_crXlsCel('I',n,f.dias||'',false);
-    f.sem.forEach(function(v,i){if(v>0)c+=_crXlsCel(semanas[i].col,n,v,false)});
+    c+=_crXlsCel('B',n,f.cod,true,E.texto);
+    c+=_crXlsCel('C',n,f.nom,true,E.texto);
+    c+=_crXlsCel('F',n,f.hh,false,E.num);
+    c+=_crXlsCel('G',n,_crASerial(f.ini),false,E.fecha);
+    c+=_crXlsCel('H',n,_crASerial(f.fin),false,E.fecha);
+    c+=_crXlsCel('I',n,f.dias||'',false,E.ent);
+    f.sem.forEach(function(v,i){c+=_crXlsCel(semanas[i].col,n,v>0?v:'',false,E.num)});
     r.push('<row r="'+n+'">'+c+'</row>');n++});
   /* el total, para poder comprobar de un vistazo que no se perdio nada */
   var tot='';
-  tot+=_crXlsCel('C',n,'TOTAL '+cron.cron_id,true);
-  tot+=_crXlsCel('F',n,Math.round(filas.reduce(function(a,f){return a+f.hh},0)*100)/100,false);
+  tot+=_crXlsCel('C',n,'TOTAL '+cron.cron_id,true,E.total);
+  tot+=_crXlsCel('F',n,Math.round(filas.reduce(function(a,f){return a+f.hh},0)*100)/100,false,E.totalNum);
   semanas.forEach(function(s,i){
     var v=filas.reduce(function(a,f){return a+f.sem[i]},0);
-    if(v>0)tot+=_crXlsCel(s.col,n,Math.round(v*1e6)/1e6,false)});
+    tot+=_crXlsCel(s.col,n,v>0?(Math.round(v*1e6)/1e6):'',false,E.totalNum)});
   r.push('<row r="'+n+'">'+tot+'</row>');
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
@@ -5153,7 +5154,7 @@ function _wkHojaCron(cronos,actual,semanas){
 /* el color de la pestana: amarillo los alimentadores, verde las del reporte */
 function _wkTab(c){return c?('<sheetPr><tabColor rgb="'+c+'"/></sheetPr>'):''}
 var _WK_AMARILLO='FFFFFF00', _WK_VERDE='FF00B050';
-var _WKS={
+var _WKS0={
   normal:0, titulo:1, subtitulo:2, cab:3, cabSem:4,
   texto:5, num:6, pct:7, fecha:8, ent:9,
   wbs1:10, wbs2:11, wbs3:12,
@@ -5165,6 +5166,9 @@ var _WKS={
   numLB:21, numLB2:22, numActual:23,
   fechaLB:24, fechaLB2:25,
   total:26, totalNum:27, totalPct:28};
+/* los indices vivos: los de arriba mas el desplazamiento de la base */
+var _WKS={};(function(){for(var k in _WKS0)_WKS[k]=_WKS0[k]})();
+function _wkOffsetEstilos(off){_WKOFF=off||0;for(var k in _WKS0)_WKS[k]=_WKS0[k]+_WKOFF}
 function _wkEstilosApp(){
   var nf=['<numFmt numFmtId="164" formatCode="dd/mm/yyyy"/>',
           '<numFmt numFmtId="165" formatCode="0.0%"/>',
@@ -5237,6 +5241,105 @@ function _wkEstLinea(i,tipo){
   if(tipo==='actual')return {et:_WKS.actual,pct:_WKS.pctActual,num:_WKS.numActual,fecha:_WKS.fecha};
   return (i===0)?{et:_WKS.lb,pct:_WKS.pctLB,num:_WKS.numLB,fecha:_WKS.fechaLB}
                 :{et:_WKS.lb2,pct:_WKS.pctLB2,num:_WKS.numLB2,fecha:_WKS.fechaLB2}}
+/* ---------- El formato de la plantilla, como base del libro nuevo ----------
+   La caratula original no se puede imitar a mano: su aspecto vive en el
+   styles.xml de la plantilla, con sus fuentes, rellenos, bordes y combinacion
+   de celdas. Asi que en vez de rehacerla, se COPIA tal cual y se trae con
+   ella la hoja de estilos y las cadenas compartidas. Los estilos propios del
+   aplicativo se anaden AL FINAL de esa base, y sus indices se corren por el
+   desplazamiento que haga falta. */
+var _WKB=null;      /* la base, cacheada: {styles, ss, hojas} */
+var _WKOFF=0;       /* cuanto hay que correr los indices de _WKS */
+function _S(k){return _WKOFF+_WKS[k]}
+async function _wkBaseFormato(){
+  if(_WKB)return _WKB;
+  var res=await fetch('plantilla_semanal.xlsx?v='+encodeURIComponent(typeof APP_VER!=='undefined'?APP_VER:''),{cache:'no-store'});
+  if(!res.ok)throw new Error('no se pudo traer el libro guía (HTTP '+res.status+')');
+  var ent=_wkZipLeer(await res.arrayBuffer()),mapa={};
+  ent.forEach(function(e){mapa[e.nombre]=e});
+  var dec=new TextDecoder();
+  var leer=async function(n){var e=mapa[n];if(!e)return '';
+    return dec.decode(e.metodo===8?await _wkInflar(e.datos):e.datos)};
+  var hojas=_wkHojas(await leer('xl/workbook.xml'),await leer('xl/_rels/workbook.xml.rels'));
+  var H={};
+  for(var n in hojas)if(mapa[hojas[n]])H[n]=await leer(hojas[n]);
+  _WKB={styles:await leer('xl/styles.xml'),ss:await leer('xl/sharedStrings.xml'),hojas:H};
+  return _WKB}
+/* Cuenta los elementos de una seccion del styles.xml */
+function _wkCuenta(xml,tag){
+  var m=xml.match(new RegExp('<'+tag+' count="(\\d+)"'));
+  return m?+m[1]:0}
+/* Mete los bloques de una seccion antes de su cierre y actualiza el count */
+function _wkMete(xml,tag,bloques){
+  if(!bloques.length)return xml;
+  var re1=new RegExp('<'+tag+' count="(\\d+)"([^>]*)>([\\s\\S]*?)</'+tag+'>');
+  if(!re1.test(xml)){
+    /* la seccion no existe: se crea justo antes de cellStyleXfs */
+    return xml.replace('<cellStyleXfs','<'+tag+' count="'+bloques.length+'">'+
+      bloques.join('')+'</'+tag+'><cellStyleXfs')}
+  return xml.replace(re1,function(t,c,at,cuerpo){
+    return '<'+tag+' count="'+(+c+bloques.length)+'"'+at+'>'+cuerpo+bloques.join('')+'</'+tag+'>'})}
+/* Une los estilos del aplicativo a los de la plantilla y devuelve el
+   desplazamiento que hay que sumar a los indices propios. */
+function _wkFusionaEstilos(base){
+  var mio=_wkEstilosApp();
+  var saca=function(x,tag){
+    var m=x.match(new RegExp('<'+tag+' count="\\d+"[^>]*>([\\s\\S]*?)</'+tag+'>'));
+    if(!m)return [];
+    var uno=new RegExp('<'+tag.slice(0,-1)+'(?:\\s[^>]*?)?(?:/>|>[\\s\\S]*?</'+tag.slice(0,-1)+'>)','g');
+    return m[1].match(uno)||[]};
+  var nF=_wkCuenta(base,'fonts'), nFi=_wkCuenta(base,'fills'), nB=_wkCuenta(base,'borders');
+  var nX=_wkCuenta(base,'cellXfs');
+  var misF=saca(mio,'fonts'), misFi=saca(mio,'fills'), misB=saca(mio,'borders');
+  var misX=saca(mio,'cellXfs');
+  var misNf=(mio.match(/<numFmt [^>]*\/>/g)||[]);
+  /* los numFmt propios usan 164..167; si la plantilla ya los tiene, se corren */
+  var usados={};(base.match(/numFmtId="(\d+)"/g)||[]).forEach(function(t){
+    usados[+t.match(/\d+/)[0]]=1});
+  var mapaNf={},sig=200;
+  misNf=misNf.map(function(t){
+    var id=+t.match(/numFmtId="(\d+)"/)[1];
+    var nid=id;
+    if(usados[id]){while(usados[sig])sig++;nid=sig++;usados[nid]=1}
+    else usados[id]=1;
+    mapaNf[id]=nid;
+    return t.replace(/numFmtId="\d+"/,'numFmtId="'+nid+'"')});
+  /* los xf propios apuntan a sus fuentes/rellenos/bordes: se corren */
+  misX=misX.map(function(t){
+    return t.replace(/fontId="(\d+)"/,function(_t,d){return 'fontId="'+(nF+ +d)+'"'})
+            .replace(/fillId="(\d+)"/,function(_t,d){return 'fillId="'+(nFi+ +d)+'"'})
+            .replace(/borderId="(\d+)"/,function(_t,d){return 'borderId="'+(nB+ +d)+'"'})
+            .replace(/numFmtId="(\d+)"/,function(_t,d){
+              var id=+d;return 'numFmtId="'+(mapaNf[id]!=null?mapaNf[id]:id)+'"'})});
+  var x=base;
+  x=_wkMete(x,'numFmts',misNf);
+  x=_wkMete(x,'fonts',misF);
+  x=_wkMete(x,'fills',misFi);
+  x=_wkMete(x,'borders',misB);
+  x=_wkMete(x,'cellXfs',misX);
+  return {xml:x,off:nX}}
+/* La caratula de la plantilla, tal cual, cambiandole solo la semana y el
+   nombre del proyecto. Ahi esta el aspecto que no se puede reproducir a mano. */
+function _wkCaratulaBase(xml,semN,proyecto){
+  var pon=function(x,col,fila,cont,txt){
+    var re1=new RegExp('(<row r="'+fila+'"(?:\\s[^>]*?)?>)([\\s\\S]*?)(</row>)');
+    return x.replace(re1,function(t,a,cu,b){
+      var re2=new RegExp('<c r="'+col+fila+'"((?:\\s[^>]*?)?)(/>|>[\\s\\S]*?</c>)');
+      if(!re2.test(cu))return t;
+      return a+cu.replace(re2,function(t2,at){
+        at=at.replace(/\s*t="[^"]*"/,'');
+        return txt
+          ? '<c r="'+col+fila+'"'+at+' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(cont)+'</t></is></c>'
+          : '<c r="'+col+fila+'"'+at+'><v>'+cont+'</v></c>'})+b})};
+  var x=xml;
+  x=pon(x,'C',17,semN,false);                       /* SEMANA DE ANÁLISIS */
+  if(proyecto)x=pon(x,'C',10,proyecto,true);        /* NOMBRE DE PROYECTO */
+  /* la pestaña, verde como en el original */
+  if(/<sheetPr/.test(x))x=x.replace(/<sheetPr(?:\s[^>]*?)?>[\s\S]*?<\/sheetPr>|<sheetPr(?:\s[^>]*?)?\/>/,
+    _wkTab(_WK_VERDE));
+  else x=x.replace('<worksheet','§§WS§§').replace('§§WS§§','<worksheet')
+          .replace(/(<worksheet[^>]*>)/,'$1'+_wkTab(_WK_VERDE));
+  return x}
 /* ================= El libro armado por el aplicativo ========================
    Hasta ahora el reporte salia de rellenar una plantilla con un numero de
    filas fijo. Eso obligaba a que el cronograma cupiera en el formato, cuando
@@ -5554,11 +5657,18 @@ async function _wkDatosLibro(semN,corte,ids){
     iSem:Math.max(1,Math.min(sem.length,semN-26))}}
 /* El libro entero, con las hojas que lleva hasta ahora */
 async function _wkLibroApp(semN,corte,ids){
+  /* el formato sale del libro guia: sus estilos y sus cadenas compartidas */
+  var base=await _wkBaseFormato();
+  var fus=_wkFusionaEstilos(base.styles);
+  _wkOffsetEstilos(fus.off);
   var D=await _wkDatosLibro(semN,corte,ids);
   var sem=D.sem;
   var pctReal=0,hhAlc=D.esp.u.hh;
   D.filas.forEach(function(f){pctReal+=f.hhReal});
   pctReal=hhAlc>0?(pctReal/hhAlc):0;
+  /* la caratula, copiada de la plantilla: su aspecto no se imita a mano */
+  var carBase=base.hojas['Car\u00e1tula (P)'];
+  var carXml=carBase?_wkCaratulaBase(carBase,semN,null):null;
   var car=_wkCaratulaApp({proyecto:DATA.proyecto,sem:semN,semanas:sem,
     semIni:sem[D.iSem-1].ini,semFin:sem[D.iSem-1].fin,corte:corte,
     hoy:(typeof todayISO==='function')?todayISO():'',
@@ -5574,16 +5684,18 @@ async function _wkLibroApp(semN,corte,ids){
   D.C.forEach(function(c){
     var fil=_crPlanSemanal(c.tar,c.u.items,sem);
     hojas.push(['ACTIVITY_PLAN ('+c.id+')',
-      _crHojaPlan({cron_id:c.id,nombre:c.nombre},fil,sem)])});
+      _crHojaPlan({cron_id:c.id,nombre:c.nombre},fil,sem,_WKS)])});
   D.C.forEach(function(c){
     hojas.push(['P6-'+c.id,_wkHojaP6({cron_id:c.id},c.tar,c.u.items,sem).xml])});
-  hojas.push(['Carátula',car.xml]);
+  hojas.push(['Carátula',carXml||car.xml]);
   hojas.push(['PROGRAMACION',prog.xml]);
-  return {hojas:hojas,info:{actividades:prog.actividades,
-    crons:D.C.map(function(c){return c.id}),espina:D.esp.id,
-    pctReal:Math.round(pctReal*1000)/10}}}
+  return {hojas:hojas,styles:fus.xml,ss:base.ss,
+    info:{actividades:prog.actividades,
+      crons:D.C.map(function(c){return c.id}),espina:D.esp.id,
+      caratula:carXml?'copiada de la plantilla':'armada por el aplicativo',
+      pctReal:Math.round(pctReal*1000)/10}}}
 /* El paquete .xlsx a partir de una lista [nombre, xml] */
-function _wkPaqueteApp(hojas){
+function _wkPaqueteApp(hojas,styles,ss){
   var ov=function(i){return '<Override PartName="/xl/worksheets/sheet'+i+
     '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'};
   var partes=[
@@ -5593,7 +5705,9 @@ function _wkPaqueteApp(hojas){
       '<Default Extension="xml" ContentType="application/xml"/>'+
       '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+
       hojas.map(function(_h,i){return ov(i+1)}).join('')+
-      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+
+      (ss?'<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>':'')+
+      '</Types>'],
     ['_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
       '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
@@ -5607,8 +5721,11 @@ function _wkPaqueteApp(hojas){
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
       hojas.map(function(_h,i){return '<Relationship Id="rId'+(i+1)+
         '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>'}).join('')+
-      '<Relationship Id="rId'+(hojas.length+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
-    ['xl/styles.xml',_wkEstilosApp()]];
+      '<Relationship Id="rId'+(hojas.length+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'+
+      (ss?('<Relationship Id="rId'+(hojas.length+2)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>'):'')+
+      '</Relationships>'],
+    ['xl/styles.xml',styles||_wkEstilosApp()]];
+  if(ss)partes.push(['xl/sharedStrings.xml',ss]);
   hojas.forEach(function(h,i){partes.push(['xl/worksheets/sheet'+(i+1)+'.xml',h[1]])});
   return partes}
 /* ---------------- Una hoja P6 por cronograma, hecha por la app -------------
@@ -5652,12 +5769,12 @@ function _wkHojaP6(cron,tareas,uItems,semanas){
     else if(ms.length>1)qps='('+ms.length+' partidas)';
     var d=(t.ini&&t.fin)?(Math.round((Date.parse(t.fin+'T00:00:00Z')-Date.parse(t.ini+'T00:00:00Z'))/864e5)+1):0;
     var c='';
-    c+=_crXlsCel('A',n,qps,true);
-    c+=_crXlsCel('B',n,cant,false);
-    c+=_crXlsCel('C',n,und,true);
-    c+=_crXlsCel('D',n,Math.round(hh*100)/100,false);
-    c+=_crXlsCel('E',n,String(t.task_code||''),true);
-    c+=_crXlsCel('F',n,String(t.nombre||''),true);
+    c+=_crXlsCel('A',n,qps,true,_WKS.texto);
+    c+=_crXlsCel('B',n,cant,false,_WKS.num);
+    c+=_crXlsCel('C',n,und,true,_WKS.texto);
+    c+=_crXlsCel('D',n,Math.round(hh*100)/100,false,_WKS.num);
+    c+=_crXlsCel('E',n,String(t.task_code||''),true,_WKS.texto);
+    c+=_crXlsCel('F',n,String(t.nombre||''),true,_WKS.texto);
     c+=_crXlsCel('G',n,d||'',false,_WKS.ent);
     c+=_crXlsCel('H',n,_crASerial(t.ini),false,_WKS.fecha);
     c+=_crXlsCel('I',n,_crASerial(t.fin),false,_WKS.fecha);
@@ -8007,7 +8124,7 @@ function _wkExcel(){
       try{if(typeof syncPull==='function')await syncPull()}catch(_e){}
       await _crCatPull();
       var LB=await _wkLibroApp(semN,corte,ids);
-      var enc=new TextEncoder(),ent=[],partes=_wkPaqueteApp(LB.hojas);
+      var enc=new TextEncoder(),ent=[],partes=_wkPaqueteApp(LB.hojas,LB.styles,LB.ss);
       for(var i=0;i<partes.length;i++){
         var u8=enc.encode(partes[i][1]);
         ent.push({nombre:partes[i][0],metodo:8,tiempo:_crZipTs(),
@@ -9524,7 +9641,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823k4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823k5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
