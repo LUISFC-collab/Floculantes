@@ -2558,7 +2558,7 @@ async function _crAlcanceUI(c){
     window._crTarN[t.task_code]=(t.items||[]).length;
     (t.items||[]).forEach(function(i){window._crDueno[i]=t.task_code;
       (window._crTarDe[i]||(window._crTarDe[i]=[])).push(t.task_code)})})}catch(_ed){}
-  _crHoja=1;_crH2=null;_crAbre={};_crRes='';_crResIt='';_crVaA='';
+  _crHoja=1;_crH2=null;_crAbre={};_crRes='';_crResIt='';_crVaA='';_crVaP='';
   var P=_crPartidas(),sel={},fec={},hhx={};
   P.forEach(function(p){var a=alc[p.id];sel[p.id]=a?a.inc:_crPorDefecto(p);
     if(a&&a.hh!=null)hhx[p.id]=a.hh;
@@ -2588,7 +2588,8 @@ async function _crAlcanceUI(c){
       if(q&&_crNrm(p.id+' '+p.nom).indexOf(q)<0)return;
       var on=sel[p.id];
       var hMe=hhDe(p),propio=(hhx[p.id]!=null);
-      H+='<div class="_crIt" data-id="'+esc(p.id)+'" style="display:flex;gap:9px;align-items:flex-start;padding:7px 8px;border-bottom:1px solid #16202e;cursor:pointer;'+(hMe>0?'':'opacity:.55')+'">'+
+      H+='<div class="_crIt" data-id="'+esc(p.id)+'" style="display:flex;gap:9px;align-items:flex-start;padding:7px 8px;border-bottom:1px solid #16202e;cursor:pointer;'+(hMe>0?'':'opacity:.55')+
+        (_crResIt===p.id?';background:#241a33;border-left:3px solid #A66BD6;border-radius:7px':'')+'">'+
         '<span style="flex:none;width:19px;height:19px;border-radius:5px;border:2px solid '+(on?'#3FD592':'#33415c')+';background:'+(on?'#1E7A46':'transparent')+';color:#fff;font-size:12px;font-weight:900;text-align:center;line-height:16px">'+(on?'✓':'')+'</span>'+
         '<span style="flex:1;min-width:0"><b style="color:#8ECBF5;font-size:11.5px">'+esc(p.id)+'</b> '+
         '<span style="color:#cfe3ff;font-size:11.5px;overflow-wrap:anywhere">'+esc(p.nom)+'</span>'+
@@ -2631,8 +2632,19 @@ async function _crAlcanceUI(c){
       B.innerHTML=_crPintaHoja2(_crH2,P,sel,fec);
       /* las actividades con mas de una partida se abren para ver cuales son */
       B.querySelectorAll('[data-abre="1"]').forEach(function(d){
-        d.onclick=function(){var tc=d.getAttribute('data-tc');
-          _crAbre[tc]=!_crAbre[tc];pinta()}});
+        d.onclick=function(ev){
+          /* si se pulso una partida de dentro, manda ella, no la actividad */
+          var z=ev.target;while(z&&z!==d&&!z.getAttribute('data-ver'))z=z.parentNode;
+          if(z&&z!==d&&z.getAttribute('data-ver'))return;
+          var tc=d.getAttribute('data-tc');_crAbre[tc]=!_crAbre[tc];pinta()}});
+      B.querySelectorAll('[data-ver]').forEach(function(d){
+        d.onclick=function(ev){
+          ev.stopPropagation();
+          var id=d.getAttribute('data-ver');
+          _crHoja=1;_crResIt=id;_crVaP=id;
+          var bv=document.getElementById('_crFeVer');
+          if(bv)bv.textContent='👁 Ver hoja 2 · AGRUPADO';
+          pinta()}});
       if(_crVaA){                    /* se ha llegado desde una partida */
         var z=B.querySelector('[data-tc="'+_crVaA+'"]');
         if(z&&z.scrollIntoView)z.scrollIntoView({block:'center'});
@@ -2670,6 +2682,13 @@ async function _crAlcanceUI(c){
       i.onclick=function(ev){ev.stopPropagation()};
       i.onchange=function(){fec[i.getAttribute('data-fin')].fin=i.value||'';
         fec[i.getAttribute('data-fin')].origen='manual';suma()}});
+    if(_crVaP){                      /* se ha vuelto desde la hoja 2 */
+      var zp=B.querySelector('._crIt[data-id="'+_crVaP+'"]');
+      if(!zp){                       /* el buscador la tenia escondida */
+        var bu=document.getElementById('_crBus');
+        if(bu&&bu.value){bu.value='';pinta();return}}
+      if(zp&&zp.scrollIntoView)zp.scrollIntoView({block:'center'});
+      _crVaP=''}
     suma()}
   document.getElementById('_crAlcX').onclick=function(){ov.remove()};
   document.getElementById('_crBus').oninput=pinta;
@@ -2899,7 +2918,7 @@ function _crSemDe(tar){
 var _crHoja=1, _crH2=null;
 /* Que actividades estan abiertas en la hoja 2, cual se ha marcado al llegar
    desde una partida y cual hay que traer a la vista de una sola vez. */
-var _crAbre={}, _crRes='', _crResIt='', _crVaA='';
+var _crAbre={}, _crRes='', _crResIt='', _crVaA='', _crVaP='';
 /* La hoja 2 tal como sale en el Excel: los titulos de WBS y, bajo cada uno,
    sus tareas con las partidas que reclaman. Las agrupaciones van con su color,
    el mismo que se ve en el resto del aplicativo. */
@@ -3008,7 +3027,8 @@ function _crPintaHoja2(D,P,sel,fec){
       (t.items||[]).forEach(function(i){
         var pp=porId[i], dentro=!!sel[i];
         var hi=pp?((Number(pp.hh)||0)/_crVeces(rp,i)):0;
-        H+='<div style="display:flex;gap:7px;align-items:baseline;padding:3px 8px'+
+        H+='<div data-ver="'+esc(i)+'" title="Verla en la hoja 1 · ALCANCE" '+
+          'style="display:flex;gap:7px;align-items:baseline;padding:3px 8px;cursor:pointer'+
           (_crResIt===i?';background:#241a33;border-radius:6px':'')+'">'+
           '<b style="flex:none;font-size:10.5px;color:'+(dentro?'#8ECBF5':'#7d8590')+'">'+
             esc(i)+'</b>'+
@@ -3020,7 +3040,9 @@ function _crPintaHoja2(D,P,sel,fec){
             'border-radius:6px;font-size:9.5px;font-weight:800;'+
             (dentro?'background:#14261d;border:1px solid #1d3a2a;color:#9FE8B0'
                    :'background:#2a1c1c;border:1px solid #4a2a2a;color:#FFB4A8')+
-            '">'+(dentro?'CUENTA':'FUERA')+'</span></div>'});
+            '">'+(dentro?'CUENTA':'FUERA')+'</span>'+
+          '<span style="flex:none;width:12px;text-align:center;color:#7d8590;'+
+            'font-size:10px">↦</span></div>'});
       H+='</div>'}});
   if(!orden.length)return '<div style="padding:14px;color:#7d8590;text-align:center">Sin tareas</div>';
   H+='<div style="display:flex;gap:8px;align-items:center;margin-top:8px;'+
@@ -11304,7 +11326,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824d5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824d6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
