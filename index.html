@@ -5527,7 +5527,9 @@ function _wkMetradoApp(P){
   var C=_wkCabeceraDe(base,9,ret), P0=C.P0, r=C.filas.slice();
   var eWbs=_wkEstDe(P0,10), ePlan=_wkEstDe(P0,14), eReal=_wkEstDe(P0,15);
   var COLS=['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
-  var ME="'"+P.hojaMetrado+"'";
+  /* la semana w de esta hoja mira la misma semana de PROGRAMACION, que
+     lleva el % acumulado, y la multiplica por la cantidad de la columna G */
+  var colS=function(i){return _wkgCol('N',i)};
   P.mapa.forEach(function(m){
     var n=m.r, c='';
     var cel=function(col,f,est){return '<c r="'+col+n+'"'+(est?(' s="'+est+'"'):'')+'><f>'+_wkEsc(f)+'</f></c>'};
@@ -5544,17 +5546,17 @@ function _wkMetradoApp(P){
       c+=cel('M','$H'+n,ePlan.e.M);
       c+=cel('N','$K'+n,ePlan.e.N);
       c+=cel('O','PROGRAMACION!M'+n,ePlan.e.O);
-      for(var k2=0;k2<=nS;k2++)c+=vac(colM(k2),ePlan.e[colM(k2)]);
+      c+=vac(colM(0),ePlan.e[colM(0)]);
+      for(var k2=1;k2<=nS;k2++)
+        c+=cel(colM(k2),'PROGRAMACION!'+colS(k2)+n+'*$G'+n,ePlan.e[colM(k2)]);
       r.push('<row r="'+n+'"'+ePlan.at+'>'+c+'</row>');return}
     /* la del avance: el metrado ejecutado sale de su alimentador */
     COLS.forEach(function(col){
       c+=(col==='O')?cel('O','PROGRAMACION!M'+n,eReal.e.O):vac(col,eReal.e[col])});
     c+=vac(colM(0),eReal.e[colM(0)]);
+    /* la cantidad vive en la linea de plan, que es la que trae la columna G */
     for(var w=1;w<=nS;w++)
-      c+=(w<=P.iSem)
-        ? cel(colM(w),'IFERROR(SUMIF('+ME+'!$'+_WKF.cod+':$'+_WKF.cod+',$B'+m.base+','+
-            ME+'!'+P.colFeeder[w-1]+':'+P.colFeeder[w-1]+'),0)',eReal.e[colM(w)])
-        : vac(colM(w),eReal.e[colM(w)]);
+      c+=cel(colM(w),'PROGRAMACION!'+colS(w)+n+'*$G'+m.base,eReal.e[colM(w)]);
     r.push('<row r="'+n+'"'+eReal.at+'>'+c+'</row>')});
   var ultCol=colM(nS);
   var enc=base.slice(0,base.indexOf('<sheetData>'))
@@ -5593,10 +5595,10 @@ function _wkPhysicalApp(P){
       c+=cel('D','PROGRAMACION!E'+pr,est.e.D);
       c+=cel('E','PROGRAMACION!F'+pr,est.e.E);
       c+=cel('F','PROGRAMACION!$L$'+pr,est.e.F);
-      c+=cel('G','IFERROR(INDEX(P'+n+':'+_wkgCol('O',nS)+n+',MATCH("Fecha de corte",$P$5:'+
-        _wkgCol('O',nS)+'$5,0)),0)',est.e.G);
+      var MT='MATCH("Fecha de corte",$P$5:$'+_wkgCol('O',nS)+'$5,0)';
+      c+=cel('G','IFERROR(INDEX(P'+n+':'+_wkgCol('O',nS)+n+','+MT+'),0)',est.e.G);
       c+=cel('H','IFERROR(INDEX(P'+(m.filaReal+D)+':'+_wkgCol('O',nS)+(m.filaReal+D)+
-        ',MATCH("Fecha de corte",$P$5:'+_wkgCol('O',nS)+'$5,0)),0)',est.e.H);
+        ','+MT+'),0)',est.e.H);
       c+=cel('I','$F'+n+'*$H'+n,est.e.I);
       c+=cel('J','$F'+n,est.e.J);
       c+=cel('K','$G'+n,est.e.K);
@@ -5608,7 +5610,7 @@ function _wkPhysicalApp(P){
         c+=(col==='F')?cel('F','PROGRAMACION!$L$'+m.base,est.e.F)
           :((col==='N')?cel('N','PROGRAMACION!M'+pr,est.e.N):vac(col,est.e[col]))});
     }
-    for(var w=0;w<=nS;w++)
+    for(var w=1;w<=nS;w++)
       c+=cel(colP(w),'PROGRAMACION!'+_wkgCol('N',w)+pr,est.e[colP(w)]);
     r.push('<row r="'+n+'"'+est.at+'>'+c+'</row>')});
   var ultCol=colP(nS);
@@ -5805,8 +5807,7 @@ function _wkFeederEsp(id,filas,semanas){
   var tot=semanas.map(function(){return 0}),tH=0;
   filas.forEach(function(f){
     var v=(id==='__REAL__')?{hh:f.hhReal,sem:f.semReal,ini:'',fin:'',dias:0}
-      :((id==='__CANT__')?{hh:(f.cant===''||f.cant==null)?0:f.cant,sem:f.semCant,ini:'',fin:'',dias:0}
-        :f.lineas[id]);
+      :f.lineas[id];
     var c='';
     c+=_crXlsCel(F.cod,n,f.cod,true,S.texto);
     c+=_crXlsCel(F.nom,n,f.nom,true,S.texto);
@@ -5895,14 +5896,6 @@ async function _wkDatosLibro(semN,corte,ids){
     /* el avance de cada semana, que es la diferencia con la anterior */
     var semReal=acumReal.map(function(a,i){
       return Math.max(0,Math.round(((a-(i?acumReal[i-1]:0))*hhE)*1e6)/1e6)});
-    /* el metrado ejecutado por semana: solo tiene sentido cuando la actividad
-       es UNA partida, que es cuando la fila trae cantidad y unidad */
-    var semCant=sem.map(function(){return 0});
-    if(ms.length===1&&porId[ms[0]]){
-      var qTot=Number(porId[ms[0]].cant)||0,prevC=0;
-      sem.forEach(function(s2,i){
-        var ac=pctA(ms[0],s2.fin)*qTot;
-        semCant[i]=Math.max(0,Math.round((ac-prevC)*1e6)/1e6);prevC=ac})}
     var hoy=(typeof todayISO==='function')?todayISO():corte;
     var pr=0;if(hhE>0)ms.forEach(function(i){pr+=(esp.u.items[i]/_crVeces(esp.rp,i))*pctA(i,corte)});
     var cant='',und='',qps='';
@@ -5911,7 +5904,7 @@ async function _wkDatosLibro(semN,corte,ids){
     filas.push({cod:t.task_code,qps:qps,nom:String(t.nombre||''),wbs:String(t.wbs||''),
       cant:cant,und:und,lineas:lineas,
       hhReal:hhE>0?pr:0,pctReal:hhE>0?Math.min(1,pr/hhE):0,
-      acumReal:acumReal,semReal:semReal,semCant:semCant})});
+      acumReal:acumReal,semReal:semReal})});
   var hhTot={};C.forEach(function(cc){hhTot[cc.id]=cc.u.hh});
   return {sem:sem,C:C,esp:esp,filas:filas,hhTot:hhTot,
     iSem:Math.max(1,Math.min(sem.length,semN-26))}}
@@ -5937,7 +5930,7 @@ async function _wkLibroApp(semN,corte,ids){
     pctReal:Math.round(pctReal*1e6)/1e6, hhAlcance:hhAlc});
   _WKPROY=DATA.proyecto||'';
   _WKFECHA=corte||'';
-  var HREAL='REAL (aplicativo)', HMET='METRADO REAL (aplicativo)';
+  var HREAL='REAL (aplicativo)';
   var p6Ult={};D.C.forEach(function(c){p6Ult[c.id]=2+D.filas.length});
   D.filas.forEach(function(f,i){f.p6={};D.C.forEach(function(c){f.p6[c.id]=3+i})});
   var prog=_wkProgApp({base:base.hojas['PROGRAMACION'],
@@ -5953,7 +5946,6 @@ async function _wkLibroApp(semN,corte,ids){
   D.C.forEach(function(c){
     hojas.push(['ACTIVITY_PLAN ('+c.id+')',_wkFeederEsp(c.id,D.filas,sem).xml])});
   hojas.push([HREAL,_wkFeederEsp('__REAL__',D.filas,sem).xml]);
-  hojas.push([HMET,_wkFeederEsp('__CANT__',D.filas,sem).xml]);
   D.C.forEach(function(c){
     hojas.push(['P6-'+c.id,_wkHojaP6Esp(c.id,D.filas,sem).xml])});
   hojas.push(['Carátula',carXml||car.xml]);
@@ -5962,8 +5954,8 @@ async function _wkLibroApp(semN,corte,ids){
   var comun={semanas:sem,iSem:D.iSem,mapa:prog.mapa,ultFila:prog.ultima,
     colFeeder:sem.map(function(x,i){return _wkFCol(i)})};
   if(base.hojas['METRADO'])
-    hojas.push(['METRADO',_wkMetradoApp(Object.assign({base:base.hojas['METRADO'],
-      hojaMetrado:HMET},comun)).xml]);
+    hojas.push(['METRADO',_wkMetradoApp(Object.assign({
+      base:base.hojas['METRADO']},comun)).xml]);
   if(base.hojas['PHYSICAL % PROGRESS'])
     hojas.push(['PHYSICAL % PROGRESS',_wkPhysicalApp(Object.assign({
       base:base.hojas['PHYSICAL % PROGRESS'],filaIni:15},comun)).xml]);
@@ -9919,7 +9911,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260823n2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260823n3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
