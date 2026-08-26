@@ -1326,6 +1326,7 @@ function leaf(p,num){const s=statusOf(p),m=metaOf(p.id),lp=partesOf(p.id).slice(
   try{if(!p._elim&&typeof _ficDe==='function'&&_ficDe(p.id)){el.className+=' leaf-fic';
     el.style.background='linear-gradient(0deg,rgba(122,75,0,.07),rgba(122,75,0,.07))';
     el.style.border='1px solid rgba(122,75,0,.35)'}}catch(_fe){}
+  try{if(window._cnxSel&&typeof _cnxPintaSel==='function')_cnxPintaSel(el,p.id)}catch(_cs){}
   /* las relacionadas van con sangria, colgando de la suya */
   try{var _cpa=(typeof _cnxPadre==='function')?_cnxPadre(p.id):null;
     if(_cpa){el.style.marginLeft=Math.min(3,(p._cnxProf||1))*14+'px';
@@ -12899,7 +12900,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824k5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824k6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -16686,6 +16687,11 @@ function _cnxCiclo(hijo,padre){var v={},cur=padre,n=0;
 function _cnxSet(hijo,padre){
   if(!hijo||!padre||hijo===padre)return false;
   if(_cnxCiclo(hijo,padre))return false;
+  /* un solo escalon: ni la principal puede estar ya enlazada, ni la que se
+     engancha puede ser principal de otras. La regla va aqui y no solo en la
+     pantalla, para que valga tambien si el enlace llega de otro equipo. */
+  if(_cnxPadre(padre))return false;
+  if(_cnxHijos(hijo).length)return false;
   var t=(typeof nowSrv==='function'?nowSrv():Date.now());
   _cnxAll()[hijo]={padre:String(padre),quien:(state.user&&state.user.supervisor)||'',
     ts:t,cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0};
@@ -16731,7 +16737,7 @@ function _cnxBotonHTML(id){try{
   var hijos=(typeof _cnxHijos==='function')?_cnxHijos(id).length:0;
   var esHija=(typeof _cnxPadre==='function')&&!!_cnxPadre(id);
   var on=hijos>0||esHija;
-  var t=esHija?'Enlazada a otra actividad':(hijos?('Tiene '+hijos+' enlazada(s)'):'Enlazar otras actividades a esta');
+  var t=esHija?'Enlazada a otra actividad — toca para desenlazarla':(hijos?('Tiene '+hijos+' enlazada(s)'):'Enlazar otras actividades a esta');
   return '<button class="_lfCnx" data-id="'+esc(id)+'" title="'+esc(t)+'" style="background:'+(on?'#E7F0FE':'#fff')+
     ';border:1.5px solid '+(on?'#1F6FE0':'#C7D0DC')+';color:'+(on?'#1F6FE0':'#5C6779')+
     ';border-radius:8px;width:25px;height:25px;display:inline-flex;align-items:center;justify-content:center;'+
@@ -16748,89 +16754,106 @@ function _cnxPanel(el,id){try{
   var caja=document.createElement('div');caja.className='_cnxPanel';
   caja.style.cssText='margin-top:8px;border:1px solid #B7D0F5;background:#F5F9FF;border-radius:10px;padding:10px';
   caja.onclick=function(e){e.stopPropagation()};
-  var nom=function(x){try{return (typeof pNom==='function')?pNom(x):(x.nombre||x.id)}catch(e){return x.id}};
-  var lista=[];
-  try{lista=acts(state.user.disc).filter(function(x){
-    /* ni ella misma, ni las borradas, ni ninguna de la que ya cuelgue esta,
-       que dejaria la cadena mordiendose la cola */
-    return x.id!==id&&!x._elim&&!_cnxCiclo(x.id,id)})}catch(e){}
-  caja.innerHTML='<div style="font-weight:800;font-size:12px;color:#1F3864;margin-bottom:2px">🔗 Actividades enlazadas a esta</div>'+
-    '<div style="font-size:11px;color:#5C6779;margin-bottom:7px">Las que marques quedan justo debajo de esta, como relacionadas suyas. Puedes marcar varias.</div>'+
-    '<input class="_cnxQ" placeholder="Buscar…" style="width:100%;padding:7px 9px;border:1px solid #DFE3EA;border-radius:8px;font-size:12px;margin-bottom:6px">'+
-    '<div class="_cnxL" style="max-height:210px;overflow:auto;border:1px solid #DFE3EA;border-radius:8px;background:#fff"></div>'+
-    '<button class="_cnxCerrar" style="width:100%;margin-top:8px;background:#eef2f7;border:0;border-radius:8px;padding:8px;font-weight:700;font-size:12px;cursor:pointer">Cerrar</button>';
-  var pinta=function(){
-    var q=(caja.querySelector('._cnxQ').value||'').trim().toLowerCase();
-    var v=lista.filter(function(x){return !q||(nom(x)+' '+x.id).toLowerCase().indexOf(q)>=0});
-    /* las que ya cuelgan de esta, arriba del todo */
-    v.sort(function(a,b){var ea=(_cnxPadre(a.id)===id)?0:1,eb=(_cnxPadre(b.id)===id)?0:1;return ea-eb});
-    v=v.slice(0,150);
-    caja.querySelector('._cnxL').innerHTML=v.length?v.map(function(x){
-      var mia=(_cnxPadre(x.id)===id),otra=(!mia&&!!_cnxPadre(x.id));
-      return '<div class="_cnxIt" data-id="'+esc(x.id)+'" style="display:flex;gap:8px;align-items:flex-start;padding:7px 9px;border-bottom:1px solid #EEF1F5;cursor:pointer;'+(mia?'background:#E7F0FE':'')+'">'+
-        '<span style="flex:none;width:16px;height:16px;margin-top:1px;border-radius:4px;border:1.5px solid '+(mia?'#1F6FE0':'#C7D0DC')+';background:'+(mia?'#1F6FE0':'#fff')+';color:#fff;font-size:11px;line-height:14px;text-align:center;font-weight:900">'+(mia?'✓':'')+'</span>'+
-        '<span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:12px;color:#1B2433">'+esc(nom(x))+'</span>'+
-        '<span style="display:block;color:#5C6779;font-size:10.5px">'+esc(x.id)+(otra?' · ya está enlazada a otra':'')+'</span></span></div>'}).join('')
-      :'<div style="padding:12px;color:#5C6779;font-size:12px">No hay ninguna que encaje.</div>';
-    caja.querySelectorAll('._cnxIt').forEach(function(e){
-      e.onclick=function(ev){ev.stopPropagation();
-        var hid=e.getAttribute('data-id');
-        if(_cnxPadre(hid)===id){_cnxBorra(hid);
-          if(typeof logCambio==='function')logCambio('EDIT','conexion '+hid,'desenlazada de '+id)}
-        else{
-          if(_cnxPadre(hid)&&!confirm('Esa actividad ya está enlazada a otra. ¿Pasarla a ésta?'))return;
-          if(!_cnxSet(hid,id)){toast('No se puede: la cadena se mordería la cola');return}
-          if(typeof logCambio==='function')logCambio('EDIT','conexion '+hid,'enlazada a '+id)}
-        pinta();try{if(typeof renderList==='function')renderList()}catch(_e){}}})};
-  pinta();
-  caja.querySelector('._cnxQ').oninput=pinta;
-  caja.querySelector('._cnxCerrar').onclick=function(e){e.stopPropagation();caja.remove()};
-  el.appendChild(caja);
-  try{caja.querySelector('._cnxQ').focus()}catch(e){}
+  var pa=_cnxPadre(id),hijos=_cnxHijos(id);
+  var h='';
+  if(pa){
+    var pn=id;try{var b0=(DATA._byId&&DATA._byId[pa])||{};pn=(typeof pNom==='function'?pNom(b0):(b0.nombre||''))||pa}catch(e){}
+    h+='<div style="font-size:12px;color:#1F3864;margin-bottom:8px">Esta actividad está enlazada a <b>'+esc(pn)+'</b>.<br>'+
+       '<span style="color:#5C6779;font-size:11px">Una actividad enlazada no puede recibir enlaces ni pasar a otra: primero hay que desenlazarla.</span></div>'+
+       '<button class="_cnxOff" data-id="'+esc(id)+'" style="width:100%;background:#B42318;color:#fff;border:0;border-radius:9px;padding:9px;font-weight:800;font-size:12px;cursor:pointer">Desenlazar esta actividad</button>';
+  }else{
+    h+='<button class="_cnxIr" style="width:100%;background:#1E7A46;color:#fff;border:0;border-radius:9px;padding:10px;font-weight:800;font-size:12.5px;cursor:pointer">🔗 Enlazar actividad</button>'+
+       '<button class="_cnxVer" style="width:100%;margin-top:6px;background:#fff;border:1.5px solid #1F6FE0;color:#1F6FE0;border-radius:9px;padding:10px;font-weight:800;font-size:12.5px;cursor:pointer">📋 Actividades enlazadas ('+hijos.length+')</button>';
+  }
+  h+='<div class="_cnxVerL" style="margin-top:8px"></div>';
+  caja.innerHTML=h;el.appendChild(caja);
+  var off=caja.querySelector('._cnxOff');
+  if(off)off.onclick=function(e){e.stopPropagation();
+    if(!confirm('¿Desenlazar esta actividad de su principal?'))return;
+    _cnxBorra(id);
+    if(typeof logCambio==='function')logCambio('EDIT','conexion '+id,'desenlazada');
+    if(typeof toast==='function')toast('Actividad desenlazada');
+    try{renderList()}catch(_e){}};
+  var ir=caja.querySelector('._cnxIr');
+  if(ir)ir.onclick=function(e){e.stopPropagation();_cnxModo(id)};
+  var ver=caja.querySelector('._cnxVer');
+  if(ver)ver.onclick=function(e){e.stopPropagation();_cnxVerLista(caja,id)};
 }catch(e){if(typeof toast==='function')toast('⚠ '+((e&&e.message)||e))}}
 
-/* elegir de cual cuelga */
-function _cnxUI(id){
-  var pa=_cnxPadre(id);
-  var lista=[];try{lista=acts(state.user.disc).filter(function(x){
-    return x.id!==id&&!x._elim&&!_cnxCiclo(id,x.id)})}catch(e){}
-  var nom=function(x){try{return (typeof pNom==='function')?pNom(x):(x.nombre||x.id)}catch(e){return x.id}};
-  var ov=document.createElement('div');ov.id='_cnxOv';
-  ov.style.cssText='position:fixed;inset:0;z-index:2147483000;background:rgba(15,25,45,.55);display:flex;align-items:flex-end;justify-content:center';
-  var h='<div style="background:#fff;width:100%;max-width:460px;max-height:88vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px 15px 18px">';
-  h+='<div style="font-weight:900;font-size:15px;color:#1F3864">🔗 Conectar con otra actividad</div>';
-  h+='<div style="font-size:12px;color:#5C6779;margin:4px 0 12px">La conectada queda justo debajo de la que elijas, como relacionada suya.</div>';
-  if(pa){var pn='';try{var b=(DATA._byId&&DATA._byId[pa])||{};pn=nom(b)||pa}catch(e){pn=pa}
-    h+='<div style="background:#E3EAF6;border:1px solid #B9C7DD;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#26456F;margin-bottom:12px">Ahora cuelga de <b>'+esc(pn)+'</b></div>'}
-  h+='<input id="_cnxQ" placeholder="Buscar actividad…" style="width:100%;padding:10px;border:1px solid #DFE3EA;border-radius:9px;margin-bottom:8px">';
-  h+='<div id="_cnxLista" style="max-height:44vh;overflow:auto;border:1px solid #DFE3EA;border-radius:9px"></div>';
-  h+='<div style="display:flex;gap:8px;margin-top:14px"><button id="_cnxX" style="flex:1;background:#eef2f7;border:0;border-radius:10px;padding:13px;font-weight:700">Cerrar</button>'+
-     (pa?'<button id="_cnxDel" style="flex:1;background:#B42318;color:#fff;border:0;border-radius:10px;padding:13px;font-weight:800">Desconectar</button>':'')+'</div>';
-  h+='</div>';ov.innerHTML=h;document.body.appendChild(ov);
-  var pinta=function(){
-    var q=(document.getElementById('_cnxQ').value||'').trim().toLowerCase();
-    var v=lista.filter(function(x){return !q||(nom(x)+' '+x.id).toLowerCase().indexOf(q)>=0}).slice(0,120);
-    document.getElementById('_cnxLista').innerHTML=v.length?v.map(function(x){
-      return '<div class="_cnxIt" data-id="'+esc(x.id)+'" style="padding:10px 12px;border-bottom:1px solid #EEF1F5;cursor:pointer;font-size:12.5px">'+
-        '<div style="font-weight:700;color:#1B2433">'+esc(nom(x))+'</div>'+
-        '<div style="color:#5C6779;font-size:11px">'+esc(x.id)+' · '+esc(x.sistema||'')+'</div></div>'}).join('')
-      :'<div style="padding:14px;color:#5C6779;font-size:12.5px">No hay ninguna que encaje.</div>';
-    document.getElementById('_cnxLista').querySelectorAll('._cnxIt').forEach(function(e){
-      e.onclick=function(){
-        if(!_cnxSet(id,e.getAttribute('data-id'))){toast('No se puede: quedaria conectada consigo misma');return}
-        ov.remove();try{renderList()}catch(_e){}
-        if(typeof logCambio==='function')logCambio('EDIT','conexion '+id,'cuelga de '+e.getAttribute('data-id'));
-        if(typeof toast==='function')toast('🔗 Conectada')}})};
-  pinta();
-  document.getElementById('_cnxQ').oninput=pinta;
-  ov.onclick=function(e){if(e.target===ov)ov.remove()};
-  document.getElementById('_cnxX').onclick=function(){ov.remove()};
-  var dl=document.getElementById('_cnxDel');
-  if(dl)dl.onclick=function(){if(!confirm('¿Desconectar esta actividad?'))return;
-    _cnxBorra(id);ov.remove();try{renderList()}catch(e){}
-    if(typeof logCambio==='function')logCambio('EDIT','conexion '+id,'desconectada');
-    if(typeof toast==='function')toast('Desconectada')};
-}
+/* las que ya cuelgan de esta, para poder quitarlas */
+function _cnxVerLista(caja,id){try{
+  var d=caja.querySelector('._cnxVerL');if(!d)return;
+  if(d.innerHTML){d.innerHTML='';return}
+  var hijos=_cnxHijos(id);
+  var nom=function(k){try{var x=(DATA._byId&&DATA._byId[k])||{};return (typeof pNom==='function'?pNom(x):(x.nombre||''))||k}catch(e){return k}};
+  d.innerHTML=hijos.length
+    ? '<div style="border:1px solid #DFE3EA;border-radius:8px;background:#fff;overflow:hidden">'+hijos.map(function(k){
+        return '<div style="display:flex;gap:8px;align-items:center;padding:8px 9px;border-bottom:1px solid #EEF1F5">'+
+          '<span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:12px;color:#1B2433">'+esc(nom(k))+'</span>'+
+          '<span style="display:block;color:#5C6779;font-size:10.5px">'+esc(k)+'</span></span>'+
+          '<button class="_cnxQuita" data-id="'+esc(k)+'" style="flex:none;background:#fff;border:1.5px solid #B42318;color:#B42318;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;cursor:pointer">Desenlazar</button></div>'}).join('')+'</div>'
+    : '<div style="padding:9px;color:#5C6779;font-size:11.5px">Todavía no tiene ninguna enlazada.</div>';
+  d.querySelectorAll('._cnxQuita').forEach(function(b){
+    b.onclick=function(e){e.stopPropagation();
+      var k=b.getAttribute('data-id');
+      if(!confirm('¿Desenlazar «'+nom(k)+'»?'))return;
+      _cnxBorra(k);
+      if(typeof logCambio==='function')logCambio('EDIT','conexion '+k,'desenlazada de '+id);
+      if(typeof toast==='function')toast('Desenlazada');
+      try{renderList()}catch(_e){}}})
+}catch(e){}}
+
+/* ---- modo seleccion: se señala la tarjeta en vez de buscarla ---- */
+/* Puede enlazarse bajo `padre` la que no este ya enlazada -solo se admite un
+   enlace por actividad- y la que no sea principal de otras, para que no salgan
+   cadenas de cadenas. */
+function _cnxElegible(idHijo,padre){
+  if(!idHijo||!padre||idHijo===padre)return false;
+  if(_cnxPadre(idHijo))return false;
+  if(_cnxHijos(idHijo).length)return false;
+  return true}
+function _cnxModo(padre){
+  if(_cnxPadre(padre)){if(typeof toast==='function')toast('Esta actividad ya está enlazada a otra');return}
+  window._cnxSel=padre;
+  try{renderList()}catch(e){}
+  _cnxBarra(padre);
+  try{window.scrollTo({top:0,behavior:'smooth'})}catch(e){}}
+function _cnxSalir(){
+  window._cnxSel=null;
+  try{var b=document.getElementById('_cnxBar');if(b)b.remove()}catch(e){}
+  try{renderList()}catch(e){}}
+function _cnxBarra(padre){try{
+  var v=document.getElementById('_cnxBar');if(v)v.remove();
+  var nom=padre;try{var x=(DATA._byId&&DATA._byId[padre])||{};nom=(typeof pNom==='function'?pNom(x):(x.nombre||''))||padre}catch(e){}
+  var d=document.createElement('div');d.id='_cnxBar';
+  d.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:2147482000;background:#1E7A46;color:#fff;'+
+    'padding:11px 14px calc(11px + env(safe-area-inset-bottom));display:flex;gap:10px;align-items:center;'+
+    'box-shadow:0 -3px 14px rgba(15,25,45,.28)';
+  d.innerHTML='<span style="flex:1;min-width:0;font-size:12.5px;font-weight:700;line-height:1.25">'+
+    'Selecciona la actividad a enlazar<br><span style="font-weight:500;opacity:.9;font-size:11px">se enlazará a: '+esc(nom)+'</span></span>'+
+    '<button id="_cnxBarX" style="flex:none;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:9px;padding:9px 13px;font-weight:800;font-size:12px;cursor:pointer">Cancelar</button>';
+  document.body.appendChild(d);
+  document.getElementById('_cnxBarX').onclick=function(e){e.stopPropagation();_cnxSalir()};
+}catch(e){}}
+/* lo que le pasa a cada tarjeta mientras se esta eligiendo */
+function _cnxPintaSel(el,id){try{
+  var padre=window._cnxSel;if(!padre)return;
+  if(id===padre){
+    el.style.border='2px solid #1E7A46';
+    el.style.background='linear-gradient(0deg,rgba(30,122,70,.10),rgba(30,122,70,.10))';
+    return}
+  if(!_cnxElegible(id,padre)){el.style.opacity='.38';return}
+  el.style.background='linear-gradient(0deg,rgba(30,122,70,.16),rgba(30,122,70,.16))';
+  el.style.border='1.5px solid #1E7A46';
+  el.style.cursor='pointer';
+  el.onclick=function(e){
+    e.stopPropagation();
+    if(!_cnxSet(id,padre)){if(typeof toast==='function')toast('No se puede enlazar ahí');return}
+    if(typeof logCambio==='function')logCambio('EDIT','conexion '+id,'enlazada a '+padre);
+    if(typeof toast==='function')toast('✓ Actividad enlazada');
+    _cnxSalir()}
+}catch(e){}}
+
 /* colgadas del sync, igual que alcance */
 try{var _ficPushBase=syncPush;syncPush=async function(){try{await _ficPush()}catch(e){}try{await _cnxPush()}catch(e){}return await _ficPushBase.apply(this,arguments)};
 var _ficPullBase=syncPull;syncPull=async function(){var r=await _ficPullBase.apply(this,arguments);try{await _ficPull()}catch(e){}try{await _cnxPull()}catch(e){}return r};}catch(_fcw){}
