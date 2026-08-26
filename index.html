@@ -1045,6 +1045,13 @@ function _rtOnCambio(tabla){
  if(tabla==='tormenta'){try{if(typeof syncNow==='function')syncNow(true)}catch(e){}try{var _ss=$('scrStorm');if(_ss&&!_ss.classList.contains('hidden')&&typeof renderStorm==='function')setTimeout(renderStorm,900)}catch(e){}return}
   if(tabla==='reportabilidad'){try{if(typeof syncNow==='function')syncNow(true)}catch(e){}return}
   if(tabla==='app_config'){try{if(typeof _mpPoll==='function')_mpPoll()}catch(e){}try{if(typeof _ajPull==='function')_ajPull()}catch(e){}return}
+  /* El alcance de cada partida y la galeria ya se guardaban bien, pero no
+     estaban suscritas: el cambio del companero solo llegaba en la siguiente
+     pasada del sync. La galeria se refrescaba de rebote al tocar ajustes, que
+     es una casualidad, no un aviso. */
+  if(tabla==='alcance_create_090826'){try{if(typeof _alcPull==='function')_alcPull()}catch(e){}return}
+  if(tabla==='galeria_fotos_create_210826'){try{if(typeof _galPull==='function')_galPull().then(function(){
+    try{if(document.getElementById('_docOv')&&typeof _docRender==='function')_docRender()}catch(e){}})}catch(e){}return}
   /* avance ficticio y conexiones: se baja el dato y se repinta al momento */
   if(tabla==='ficticio_create_250826'||tabla==='conexiones_create_250826'){
     try{if(tabla==='ficticio_create_250826'&&typeof _ficPull==='function')_ficPull()}catch(e){}
@@ -1088,7 +1095,7 @@ function _rtInit(){
   _RT.ws=ws;
   ws.onopen=function(){
    _RT.tries=0;
-   ws.send(JSON.stringify({topic:'realtime:obf_wbs',event:'phx_join',ref:'1',join_ref:'1',payload:{config:{broadcast:{ack:false,self:false},presence:{key:''},postgres_changes:[{event:'*',schema:'public',table:'wbs_extra'},{event:'*',schema:'public',table:'nuevas'},{event:'*',schema:'public',table:'personal'},{event:'*',schema:'public',table:'personal_dia'},{event:'*',schema:'public',table:'personal_esp'},{event:'*',schema:'public',table:'cuadrillas'},{event:'*',schema:'public',table:'crono_cuadrillas_create_090826'},{event:'*',schema:'public',table:'config_usuario_create_110826'},{event:'*',schema:'public',table:'actividades_create_110826'},{event:'*',schema:'public',table:'ajustes_create_110826'},{event:'*',schema:'public',table:'app_config'},{event:'*',schema:'public',table:'tormenta'},{event:'*',schema:'public',table:'reportabilidad'},{event:'*',schema:'public',table:'doc_carpetas_create_120826'},{event:'*',schema:'public',table:'doc_archivos_create_120826'},{event:'*',schema:'public',table:'fotos'},{event:'*',schema:'public',table:'fotos_borradas'},{event:'*',schema:'public',table:'agrupaciones_create_220826'},{event:'*',schema:'public',table:'cronogramas_create_230826'},{event:'*',schema:'public',table:'cron_tareas_create_230826'},{event:'*',schema:'public',table:'cron_alcance_create_230826'},{event:'*',schema:'public',table:'cron_plan_create_230826'},{event:'*',schema:'public',table:'cron_wbs_create_230826'},{event:'*',schema:'public',table:'ficticio_create_250826'},{event:'*',schema:'public',table:'conexiones_create_250826'}]}}}));
+   ws.send(JSON.stringify({topic:'realtime:obf_wbs',event:'phx_join',ref:'1',join_ref:'1',payload:{config:{broadcast:{ack:false,self:false},presence:{key:''},postgres_changes:[{event:'*',schema:'public',table:'wbs_extra'},{event:'*',schema:'public',table:'nuevas'},{event:'*',schema:'public',table:'personal'},{event:'*',schema:'public',table:'personal_dia'},{event:'*',schema:'public',table:'personal_esp'},{event:'*',schema:'public',table:'cuadrillas'},{event:'*',schema:'public',table:'crono_cuadrillas_create_090826'},{event:'*',schema:'public',table:'config_usuario_create_110826'},{event:'*',schema:'public',table:'actividades_create_110826'},{event:'*',schema:'public',table:'ajustes_create_110826'},{event:'*',schema:'public',table:'app_config'},{event:'*',schema:'public',table:'tormenta'},{event:'*',schema:'public',table:'reportabilidad'},{event:'*',schema:'public',table:'doc_carpetas_create_120826'},{event:'*',schema:'public',table:'doc_archivos_create_120826'},{event:'*',schema:'public',table:'fotos'},{event:'*',schema:'public',table:'fotos_borradas'},{event:'*',schema:'public',table:'agrupaciones_create_220826'},{event:'*',schema:'public',table:'cronogramas_create_230826'},{event:'*',schema:'public',table:'cron_tareas_create_230826'},{event:'*',schema:'public',table:'cron_alcance_create_230826'},{event:'*',schema:'public',table:'cron_plan_create_230826'},{event:'*',schema:'public',table:'cron_wbs_create_230826'},{event:'*',schema:'public',table:'ficticio_create_250826'},{event:'*',schema:'public',table:'conexiones_create_250826'},{event:'*',schema:'public',table:'alcance_create_090826'},{event:'*',schema:'public',table:'galeria_fotos_create_210826'}]}}}));
    _RT.hb=setInterval(function(){try{ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:String(++_RT.ref)}))}catch(e){}},22000);
   };
   ws.onmessage=function(m){try{var d=JSON.parse(m.data);
@@ -1326,6 +1333,7 @@ function leaf(p,num){const s=statusOf(p),m=metaOf(p.id),lp=partesOf(p.id).slice(
   try{if(!p._elim&&typeof _ficDe==='function'&&_ficDe(p.id)){el.className+=' leaf-fic';
     el.style.background='linear-gradient(0deg,rgba(122,75,0,.07),rgba(122,75,0,.07))';
     el.style.border='1px solid rgba(122,75,0,.35)'}}catch(_fe){}
+  try{if(window._cnxAbierto===p.id&&typeof _cnxRepon==='function')setTimeout(function(){_cnxRepon(el,p.id)},0)}catch(_cr){}
   try{if(window._cnxSel&&typeof _cnxPintaSel==='function')_cnxPintaSel(el,p.id)}catch(_cs){}
   /* las relacionadas van con sangria, colgando de la suya */
   try{var _cpa=(typeof _cnxPadre==='function')?_cnxPadre(p.id):null;
@@ -12900,7 +12908,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260824k6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260824k7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -16748,9 +16756,14 @@ catch(e){return ''}}
 /* El listado se despliega DENTRO de la tarjeta, no en una pantalla aparte:
    asi no parece que te hayas ido a otro sitio. Se eligen las que quedan
    colgando de esta, y pueden ser varias. */
-function _cnxPanel(el,id){try{
+/* El panel se colgaba del DOM de la tarjeta, y renderList lo reconstruye en
+   cada pasada del sync: por eso aparecia y desaparecia solo. Ahora se recuerda
+   cual esta abierto y se vuelve a poner al repintar. */
+function _cnxPanel(el,id,_repon){try{
   var ya=el.querySelector('._cnxPanel');
-  if(ya){ya.remove();return}
+  if(ya&&!_repon){ya.remove();window._cnxAbierto=null;window._cnxVerAbierto=false;return}
+  if(ya)ya.remove();
+  window._cnxAbierto=id;
   var caja=document.createElement('div');caja.className='_cnxPanel';
   caja.style.cssText='margin-top:8px;border:1px solid #B7D0F5;background:#F5F9FF;border-radius:10px;padding:10px';
   caja.onclick=function(e){e.stopPropagation()};
@@ -16778,12 +16791,17 @@ function _cnxPanel(el,id){try{
   if(ir)ir.onclick=function(e){e.stopPropagation();_cnxModo(id)};
   var ver=caja.querySelector('._cnxVer');
   if(ver)ver.onclick=function(e){e.stopPropagation();_cnxVerLista(caja,id)};
+  if(_repon&&window._cnxVerAbierto)_cnxVerLista(caja,id,true);
 }catch(e){if(typeof toast==='function')toast('⚠ '+((e&&e.message)||e))}}
+/* al repintar la lista, devolver el panel a su tarjeta */
+function _cnxRepon(el,id){try{
+  if(window._cnxAbierto===id)_cnxPanel(el,id,true)}catch(e){}}
 
 /* las que ya cuelgan de esta, para poder quitarlas */
-function _cnxVerLista(caja,id){try{
+function _cnxVerLista(caja,id,_repon){try{
   var d=caja.querySelector('._cnxVerL');if(!d)return;
-  if(d.innerHTML){d.innerHTML='';return}
+  if(d.innerHTML&&!_repon){d.innerHTML='';window._cnxVerAbierto=false;return}
+  window._cnxVerAbierto=true;
   var hijos=_cnxHijos(id);
   var nom=function(k){try{var x=(DATA._byId&&DATA._byId[k])||{};return (typeof pNom==='function'?pNom(x):(x.nombre||''))||k}catch(e){return k}};
   d.innerHTML=hijos.length
@@ -16814,6 +16832,7 @@ function _cnxElegible(idHijo,padre){
   return true}
 function _cnxModo(padre){
   if(_cnxPadre(padre)){if(typeof toast==='function')toast('Esta actividad ya está enlazada a otra');return}
+  window._cnxAbierto=null;window._cnxVerAbierto=false;
   window._cnxSel=padre;
   try{renderList()}catch(e){}
   _cnxBarra(padre);
