@@ -752,7 +752,7 @@ function fmtF(iso){const[y,m,d]=iso.split('-').map(Number);const dt=new Date(y,m
 function esAdminReal(){var n=(state.user&&state.user.supervisor)||'';if(n==='Luis Antonio Focon Colina')return true;try{var r=(state.roles||{})[n];return !!(r&&r.rol==='admin'&&!r.bloqueado&&state.user&&state.user._adminOk)}catch(e){return false}}
 function esAdmin(){return esAdminReal()&&!(state&&state._supMode)&&!window._impRol}
 function _updModeBtn(){try{var _ad=(typeof esAdmin==='function')?esAdmin():true;var _pce=_ad||((typeof puedeCambiarEsp==='function')&&puedeCambiarEsp());['dDisc','progDisc'].forEach(function(_k){var _el=(typeof $==='function')?$(_k):null;var _sv=_el?_el.querySelector('svg'):null;if(_sv)_sv.style.display=_pce?'':'none'})}catch(_e){}var b=(typeof $==='function')?$('btnMode'):null;if(!b)return;var real=esAdminReal();b.style.display=real?'inline-flex':'none';var _rr=window._impRol||'';var _rn=_rr?((state.rolperms&&state.rolperms[_rr]&&state.rolperms[_rr].nombre)||_rr):'';b.innerHTML=_rr?('👤 '+_rn):((state&&state._supMode)?'👤 Supervisor':'🛡 ADMIN')}
-function _toggleMode(){state._supMode=false;try{localStorage.setItem('obf4_supmode','')}catch(e){}if(window._impRol){window._impRol=''}else{window._impRol=window._impPick||'sup'}try{localStorage.setItem('obf4_improl',window._impRol||'')}catch(e){}try{if(typeof _impSrvSave==='function')_impSrvSave(window._impRol)}catch(_e){}/* persistir también aquí: al volver a ADMIN con el botón, un refresh NO debe regresar al otro rol */try{var _se=document.getElementById('_cfgImp');if(_se)_se.value=window._impRol}catch(e){}try{if(typeof _impBanner==='function')_impBanner()}catch(e){}try{_updModeBtn()}catch(e){}try{showDiario()}catch(e){}}
+function _toggleMode(){state._supMode=false;try{localStorage.setItem('obf4_supmode','')}catch(e){}if(window._impRol){window._impRol=''}else{window._impRol=window._impPick||'sup'}try{if(typeof _impGuarda==='function')_impGuarda(window._impRol,window._impPick)}catch(_e){}try{localStorage.setItem('obf4_improl',window._impRol||'')}catch(e){}try{if(typeof _impSrvSave==='function')_impSrvSave(window._impRol)}catch(_e){}/* persistir también aquí: al volver a ADMIN con el botón, un refresh NO debe regresar al otro rol */try{var _se=document.getElementById('_cfgImp');if(_se)_se.value=window._impRol}catch(e){}try{if(typeof _impBanner==='function')_impBanner()}catch(e){}try{_updModeBtn()}catch(e){}try{showDiario()}catch(e){}}
 function diaHabilitado(f){return !f||f>=todayISO()||!!(state.diasOpen&&state.diasOpen[f])}
 function setDiaOpen(f,on){if(!state.diasOpen)state.diasOpen={};if(on)state.diasOpen[f]=1;else delete state.diasOpen[f];try{localStorage.setItem('obf4_diasopen',JSON.stringify(state.diasOpen))}catch(e){}try{if(typeof sbReady==='function'&&sbReady()&&navigator.onLine){var _t=Date.now();sbUpsert('dias_habilitados',[{proyecto:DATA.proyecto,fecha:f,abierto:!!on,quien:(state.user&&state.user.supervisor)||'',ts:_t,updated_at:new Date(_t).toISOString()}],'proyecto,fecha').catch(function(){})}}catch(e){}try{renderDiario()}catch(e){}if(typeof toast==='function')toast(on?'Día habilitado para escritura ✓':'Día bloqueado (solo lectura)')}
 function diaCerrado(f){return !esAdmin() && !!f && !diaHabilitado(f)}
@@ -11948,8 +11948,10 @@ function _showConfig(){
   _pintaSinSalto(B,H);
   Array.prototype.forEach.call(B.querySelectorAll('button[data-rol][data-key]'),function(b){b.onclick=function(){var rol=b.getAttribute('data-rol'),key=b.getAttribute('data-key');var r=state.rolperms[rol];if(!r)return;var cur=valDe(r,key);var _PAIR={act_eliminar:'act_eliminar_dir',act_eliminar_dir:'act_eliminar'};if(!cur&&_PAIR[key]){var _ok=_PAIR[key];var _vO=(dirty[rol]&&dirty[rol][_ok]!=null)?dirty[rol][_ok]:valDe(r,_ok);if(_vO){toast(key==='act_eliminar_dir'?'⛔ Ese rol tiene activo "🗑 Eliminar — SOLICITAR". Desmárcalo primero: no pueden estar los dos.':'⛔ Ese rol tiene activo "🗑 Eliminar — CAMBIO DIRECTO". Desmárcalo primero: no pueden estar los dos.');return}}dirty[rol]=dirty[rol]||{};try{Object.assign(dirty[rol],{},dirty[rol])}catch(e){}dirty[rol][key]=!cur;updSaveBtn();draw()}});
   Array.prototype.forEach.call(B.querySelectorAll('[data-permgo]'),function(s){s.onclick=function(){var k=s.getAttribute('data-permgo');try{ov.remove()}catch(e){}if(typeof _irABoton==='function')_irABoton(k)}});
-  var _impSel=document.getElementById('_cfgImp');if(_impSel)_impSel.onchange=function(){window._impRol=_impSel.value||'';window._impPick=window._impRol||window._impPick;try{localStorage.setItem('obf4_improl',window._impRol||'');localStorage.setItem('obf4_imppick',window._impPick||'')}catch(e){}try{if(typeof _impSrvSave==='function')_impSrvSave(window._impRol)}catch(_e){}/* queda guardado en este equipo */if(typeof _impBanner==='function')_impBanner();if(typeof _updModeBtn==='function')_updModeBtn();try{if(typeof updAdminBox==='function')updAdminBox()}catch(e){}try{if($('scrList')&&!$('scrList').classList.contains('hidden'))renderList()}catch(e){}draw()};
-  var _impCk=document.getElementById('_cfgImpCk');if(_impCk)_impCk.onchange=function(){if(!_impCk.checked){window._impRol='';try{localStorage.setItem('obf4_improl','')}catch(e){}try{if(typeof _impSrvSave==='function')_impSrvSave('')}catch(_e){}if(typeof _impBanner==='function')_impBanner();if(typeof _updModeBtn==='function')_updModeBtn();try{if(typeof updAdminBox==='function')updAdminBox()}catch(e){}try{if($('scrList')&&!$('scrList').classList.contains('hidden'))renderList()}catch(e){}draw()}else{_impCk.checked=!!window._impRol;if(!window._impRol&&typeof toast==='function')toast('Elige un rol en el desplegable de arriba')}};
+  var _impSel=document.getElementById('_cfgImp');if(_impSel)_impSel.onchange=function(){window._impRol=_impSel.value||'';window._impPick=window._impRol||window._impPick;try{localStorage.setItem('obf4_improl',window._impRol||'');localStorage.setItem('obf4_imppick',window._impPick||'')}catch(e){}try{if(typeof _impSrvSave==='function')_impSrvSave(window._impRol)}catch(_e){}
+    try{if(typeof _impGuarda==='function')_impGuarda(window._impRol,window._impPick)}catch(_e){}if(typeof _impBanner==='function')_impBanner();if(typeof _updModeBtn==='function')_updModeBtn();try{if(typeof updAdminBox==='function')updAdminBox()}catch(e){}try{if($('scrList')&&!$('scrList').classList.contains('hidden'))renderList()}catch(e){}draw()};
+  var _impCk=document.getElementById('_cfgImpCk');if(_impCk)_impCk.onchange=function(){if(!_impCk.checked){window._impRol='';try{localStorage.setItem('obf4_improl','')}catch(e){}try{if(typeof _impSrvSave==='function')_impSrvSave('')}catch(_e){}
+    try{if(typeof _impGuarda==='function')_impGuarda('')}catch(_e){}if(typeof _impBanner==='function')_impBanner();if(typeof _updModeBtn==='function')_updModeBtn();try{if(typeof updAdminBox==='function')updAdminBox()}catch(e){}try{if($('scrList')&&!$('scrList').classList.contains('hidden'))renderList()}catch(e){}draw()}else{_impCk.checked=!!window._impRol;if(!window._impRol&&typeof toast==='function')toast('Elige un rol en el desplegable de arriba')}};
   Array.prototype.forEach.call(B.querySelectorAll('button[data-rolall]'),function(b){b.onclick=function(){var rol=b.getAttribute('data-rolall');var r=state.rolperms[rol];if(!r)return;var keys=[];PERMS_GRUPOS.forEach(function(g){g.items.forEach(function(it){keys.push(it[0])})});var todasOn=keys.every(function(k){return valDe(r,k)});dirty[rol]=dirty[rol]||{};keys.forEach(function(k){dirty[rol][k]=!todasOn});if(!todasOn)dirty[rol]['act_eliminar_dir']=false;/* exclusión: al activar todo, SOLICITAR queda activo y DIRECTO no puede acompañarlo */updSaveBtn();draw();if(typeof toast==='function')toast(todasOn?('Se DESACTIVARON todos los permisos de '+(r.nombre||rol)):('Se ACTIVARON todos los permisos de '+(r.nombre||rol)))}});
   Array.prototype.forEach.call(B.querySelectorAll('._cfgColVis'),function(c){c.onchange=function(){var cv={};try{cv=JSON.parse(localStorage.getItem('obf4_cfgcols')||'{}')}catch(e){}cv[c.getAttribute('data-rol')]=c.checked?1:0;try{localStorage.setItem('obf4_cfgcols',JSON.stringify(cv))}catch(e){}draw()}});
   Array.prototype.forEach.call(B.querySelectorAll('button[data-delrol]'),function(b){b.onclick=async function(){var rol=b.getAttribute('data-delrol');var msg=document.getElementById('_cfgRolMsg');var enUso=0;try{Object.keys(state.roles||{}).forEach(function(n){if((state.roles[n]||{}).rol===rol)enUso++})}catch(e){}
@@ -13003,7 +13005,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260825a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260825a7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -14802,6 +14804,11 @@ async function _ajPull(){
     all[r.clave]=nuevo});
   if(!cambio)return;
   _ajSaveLocal();
+  /* lo mismo si el cambio viene de otro equipo: las HH apagadas se guardan
+     aqui, y el catalogo de cronogramas las tiene copiadas */
+  try{window._hhCache=null;window._crCat=null}catch(e){}
+  try{if(document.getElementById('_crOv')&&typeof _crConteos==='function')
+    _crConteos().then(function(){if(typeof _crPinta==='function')_crPinta()})}catch(e){}
   try{window._cfgOcultarUnd=!!_ajGet('ocultar_und',false)}catch(e){}
   try{var sl=$('scrList');if(sl&&!sl.classList.contains('hidden')&&typeof renderList==='function')renderList()}catch(e){}
   try{var ov=document.getElementById('_cfgOv');if(ov&&typeof _undBotonAdmin==='function'){var b=ov.querySelector('#_undSw');if(b)b.remove();_undBotonAdmin(ov)}}catch(e){}
@@ -16237,6 +16244,12 @@ async function _hhToggle(id){
   if(apago)L.push(String(id));else L.splice(i,1);
   await _ajSet('hh_inactivas',L,'Actividades cuyas HH no cuentan para los pesos del avance');
   window._hhCache=null;
+  /* el catalogo de los cronogramas guarda el "off" y las horas de cada
+     partida; si no se tira, el alcance y la curva siguen contando con las
+     horas viejas hasta recargar */
+  try{window._crCat=null}catch(e){}
+  try{if(typeof _crConteos==='function')_crConteos().then(function(){
+    if(document.getElementById('_crOv')&&typeof _crPinta==='function')_crPinta()})}catch(e){}
   try{if(typeof renderList==='function')renderList()}catch(e){}
   if(typeof toast==='function')toast(apago?'⏸ Sus HH ya no cuentan para los pesos':'▶ Sus HH vuelven a contar');
   return apago;
@@ -16440,6 +16453,35 @@ function _cuSaveLocal(){try{localStorage.setItem('obf4_cfgusr',JSON.stringify(_c
 function _ocMap(){var c=_cuAll().config;if(!c.ocultas)c.ocultas={};return c.ocultas}
 function _ocSave(){var u=_cuAll();u.sup=_cuKey();u.ts=(typeof nowSrv==='function'?nowSrv():Date.now());u.cell_at=Date.now();_cuSaveLocal();try{if(typeof syncNow==='function')syncNow(true)}catch(e){}}
 function _ocEsta(id){return !!_ocMap()[id]}
+/* El modo «Actuar como» del administrador, guardado en SU configuracion: asi
+   lo encuentra igual en el celular, en la tablet y en la computadora, y no
+   tiene que volver a elegirlo en cada aparato. */
+function _impGuarda(rol,pick){try{
+  var u=_cuAll();if(!u.config)u.config={};
+  u.config.improl=String(rol||'');
+  if(pick)u.config.imppick=String(pick);
+  u.sup=_cuKey();
+  u.ts=(typeof nowSrv==='function'?nowSrv():Date.now());u.cell_at=Date.now();
+  _cuSaveLocal();
+  try{if(typeof syncNow==='function')syncNow(true)}catch(e){}
+}catch(e){}}
+/* y al revés: lo que venga del servidor se aplica aquí */
+function _impAplica(cfg){try{
+  if(!cfg)return;
+  if(!(typeof esAdminReal==='function'&&esAdminReal()))return;
+  if(cfg.imppick)  {window._impPick=String(cfg.imppick);
+    try{localStorage.setItem('obf4_imppick',window._impPick)}catch(e){}}
+  if(cfg.improl===undefined)return;
+  var v=String(cfg.improl||'');
+  if(v===String(window._impRol||''))return;
+  window._impRol=v;if(v)window._impPick=v;
+  try{localStorage.setItem('obf4_improl',v)}catch(e){}
+  try{if(typeof _impBanner==='function')_impBanner()}catch(e){}
+  try{if(typeof _updModeBtn==='function')_updModeBtn()}catch(e){}
+  try{if(typeof updAdminBox==='function')updAdminBox()}catch(e){}
+  try{var sl=$('scrList');if(sl&&!sl.classList.contains('hidden')&&typeof renderList==='function')renderList()}catch(e){}
+  try{if(typeof toast==='function')toast(v?('👤 Actuando como '+v+' (guardado en tu cuenta)'):'👤 Vuelves a ser tú')}catch(e){}
+}catch(e){}}
 function _ocSet(id,oculta){var m=_ocMap();if(oculta)m[id]=1;else delete m[id];_ocSave()}
 async function _cuPush(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
 var u=_cuAll();var sup=_cuKey();if(!sup||!u.ts)return;
@@ -16455,6 +16497,7 @@ if(lts>sts)return;
 if(lts&&lts===sts&&((typeof nowSrv==='function'?nowSrv():Date.now())-lts)<120000)return;
 var cfg=r.config;if(typeof cfg==='string'){try{cfg=JSON.parse(cfg)}catch(e){cfg={}}}
 window._cuCache={config:cfg||{},ts:sts,cell_at:Number(r.cell_at)||0,sup:sup};_cuSaveLocal();
+try{if(typeof _impAplica==='function')_impAplica(cfg||{})}catch(e){}
 try{var sl=$('scrList');if(sl&&!sl.classList.contains('hidden')&&typeof renderList==='function')renderList()}catch(e){}
 try{if(typeof _ocUpdBtn==='function')_ocUpdBtn()}catch(e){}}
 try{var _cuPushBase=syncPush;syncPush=async function(){try{await _cuPush()}catch(e){}return await _cuPushBase.apply(this,arguments)};
