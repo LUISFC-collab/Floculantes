@@ -967,23 +967,30 @@ function datosDia(f){var ps=(state.partes||[]).filter(function(p){return p.fecha
  Object.keys(por).forEach(function(d){por[d].sort(function(a,b){return String(a.id)<String(b.id)?-1:1})});
  return {por:por,discs:Object.keys(por).sort(),avances:ps.length,fotos:nf,acts:Object.keys(na).length,sups:Object.keys(sups)}}
 function _avTxt(p){var m=metaOf(p.id);var u=(m&&m.unidad)||'';return p.tipo==='glb'?('→ '+(p.pctGlb||0)+'%'):('+'+qty(p.cant||0)+' '+u)}
+/* El acumulado partido en trozos, uno por apartado, cada uno con su color.
+   _acTxt los junta con puntos para el PDF de laminas, donde no hay donde
+   partir; la previsualizacion los pone en lineas. */
+function _acLineas(p,f){try{
+  var r=(typeof _fzDe==='function')?_fzDe(p.id):null;
+  if(!(r&&(r.fases||[]).length&&p.tipo!=='glb'))return null;
+  var mapa=(typeof _fzFechasDe==='function')?_fzFechasDe(p.id):null;
+  var out=(r.fases||[]).map(function(x){
+    var av=(typeof _fzAvanceAt==='function')?_fzAvanceAt(x,f,mapa):(Number(x.avance)||0);
+    var c=Number(x.cantidad)||0;
+    var pc=c>0?Math.min(999,Math.round(av/c*100)):(av>0?100:0);
+    return {t:(x.nombre||'')+': '+qty(av)+' de '+qty(c)+' '+(x.unidad||'')+' ('+pc+'%)',
+            c:x.cierra?'#1F3864':'#0C5132'}});   /* el mismo color que la tarjeta */
+  var tot=(typeof _fzPctAt==='function')?_fzPctAt(p.id,f):null;
+  if(tot!=null)out.push({t:'Actividad '+(Math.round(tot*100)/100)+'%',c:'#1E7A46',fin:1});
+  return out}catch(e){return null}}
 function _acTxt(p,f){try{
   /* Si la partida esta repartida en apartados del APU, el acumulado NO puede
      ser la suma de todos contra la cantidad del contrato: cada apartado se
      mide sobre esa misma cantidad, asi que sumarlos daba cosas como
      "600 de 552 m (109%)". Se muestra apartado por apartado, hasta la fecha,
      y al final lo que lleva la actividad. */
-  var r=(typeof _fzDe==='function')?_fzDe(p.id):null;
-  if(r&&(r.fases||[]).length&&p.tipo!=='glb'){
-    var mapa=(typeof _fzFechasDe==='function')?_fzFechasDe(p.id):null;
-    var partes=(r.fases||[]).map(function(x){
-      var av=(typeof _fzAvanceAt==='function')?_fzAvanceAt(x,f,mapa):(Number(x.avance)||0);
-      var c=Number(x.cantidad)||0;
-      var pc=c>0?Math.min(999,Math.round(av/c*100)):(av>0?100:0);
-      return (x.nombre||'')+' '+qty(av)+' de '+qty(c)+' '+(x.unidad||'')+' ('+pc+'%)'});
-    var tot=(typeof _fzPctAt==='function')?_fzPctAt(p.id,f):null;
-    return 'Acumulado por APU: '+partes.join(' · ')+
-           (tot!=null?(' · Actividad '+(Math.round(tot*100)/100)+'%'):'')}
+  var ls=_acLineas(p,f);
+  if(ls)return 'Acumulado por APU: '+ls.map(function(x){return x.t}).join(' · ');
   var m=metaOf(p.id);if(p.tipo==='glb'){return 'Acumulado: '+((typeof pctOfAt==='function')?pctOfAt(p,f):(p.pctGlb||0))+'% del 100%'}if(m&&m.total>0){var aa=acumCantAt(p.id,f);return 'Acumulado: '+qty(aa)+' de '+qty(m.total)+' '+(m.unidad||'')+' ('+Math.min(999,Math.round(aa/m.total*100))+'%)'}}catch(e){}return ''}
 function prevDia(f){var D=datosDia(f);var _pf=!(typeof diaCerrado==='function'&&diaCerrado(f));var ov=document.getElementById('_prevDia');if(ov)ov.remove();ov=document.createElement('div');ov.id='_prevDia';ov.style.cssText='position:fixed;inset:0;z-index:140;background:rgba(15,25,45,.55);display:flex;align-items:flex-end;justify-content:center';
  var h='<div style="background:#F4F7FB;width:100%;max-width:560px;border-radius:16px 16px 0 0;max-height:92vh;overflow:auto;padding:14px;box-sizing:border-box">';
@@ -999,8 +1006,30 @@ function prevDia(f){var D=datosDia(f);var _pf=!(typeof diaCerrado==='function'&&
    h+='<div style="font-weight:800;color:#5C6779;font-size:11.5px;margin:2px 2px 5px">▸ '+esc(g.sys)+'</div>';
    g.items.forEach(function(p){_nAr++;h+='<div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px">';
    h+='<div style="font-weight:800;color:#1F3864;font-size:13px">'+_nAr+'. '+esc(p.nombre||'')+'</div>';
-   h+='<div style="font-size:13px;margin:3px 0"><b style="color:#1E7A46">'+esc(_avTxt(p))+'</b> <span style="color:#5C6779;font-size:12px">· '+esc(_acTxt(p,f))+'</span></div>';
+   var _ls=(typeof _acLineas==='function')?_acLineas(p,f):null;
+   h+='<div style="font-size:13px;margin:3px 0"><b style="color:#1E7A46">'+esc(_avTxt(p))+'</b>'+
+      (_ls?'':(' <span style="color:#5C6779;font-size:12px">· '+esc(_acTxt(p,f))+'</span>'))+'</div>';
+   if(_ls){h+='<div style="font-size:12px;margin:2px 0 4px;padding-left:9px;border-left:2px solid #DFE3EA">'+
+     '<div style="font-weight:700;color:#5C6779;font-size:10.5px;letter-spacing:.02em">ACUMULADO POR APU</div>'+
+     _ls.map(function(x){return '<div style="color:'+x.c+(x.fin?';font-weight:800':';font-weight:600')+'">'+esc(x.t)+'</div>'}).join('')+
+     '</div>'}
    h+='<div style="font-size:11.5px;color:#5C6779">'+esc(p.supervisor||'')+(p.obs?(' · '+esc(p.obs)):'')+((p.incidencia&&p.incidencia!=='Ninguna')?(' · ⚠ '+esc(p.incidencia)):'')+'</div>';
+   /* las restricciones que se pusieron ese dia a esta partida: estaban
+      cargadas pero no se veian en la previsualizacion */
+   try{
+     var _rs=((state.repo&&state.repo[p.id])||[]).filter(function(x){
+       return (x.cat==='int'||x.cat==='mina')&&String(x.fecha||'')===String(f)});
+     if(_rs.length){
+       h+='<div style="margin-top:6px">'+_rs.map(function(x){
+         var mina=(x.cat==='mina');
+         var col=mina?'#B42318':'#1F6FE0', fondo=mina?'#FCEBEB':'#EAF2FF', borde=mina?'#F2C0BA':'#BFD3EE';
+         var txt=(typeof _stripLev==='function')?_stripLev(x.texto||''):(x.texto||'');
+         return '<div style="background:'+fondo+';border:1px solid '+borde+';border-radius:8px;padding:6px 8px;margin-top:4px">'+
+           '<span style="color:'+col+';font-weight:800;font-size:10.5px">'+(mina?'🔴 Restricción de mina':'🔵 Restricción interna')+'</span>'+
+           (x.lev?'<span style="color:#0C5132;font-weight:800;font-size:10.5px"> · levantada'+(x.levF?(' el '+esc(x.levF)):'')+'</span>':'')+
+           '<div style="font-size:11.5px;color:#1B2433;white-space:pre-wrap'+(x.lev?';text-decoration:line-through;opacity:.65':'')+'">'+esc(txt)+'</div>'+
+           (x.quien?('<div style="font-size:10.5px;color:#5C6779">'+esc(x.quien)+'</div>'):'')+'</div>'}).join('')+'</div>'}
+   }catch(_er){}
    var _ret=p.fotosRet&&state.user&&p.supervisor===state.user.supervisor;var fs=_repFotos(p);var _pe=_pf&&((typeof esAdmin==='function'&&esAdmin())||d===((state.user&&state.user.disc)||''))&&(state.partes||[]).some(function(z){return z.client_id===p.client_id});if(fs.length){h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">'+fs.map(function(u,_fi2){return '<span style="position:relative;display:inline-block;width:31%"><img class="rp-foto" src="'+u+'" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;display:block;cursor:zoom-in'+(_ret?';filter:grayscale(1) brightness(.55)':'')+'">'+(_ret?'<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.42);border-radius:8px;color:#fff;font-size:9px;font-weight:800;text-align:center;padding:0 4px">Foto retirada</span>':'')+'</span>'}).join('')+'</div>'}
    /* Previsualizar: fotos solo lectura (subir/borrar se hace en el Desglose del d\u00eda) */
    h+='</div>'})})});
@@ -12957,7 +12986,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260825a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260825a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
