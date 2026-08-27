@@ -2795,12 +2795,25 @@ async function _crAlcanceUI(c){
           return h})()+
         '</span></span>'+
         '<span style="flex:none;color:'+(propio?'#C39BD3':'#9FE8B0')+';font-size:11px;font-weight:800">'+hMe+' hh</span>'+
-        /* de un vistazo: si esta partida entra o no en el alcance */
-        '<span style="flex:none;min-width:74px;text-align:center;padding:2px 7px;'+
-        'border-radius:7px;font-size:10px;font-weight:800;'+
-        (sel[p.id]?'background:#14261d;border:1px solid #1d3a2a;color:#9FE8B0'
-                  :'background:#2a1c1c;border:1px solid #4a2a2a;color:#FFB4A8')+
-        '">'+(sel[p.id]?'INCLUYE':'NO INCLUYE')+'</span>'+
+        /* De un vistazo: si entra en el alcance y si de verdad pesa.
+           Son dos cosas distintas y antes se decia solo la primera: la marca
+           del alcance vale para el coste, pero para el peso del avance hace
+           falta ademas tener horas. Sin horas no entra en el universo y no
+           mueve la curva, asi que anunciarla como INCLUYE a secas enganaba. */
+        (function(){
+          var on=sel[p.id];
+          var cuenta=on&&!p.off&&hMe>0;
+          var txt,est,tit;
+          if(!on){txt='NO INCLUYE';est='background:#2a1c1c;border:1px solid #4a2a2a;color:#FFB4A8';
+            tit='Fuera del alcance de este cronograma'}
+          else if(p.off){txt='HH APAGADAS';est='background:#2a2114;border:1px solid #4a3a1e;color:#E8C9A0';
+            tit='Está en el alcance, pero sus HH están desactivadas: no aporta peso al avance. Se vuelven a encender desde la ficha de la actividad.'}
+          else if(hMe<=0){txt='SIN HH';est='background:#2a2114;border:1px solid #4a3a1e;color:#E8C9A0';
+            tit='Está en el alcance y cuenta para el costo, pero no tiene horas en el contrato: no aporta peso al avance.'}
+          else{txt='INCLUYE';est='background:#14261d;border:1px solid #1d3a2a;color:#9FE8B0';
+            tit='En el alcance y con horas: aporta '+hMe+' hh al peso del avance'}
+          return '<span title="'+esc(tit)+'" style="flex:none;min-width:74px;text-align:center;'+
+                 'padding:2px 7px;border-radius:7px;font-size:10px;font-weight:800;'+est+'">'+txt+'</span>'})()+
         /* con quien comparte actividad, y un atajo para ir a verlo */
         (function(){
           var tcs=(window._crTarDe||{})[p.id]||[];
@@ -12990,7 +13003,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260825a5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260825a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
