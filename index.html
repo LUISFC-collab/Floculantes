@@ -967,7 +967,24 @@ function datosDia(f){var ps=(state.partes||[]).filter(function(p){return p.fecha
  Object.keys(por).forEach(function(d){por[d].sort(function(a,b){return String(a.id)<String(b.id)?-1:1})});
  return {por:por,discs:Object.keys(por).sort(),avances:ps.length,fotos:nf,acts:Object.keys(na).length,sups:Object.keys(sups)}}
 function _avTxt(p){var m=metaOf(p.id);var u=(m&&m.unidad)||'';return p.tipo==='glb'?('→ '+(p.pctGlb||0)+'%'):('+'+qty(p.cant||0)+' '+u)}
-function _acTxt(p,f){try{var m=metaOf(p.id);if(p.tipo==='glb'){return 'Acumulado: '+((typeof pctOfAt==='function')?pctOfAt(p,f):(p.pctGlb||0))+'% del 100%'}if(m&&m.total>0){var aa=acumCantAt(p.id,f);return 'Acumulado: '+qty(aa)+' de '+qty(m.total)+' '+(m.unidad||'')+' ('+Math.min(999,Math.round(aa/m.total*100))+'%)'}}catch(e){}return ''}
+function _acTxt(p,f){try{
+  /* Si la partida esta repartida en apartados del APU, el acumulado NO puede
+     ser la suma de todos contra la cantidad del contrato: cada apartado se
+     mide sobre esa misma cantidad, asi que sumarlos daba cosas como
+     "600 de 552 m (109%)". Se muestra apartado por apartado, hasta la fecha,
+     y al final lo que lleva la actividad. */
+  var r=(typeof _fzDe==='function')?_fzDe(p.id):null;
+  if(r&&(r.fases||[]).length&&p.tipo!=='glb'){
+    var mapa=(typeof _fzFechasDe==='function')?_fzFechasDe(p.id):null;
+    var partes=(r.fases||[]).map(function(x){
+      var av=(typeof _fzAvanceAt==='function')?_fzAvanceAt(x,f,mapa):(Number(x.avance)||0);
+      var c=Number(x.cantidad)||0;
+      var pc=c>0?Math.min(999,Math.round(av/c*100)):(av>0?100:0);
+      return (x.nombre||'')+' '+qty(av)+' de '+qty(c)+' '+(x.unidad||'')+' ('+pc+'%)'});
+    var tot=(typeof _fzPctAt==='function')?_fzPctAt(p.id,f):null;
+    return 'Acumulado por APU: '+partes.join(' · ')+
+           (tot!=null?(' · Actividad '+(Math.round(tot*100)/100)+'%'):'')}
+  var m=metaOf(p.id);if(p.tipo==='glb'){return 'Acumulado: '+((typeof pctOfAt==='function')?pctOfAt(p,f):(p.pctGlb||0))+'% del 100%'}if(m&&m.total>0){var aa=acumCantAt(p.id,f);return 'Acumulado: '+qty(aa)+' de '+qty(m.total)+' '+(m.unidad||'')+' ('+Math.min(999,Math.round(aa/m.total*100))+'%)'}}catch(e){}return ''}
 function prevDia(f){var D=datosDia(f);var _pf=!(typeof diaCerrado==='function'&&diaCerrado(f));var ov=document.getElementById('_prevDia');if(ov)ov.remove();ov=document.createElement('div');ov.id='_prevDia';ov.style.cssText='position:fixed;inset:0;z-index:140;background:rgba(15,25,45,.55);display:flex;align-items:flex-end;justify-content:center';
  var h='<div style="background:#F4F7FB;width:100%;max-width:560px;border-radius:16px 16px 0 0;max-height:92vh;overflow:auto;padding:14px;box-sizing:border-box">';
  h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div style="flex:1;min-width:0"><div style="font-weight:800;color:#1F3864;font-size:16px">Reporte del '+fmtF(f)+'</div><div style="font-size:12px;color:#5C6779">'+D.avances+' avance(s) · '+D.acts+' actividad(es) · '+D.discs.length+' especialidad(es) · '+D.fotos+' foto(s)</div></div><button id="_pvPdf" style="background:#7A1A1A;color:#fff;border:0;border-radius:10px;padding:10px 12px;font-weight:800;display:inline-flex;align-items:center;gap:6px"><svg width="20" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="4"/><rect x="2" y="13" width="14" height="7" rx="1.5"/><path d="M16 15.5l5.5-2.5v9l-5.5-2.5z"/><line x1="5.5" y1="20" x2="5.5" y2="22"/><line x1="12.5" y1="20" x2="12.5" y2="22"/></svg>PDF</button><button id="_pvX" style="background:#E4EAF3;border:0;border-radius:10px;padding:10px 14px;font-weight:800">✕</button></div>';
@@ -12940,7 +12957,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260825a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260825a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
