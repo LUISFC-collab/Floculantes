@@ -7030,11 +7030,13 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
            I:E('I19',W.num),J:E('J19',W.num),K:E('K19',W.pct),
            L:E('D19',W.texto),M:E('C19',W.texto),N:E('D19',W.texto),
            O:E('L19',W.texto)};
+  if(QN){CAB.P=CAB.O;CAB.O=E('C19',W.texto)}
   var stCabF={B:E('B7',W.cab),C:E('C7',W.cab),D:E('D7',W.cab),E:E('E7',W.cab),
               F:E('F7',W.cab),G:E('G7',W.cab),H:E('H7',W.cab),I:E('I7',W.cab),
               J:E('J7',W.cab),K:E('K7',W.cab),
               L:E('K7',W.cab),M:E('C7',W.cab),N:E('K7',W.cab),
               O:E('L7',W.cab)};
+  if(QN){stCabF.P=stCabF.O;stCabF.O=E('C7',W.cab)}
   var stDato=E('P19',W.num),stPct=E('K19',W.pct),stTotJ=E('J8',W.num),stTotK=E('K8',W.pct);
   var COL=[{sua:'FFDCE9FB',fue:'FFA9C9F5',bor:'FF2E5C9A'},
            {sua:'FFDFF4E7',fue:'FF9EDCB8',bor:'FF1E7A46'},
@@ -7062,11 +7064,15 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
   var SEMS=((typeof _wkSemanas==='function'?_wkSemanas():[])||[]).map(function(z){return z.n});
   if(!SEMS.length)SEMS=[semN,semN+1,semN+2];
   var VIS={};VIS[semN]=1;VIS[semN+1]=1;VIS[semN+2]=1;
-  var BLQ=SEMS.map(function(_s,q){return 15+q*9});   /* L, M y N son nuevas */
+  /* con QUIEN (opc.quien), la columna nueva es el nuevo O, la LINEA pasa a
+     P y la rejilla corre una columna */
+  var QN=!!(opc&&opc.quien), cLIN=QN?'P':'O';
+  var BLQ=SEMS.map(function(_s,q){return (QN?16:15)+q*9});   /* L, M y N son nuevas */
   var ROT=['ITEM','DESCRIPTION','Und','CANTIDAD CONTRACTUAL','CANTIDAD FORE CAST',
            'AVANCE ACUMULADO','SALDO','Rate','HH Contractuales','% Restante',
            'Cumplimiento','Comentarios','Razón','LÍNEA'];
   if(opc&&opc.lmn){ROT[10]='Restricción';ROT[11]='QUIEN';ROT[12]='Solución propuesta'}
+  if(QN)ROT.splice(13,0,'QUIEN');
   /* la restriccion DE MINA viva de las partidas de una actividad */
   var _minaMemo={};
   var _minaDe=function(f){
@@ -7079,7 +7085,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
         var t=String(x.texto).trim(),kk=t.toLowerCase();
         if(t&&!vis[kk]){vis[kk]=1;out.push(t)}})});
     return (_minaMemo[k]=out.join(' · '))};
-  var COLS='BCDEFGHIJKLMNO'.split('');
+  var COLS=(QN?'BCDEFGHIJKLMNOP':'BCDEFGHIJKLMNO').split('');
   /* las razones del lookahead, tal cual estan en la hoja de Razones */
   var RAZONES=['Materiales','Trabajo previo','Cambio en prioridades',
     'Cantidad de Personal','Bajo el estimado','No identificado','Retrabajo',
@@ -7156,7 +7162,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
     for(var b=0;b<=hasta;b++)o.push(_wkColL(BLQ[b])+n+':'+_wkColL(BLQ[b]+6)+n);
     return o.join(',')};
   /* ---- filas 8..10: el resumen, una por concepto ---- */
-  var RL='$O$'+r0+':$O$'+nFin, RJ='$J$'+r0+':$J$'+nFin, RK='$K$'+r0+':$K$'+nFin;
+  var RL='$'+cLIN+'$'+r0+':$'+cLIN+'$'+nFin, RJ='$J$'+r0+':$J$'+nFin, RK='$K$'+r0+':$K$'+nFin;
   var ponResumen=function(k,acum){
     var L=LINEAS[k],C=COL[_K0[k]]||COL[0];
     var n=8+k+(acum?LINEAS.length:0);
@@ -7172,7 +7178,8 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
             _wkCelE('L',n,'',true,tinta(CAB.L,PLOMO,PLOMOB)),
             _wkCelE('M',n,'',true,tinta(CAB.M,PLOMO,PLOMOB)),
             _wkCelE('N',n,'',true,tinta(CAB.N,PLOMO,PLOMOB)),
-            _wkCelE('O',n,L,true,tinta(CAB.O,C.sua,C.bor))];
+            QN?_wkCelE('O',n,'',true,tinta(CAB.O,PLOMO,PLOMOB)):null,
+            _wkCelE(cLIN,n,L,true,tinta(QN?CAB.P:CAB.O,C.sua,C.bor))].filter(Boolean);
     BLQ.forEach(function(c0,b){
       var T1=_wkColL(c0+7),U1=_wkColL(c0+8);
       /* los dias, para que la banda del resumen no tenga huecos */
@@ -7192,7 +7199,9 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
       var _fAc=f.slice(1);
       if(acum&&_K0[k]===2&&_bSem>=0){
         if(b===_bSem)
-          _fAc=(_pAct>=0)?(U1+(8+_pAct+LINEAS.length)):("'PPC'!"+U1+"11");
+          /* la hoja PPC lleva la columna QUIEN: su rejilla va corrida una
+             columna respecto a esta, y su acumulado tambien */
+          _fAc=(_pAct>=0)?(U1+(8+_pAct+LINEAS.length)):("'PPC'!"+_wkColL(16+b*9+8)+"11");
         else if(b>_bSem)
           _fAc=_wkColL(BLQ[b-1]+8)+n+'+'+T1+(8+k)}
       cs.push(_wkCelE(U1,n,'',false,tinta(stPct,PLOMO,PLOMOB),acum?_fAc:null))});
@@ -7261,13 +7270,16 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
                  'IF(SUM('+P1+')<=SUM('+A1+'),"SI","NO")))'})()),
       _wkCelE('M',n,((opc&&opc.lmn&&(z.pos||0)===0&&_minaDe(f))?'MY':''),true,_wkCentrado(tinta(CAB.M,PLOMO,PLOMOB))),
       _wkCelE('N',n,'',true,_wkCentrado(tinta(CAB.N,PLOMO,PLOMOB))),
-      _wkCelE('O',n,z.linea||'',true,st(CAB.O))];
+      QN?_wkCelE('O',n,(((z.pos||0)===0&&_minaDe(f))?'MY':''),true,
+           _wkCentrado(tinta(CAB.O,PLOMO,PLOMOB))):null,
+      _wkCelE(cLIN,n,z.linea||'',true,st(QN?CAB.P:CAB.O))].filter(Boolean);
     /* las tres, combinadas de arriba abajo del bloque */
     if(R&&(z.pos||0)===0&&LINEAS.length>1){
       var hasta=n+LINEAS.length-1;
       merges.push('L'+n+':L'+hasta);
       merges.push('M'+n+':M'+hasta);
-      merges.push('N'+n+':N'+hasta)}
+      merges.push('N'+n+':N'+hasta);
+      if(QN)merges.push('O'+n+':O'+hasta)}
     var mapa=null;
     if(!R){mapa={};
       if(f.ini&&f.fin){var d0=_crASerial(f.ini),d1=_crASerial(f.fin),nd=Math.max(1,d1-d0+1);
@@ -7308,6 +7320,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
     '<col min="13" max="13" width="30" customWidth="1"/>'+
     '<col min="14" max="14" width="24" customWidth="1"/>'+
     '<col min="15" max="15" width="20" customWidth="1"/>'+
+    (QN?'<col min="16" max="16" width="20" customWidth="1"/>':'')+
     BLQ.map(function(c0,b){
       var oculta=!VIS[SEMS[b]];
       /* con 11.5 las fechas de la fila 5 salian ###### */
@@ -7319,10 +7332,18 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
     (merges.length?('<mergeCells count="'+merges.length+'">'+
       merges.map(function(m){return '<mergeCell ref="'+m+'"/>'}).join('')+'</mergeCells>'):'')+
     /* el desplegable de razones, sobre toda la columna de datos */
-    ((R&&n>r0&&!(opc&&opc.lmn))?('<dataValidations count="1"><dataValidation type="list" '+
+    ((R&&n>r0&&!(opc&&opc.lmn))?(QN
+      ?('<dataValidations count="2">'+
+        '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" '+
+        'sqref="N'+r0+':N'+(n-1)+'"><formula1>'+
+        "'PPC ANALISIS'!$C$40:$C$53"+'</formula1></dataValidation>'+
+        '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" '+
+        'sqref="O'+r0+':O'+(n-1)+'"><formula1>&quot;MY,CPQ-Columbito,MY/CPQ-Columbito&quot;</formula1></dataValidation>'+
+        '</dataValidations>')
+      :('<dataValidations count="1"><dataValidation type="list" '+
       'allowBlank="1" showInputMessage="1" showErrorMessage="1" '+
       'sqref="N'+r0+':N'+(n-1)+'"><formula1>&quot;'+
-      _wkEscAt(RAZONES.join(','))+'&quot;</formula1></dataValidation></dataValidations>'):'')+
+      _wkEscAt(RAZONES.join(','))+'&quot;</formula1></dataValidation></dataValidations>')):'')+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'+
     '<drawing r:id="rId1"/>'+
     '</worksheet>';
@@ -9168,7 +9189,7 @@ async function _wkLibroApp(semN,corte,ids){
     try{_hdVal=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,true)}catch(_ev){}
     /* PPC (lo anterior y lo hecho) y 3WLA (lo programado): la misma hoja
        partida en dos, con colores mas sobrios. PARA 3WLA sigue estando. */
-    try{_hdPPC=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,false,{idx:[0,1],sobrio:true})}catch(_e4){}
+    try{_hdPPC=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,false,{idx:[0,1],sobrio:true,quien:1})}catch(_e4){}
     try{_hd3W=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,false,{idx:[2,3],sobrio:true,lmn:1})}catch(_e5){}
   }catch(_ehd){try{console.warn('PARA 3WLA no se pudo armar:',_ehd)}catch(_e2){}}
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
@@ -9297,6 +9318,33 @@ async function _wkLibroApp(semN,corte,ids){
       /* sin indices de metadatos de celda: apuntan al metadata.xml del libro
          origen, que no viaja, y Excel se niega a abrir si los ve */
       x=x.replace(/ (?:cm|vm)="\d+"/g,'');
+      /* El PPC ANALISIS se recablea a NUESTRO PPC: los conteos del periodo
+         miran la columna L (EMP/SI/NO), la malla de razones la columna N
+         contra el texto C de su fila, y los responsables la columna O
+         (QUIEN, con comodines para el MY/CPQ-Columbito). La fila C de la
+         semana generada corre con $D$35 y las pasadas jalan del PPC por
+         semanas de la hoja 3WLookahead_PPC (oculta pero viva). */
+      if(nm==='PPC ANALISIS'&&_hdPPC){
+        var _f0=_hdPPC.r0,_f1=_hdPPC.nFin;
+        var _L9='PPC!$L$'+_f0+':$L$'+_f1;
+        x=x.split('COUNTIF(PPC!$O$12:$O$126,"X")')
+           .join('COUNTIF('+_L9+',"SI")+COUNTIF('+_L9+',"NO")');
+        x=x.split('COUNTIF(PPC!$AH$11:$AH$126,"SI")')
+           .join('COUNTIF('+_L9+',"SI")');
+        x=x.split('SUMPRODUCT((PPC!$O$11:$O$126&lt;&gt;"X")*(PPC!$AG$11:$AG$126&gt;0)*(PPC!$D$11:$D$126&lt;&gt;""))')
+           .join('COUNTIF('+_L9+',"EMP")');
+        x=x.replace(/COUNTIF\(PPC!\$AI\$11:\$AI\$126,\$B(\d+)\)/g,
+           function(_t9,_r8){return 'COUNTIF(PPC!$N$'+_f0+':$N$'+_f1+',$C'+_r8+')'});
+        x=x.split('COUNTIFS(PPC!$AH$11:$AH$126,"NO",PPC!$AL$11:$AL$126,"CPQ")')
+           .join('COUNTIFS('+_L9+',"NO",PPC!$O$'+_f0+':$O$'+_f1+',"*CPQ*")');
+        x=x.split('COUNTIFS(PPC!$AH$11:$AH$126,"NO",PPC!$AL$11:$AL$126,"MY")')
+           .join('COUNTIFS('+_L9+',"NO",PPC!$O$'+_f0+':$O$'+_f1+',"MY*")');
+        x=_wkPonEn(x,'I3',{v:semN});
+        for(var _r9=10;_r9<=27;_r9++){
+          var _s9=_r9+17;
+          if(_s9<semN)x=_wkPonEn(x,'C'+_r9,
+            {f:"IFERROR('3WLookahead_PPC'!"+_wkColL(2+_s9-27)+'11,"")'});
+          else if(_s9===semN)x=_wkPonEn(x,'C'+_r9,{f:'$D$35'})}}
       var a=ana.activos[nH]||null;
       hojas.push([nm,_wkPonTab(x,_WK_AZUL),a?{relsHoja:a.rels,partes:a.partes}:null])});
   }catch(_ea9){}
@@ -9308,7 +9356,7 @@ async function _wkLibroApp(semN,corte,ids){
       caratula:carXml?'copiada de la plantilla':'armada por el aplicativo',
       pctReal:Math.round(pctReal*1000)/10}}}
 /* El paquete .xlsx a partir de una lista [nombre, xml] */
-function _wkPaqueteApp(hojas,styles,ss){
+function _wkPaqueteApp(hojas,styles,ss,ocultas){
   /* Ultima pasada: el nombre vigente en todo el paquete. Cazar estampa por
      estampa es como se escaparon seis; aqui pasa todo si o si. Se traducen
      nombre de hoja, xml y piezas (graficos incluidos). Los pares de celda
@@ -9429,7 +9477,8 @@ function _wkPaqueteApp(hojas,styles,ss){
       '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '+
       'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
       '<sheets>'+hojas.map(function(h,i){
-        return '<sheet name="'+_wkEsc(h[0])+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>'}).join('')+
+        return '<sheet name="'+_wkEsc(h[0])+'" sheetId="'+(i+1)+'"'+
+          ((ocultas&&ocultas[h[0]])?' state="hidden"':'')+' r:id="rId'+(i+1)+'"/>'}).join('')+
       '</sheets><calcPr calcId="0" fullCalcOnLoad="1"/></workbook>'],
     ['xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
@@ -11948,7 +11997,8 @@ function _wkExcel(){
       try{if(typeof syncPull==='function')await syncPull()}catch(_e){}
       await _crCatPull();
       var LB=await _wkLibroApp(semN,corte,ids);
-      var enc=new TextEncoder(),ent=[],partes=_wkPaqueteApp(LB.hojas,LB.styles,LB.ss);
+      var enc=new TextEncoder(),ent=[],partes=_wkPaqueteApp(LB.hojas,LB.styles,LB.ss,
+        {'3WLookahead_PPC':1,'3WLookahead_Razones':1});
       for(var i=0;i<partes.length;i++){
         /* las imagenes ya vienen en bytes; el resto es XML y hay que codificarlo */
         var u8=(partes[i][1] instanceof Uint8Array)?partes[i][1]:enc.encode(partes[i][1]);
@@ -13571,7 +13621,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828c4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828c5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
