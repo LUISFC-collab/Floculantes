@@ -3665,14 +3665,21 @@ function _crProyeccion(u,semanas,real){
       if(String(semanas[i].fin||'')>=hoy){iHoy=i;break}}
     if(iHoy<0)return null;
     var base=(real&&real.acum&&real.acum[iHoy]!=null)?real.acum[iHoy]:0;
-    var out=[],t=base;
+    var out=[],hay=[],t=base,ultima=iHoy;
     for(var j=0;j<semanas.length;j++){
-      if(j<iHoy){out.push(null);continue}
-      var ini=String(semanas[j].ini||''),fin=String(semanas[j].fin||'');
+      if(j<iHoy){out.push(null);hay.push(false);continue}
+      var ini=String(semanas[j].ini||''),fin=String(semanas[j].fin||''),suma=0;
       Object.keys(porDia).forEach(function(d){
-        if(d>hoy&&d>=ini&&d<=fin)t+=porDia[d]/hhT});
-      out.push(Math.min(1.2,t))}
-    return out}catch(e){return null}}
+        if(d>hoy&&d>=ini&&d<=fin)suma+=porDia[d]});
+      if(suma>0){t+=suma/hhT;ultima=j}
+      out.push(Math.min(1.2,t));hay.push(suma>0)}
+    /* La linea muere donde muere la programacion: prolongarla plana hasta el
+       final del cronograma haria creer que hay algo puesto ahi cuando no lo
+       hay. El punto de arranque -la semana de hoy- se marca igual, para que se
+       vea de donde sale. */
+    for(var z=ultima+1;z<out.length;z++)out[z]=null;
+    hay[iHoy]=true;
+    return {acum:out,hay:hay,ultima:ultima,desde:iHoy}}catch(e){return null}}
 function _crCurvaReal(u,semanas){
   var vivas={};
   (DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id)vivas[p.id]=p});
@@ -3838,10 +3845,14 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
       preal+='<circle cx="'+x.toFixed(1)+'" cy="'+yr.toFixed(1)+'" r="2.6" fill="#C0392B"/>';
       }
     /* la proyeccion: a donde se llega con lo puesto en el calendario */
-    if(proy&&proy[i]!=null){
-      var yp=my+gh-Math.min(1,proy[i])*gh;
+    if(proy&&proy.acum&&proy.acum[i]!=null){
+      var yp=my+gh-Math.min(1,proy.acum[i])*gh;
       lproy+=(lproy?' L':'M')+x.toFixed(1)+' '+yp.toFixed(1);
-      pproy+='<circle cx="'+x.toFixed(1)+'" cy="'+yp.toFixed(1)+'" r="2.4" fill="#2ECC71"/>'}
+      /* punto y cifra solo en las semanas que tienen algo programado */
+      if(proy.hay[i]){
+        pproy+='<circle cx="'+x.toFixed(1)+'" cy="'+yp.toFixed(1)+'" r="3" fill="#2ECC71" stroke="#0d1117" stroke-width="1"/>'+
+          '<text x="'+x.toFixed(1)+'" y="'+(yp+13).toFixed(1)+'" fill="#2ECC71" font-size="8.5" '+
+          'font-weight="800" text-anchor="middle">'+(Math.round(proy.acum[i]*1000)/10)+'%</text>'}}
     /* el acumulado, sobre el punto de la curva */
     /* el acumulado va pegado a la linea: si no hay sitio, alterna */
     if(casilla>=24||!(i%2)||i===sem.length-1)
@@ -13118,7 +13129,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260826b9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260826c1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
