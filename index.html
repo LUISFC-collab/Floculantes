@@ -8341,7 +8341,7 @@ function _wkProgApp(P){
     return '<c r="'+col+n+'"'+e+'><v>'+v+'</v></c>'};
   var COLS=['A','B','C','D','E','F','G','H','I','J','K','L','M'];
   P.bloques.forEach(function(bl,ib){
-    var pb=pos[ib], H6="'P6-"+bl.id+"'", AP="'ACTIVITY_PLAN ("+bl.id+")'";
+    var pb=pos[ib], H6="'P6-"+_wkHojaCr(bl.id)+"'", AP="'ACTIVITY_PLAN ("+_wkHojaCr(bl.id)+")'";
     /* el color de este cuadro, sobre el estilo que ya traia la hoja */
     var col=function(c,nivel){return ib?_wkFondo(eWbs.e[c],_wkColorCuadro(ib,nivel)):eWbs.e[c]};
     var RG=H6+'!$'+Q.clave+'$3:$'+Q.fin+'$'+(P.p6Ult[bl.id]||3);
@@ -8997,7 +8997,7 @@ async function _wkLibroApp(semN,corte,ids){
   /* cada cuadro con su plan y su avance, por separado */
   D.bloques.forEach(function(bl,ib){
     bl.ib=ib;
-    mete('ACTIVITY_PLAN ('+bl.id+')',_wkFeederEsp([bl],sem,false).xml,3)});
+    mete('ACTIVITY_PLAN ('+_wkHojaCr(bl.id)+')',_wkFeederEsp([bl],sem,false).xml,3)});
   D.bloques.forEach(function(bl){mete('P6-'+bl.id,p6[bl.id],3)});
   /* La hoja de gastos generales va aqui, con las de apoyo: de ella sale el
      total que el gasto general de COSTO reparte por avance. Su unica
@@ -9321,6 +9321,10 @@ var _WKC_COLORES=['2E86C1','E67E22','8E44AD','16A085','C0392B'];
 /* El nombre VIGENTE de un cronograma para lo que se lee en el libro: su
    etiqueta si la tiene, si no su id. Se usa a juego en rotulos y en los
    criterios de los SUMIF, para que sigan casando. Las llaves van por id. */
+/* el nombre vigente, apto para PESTAÑA: sin caracteres prohibidos, corto */
+function _wkHojaCr(id){try{
+  return String(_wkNomCr(id)).replace(/[\\\/\?\*\[\]:]/g,'').slice(0,22)||String(id||'')}
+  catch(e){return String(id||'')}}
 function _wkNomCr(id){try{
   var L=(typeof _crLista==='function'&&_crLista())||[];
   for(var i=0;i<L.length;i++){if(L[i]&&L[i].cron_id===id){
@@ -11923,14 +11927,13 @@ function _wkExcel(){
               nom:(typeof _crNomVis==='function'?_crNomVis(_cc):_cc.cron_id),
               v:_wkCurvaDe(_fil,_rej)});
             var _xmlP=_crHojaPlan(_cc,_fil,_rej);
-            /* el nombre de hoja es LLAVE: las formulas lo referencian */
-            var _nomP='ACTIVITI_PLAN ('+_cc.cron_id+')';
+            var _nomP='ACTIVITI_PLAN ('+_wkHojaCr(_cc.cron_id)+')';
             if(hojas[_nomP]&&mapa[hojas[_nomP]])cambiar[hojas[_nomP]]=_xmlP;
             else{await _wkNuevaHoja(entradas,mapa,leer,_nomP,_xmlP,enc,pkgH);_nuev++}
             /* y su lista de actividades, que es lo que hasta ahora venia
                congelado en la hoja Partidas de la plantilla */
             var _p6=_wkHojaP6(_cc,_tt,_uu.items,_rej);
-            var _nomP6='P6-'+_cc.cron_id;
+            var _nomP6='P6-'+_wkHojaCr(_cc.cron_id);
             if(hojas[_nomP6]&&mapa[hojas[_nomP6]])cambiar[hojas[_nomP6]]=_p6.xml;
             else{await _wkNuevaHoja(entradas,mapa,leer,_nomP6,_p6.xml,enc,pkgH);_nuev++}
             _p6s.push({id:_cc.cron_id,hoja:_nomP6,n:_p6.actividades})}
@@ -12037,6 +12040,35 @@ function _wkExcel(){
             return a9+fc9+'<c:ptCount val="0"/>'+b9});
           if(_cn9!==_cx9)cambiar[_rp9]=_cn9}
       }catch(_ech){}
+      /* Las formulas ESTATICAS que la plantilla trae de fabrica casan contra
+         los nombres viejos ('P6-LB1', 'ACTIVITY_PLAN (LB1)', 'Prog. LB1',
+         '(LB1)'). Si el cronograma tiene nombre vigente distinto, se migran
+         texto a texto en todas las hojas y graficos, para que el libro quede
+         parejo de punta a punta. */
+      try{
+        var _mig=[];
+        (_Lc||[]).forEach(function(c9){
+          var e9=(typeof _wkNomCr==='function')?_wkNomCr(c9.cron_id):c9.cron_id;
+          if(!e9||e9===c9.cron_id)return;
+          var eh9=(typeof _wkHojaCr==='function')?_wkHojaCr(c9.cron_id):e9;
+          _mig.push(["'P6-"+c9.cron_id+"'","'P6-"+eh9+"'"]);
+          _mig.push(['P6-'+c9.cron_id,'P6-'+eh9]);
+          _mig.push(['ACTIVITY_PLAN ('+c9.cron_id+')','ACTIVITY_PLAN ('+eh9+')']);
+          _mig.push(['ACTIVITI_PLAN ('+c9.cron_id+')','ACTIVITI_PLAN ('+eh9+')']);
+          _mig.push(['Prog. '+c9.cron_id,'Prog. '+e9]);
+          _mig.push(['('+c9.cron_id+')','('+e9+')']);
+        });
+        if(_mig.length){
+          var _pts=Object.keys(mapa||{}).filter(function(k){
+            return /^xl\/(worksheets\/sheet\d+|charts\/chart\d+)\.xml$/.test(k)});
+          for(var _pi9=0;_pi9<_pts.length;_pi9++){
+            var _pk9=_pts[_pi9];
+            var _px9=cambiar[_pk9]||(await leer(_pk9));
+            if(!_px9)continue;
+            var _po9=_px9;
+            _mig.forEach(function(par){ _po9=_po9.split(par[0]).join(par[1]) });
+            if(_po9!==_px9)cambiar[_pk9]=_po9}}
+      }catch(_emg){}
       /* ---- PANEL CONTROL: la fila 19 es el hueco del segundo cronograma ---- */
       try{
         var _hPan=hojas['PANEL CONTROL'];
@@ -13305,7 +13337,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828a7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
