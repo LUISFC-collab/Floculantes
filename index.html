@@ -13115,7 +13115,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260826b5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260826b6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17440,25 +17440,52 @@ function _pgAvanceEsp(){try{
 /* Se calcula una vez por pintada: por dia lo que suma, y el acumulado desde el
    primero programado partiendo de lo que ya lleva la especialidad. */
 function _pgCalcPct(){try{
-  var dia={};
+  var dia={},porD={};
   var P=_pgProg();
+  /* Con la vara en las tres se cuentan las tres: sus pesos salen del mismo
+     total y por eso se pueden sumar. Con la vara en una sola especialidad no
+     se pueden mezclar -cada una reparte su propio 100%- y solo cuenta la que
+     se esta viendo. */
+  var todas=_pgBaseProy();
   Object.keys(P).forEach(function(id){
-    var pr=P[id];if(!pr||pr.disc!==progDisc)return;
+    var pr=P[id];if(!pr)return;
+    if(!todas&&pr.disc!==progDisc)return;
     if(!window._bkcSrc&&state.progDel&&state.progDel[id])return;
     var ap=_pgAporteDia(pr);if(!(ap>0))return;
     var ds=(typeof occupiedDays==='function')?(occupiedDays(pr.start,pr.dias||1)||[]):[];
-    ds.forEach(function(d){dia[d]=(dia[d]||0)+ap})});
+    var dd=pr.disc||'—';
+    ds.forEach(function(d){dia[d]=(dia[d]||0)+ap;
+      if(!porD[d])porD[d]={};porD[d][dd]=(porD[d][dd]||0)+ap})});
+  window._pgPctDisc=porD;
   var base=_pgAvanceEsp(),acum={},t=base;
   Object.keys(dia).sort().forEach(function(d){t+=dia[d];acum[d]=t});
   window._pgPctDia=dia;window._pgPctAcum=acum;window._pgPctBase=base;
 }catch(e){window._pgPctDia={};window._pgPctAcum={};window._pgPctBase=0}}
+/* El desglose de un dia, en lineas. Lo usan el aviso del calendario y la
+   ficha del dia, para que digan lo mismo. */
+function _pgPctLineas(ds){try{
+  var d=(window._pgPctDia||{})[ds];if(!(d>0))return null;
+  var n2=function(x){return (Math.round(x*100)/100).toFixed(2)};
+  var por=(window._pgPctDisc||{})[ds]||{};
+  var todas=_pgBaseProy();
+  var lista=todas?['Civil','Electrica','Mecanica']:[progDisc];
+  var L=lista.map(function(k){
+    var v=por[k]||0;
+    return {esp:k,pct:v,txt:k+': '+(v>0?(n2(v)+'%'):'sin aporte programado')}});
+  return {lineas:L,total:d,acum:(window._pgPctAcum||{})[ds]||0,
+          base:window._pgPctBase||0,todas:todas,n2:n2}}catch(e){return null}}
 /* el rotulo que va al lado del numero del dia */
 function _pgPctDiaHTML(ds){try{
   var d=(window._pgPctDia||{})[ds];if(!(d>0))return '';
   var a=(window._pgPctAcum||{})[ds];
   var n2=function(x){return (Math.round(x*100)/100).toFixed(2)};
-  return '<span class="cdpct" title="Ese día suma '+n2(d)+'% y con lo anterior se llega a '+n2(a||0)+
-    '%, contando el '+n2(window._pgPctBase||0)+'% que la especialidad ya lleva hecho" '+
+  var _R=_pgPctLineas(ds);
+  var _tit='';
+  if(_R){_tit=_R.lineas.map(function(x){return x.txt}).join(' · ')+
+    ' = '+n2(_R.total)+'% programado ese día\n'+
+    'Con lo anterior se llega a '+n2(_R.acum)+'%, partiendo del '+n2(_R.base)+'% ya hecho'+
+    (_R.todas?' entre las tres especialidades':' en '+progDisc)}
+  return '<span class="cdpct" title="'+esc(_tit)+'" '+
     'style="font-size:8.5px;font-weight:800;color:#0C5132;background:#EAF3EC;border:1px solid #BFD8C6;'+
     'border-radius:5px;padding:0 4px;margin-right:auto;line-height:1.5;white-space:nowrap">'+
     n2(d)+'% · '+n2(a||0)+'% ac</span>'}catch(e){return ''}}
@@ -17669,7 +17696,19 @@ function renderCal(){try{window._pgPesoTot=null}catch(_e){}try{var _bh=$('progTo
   try{if(window._pgMarkIds&&window._pgMarkIds.length){var _mFirst=null;window._pgMarkIds.forEach(function(mid){var _mEls=cal.querySelectorAll('.cdtask[data-id="'+mid+'"]');Array.prototype.forEach.call(_mEls,function(ch){ch.style.outline='3px solid #B42318';ch.style.boxShadow='0 0 0 4px rgba(180,35,24,.30)';if(!_mFirst)_mFirst=ch})});if(_mFirst)setTimeout(function(){try{_mFirst.scrollIntoView({block:'center',inline:'center',behavior:'smooth'})}catch(_e){}},220)}}catch(_em){}
   }
 function placeActivity(id,ds){if(window._bkcSrc)return;if(typeof _gateAcc==="function"&&!_gateAcc("prog_programar","Programarme en el cronograma"))return;if(window._progSolo){toast('\ud83d\udc41 Modo visualizar: toca \u270f\ufe0f arriba para poder modificar');return}var p=acts(progDisc).find(function(x){return x.id===id});if(!p){return}if(ds<todayISO()&&!esAdmin()){toast('Solo el administrador puede programar en fechas pasadas; tú, de hoy en adelante');return}var d=diasDe(id);if(d!=null){try{var _dR9=(typeof diasRestDe==='function')?diasRestDe(p,null):null;if(_dR9!=null)d=Math.max(1,Math.min(d,_dR9))}catch(_dr9){}}if(!d&&progPickedDias)d=progPickedDias;if(!d){toast('Define metrado y rendimiento primero');return}state.prog[id]={partida_id:id,codigo:codeOf(p),nombre:p.nombre,disc:progDisc,start:ds,dias:d,cell_at:Date.now(),_lo:1,ts:(typeof nowSrv==='function'?nowSrv():Date.now())};if(typeof progUntomb==='function')progUntomb(id);if(typeof logCambio==='function')logCambio('PROGRAMACION',id,'Programada: '+d+' d\u00eda(s) desde '+ds);progSave();progPicked=null;progPickedDias=null;var _pp=$('progPanel');if(_pp)_pp.classList.remove('hidden');var _h=$('ppHint');if(_h){_h.textContent='Programada ✓. Elige otra actividad o cierra la lista (☰).';_h.classList.remove('hl')}renderProgSelect();renderCal();toast(codeOf(p)+': '+d+' día'+(d>1?'s':'')+' desde '+ds.slice(5));syncNow(true)}
-function openDayDetail(ds){var tk=tasksOn(ds);var pr=ds.split('-');$('dpDate').textContent=pr[2]+'/'+pr[1]+'/'+pr[0];var w=$('dpList');var cal=(state.calend||{})[ds];var lab=esLaborable(ds);var tipoTxt=esFeriado(ds)?'NO laborable':'Laborable';var cb='';if(esAdmin()){if(lab){cb+='<button class="dpcalb fer" data-act="feriado">Marcar feriado / no laborable</button>'}else{cb+='<button class="dpcalb lab" data-act="laborable">Marcar laborable</button>'}if(cal){cb+='<button class="dpcalb clr" data-act="quitar">Quitar marca</button>'}}else{cb='<span style="font-size:11px;color:var(--muted)">Solo el administrador marca feriados/laborables.</span>'}var calBlock='<div class="dpcal"><div class="dpcalt">Día: <b>'+tipoTxt+'</b>'+(cal&&cal.comentario?(' — '+esc(cal.comentario)):'')+'</div><div class="dpcalbs">'+cb+'</div></div>';var tH=tk.length?tk.map(function(t,idx){var _m=metaOf(t.partida_id);var _met=_m?(' · '+qty(_m.total)+' '+(_m.unidad||'')):'';var _ord='<div style="display:flex;gap:4px;align-items:center">'+(tk.length>1?('<button class="dpord" data-id="'+esc(t.partida_id)+'" data-dir="-1" '+(idx===0?'disabled':'')+' style="width:32px;height:32px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:800;font-size:15px">↑</button><button class="dpord" data-id="'+esc(t.partida_id)+'" data-dir="1" '+(idx===tk.length-1?'disabled':'')+' style="width:32px;height:32px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:800;font-size:15px">↓</button>'):'')+'<button class="dpdel" data-id="'+esc(t.partida_id)+'">Quitar</button></div>';return '<div class="dpi"><div class="dpt"><b>'+(idx+1)+'ª · '+esc(t.codigo||t.partida_id)+'</b> · '+esc(t.nombre||'')+'<div class="dps">Inicia '+String(t.start||'').slice(5)+' · '+(t.dias||1)+' día'+((t.dias||1)>1?'s':'')+_met+'</div></div>'+_ord+'</div>'}).join(''):'<div style="font-size:12px;color:var(--muted);margin-top:8px">Sin actividades programadas este día.</div>';w.innerHTML=calBlock+tH;w.querySelectorAll('.dpdel').forEach(function(b){b.onclick=function(){if(typeof _gateAcc==="function"&&!_gateAcc("prog_cambiar","Quitar del cronograma"))return;if(window._progSolo){toast('\ud83d\udc41 Modo visualizar: toca \u270f\ufe0f arriba para poder modificar');return}var id=b.getAttribute('data-id');delete state.prog[id];if(typeof progTomb==='function')progTomb(id);if(typeof logCambio==='function')logCambio('PROGRAMACION',id,'Quitada del cronograma (para reprogramar)');progSave();renderProgSelect();renderCal();(async function(){try{var _dT=Number(state.progDel&&state.progDel[id])||0;if(sbReady()&&navigator.onLine)await sbDelete('programacion','proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&partida_id=eq.'+encodeURIComponent(id)+(_dT?('&ts=lt.'+_dT):''))}catch(e){}syncNow(true)})();toast('Quitado del cronograma');var rem=tasksOn(ds);if(rem.length){openDayDetail(ds)}else{closeSheet('mDayProg')}}});w.querySelectorAll('.dpord').forEach(function(b){b.onclick=function(){if(b.disabled)return;progReorder(ds,b.getAttribute('data-id'),parseInt(b.getAttribute('data-dir'),10)||0)}});w.querySelectorAll('.dpcalb').forEach(function(b){b.onclick=function(){var act=b.getAttribute('data-act');if(act==='quitar'){clearDayMark(ds)}else{var c=prompt('Comentario del supervisor (motivo para marcar '+(act==='feriado'?'feriado':'laborable')+'):','');markDay(ds,act,c||'')}openDayDetail(ds)}});openSheet('mDayProg')}
+function openDayDetail(ds){var tk=tasksOn(ds);var pr=ds.split('-');$('dpDate').textContent=pr[2]+'/'+pr[1]+'/'+pr[0];var w=$('dpList');var cal=(state.calend||{})[ds];var lab=esLaborable(ds);var tipoTxt=esFeriado(ds)?'NO laborable':'Laborable';var cb='';if(esAdmin()){if(lab){cb+='<button class="dpcalb fer" data-act="feriado">Marcar feriado / no laborable</button>'}else{cb+='<button class="dpcalb lab" data-act="laborable">Marcar laborable</button>'}if(cal){cb+='<button class="dpcalb clr" data-act="quitar">Quitar marca</button>'}}else{cb='<span style="font-size:11px;color:var(--muted)">Solo el administrador marca feriados/laborables.</span>'}var calBlock='<div class="dpcal"><div class="dpcalt">Día: <b>'+tipoTxt+'</b>'+(cal&&cal.comentario?(' — '+esc(cal.comentario)):'')+'</div><div class="dpcalbs">'+cb+'</div></div>';var tH=tk.length?tk.map(function(t,idx){var _m=metaOf(t.partida_id);var _met=_m?(' · '+qty(_m.total)+' '+(_m.unidad||'')):'';var _ord='<div style="display:flex;gap:4px;align-items:center">'+(tk.length>1?('<button class="dpord" data-id="'+esc(t.partida_id)+'" data-dir="-1" '+(idx===0?'disabled':'')+' style="width:32px;height:32px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:800;font-size:15px">↑</button><button class="dpord" data-id="'+esc(t.partida_id)+'" data-dir="1" '+(idx===tk.length-1?'disabled':'')+' style="width:32px;height:32px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:800;font-size:15px">↓</button>'):'')+'<button class="dpdel" data-id="'+esc(t.partida_id)+'">Quitar</button></div>';return '<div class="dpi"><div class="dpt"><b>'+(idx+1)+'ª · '+esc(t.codigo||t.partida_id)+'</b> · '+esc(t.nombre||'')+'<div class="dps">Inicia '+String(t.start||'').slice(5)+' · '+(t.dias||1)+' día'+((t.dias||1)>1?'s':'')+_met+'</div></div>'+_ord+'</div>'}).join(''):'<div style="font-size:12px;color:var(--muted);margin-top:8px">Sin actividades programadas este día.</div>';/* el mismo desglose, al abrir la ficha del dia */
+ var _pcH='';try{
+   var _R=(typeof _pgPctLineas==='function')?_pgPctLineas(ds):null;
+   if(_R){_pcH='<div style="background:#EAF3EC;border:1px solid #BFD8C6;border-radius:10px;padding:9px 11px;margin-bottom:10px">'+
+     '<div style="font-size:11px;font-weight:800;color:#0C5132;letter-spacing:.02em">AVANCE PROGRAMADO ESTE DÍA</div>'+
+     _R.lineas.map(function(x){
+       return '<div style="font-size:12px;color:'+(x.pct>0?'#1B2433':'#5C6779')+'">'+esc(x.txt)+'</div>'}).join('')+
+     '<div style="font-size:12.5px;font-weight:800;color:#0C5132;margin-top:3px">Total '+_R.n2(_R.total)+'%'+
+     ' · se llega a '+_R.n2(_R.acum)+'%</div>'+
+     '<div style="font-size:11px;color:#5C6779">partiendo del '+_R.n2(_R.base)+'% ya hecho'+
+     (_R.todas?' entre las tres especialidades':' en '+esc(progDisc))+'</div></div>'}
+ }catch(_ep){}
+ w.innerHTML=calBlock+_pcH+tH;w.querySelectorAll('.dpdel').forEach(function(b){b.onclick=function(){if(typeof _gateAcc==="function"&&!_gateAcc("prog_cambiar","Quitar del cronograma"))return;if(window._progSolo){toast('\ud83d\udc41 Modo visualizar: toca \u270f\ufe0f arriba para poder modificar');return}var id=b.getAttribute('data-id');delete state.prog[id];if(typeof progTomb==='function')progTomb(id);if(typeof logCambio==='function')logCambio('PROGRAMACION',id,'Quitada del cronograma (para reprogramar)');progSave();renderProgSelect();renderCal();(async function(){try{var _dT=Number(state.progDel&&state.progDel[id])||0;if(sbReady()&&navigator.onLine)await sbDelete('programacion','proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&partida_id=eq.'+encodeURIComponent(id)+(_dT?('&ts=lt.'+_dT):''))}catch(e){}syncNow(true)})();toast('Quitado del cronograma');var rem=tasksOn(ds);if(rem.length){openDayDetail(ds)}else{closeSheet('mDayProg')}}});w.querySelectorAll('.dpord').forEach(function(b){b.onclick=function(){if(b.disabled)return;progReorder(ds,b.getAttribute('data-id'),parseInt(b.getAttribute('data-dir'),10)||0)}});w.querySelectorAll('.dpcalb').forEach(function(b){b.onclick=function(){var act=b.getAttribute('data-act');if(act==='quitar'){clearDayMark(ds)}else{var c=prompt('Comentario del supervisor (motivo para marcar '+(act==='feriado'?'feriado':'laborable')+'):','');markDay(ds,act,c||'')}openDayDetail(ds)}});openSheet('mDayProg')}
 if($('btnProg'))$('btnProg').onclick=openProg;
 if($('progBack'))$('progBack').onclick=closeProg;
 if($('progToggleList'))$('progToggleList').onclick=function(){$('progPanel').classList.toggle('hidden');if(typeof _ccBoxesSoon==='function')_ccBoxesSoon()}; if($('btnProgRot'))$('btnProgRot').onclick=function(){toggleProgRot()}; if($('btnFs'))$('btnFs').onclick=function(){try{if(document.fullscreenElement){document.exitFullscreen()}else if(document.documentElement.requestFullscreen){document.documentElement.requestFullscreen()}}catch(e){}};
