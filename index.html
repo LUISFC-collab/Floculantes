@@ -7074,7 +7074,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
   if(opc&&opc.lmn){ROT[10]='Restricción';ROT[11]='QUIEN';ROT[12]='Solución propuesta'}
   if(QN)ROT.splice(13,0,'QUIEN');
   /* la restriccion DE MINA viva de las partidas de una actividad */
-  var _minaMemo={};
+  var _minaMemo={},_restrL=[];
   var _minaDe=function(f){
     var k=(f&&f.clave)||'';
     if(_minaMemo[k]!=null)return _minaMemo[k];
@@ -7221,6 +7221,8 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
         bs.push(_wkCelE(_wkColL(cc),n,(cc===2)?z.tit:'',cc===2,eT));
       fila(n,bs,18);n++;return}
     var f=z.f,C=COL[z.k||0]||COL[0];
+    if(opc&&opc.lmn&&(z.pos||0)===0&&_minaDe(f))
+      _restrL.push({fila:n,cod:f.cod||'',qps:f.qps||'',items:(f.items||[]).slice()});
     var st=function(b2){return tinta(b2,C.sua,GRIS)};
     /* la cantidad: la de la P6 y, si esa actividad no tiene una propia porque
        lleva varias partidas, 1 global — asi sus HH no se pierden */
@@ -7348,7 +7350,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
     '<drawing r:id="rId1"/>'+
     '</worksheet>';
   return {xml:xml,filas:nFilas,ini:r0,fin:nFin,
-          r0:r0,nFin:nFin,SEMS:SEMS,BLQ:BLQ,corte:corte}}
+          r0:r0,nFin:nFin,SEMS:SEMS,BLQ:BLQ,corte:corte,restr:_restrL}}
 /* Los dos logos de la caratula, arriba a la izquierda de PARA 3WLA. Se
    reutilizan los MISMOS ficheros que ya lleva el libro -image8 y image9-, sin
    duplicarlos: el empaquetador los pone una sola vez. */
@@ -9345,6 +9347,36 @@ async function _wkLibroApp(semN,corte,ids){
           if(_s9<semN)x=_wkPonEn(x,'C'+_r9,
             {f:"IFERROR('3WLookahead_PPC'!"+_wkColL(2+_s9-27)+'11,"")'});
           else if(_s9===semN)x=_wkPonEn(x,'C'+_r9,{f:'$D$35'})}}
+      /* El Analisis de Restricciones jala de la hoja 3WLA y del aplicativo:
+         E, F, G y L con formula a la 3WLA (nombre, restriccion, solucion y
+         quien de la fila de esa actividad); H = cuando se registro la
+         restriccion en el aplicativo; I = para cuando esta programada la
+         partida en el Cronograma. Lo estatico del donante se vacia
+         conservando su formato. */
+      if(nm==='Analisis de Restricciones'&&_hd3W&&_hd3W.restr){
+        var _rs=_hd3W.restr;
+        for(var _q9=9;_q9<=27;_q9++)
+          'BCDEFGHIJKLMNOPQ'.split('').forEach(function(cq){
+            x=_wkPonEn(x,cq+_q9,{})});
+        _rs.forEach(function(rq,iq){
+          var fq=10+iq;if(fq>27)return;
+          var ts=null,ini=null;
+          (rq.items||[]).forEach(function(iw){
+            ((((typeof state!=='undefined'&&state.repo)||{})[iw])||[]).forEach(function(xw){
+              if(xw&&xw.cat==='mina'&&!xw.lev&&xw.ts!=null){
+                var tw=Number(xw.ts);if(tw&&(ts==null||tw<ts))ts=tw}});
+            var pw=(typeof state!=='undefined'&&state.prog)?state.prog[iw]:null;
+            if(pw&&pw.start&&(!ini||pw.start<ini))ini=pw.start});
+          x=_wkPonEn(x,'B'+fq,{v:iq+1});
+          x=_wkPonEn(x,'C'+fq,{t:rq.cod});
+          x=_wkPonEn(x,'D'+fq,{t:rq.qps});
+          x=_wkPonEn(x,'E'+fq,{f:"'3WLA'!C"+rq.fila});
+          x=_wkPonEn(x,'F'+fq,{f:"'3WLA'!L"+rq.fila});
+          x=_wkPonEn(x,'G'+fq,{f:"'3WLA'!N"+rq.fila});
+          try{if(ts!=null)x=_wkPonEn(x,'H'+fq,
+            {v:_crASerial(new Date(ts).toISOString().slice(0,10))})}catch(_eh){}
+          try{if(ini)x=_wkPonEn(x,'I'+fq,{v:_crASerial(ini)})}catch(_ei){}
+          x=_wkPonEn(x,'L'+fq,{f:"'3WLA'!M"+rq.fila})})}
       var a=ana.activos[nH]||null;
       hojas.push([nm,_wkPonTab(x,_WK_AZUL),a?{relsHoja:a.rels,partes:a.partes}:null])});
   }catch(_ea9){}
@@ -13621,7 +13653,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828c5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828c6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
