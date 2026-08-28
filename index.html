@@ -3798,8 +3798,6 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
   var mx=44,my=30,gw=W-mx-14,gh=H-my-42;
   var maxSem=0;cur.porSem.forEach(function(v){if(v>maxSem)maxSem=v});
   var barras='',linea='',ptos='',lreal='',preal='',lproy='',pproy='';
-  if(proy&&proy.acum&&_hx!=null&&proy.acum[proy.desde]!=null)
-    lproy='M'+_hx.toFixed(1)+' '+_hy.toFixed(1);
   var proy=null;try{proy=_crProyeccion(u,sem,real)}catch(_ep){}
   var casilla=gw/Math.max(1,sem.length);
   /* el centro de la casilla de cada semana: asi la barra cae DENTRO de su
@@ -3813,6 +3811,11 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
   if(realHoy){
     _hx=mx+(realHoy.i+0.5)*casilla+(realHoy.frac-0.5)*casilla;
     _hy=my+gh-realHoy.v*gh}
+  /* el primer tramo de la verde nace en el punto de HOY. Tiene que sembrarse
+     AQUI, ya con _hx calculado: sembrado antes, corria con la variable aun
+     vacia y la linea aparecia sin su primer tramo. */
+  if(proy&&proy.acum&&_hx!=null&&proy.acum[proy.desde]!=null)
+    lproy='M'+_hx.toFixed(1)+' '+_hy.toFixed(1);
   sem.forEach(function(s,i){
     var x=cx(i);
     var hv=maxSem>0?(cur.porSem[i]/maxSem):0;
@@ -3860,8 +3863,13 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
       lproy+=(lproy?' L':'M')+x.toFixed(1)+' '+yp.toFixed(1);
       /* punto y cifra solo en las semanas que tienen algo programado */
       if(proy.hay[i]){
+        /* si cae pegado al rotulo de HOY, la cifra baja un escalon para no
+           montarse encima; y si con eso se sale del dibujo, sube arriba */
+        var _ly=yp+13;
+        if(_hx!=null&&Math.abs(x-_hx)<76&&Math.abs(yp-_hy)<26)_ly=yp+24;
+        if(_ly>my+gh+8)_ly=yp-7;
         pproy+='<circle cx="'+x.toFixed(1)+'" cy="'+yp.toFixed(1)+'" r="3" fill="#2ECC71" stroke="#0d1117" stroke-width="1"/>'+
-          '<text x="'+x.toFixed(1)+'" y="'+(yp+13).toFixed(1)+'" fill="#2ECC71" font-size="8.5" '+
+          '<text x="'+x.toFixed(1)+'" y="'+_ly.toFixed(1)+'" fill="#2ECC71" font-size="8.5" '+
           'font-weight="800" text-anchor="middle">'+(Math.round(proy.acum[i]*1000)/10)+'%</text>'}}
     /* el acumulado, sobre el punto de la curva */
     /* el acumulado va pegado a la linea: si no hay sitio, alterna */
@@ -13139,7 +13147,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260826c3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260826c4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
