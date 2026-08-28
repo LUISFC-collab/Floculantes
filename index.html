@@ -3657,18 +3657,18 @@ function _crProyeccion(u,semanas,real){
       ds.forEach(function(d){porDia[d]=(porDia[d]||0)+cada;hay=true})});
     if(!hay)return null;
     /* se acumula por semana, arrancando de lo realmente hecho */
+    /* ini y fin de cada semana YA son fechas, no seriales: pasarlas por
+       _crDeSerial daba basura y no se encontraba nunca la semana de hoy. */
     var hoy=(typeof todayISO==='function')?todayISO():'';
     var iHoy=-1;
     for(var i=0;i<semanas.length;i++){
-      var fi=(typeof _crDeSerial==='function')?_crDeSerial(semanas[i].fin):'';
-      if(fi&&fi>=hoy){iHoy=i;break}}
+      if(String(semanas[i].fin||'')>=hoy){iHoy=i;break}}
     if(iHoy<0)return null;
     var base=(real&&real.acum&&real.acum[iHoy]!=null)?real.acum[iHoy]:0;
     var out=[],t=base;
     for(var j=0;j<semanas.length;j++){
       if(j<iHoy){out.push(null);continue}
-      var ini=(typeof _crDeSerial==='function')?_crDeSerial(semanas[j].ini):'';
-      var fin=(typeof _crDeSerial==='function')?_crDeSerial(semanas[j].fin):'';
+      var ini=String(semanas[j].ini||''),fin=String(semanas[j].fin||'');
       Object.keys(porDia).forEach(function(d){
         if(d>hoy&&d>=ini&&d<=fin)t+=porDia[d]/hhT});
       out.push(Math.min(1.2,t))}
@@ -13118,7 +13118,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260826b7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260826b8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17800,14 +17800,17 @@ function _pgTaskWire(cal){
    se ve por meses y la semana -la misma numeracion de la curva, de viernes a
    jueves- cuando se ve por semanas. */
 function _pgHoyTxt(){try{
-  var hoy=(typeof todayISO==='function')?todayISO():'';
-  if(progView==='sem'&&typeof _crSemDeFecha==='function'){
-    var n=_crSemDeFecha(hoy);if(n>0)return 'S'+n}
+  /* dice DONDE se esta, no donde esta hoy: si no, al pasar de semana el rotulo
+     se quedaba clavado en la de hoy y no se sabia que se estaba mirando */
+  var a=(progAnchor instanceof Date)?progAnchor:new Date();
+  if(progView==='sem'&&typeof _crSemDeFecha==='function'&&typeof ymd==='function'){
+    var n=_crSemDeFecha(ymd(a));if(n>0)return 'S'+n}
   var MO=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto',
           'Septiembre','Octubre','Noviembre','Diciembre'];
-  return MO[new Date().getMonth()]}catch(e){return 'Hoy'}}
+  return MO[a.getMonth()]}catch(e){return 'Hoy'}}
 function renderCal(){try{window._pgPesoTot=null}catch(_e){}try{var _bh=$('progToday');if(_bh){_bh.textContent=_pgHoyTxt();
-    _bh.title='Volver a '+_bh.textContent}}catch(_e){}try{_pgCalcPct()}catch(_e){}try{window._pgAM=_pgActColorMap()}catch(_e){window._pgAM={}}try{window._pgLaneMap=_pgLanes()}catch(_e){window._pgLaneMap={}}var cal=$('progCal');if(!cal)return;var MO=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];var _tt='';try{if(progView==='mes'){_tt=MO[progAnchor.getMonth()].toUpperCase()+' '+progAnchor.getFullYear()}else{var _ws=startOfWeek(progAnchor),_we=addDays(_ws,6);_tt=(_ws.getMonth()===_we.getMonth())?(MO[_ws.getMonth()].toUpperCase()+' '+_we.getFullYear()):(MO[_ws.getMonth()].slice(0,3).toUpperCase()+' \u2013 '+MO[_we.getMonth()].slice(0,3).toUpperCase()+' '+_we.getFullYear())}}catch(_e){}var html='<div id="calMesTit" style="text-align:center;font-weight:800;color:#1F3864;font-size:14px;letter-spacing:3px;padding:3px 0 5px">'+_tt+'</div><div class="calhead"><span>D</span><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span></div>';
+    var _hs='';try{if(progView==='sem'&&typeof _crSemDeFecha==='function')_hs='S'+_crSemDeFecha(todayISO())}catch(_e2){}
+    _bh.title='Estás en '+_bh.textContent+' — tocar para volver a hoy'+(_hs?(' ('+_hs+')'):'')}}catch(_e){}try{_pgCalcPct()}catch(_e){}try{window._pgAM=_pgActColorMap()}catch(_e){window._pgAM={}}try{window._pgLaneMap=_pgLanes()}catch(_e){window._pgLaneMap={}}var cal=$('progCal');if(!cal)return;var MO=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];var _tt='';try{if(progView==='mes'){_tt=MO[progAnchor.getMonth()].toUpperCase()+' '+progAnchor.getFullYear()}else{var _ws=startOfWeek(progAnchor),_we=addDays(_ws,6);_tt=(_ws.getMonth()===_we.getMonth())?(MO[_ws.getMonth()].toUpperCase()+' '+_we.getFullYear()):(MO[_ws.getMonth()].slice(0,3).toUpperCase()+' \u2013 '+MO[_we.getMonth()].slice(0,3).toUpperCase()+' '+_we.getFullYear())}}catch(_e){}var html='<div id="calMesTit" style="text-align:center;font-weight:800;color:#1F3864;font-size:14px;letter-spacing:3px;padding:3px 0 5px">'+_tt+'</div><div class="calhead"><span>D</span><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span></div>';
   html+=_ccActiveBanner();
   if(progView==='mes'){var first=new Date(progAnchor.getFullYear(),progAnchor.getMonth(),1);$('progRange').textContent=MO[progAnchor.getMonth()]+' '+progAnchor.getFullYear();var gs=startOfWeek(first);html+='<div class="calgrid">';for(var i=0;i<42;i++){var day=addDays(gs,i);var ds=ymd(day);var out=day.getMonth()!==progAnchor.getMonth();var tk=tasksOn(ds);html+='<div class="cday'+(out?' out':'')+(esFeriado(ds)?' nolab':'')+(ds===todayISO()?' today':'')+((ds<todayISO()&&!esAdmin())?' past':'')+((ds<todayISO())?' ant':'')+'" data-day="'+ds+'"><div class="cdhd">'+_pgPctDiaHTML(ds)+'<span class="cdn">'+day.getDate()+'</span></div>'+_ccCellChips(tk)+'</div>'}html+='</div>'}
   else{var ws=startOfWeek(progAnchor);var we=addDays(ws,6);$('progRange').textContent='Sem '+ws.getDate()+' '+MO[ws.getMonth()].slice(0,3)+' – '+we.getDate()+' '+MO[we.getMonth()].slice(0,3);html+='<div class="calgrid week">';for(var j=0;j<7;j++){var dd=addDays(ws,j);var dss=ymd(dd);var tks=tasksOn(dss);html+='<div class="cday'+(esFeriado(dss)?' nolab':'')+(dss===todayISO()?' today':'')+((dss<todayISO()&&!esAdmin())?' past':'')+((dss<todayISO())?' ant':'')+'" data-day="'+dss+'" style="min-height:230px"><div class="cdhd">'+_pgPctDiaHTML(dss)+'<span class="cdn">'+dd.getDate()+'</span></div>'+_ccCellChips(tks)+'</div>'}html+='</div>'}
