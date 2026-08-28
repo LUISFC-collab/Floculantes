@@ -3969,8 +3969,8 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     '<text x="'+mx+'" y="'+(my-18)+'" fill="#7d8590" font-size="9">barras = % que toca hacer esa semana · números en blanco = programado acumulado</text>'+
     '<rect x="'+mx+'" y="'+(my-13)+'" width="16" height="2.5" fill="'+esc(c.color||'#2E86C1')+'"/>'+
     '<text x="'+(mx+20)+'" y="'+(my-9)+'" fill="#9db4d6" font-size="9">programado</text>'+
-    (lproy?('<rect x="'+(mx+150)+'" y="'+(my-13)+'" width="16" height="2.5" fill="#2ECC71"/>'+
-      '<text x="'+(mx+170)+'" y="'+(my-9)+'" fill="#9db4d6" font-size="9">proyección del calendario</text>'):'')+
+    (lproy?('<rect x="'+(mx+gw-168)+'" y="'+(my-13)+'" width="16" height="2.5" fill="#2ECC71"/>'+
+      '<text x="'+(mx+gw-148)+'" y="'+(my-9)+'" fill="#9db4d6" font-size="9">proyección del calendario</text>'):'')+
     '<rect x="'+(mx+90)+'" y="'+(my-13)+'" width="16" height="2.5" fill="#C0392B"/>'+
     '<text x="'+(mx+110)+'" y="'+(my-9)+'" fill="#F0A3A3" font-size="9">real del aplicativo</text>'+
     /* de que es cada trozo de las barras */
@@ -13139,7 +13139,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260826c2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260826c3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17724,10 +17724,33 @@ async function _pgCurvaFlotante(){try{
     'background:#152436;border:1px solid #1d3550;border-radius:10px;cursor:move;user-select:none;position:sticky;top:0;z-index:5';
   bar.innerHTML='<b style="flex:1;color:#8ECBF5;font-size:12.5px">📈 '+esc(c.cron_id||'')+
     ' · <span style="color:#9db4d6;font-weight:600">arrastra para moverla</span></b>'+
+    '<button id="_crFlotPip" title="Sacarla a una ventana propia, fuera del navegador: queda encima de cualquier programa" style="background:#1F3864;color:#fff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer">🗗 Sacar</button>'+
     '<button id="_crFlotX" title="Cerrar" style="background:#8A2018;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:800;cursor:pointer">✕</button>';
   bar.style.flex='none';
   ov.insertBefore(bar,ov.firstChild);
   document.getElementById('_crFlotX').onclick=function(e){e.stopPropagation();ov.remove()};
+  /* Sacarla DEL NAVEGADOR: una ventana del sistema, que se lleva a otro
+     monitor o encima de otro programa. Chrome moderno la deja siempre encima
+     (Picture-in-Picture de documento); si no esta, una ventana emergente
+     normal, que tambien vive fuera de la pestana. */
+  document.getElementById('_crFlotPip').onclick=async function(e){e.stopPropagation();
+    try{
+      var graf=ov.querySelector('#_crGraf');if(!graf)return;
+      var cuerpo='<style>body{margin:0;background:#0d1117;overflow:hidden}svg{width:100vw;height:100vh;display:block}</style>'+graf.innerHTML;
+      if(window.documentPictureInPicture&&documentPictureInPicture.requestWindow){
+        var pw=await documentPictureInPicture.requestWindow({width:920,height:480});
+        pw.document.body.style.cssText='margin:0;background:#0d1117';
+        pw.document.body.innerHTML=cuerpo;
+        ov.remove();
+        if(typeof toast==='function')toast('🗗 La curva quedó en su propia ventana, encima de todo — arrástrala donde quieras');
+      }else{
+        var w2=window.open('','_crPip','popup=yes,width=940,height=520');
+        if(!w2){if(typeof toast==='function')toast('El navegador bloqueó la ventana emergente');return}
+        w2.document.write('<title>Curva</title>'+cuerpo);w2.document.close();
+        ov.remove();
+        if(typeof toast==='function')toast('🗗 La curva quedó en una ventana aparte del navegador');
+      }
+    }catch(e2){if(typeof toast==='function')toast('⚠ '+((e2&&e2.message)||e2))}};
   /* arrastrar: se guarda de donde se agarro para que no pegue saltos */
   var dx=0,dy=0,mov=false;
   var baja=function(x,y){var r=ov.getBoundingClientRect();
