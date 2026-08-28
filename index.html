@@ -6628,6 +6628,29 @@ async function _wkLookBase(){
     A[n]=await _wkActivosDe(mapa,leer,crudo,hojas[n])}
   _WKLOOK={styles:await leer('xl/styles.xml'),hojas:H,activos:A};
   return _WKLOOK}
+/* PPC ANALISIS y Analisis de Restricciones: dos hojas del Contractor Weekly
+   Report empaquetadas en analisis.xlsx, con el estilo de los demas donantes
+   (cadenas inline, sin sharedStrings) */
+var _WKANA=null;
+async function _wkAnaBase(){
+  if(_WKANA)return _WKANA;
+  var res=await fetch('analisis.xlsx?v='+encodeURIComponent(typeof APP_VER!=='undefined'?APP_VER:''),
+    {cache:'no-store'});
+  if(!res.ok)return null;
+  var ent=_wkZipLeer(await res.arrayBuffer()),mapa={};
+  ent.forEach(function(e){mapa[e.nombre]=e});
+  var dec=new TextDecoder();
+  var leer=async function(n){var e=mapa[n];if(!e)return '';
+    return dec.decode(e.metodo===8?await _wkInflar(e.datos):e.datos)};
+  var crudo=async function(n){var e=mapa[n];if(!e)return null;
+    return e.metodo===8?await _wkInflar(e.datos):e.datos};
+  var hojas=_wkHojas(await leer('xl/workbook.xml'),await leer('xl/_rels/workbook.xml.rels'));
+  var H={},A={};
+  for(var n in hojas)if(mapa[hojas[n]]){
+    H[n]=await leer(hojas[n]);
+    A[n]=await _wkActivosDe(mapa,leer,crudo,hojas[n])}
+  _WKANA={styles:await leer('xl/styles.xml'),hojas:H,activos:A};
+  return _WKANA}
 /* el estilo con el que la hoja pinta esa celda */
 function _wkEstiloEn(xml,ref){return _wkEstiloDe(xml,ref)}
 /* Escribe en una celda que YA existe -o la crea en su sitio- conservando el
@@ -7043,6 +7066,19 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
   var ROT=['ITEM','DESCRIPTION','Und','CANTIDAD CONTRACTUAL','CANTIDAD FORE CAST',
            'AVANCE ACUMULADO','SALDO','Rate','HH Contractuales','% Restante',
            'Cumplimiento','Comentarios','Razón','LÍNEA'];
+  if(opc&&opc.lmn){ROT[10]='Restricción';ROT[11]='QUIEN';ROT[12]='Solución propuesta'}
+  /* la restriccion DE MINA viva de las partidas de una actividad */
+  var _minaMemo={};
+  var _minaDe=function(f){
+    var k=(f&&f.clave)||'';
+    if(_minaMemo[k]!=null)return _minaMemo[k];
+    var out=[],vis={};
+    ((f&&f.items)||[]).forEach(function(i){
+      (((typeof state!=='undefined'&&state.repo)||{})[i]||[]).forEach(function(x){
+        if(!x||x.cat!=='mina'||x.lev||!x.texto)return;
+        var t=String(x.texto).trim(),kk=t.toLowerCase();
+        if(t&&!vis[kk]){vis[kk]=1;out.push(t)}})});
+    return (_minaMemo[k]=out.join(' · '))};
   var COLS='BCDEFGHIJKLMNO'.split('');
   /* las razones del lookahead, tal cual estan en la hoja de Razones */
   var RAZONES=['Materiales','Trabajo previo','Cambio en prioridades',
@@ -7211,7 +7247,9 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
       _wkCelE('K',n,'',false,st(CAB.K),'IF($J$8=0,0,$H'+n+'*$I'+n+'/$J$8)'),
       /* Cumplimiento, Comentario y Razon son de la ACTIVIDAD: van combinados
          en las cuatro filas del bloque y solo la primera lleva el dato */
-      _wkCelE('L',n,'',true,_wkCentrado(tinta(CAB.L,PLOMO,PLOMOB)),
+      (opc&&opc.lmn)
+        ?_wkCelE('L',n,((z.pos||0)===0?_minaDe(f):''),true,_wkCentrado(tinta(CAB.L,PLOMO,PLOMOB)))
+        :_wkCelE('L',n,'',true,_wkCentrado(tinta(CAB.L,PLOMO,PLOMOB)),
         ((z.k||0)!==0||!R)?null:(function(){
           var bA=SEMS.indexOf(semN);if(bA<0)bA=0;
           var cA=BLQ[bA];
@@ -7221,7 +7259,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
           return 'IF(AND(SUM('+P1+')=0,SUM('+A1+')=0),"",'+
                  'IF(SUM('+P1+')=0,"EMP",'+
                  'IF(SUM('+P1+')<=SUM('+A1+'),"SI","NO")))'})()),
-      _wkCelE('M',n,'',true,_wkCentrado(tinta(CAB.M,PLOMO,PLOMOB))),
+      _wkCelE('M',n,((opc&&opc.lmn&&(z.pos||0)===0&&_minaDe(f))?'MY':''),true,_wkCentrado(tinta(CAB.M,PLOMO,PLOMOB))),
       _wkCelE('N',n,'',true,_wkCentrado(tinta(CAB.N,PLOMO,PLOMOB))),
       _wkCelE('O',n,z.linea||'',true,st(CAB.O))];
     /* las tres, combinadas de arriba abajo del bloque */
@@ -7281,7 +7319,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
     (merges.length?('<mergeCells count="'+merges.length+'">'+
       merges.map(function(m){return '<mergeCell ref="'+m+'"/>'}).join('')+'</mergeCells>'):'')+
     /* el desplegable de razones, sobre toda la columna de datos */
-    ((R&&n>r0)?('<dataValidations count="1"><dataValidation type="list" '+
+    ((R&&n>r0&&!(opc&&opc.lmn))?('<dataValidations count="1"><dataValidation type="list" '+
       'allowBlank="1" showInputMessage="1" showErrorMessage="1" '+
       'sqref="N'+r0+':N'+(n-1)+'"><formula1>&quot;'+
       _wkEscAt(RAZONES.join(','))+'&quot;</formula1></dataValidation></dataValidations>'):'')+
@@ -8992,6 +9030,7 @@ function _wkBloquesDe(C,esp,sem,corte,porId,pctA){
       if(ms.length===1&&porId[ms[0]]){cant=porId[ms[0]].cant;und=porId[ms[0]].und||'';qps=ms[0]}
       else if(ms.length>1)qps='('+ms.length+')';
       filas.push({clave:cc.id+'-'+t.task_code, cod:t.task_code, qps:qps,
+        items:(t.items||[]).slice(),
         nom:String(t.nombre||''), wbs:String(t.wbs||''),
         cant:cant, und:und, costo:costo,
         hh:hh, sem:s, acum:_wkAcumDe(s,hh),
@@ -9056,6 +9095,11 @@ async function _wkLibroApp(semN,corte,ids){
   try{look=await _wkLookBase()}catch(_el0){}
   if(look&&look.styles){var fu3=_wkFusionaOtro(estilos,look.styles);
     estilos=fu3.xml;offLook=fu3.off}
+  /* y los del analisis, por lo mismo */
+  var ana=null,offAna={xf:0,dxf:0};
+  try{ana=await _wkAnaBase()}catch(_ea0){}
+  if(ana&&ana.styles){var fu4=_wkFusionaOtro(estilos,ana.styles);
+    estilos=fu4.xml;offAna=fu4.off}
   _wkPintorAbre(estilos);
   var D=await _wkDatosLibro(semN,corte,ids);
   var sem=D.sem;
@@ -9125,7 +9169,7 @@ async function _wkLibroApp(semN,corte,ids){
     /* PPC (lo anterior y lo hecho) y 3WLA (lo programado): la misma hoja
        partida en dos, con colores mas sobrios. PARA 3WLA sigue estando. */
     try{_hdPPC=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,false,{idx:[0,1],sobrio:true})}catch(_e4){}
-    try{_hd3W=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,false,{idx:[2,3],sobrio:true})}catch(_e5){}
+    try{_hd3W=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,false,{idx:[2,3],sobrio:true,lmn:1})}catch(_e5){}
   }catch(_ehd){try{console.warn('PARA 3WLA no se pudo armar:',_ehd)}catch(_e2){}}
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
   /* La caratula del reporte conserva su nombre del original -`Carátula (P)`-,
@@ -9241,6 +9285,18 @@ async function _wkLibroApp(semN,corte,ids){
   if(_hd3W)hojas.push(['3WLA',_wkPonTab(_hd3W.xml,_WK_AZUL),_wk3wLogos(base)]);
   try{
     if(look&&_hd)_wkLookHojas(look,semN,_hd,offLook).forEach(function(h){hojas.push(h)});
+  /* PPC ANALISIS y Analisis de Restricciones: al FINAL de las azules, con su
+     formato entero. El 'PPC ' (con espacio) del libro origen pasa a mirar a
+     NUESTRA hoja PPC; Caratula y Caratula (P) ya existen y resuelven solas. */
+  try{
+    if(ana)['PPC ANALISIS','Analisis de Restricciones'].forEach(function(nm){
+      var nH=_wkComoSeLlama(ana.hojas,nm);
+      if(!nH)return;
+      var x=_wkCorreEstilos(ana.hojas[nH],offAna);
+      x=x.split("'PPC '!").join('PPC!');
+      var a=ana.activos[nH]||null;
+      hojas.push([nm,_wkPonTab(x,_WK_AZUL),a?{relsHoja:a.rels,partes:a.partes}:null])});
+  }catch(_ea9){}
   }catch(_elk){try{console.warn('lookahead:',_elk)}catch(_e5){}}
   return {hojas:hojas,styles:_wkPintorCierra(estilos),ss:base.ss,
     hoja3wVal:(_hdVal?_wkPonTab(_hdVal.xml,_WK_AZUL):null),
@@ -9297,7 +9353,7 @@ function _wkPaqueteApp(hojas,styles,ss){
       Object.keys(ex8.partes).forEach(function(k8){
         var v8=ex8.partes[k8];
         if(typeof v8==='string'&&/^xl\/charts\/chart\d+\.xml$/.test(k8)&&
-           /PHYSICAL % PROGRESS|REPORTE SEMANAL/.test(v8)){
+           /PHYSICAL % PROGRESS|REPORTE SEMANAL|PPC ANALISIS/.test(v8)){
           var n8=v8.replace(/(<c:numCache>)([\s\S]*?)(<\/c:numCache>)/g,
             function(_t8,a8,cu8,b8){
               var fc8=(cu8.match(/<c:formatCode>[\s\S]*?<\/c:formatCode>/)||[''])[0];
@@ -11830,7 +11886,7 @@ function _wkExcel(){
       var jue=_wkISO(_wkSem(semN).fin);
       var pre=jue.slice(2,4)+jue.slice(5,7)+jue.slice(8,10);
       var RAIZ='REPOSICIÓN DEL SISTEMA DE DOSIFICACIÓN DE FLOCULANTE_CPQ Columbito';
-      var AZUL={'Carátula':1,'PARA 3WLA':1,'PPC':1,'3WLA':1,'3WLookahead_PPC':1,'3WLookahead_Razones':1};
+      var AZUL={'Carátula':1,'PARA 3WLA':1,'PPC':1,'3WLA':1,'3WLookahead_PPC':1,'3WLookahead_Razones':1,'PPC ANALISIS':1,'Analisis de Restricciones':1};
       var VERDE={'Carátula (P)':1,'REPORTE SEMANAL':1,'PANEL CONTROL':1,'PROGRAMACION':1,
         'METRADO':1,'PHYSICAL % PROGRESS':1,'COSTO':1,'STAFFING TABULATION CHART':1,
         'CONSTRUCTION EQUIPMENT SCHE':1,'RFI':1,'FCR':1,'Registro Fot SEM':1};
@@ -13512,7 +13568,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828c2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828c3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
