@@ -7111,11 +7111,11 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
     var L=LINEAS[k],C=COL[_K0[k]]||COL[0];
     var n=8+k+(acum?LINEAS.length:0);
     var q='"'+L+'"';
-    /* la fila PROG. SEM. SIG. arranca de donde va el cronograma: su casilla
-       de la semana GENERADA referencia el acumulado de la linea del
-       cronograma en esa misma semana (CQ8 = CR11 al generar S35; en S36
-       caera en CZ8 = DA11...), y de ahi las siguientes suman lo programado */
-    var _pCron=_K0.indexOf(3),_fCron=(_pCron>=0)?(8+_pCron+LINEAS.length):0;
+    /* El ACUMULADO de PROG. SEM. SIG. arranca del avance REAL al corte y
+       encadena: en la semana generada jala el acumulado del ACTUAL (de la
+       fila interna si esta hoja lleva la linea, o de la hoja PPC si no), y
+       en las siguientes suma lo programado de cada semana al anterior. */
+    var _pAct=_K0.indexOf(1),_bSem=SEMS.indexOf(semN);
     var cs=[_wkCelE('I',n,acum?'ACUMULADO':'DE LA SEMANA',true,tinta(stCabF.I,C.sua,C.bor)),
             _wkCelE('J',n,'',false,tinta(stTotJ,C.sua,C.bor),'SUMIF('+RL+','+q+','+RJ+')'),
             _wkCelE('K',n,'',false,tinta(stTotK,C.sua,C.bor),'SUMIF('+RL+','+q+','+RK+')'),
@@ -7138,9 +7138,14 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
       var FUE=acum?U1:T1;
       var f=' IFERROR(SUMPRODUCT(('+RL+'='+q+')*'+RJ+'*$'+FUE+'$'+r0+':$'+FUE+'$'+nFin+')/'+
         'SUMIF('+RL+','+q+','+RJ+'),0)';
-      var _fSem=(!acum&&_K0[k]===2&&_fCron&&SEMS[b]===semN)?(U1+_fCron):f.slice(1);
-      cs.push(_wkCelE(T1,n,'',false,tinta(stPct,PLOMO,PLOMOB),acum?null:_fSem));
-      cs.push(_wkCelE(U1,n,'',false,tinta(stPct,PLOMO,PLOMOB),acum?f.slice(1):null))});
+      cs.push(_wkCelE(T1,n,'',false,tinta(stPct,PLOMO,PLOMOB),acum?null:f.slice(1)));
+      var _fAc=f.slice(1);
+      if(acum&&_K0[k]===2&&_bSem>=0){
+        if(b===_bSem)
+          _fAc=(_pAct>=0)?(U1+(8+_pAct+LINEAS.length)):("'PPC'!"+U1+"11");
+        else if(b>_bSem)
+          _fAc=_wkColL(BLQ[b-1]+8)+n+'+'+T1+(8+k)}
+      cs.push(_wkCelE(U1,n,'',false,tinta(stPct,PLOMO,PLOMOB),acum?_fAc:null))});
     fila(n,cs)};
   LINEAS.forEach(function(_L,k){ponResumen(k,false)});
   LINEAS.forEach(function(_L,k){ponResumen(k,true)});
@@ -13493,7 +13498,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828b9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828c1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
