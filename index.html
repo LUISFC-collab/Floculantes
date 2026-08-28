@@ -6761,29 +6761,32 @@ async function _crPlanRecupera(cronId,corte,semN){
       obj=pasados/nd}
     var saldo=Math.max(0,obj-hecho);
     /* lo que ya paso, el plan lo da por hecho: son las cumplidas del PPC */
+    /* la linea del ACTUAL ya existe justo arriba: no se duplica aqui */
     var priIni='';
     Object.keys(actual[cod]).forEach(function(f){
-      fore[cod][f]=actual[cod][f];
       if(!priIni||f<priIni)priIni=f});
     /* de aqui en adelante manda la PROGRAMACION de cada partida: el forecast
        no es una reparticion inventada, es lo que se ha programado hacer */
     var conProg=false,puesto=0;
-    if(hh>0&&typeof state!=='undefined'&&state.prog){
+    if(typeof state!=='undefined'&&state.prog){
       (t.items||[]).forEach(function(i){
         var pr=state.prog[i];if(!pr||!pr.start)return;
         var hi=(Number(u.items[i])||0)/_crVeces(rp,i);
-        if(!(hi>0))return;
+        /* las tareas sin HH en el cronograma tambien pintan su programacion:
+           con peso 1 por partida, que los dias se vean aunque no ponderen */
+        if(hh>0&&!(hi>0))return;
         var oc=[];
         try{oc=(typeof occupiedDays==='function')?occupiedDays(pr.start,pr.dias||1):[pr.start]}
         catch(_eo){oc=[pr.start]}
-        /* solo lo que queda por hacer, y solo despues del corte */
-        var fut=oc.filter(function(d){return d>corte&&d>=vIni&&d<=vFin});
+        /* solo lo que queda por hacer y despues del corte, pero sobre la
+           rejilla entera: si se programo mas alla de las 3 semanas, se ve */
+        var fut=oc.filter(function(d){return d>corte&&d>=gIni&&d<=gFin});
         if(!fut.length)return;
         var hecho=0;
         try{var a2=_crAvanceDe([i],corte,{cod:cod,rp:rp});hecho=Math.max(0,Math.min(100,a2.pct||0))/100}catch(_ea){}
-        var queda=Math.max(0,1-hecho)*hi/hh;
+        var queda=(hh>0)?(Math.max(0,1-hecho)*hi/hh):Math.max(0,1-hecho);
         if(!(queda>1e-9))return;
-        conProg=true;puesto+=queda;
+        conProg=true;if(hh>0)puesto+=queda;
         var pdd=queda/fut.length;
         fut.forEach(function(d){fore[cod][d]=(fore[cod][d]||0)+pdd})})}
     /* lo que el LB1 deja para DESPUES de la ventana: el plan no acaba al
@@ -6798,10 +6801,9 @@ async function _crPlanRecupera(cronId,corte,semN){
       if(nd)for(var kC=0;kC<nd;kC++){
         var fC=_crDeSerial(d0+kC);
         if(fC>vFin&&fC<=gFin)colaDias.push(fC)}
-      if(colaDias.length){
-        var pdC=cola/colaDias.length;
-        colaDias.forEach(function(f2){fore[cod][f2]=(fore[cod][f2]||0)+pdC})}
-      else recuperar+=cola}
+      /* la cola del LB1 ya no se pinta en la linea: es plan viejo, no lo
+         programado; la aritmetica del saldo sigue igual */
+      if(!colaDias.length)recuperar+=cola}
     saldo=recuperar;
     /* y las que arrancan enteras despues de la ventana: no tienen nada que
        recuperar, pero forman parte del plan igual */
@@ -6831,9 +6833,9 @@ async function _crPlanRecupera(cronId,corte,semN){
       if(!dias.length)dias=[rIni];
       var dur=dias.length;
       rIni=dias[0];
-      /* el saldo ya viene descontado de lo que coloco la programacion */
-      var pdf=saldo/dur;
-      dias.forEach(function(f2){fore[cod][f2]=(fore[cod][f2]||0)+pdf});
+      /* el reparto de recuperacion ya NO se pinta en la linea: la linea dice
+         lo programado en el Cronograma y nada mas; el reparto sigue vivo solo
+         para el plan que se guarda (recup/porPart) */
       /* la secuencia arranca donde empezo el trabajo de verdad, no en el
          corte: si esta actividad ya venia avanzando, el plan la incluye desde
          ese dia y por eso sale cumplida */
@@ -13409,7 +13411,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828b1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828b2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
