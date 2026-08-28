@@ -13712,7 +13712,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828d1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828d2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -15641,16 +15641,77 @@ function _rxAnexaUna(q,sem){
     descripcion:'',accion:'',f_ident:(typeof todayISO==='function')?todayISO():'',
     f_req:'',f_prev:'',f_nueva:'',area:'',personal:'',importancia:'',f_prog:'',
     estado:'PENDIENTE',razon:'',comentario:'',semana:sem||0})}
+/* las RESTRICCIONES FUTURAS del aplicativo (las de fecha limite, mina o
+   internas, aun no levantadas): tambien se anexan desde aqui */
+function _rxFuturas(){
+  var out=[];
+  Object.keys((typeof state!=='undefined'&&state.repo)||{}).forEach(function(pid){
+    (state.repo[pid]||[]).forEach(function(x){
+      if(!x||x.lev||!x.flev)return;
+      var p=(DATA._byId&&DATA._byId[pid])||
+        ((state.nuevas||[]).filter(function(n){return n&&n.id===pid})[0])||null;
+      out.push({pid:pid,cat:String(x.cat||''),
+        texto:String(x.texto||'').replace(/\s*⟨lev:[^⟩]*⟩\s*$/,''),
+        flev:String(x.flev||''),fecha:String(x.fecha||''),
+        nom:(p&&p.nombre)||pid})})});
+  out.sort(function(a,b){return a.flev<b.flev?-1:a.flev>b.flev?1:0});
+  return out}
+function _rxAnexaFut(q){
+  _rxSet(_rxNuevoRid(),{task_code:'',partida_id:q.pid,actividad:q.nom||'',
+    descripcion:q.texto||'',accion:'',
+    f_ident:q.fecha||((typeof todayISO==='function')?todayISO():''),
+    f_req:q.flev||'',f_prev:'',f_nueva:'',
+    area:(q.cat==='mina')?'MY':'CPQ-Columbito',personal:'',importancia:'',f_prog:'',
+    estado:'PENDIENTE',razon:'',comentario:'',
+    semana:(typeof _wkQueToca==='function')?_wkQueToca():0})}
 async function _rxAnexaNo(){
   try{
     var r=await _rxNoCumplidas(),n=0;
-    r.lista.forEach(function(q){if(q.reg)return;n++;_rxAnexaUna(q,r.sem)});
-    toast(n?('\u2795 '+n+' actividad(es) anexada(s) \u2014 ll\u00e9nalas en la vi\u00f1eta Restricciones')
+    r.lista.forEach(function(q){if(q.reg)return;n++;_rxAnexaUna(q,r.sem);
+      window._rxNoAbre=window._rxNoAbre||{};window._rxNoAbre[q.cod]=true});
+    toast(n?('\u2795 '+n+' actividad(es) anexada(s) \u2014 ponles su restricci\u00f3n aqu\u00ed mismo')
            :'No hay NO cumplidas sin registro');
     _rxUI(window._rxVista||'no')}catch(e){toast('No se pudo: '+((e&&e.message)||e))}}
+/* la ficha editable de un registro, la misma en las dos vi\u00f1etas */
+var _RX_STI='background:#0b1220;color:#cfe3ff;border:1px solid #24344f;border-radius:7px;padding:6px 8px;font-size:12px;font-family:inherit';
+function _rxCard(x){
+  var rid=x.rid,stI=_RX_STI;
+  var sel=function(campo,ops,val){return '<select class="_rxCam" data-rid="'+esc(rid)+'" data-campo="'+campo+'" style="'+stI+'"><option value=""></option>'+
+    ops.map(function(o){return '<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>'}).join('')+'</select>'};
+  var inp=function(campo,val,tipo,ancho){return '<input type="'+(tipo||'text')+'" class="_rxCam" data-rid="'+esc(rid)+'" data-campo="'+campo+'" value="'+esc(val==null?'':val)+'" style="'+stI+(ancho?(';width:'+ancho):';flex:1;min-width:130px')+'">'};
+  var ta=function(campo,val,ph){return '<textarea class="_rxCam" data-rid="'+esc(rid)+'" data-campo="'+campo+'" placeholder="'+esc(ph||'')+'" style="'+stI+';width:100%;min-height:44px;resize:vertical;box-sizing:border-box">'+esc(val||'')+'</textarea>'};
+  var lab=function(t){return '<span style="font-size:9.5px;font-weight:800;color:#7d8590;letter-spacing:.05em">'+t+'</span>'};
+  return '<div style="background:#0f1726;border:1px solid '+(x.estado==='LIBERADA'?'#1d3a2a':'#33415c')+';border-radius:12px;padding:10px;margin-bottom:10px">'+
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:7px">'+
+      '<b style="color:#8ECBF5;font-size:12px;min-width:52px">'+esc(x.task_code||'\u2014')+'</b>'+
+      inp('task_code',x.task_code,'text','80px')+
+      inp('partida_id',x.partida_id,'text','100px')+
+      inp('actividad',x.actividad)+
+      sel('estado',RX_EST,x.estado||'PENDIENTE')+
+      '<button class="_rxDel" data-rid="'+esc(rid)+'" title="Eliminar" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:7px;padding:6px 10px;font-weight:900;cursor:pointer">\u2715</button>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:7px">'+
+      '<div>'+lab('DESCRIPCI\u00d3N DE LA RESTRICCI\u00d3N')+ta('descripcion',x.descripcion,'qu\u00e9 est\u00e1 frenando la actividad')+'</div>'+
+      '<div>'+lab('ACCI\u00d3N NECESARIA / SOLUCI\u00d3N PROPUESTA')+ta('accion',x.accion,'qu\u00e9 hay que hacer para liberarla')+'</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-end;margin-bottom:7px">'+
+      '<div>'+lab('RAZ\u00d3N')+'<br>'+sel('razon',RX_RAZONES,x.razon)+'</div>'+
+      '<div>'+lab('QUIEN / \u00c1REA')+'<br>'+sel('area',RX_AREAS,x.area)+'</div>'+
+      '<div>'+lab('PERSONAL RESPONSABLE')+'<br>'+inp('personal',x.personal,'text','160px')+'</div>'+
+      '<div>'+lab('IMPORTANCIA')+'<br>'+sel('importancia',RX_IMP,x.importancia)+'</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-end">'+
+      '<div>'+lab('IDENTIFICADA')+'<br>'+inp('f_ident',x.f_ident,'date','138px')+'</div>'+
+      '<div>'+lab('LIBERAR ANTES DE')+'<br>'+inp('f_req',x.f_req,'date','138px')+'</div>'+
+      '<div>'+lab('PREVISTA')+'<br>'+inp('f_prev',x.f_prev,'date','138px')+'</div>'+
+      '<div>'+lab('NUEVA FECHA')+'<br>'+inp('f_nueva',x.f_nueva,'date','138px')+'</div>'+
+      '<div>'+lab('LIBERACI\u00d3N PROGRAMADA')+'<br>'+inp('f_prog',x.f_prog,'date','138px')+'</div>'+
+    '</div>'+
+    '<div style="margin-top:7px">'+lab('COMENTARIO')+ta('comentario',x.comentario,'')+'</div>'+
+  '</div>'}
 /* el panel, con dos vi\u00f1etas: al entrar salen las NO CUMPLIDAS de la
-   semana, cada una con su desglosable y su Anexar; la otra vi\u00f1eta es el
-   mundo de RESTRICCIONES que llena la hoja del reporte */
+   semana, cada una con su desglosable, su + junto al nombre y su ficha
+   editable dentro; la otra vi\u00f1eta es el mundo de RESTRICCIONES */
 function _rxUI(vista){
   if(vista)window._rxVista=vista;
   vista=window._rxVista||'no';
@@ -15660,50 +15721,14 @@ function _rxUI(vista){
   var vivas=_rxVivas();
   var pend=vivas.filter(function(x){return x.estado!=='LIBERADA'});
   var res=vivas.filter(function(x){return x.estado==='LIBERADA'});
-  var stI='background:#0b1220;color:#cfe3ff;border:1px solid #24344f;border-radius:7px;padding:6px 8px;font-size:12px;font-family:inherit';
-  var sel=function(rid,campo,ops,val){return '<select class="_rxCam" data-rid="'+esc(rid)+'" data-campo="'+campo+'" style="'+stI+'"><option value=""></option>'+
-    ops.map(function(o){return '<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>'}).join('')+'</select>'};
-  var inp=function(rid,campo,val,tipo,ancho){return '<input type="'+(tipo||'text')+'" class="_rxCam" data-rid="'+esc(rid)+'" data-campo="'+campo+'" value="'+esc(val==null?'':val)+'" style="'+stI+(ancho?(';width:'+ancho):';flex:1;min-width:130px')+'">'};
-  var ta=function(rid,campo,val,ph){return '<textarea class="_rxCam" data-rid="'+esc(rid)+'" data-campo="'+campo+'" placeholder="'+esc(ph||'')+'" style="'+stI+';width:100%;min-height:44px;resize:vertical;box-sizing:border-box">'+esc(val||'')+'</textarea>'};
-  var lab=function(t){return '<span style="font-size:9.5px;font-weight:800;color:#7d8590;letter-spacing:.05em">'+t+'</span>'};
-  var card=function(x){
-    var rid=x.rid;
-    return '<div style="background:#0f1726;border:1px solid '+(x.estado==='LIBERADA'?'#1d3a2a':'#33415c')+';border-radius:12px;padding:10px;margin-bottom:10px">'+
-      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:7px">'+
-        '<b style="color:#8ECBF5;font-size:12px;min-width:52px">'+esc(x.task_code||'\u2014')+'</b>'+
-        inp(rid,'task_code',x.task_code,'text','80px')+
-        inp(rid,'partida_id',x.partida_id,'text','100px')+
-        inp(rid,'actividad',x.actividad)+
-        sel(rid,'estado',RX_EST,x.estado||'PENDIENTE')+
-        '<button class="_rxDel" data-rid="'+esc(rid)+'" title="Eliminar" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:7px;padding:6px 10px;font-weight:900;cursor:pointer">\u2715</button>'+
-      '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:7px">'+
-        '<div>'+lab('DESCRIPCI\u00d3N DE LA RESTRICCI\u00d3N')+ta(rid,'descripcion',x.descripcion,'qu\u00e9 est\u00e1 frenando la actividad')+'</div>'+
-        '<div>'+lab('ACCI\u00d3N NECESARIA / SOLUCI\u00d3N PROPUESTA')+ta(rid,'accion',x.accion,'qu\u00e9 hay que hacer para liberarla')+'</div>'+
-      '</div>'+
-      '<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-end;margin-bottom:7px">'+
-        '<div>'+lab('RAZ\u00d3N')+'<br>'+sel(rid,'razon',RX_RAZONES,x.razon)+'</div>'+
-        '<div>'+lab('QUIEN / \u00c1REA')+'<br>'+sel(rid,'area',RX_AREAS,x.area)+'</div>'+
-        '<div>'+lab('PERSONAL RESPONSABLE')+'<br>'+inp(rid,'personal',x.personal,'text','160px')+'</div>'+
-        '<div>'+lab('IMPORTANCIA')+'<br>'+sel(rid,'importancia',RX_IMP,x.importancia)+'</div>'+
-      '</div>'+
-      '<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-end">'+
-        '<div>'+lab('IDENTIFICADA')+'<br>'+inp(rid,'f_ident',x.f_ident,'date','138px')+'</div>'+
-        '<div>'+lab('LIBERAR ANTES DE')+'<br>'+inp(rid,'f_req',x.f_req,'date','138px')+'</div>'+
-        '<div>'+lab('PREVISTA')+'<br>'+inp(rid,'f_prev',x.f_prev,'date','138px')+'</div>'+
-        '<div>'+lab('NUEVA FECHA')+'<br>'+inp(rid,'f_nueva',x.f_nueva,'date','138px')+'</div>'+
-        '<div>'+lab('LIBERACI\u00d3N PROGRAMADA')+'<br>'+inp(rid,'f_prog',x.f_prog,'date','138px')+'</div>'+
-      '</div>'+
-      '<div style="margin-top:7px">'+lab('COMENTARIO')+ta(rid,'comentario',x.comentario,'')+'</div>'+
-    '</div>'};
   var tab=function(id,txt,activa){return '<button class="_rxTab" data-v="'+id+'" style="border:0;border-radius:10px 10px 0 0;padding:10px 14px;font-weight:800;font-size:12px;cursor:pointer;'+
     (activa?'background:#101a2b;color:#fff;box-shadow:inset 0 -2px 0 #2ECC71':'background:#0b1220;color:#7d8590')+'">'+txt+'</button>'};
   var cuerpo;
   if(vista==='res'){
     cuerpo='<div style="font-size:11px;font-weight:800;color:#E8C9A0;letter-spacing:.06em;margin:2px 0 6px">PENDIENTES ('+pend.length+')</div>'+
-      (pend.map(card).join('')||'<div style="color:#7d8590;padding:6px 0 12px">Sin pendientes</div>')+
+      (pend.map(_rxCard).join('')||'<div style="color:#7d8590;padding:6px 0 12px">Sin pendientes</div>')+
       '<div style="font-size:11px;font-weight:800;color:#9FE8B0;letter-spacing:.06em;margin:12px 0 6px">RESUELTAS \u00b7 LIBERADAS ('+res.length+')</div>'+
-      (res.map(card).join('')||'<div style="color:#7d8590;padding:6px 0">Ninguna todav\u00eda</div>')}
+      (res.map(_rxCard).join('')||'<div style="color:#7d8590;padding:6px 0">Ninguna todav\u00eda</div>')}
   else{
     cuerpo='<div id="_rxNoLista" style="color:#7d8590;padding:8px 0">Calculando las NO cumplidas de la semana\u2026</div>'}
   ov.innerHTML='<div style="max-width:980px;margin:0 auto">'+
@@ -15729,50 +15754,107 @@ function _rxUI(vista){
     _rxUI('res')};
   ov.querySelectorAll('._rxTab').forEach(function(b){
     b.onclick=function(){_rxUI(b.getAttribute('data-v'))}});
-  ov.querySelectorAll('._rxCam').forEach(function(el){
-    el.onchange=function(){var o={};o[el.getAttribute('data-campo')]=el.value;
-      _rxSet(el.getAttribute('data-rid'),o)}});
-  ov.querySelectorAll('._rxDel').forEach(function(b){
-    b.onclick=function(){if(!confirm('\u00bfEliminar esta restricci\u00f3n? Queda registrada como eliminada.'))return;
-      _rxBorra(b.getAttribute('data-rid'));_rxUI()}});
-  if(vista!=='res')_rxNoLlena()}
-/* la vi\u00f1eta de NO cumplidas: cada actividad con su desglosable y su Anexar */
+  if(vista==='res'){
+    ov.querySelectorAll('._rxCam').forEach(function(el){
+      el.onchange=function(){var o={};o[el.getAttribute('data-campo')]=el.value;
+        _rxSet(el.getAttribute('data-rid'),o)}});
+    ov.querySelectorAll('._rxDel').forEach(function(b){
+      b.onclick=function(){if(!confirm('\u00bfEliminar esta restricci\u00f3n? Queda registrada como eliminada.'))return;
+        _rxBorra(b.getAttribute('data-rid'));_rxUI()}})}
+  else _rxNoLlena()}
+/* la vi\u00f1eta de NO cumplidas: el + junto al nombre anexa y abre la ficha;
+   la X borra el registro; el desglosable recuerda si estaba abierto */
 async function _rxNoLlena(){
   if(!document.getElementById('_rxNoLista'))return;
   try{
     var r=await _rxNoCumplidas();
     var cont=document.getElementById('_rxNoLista');if(!cont)return;
-    if(!r.lista.length){
-      cont.innerHTML='<div style="color:#9FE8B0;font-weight:700;padding:6px 0">\u2713 Semana '+r.sem+': sin actividades NO cumplidas</div>';return}
+    window._rxNoAbre=window._rxNoAbre||{};
     window._rxNoR=r;
-    cont.innerHTML='<div style="font-size:11px;color:#E8C9A0;font-weight:800;margin-bottom:7px">SEMANA '+r.sem+' \u00b7 '+r.lista.length+' actividad(es) NO cumplida(s) \u2014 an\u00e9xalas para llenar su restricci\u00f3n</div>'+
+    var fut=_rxFuturas();window._rxFutR=fut;
+    var h='';
+    if(!r.lista.length)
+      h+='<div style="color:#9FE8B0;font-weight:700;padding:6px 0">\u2713 Semana '+r.sem+': sin actividades NO cumplidas</div>';
+    else h+='<div style="font-size:11px;color:#E8C9A0;font-weight:800;margin-bottom:7px">SEMANA '+r.sem+' \u00b7 '+r.lista.length+' actividad(es) NO cumplida(s) \u2014 el \u2795 anexa y abre su ficha</div>'+
       '<div style="margin-bottom:9px"><button id="_rxTodas" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;cursor:pointer">\u26a1 Anexar todas las que faltan</button></div>'+
-      r.lista.map(function(q,i){return '<div style="border:1px solid '+(q.reg?'#1d3a2a':'#33415c')+';border-radius:10px;margin-bottom:7px;overflow:hidden">'+
-        '<div class="_rxNoCab" data-i="'+i+'" style="display:flex;gap:8px;align-items:center;padding:9px 10px;cursor:pointer;background:#0f1726;flex-wrap:wrap">'+
-          '<b style="color:#8ECBF5;font-size:12px">'+esc(q.cod)+'</b>'+
-          '<span style="flex:1;min-width:160px;font-size:12px;overflow-wrap:anywhere">'+esc(q.nom)+'</span>'+
-          '<span style="font-size:10.5px;color:#E8C9A0;font-weight:800;white-space:nowrap">prog '+q.prog+'% \u00b7 hecho '+q.hecho+'%</span>'+
-          (q.reg?'<span style="font-size:10px;font-weight:800;color:#9FE8B0;background:#14261d;border:1px solid #1d3a2a;border-radius:7px;padding:2px 7px">\u2713 anexada</span>'
-                :'<button class="_rxAne" data-i="'+i+'" style="background:#1E7A46;color:#fff;border:0;border-radius:7px;padding:5px 10px;font-weight:800;cursor:pointer">\u2795 Anexar</button>')+
-          '<span style="color:#7d8590">\u25be</span>'+
-        '</div>'+
-        '<div class="_rxNoDet" style="display:none;padding:8px 12px;background:#0b1220;font-size:11.5px;color:#9db4d6">'+
-          'Partidas: '+esc((q.items||[]).join(', ')||'\u2014')+
-          '<br>Programado esta semana: <b>'+q.prog+'%</b> \u00b7 Hecho: <b>'+q.hecho+'%</b>'+
-          (q.reg?'<br>Ya tiene registro: ll\u00e9nalo en la vi\u00f1eta Restricciones.'
-                :'<br>An\u00e9xala y llena su restricci\u00f3n, acci\u00f3n, QUIEN y fechas en la vi\u00f1eta Restricciones.')+
-        '</div></div>'}).join('');
+      r.lista.map(function(q,i){
+        var reg=_rxDeAct(q.cod,q.items);
+        var abierto=!!window._rxNoAbre[q.cod];
+        var det=reg?_rxCard(reg)
+          :('<div style="padding:8px 12px;font-size:11.5px;color:#9db4d6">Partidas: '+esc((q.items||[]).join(', ')||'\u2014')+
+            '<br>Programado esta semana: <b>'+q.prog+'%</b> \u00b7 Hecho: <b>'+q.hecho+'%</b>'+
+            '<br>An\u00e9xala con el \u2795 para ponerle su restricci\u00f3n.</div>');
+        return '<div style="border:1px solid '+(reg?'#1d3a2a':'#33415c')+';border-radius:10px;margin-bottom:7px;overflow:hidden">'+
+          '<div class="_rxNoCab" data-cod="'+esc(q.cod)+'" style="display:flex;gap:8px;align-items:center;padding:9px 10px;cursor:pointer;background:#0f1726;flex-wrap:wrap">'+
+            '<b style="color:#8ECBF5;font-size:12px">'+esc(q.cod)+'</b>'+
+            (reg?'<button class="_rxNoDel" data-rid="'+esc(reg.rid)+'" title="Borrar su registro" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:7px;padding:3px 9px;font-weight:900;cursor:pointer">\u2715</button>'
+                :'<button class="_rxAne" data-i="'+i+'" title="Anexar y ponerle su restricci\u00f3n" style="background:#1E7A46;color:#fff;border:0;border-radius:7px;padding:3px 10px;font-weight:900;cursor:pointer">\u2795</button>')+
+            '<span style="flex:1;min-width:150px;font-size:12px;overflow-wrap:anywhere">'+esc(q.nom)+'</span>'+
+            '<span style="font-size:10.5px;color:#E8C9A0;font-weight:800;white-space:nowrap">prog '+q.prog+'% \u00b7 hecho '+q.hecho+'%</span>'+
+            (reg?'<span style="font-size:10px;font-weight:800;color:#9FE8B0;background:#14261d;border:1px solid #1d3a2a;border-radius:7px;padding:2px 7px">\u2713 anexada</span>':'')+
+            '<span style="color:#7d8590">'+(abierto?'\u25b4':'\u25be')+'</span>'+
+          '</div>'+
+          '<div class="_rxNoDet" style="display:'+(abierto?'block':'none')+';background:#0b1220;padding:'+(reg?'8px':'0')+'">'+det+'</div>'+
+        '</div>'}).join('');
+    if(fut.length)
+      h+='<div style="font-size:11px;color:#C7A3E8;font-weight:800;letter-spacing:.05em;margin:12px 0 6px">🔮 RESTRICCIONES FUTURAS ('+fut.length+') — también se anexan</div>'+
+        fut.map(function(q,j){
+          var kf='F'+q.pid;
+          var regF=_rxDeAct('',[q.pid]);
+          var abF=!!window._rxNoAbre[kf];
+          var detF=regF?_rxCard(regF)
+            :('<div style="padding:8px 12px;font-size:11.5px;color:#9db4d6">'+esc(q.texto||'')+
+              '<br>Límite para levantarla: <b>'+esc(q.flev||'—')+'</b> · Registrada el '+esc(q.fecha||'—')+
+              '<br>Anéxala con el ➕ para ponerle su restricción.</div>');
+          return '<div style="border:1px solid '+(regF?'#1d3a2a':'#4a3a6a')+';border-radius:10px;margin-bottom:7px;overflow:hidden">'+
+            '<div class="_rxNoCab" data-cod="'+esc(kf)+'" style="display:flex;gap:8px;align-items:center;padding:9px 10px;cursor:pointer;background:#141026;flex-wrap:wrap">'+
+              '<b style="color:#C7A3E8;font-size:12px">'+esc(q.pid)+'</b>'+
+              (regF?'<button class="_rxNoDel" data-rid="'+esc(regF.rid)+'" title="Borrar su registro" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:7px;padding:3px 9px;font-weight:900;cursor:pointer">✕</button>'
+                   :'<button class="_rxAneF" data-j="'+j+'" title="Anexar y ponerle su restricción" style="background:#5B3A8A;color:#fff;border:0;border-radius:7px;padding:3px 10px;font-weight:900;cursor:pointer">➕</button>')+
+              '<span style="flex:1;min-width:150px;font-size:12px;overflow-wrap:anywhere">'+esc(q.nom)+'</span>'+
+              '<span style="font-size:10px;font-weight:800;color:'+(q.cat==='mina'?'#FFB4A8':'#8ECBF5')+'">'+(q.cat==='mina'?'🔴 mina':'🔵 interna')+'</span>'+
+              '<span style="font-size:10.5px;color:#C7A3E8;font-weight:800;white-space:nowrap">límite '+esc(q.flev||'—')+'</span>'+
+              (regF?'<span style="font-size:10px;font-weight:800;color:#9FE8B0;background:#14261d;border:1px solid #1d3a2a;border-radius:7px;padding:2px 7px">✓ anexada</span>':'')+
+              '<span style="color:#7d8590">'+(abF?'▴':'▾')+'</span>'+
+            '</div>'+
+            '<div class="_rxNoDet" style="display:'+(abF?'block':'none')+';background:#0b1220;padding:'+(regF?'8px':'0')+'">'+detF+'</div>'+
+          '</div>'}).join('');
+    cont.innerHTML=h;
+    cont.querySelectorAll('._rxAneF').forEach(function(b){
+      b.onclick=function(ev){ev.stopPropagation();
+        var q=window._rxFutR[+b.getAttribute('data-j')];
+        _rxAnexaFut(q);
+        window._rxNoAbre['F'+q.pid]=true;
+        toast('➕ futura anexada — ponle su restricción aquí mismo');
+        _rxNoLlena()}});
     cont.querySelectorAll('._rxNoCab').forEach(function(c){
       c.onclick=function(ev){
-        if(ev.target&&ev.target.classList&&ev.target.classList.contains('_rxAne'))return;
+        var t=ev.target;
+        while(t&&t!==c){if(t.classList&&(t.classList.contains('_rxAne')||t.classList.contains('_rxNoDel')))return;t=t.parentNode}
+        var cod=c.getAttribute('data-cod');
+        window._rxNoAbre[cod]=!window._rxNoAbre[cod];
         var det=c.parentNode.querySelector('._rxNoDet');
-        det.style.display=(det.style.display==='none')?'block':'none'}});
+        det.style.display=window._rxNoAbre[cod]?'block':'none';
+        var fl=c.querySelector('span:last-child');
+        if(fl)fl.textContent=window._rxNoAbre[cod]?'\u25b4':'\u25be'}});
     cont.querySelectorAll('._rxAne').forEach(function(b){
       b.onclick=function(ev){ev.stopPropagation();
         var q=window._rxNoR.lista[+b.getAttribute('data-i')];
         _rxAnexaUna(q,window._rxNoR.sem);
-        toast('\u2795 '+q.cod+' anexada \u2014 ll\u00e9nala en la vi\u00f1eta Restricciones');
-        _rxUI('no')}});
+        window._rxNoAbre[q.cod]=true;
+        toast('\u2795 '+q.cod+' anexada \u2014 ponle su restricci\u00f3n aqu\u00ed mismo');
+        _rxNoLlena()}});
+    cont.querySelectorAll('._rxNoDel').forEach(function(b){
+      b.onclick=function(ev){ev.stopPropagation();
+        if(!confirm('\u00bfBorrar el registro de esta actividad? Queda registrado como eliminado.'))return;
+        _rxBorra(b.getAttribute('data-rid'));
+        _rxNoLlena()}});
+    cont.querySelectorAll('._rxCam').forEach(function(el){
+      el.onchange=function(){var o={};o[el.getAttribute('data-campo')]=el.value;
+        _rxSet(el.getAttribute('data-rid'),o)}});
+    cont.querySelectorAll('._rxDel').forEach(function(b){
+      b.onclick=function(){if(!confirm('\u00bfEliminar esta restricci\u00f3n? Queda registrada como eliminada.'))return;
+        _rxBorra(b.getAttribute('data-rid'));_rxNoLlena()}});
     var bt=document.getElementById('_rxTodas');
     if(bt)bt.onclick=function(){bt.disabled=true;_rxAnexaNo()};
   }catch(e){var c3=document.getElementById('_rxNoLista');
