@@ -8573,7 +8573,7 @@ function _wkFeederEsp(bloques,semanas,real){
     if(ibX)n++;                      /* una fila en blanco entre cuadros */
     var E=_wkEspinaFilas(bl.filas,bl.nomWbs,n);
     var tot=semanas.map(function(){return 0}),tH=0;
-    r.push('<row r="'+n+'">'+_crXlsCel(F.clave,n,bl.id+(real?' — AVANCE REAL':' — PLAN'),
+    r.push('<row r="'+n+'">'+_crXlsCel(F.clave,n,_wkNomCr(bl.id)+(real?' — AVANCE REAL':' — PLAN'),
       true,_wkEstWbs(0,ib))+'</row>');n++;
     E=_wkEspinaFilas(bl.filas,bl.nomWbs,n);
     E.lista.forEach(function(x){
@@ -8998,7 +8998,7 @@ async function _wkLibroApp(semN,corte,ids){
   D.bloques.forEach(function(bl,ib){
     bl.ib=ib;
     mete('ACTIVITY_PLAN ('+_wkHojaCr(bl.id)+')',_wkFeederEsp([bl],sem,false).xml,3)});
-  D.bloques.forEach(function(bl){mete('P6-'+bl.id,p6[bl.id],3)});
+  D.bloques.forEach(function(bl){mete('P6-'+_wkHojaCr(bl.id),p6[bl.id],3)});
   /* La hoja de gastos generales va aqui, con las de apoyo: de ella sale el
      total que el gasto general de COSTO reparte por avance. Su unica
      referencia de fuera -el costo directo, que sacaba de la hoja QPS- se
@@ -9133,6 +9133,39 @@ async function _wkLibroApp(semN,corte,ids){
       pctReal:Math.round(pctReal*1000)/10}}}
 /* El paquete .xlsx a partir de una lista [nombre, xml] */
 function _wkPaqueteApp(hojas,styles,ss){
+  /* Ultima pasada: el nombre vigente en todo el paquete. Cazar estampa por
+     estampa es como se escaparon seis; aqui pasa todo si o si. Se traducen
+     nombre de hoja, xml y piezas (graficos incluidos). Los pares de celda
+     ('>LB1<') solo tocan texto de celda, nunca formulas ni referencias. */
+  try{
+    var _mig9=[];
+    (((typeof _crLista==='function')&&_crLista())||[]).forEach(function(c9){
+      if(!c9||!c9.cron_id)return;
+      var e9=(typeof _wkNomCr==='function')?_wkNomCr(c9.cron_id):c9.cron_id;
+      if(!e9||e9===c9.cron_id)return;
+      var eh9=(typeof _wkHojaCr==='function')?_wkHojaCr(c9.cron_id):e9;
+      _mig9.push(["'P6-"+c9.cron_id+"'","'P6-"+eh9+"'"]);
+      _mig9.push(['P6-'+c9.cron_id,'P6-'+eh9]);
+      _mig9.push(['ACTIVITY_PLAN ('+c9.cron_id+')','ACTIVITY_PLAN ('+eh9+')']);
+      _mig9.push(['ACTIVITI_PLAN ('+c9.cron_id+')','ACTIVITI_PLAN ('+eh9+')']);
+      _mig9.push(['Prog. '+c9.cron_id,'Prog. '+e9]);
+      _mig9.push(['('+c9.cron_id+')','('+e9+')']);
+      _mig9.push([c9.cron_id+' — ',e9+' — ']);
+      _mig9.push(['>'+c9.cron_id+'<','>'+e9+'<']);
+    });
+    if(_mig9.length){
+      var _tr9=function(t){if(typeof t!=='string')return t;
+        _mig9.forEach(function(pr){t=t.split(pr[0]).join(pr[1])});return t};
+      hojas=hojas.map(function(h){
+        var nom=_tr9(h[0]),xml=_tr9(h[1]),extra=h[2];
+        if(extra&&extra.partes){
+          var np={};Object.keys(extra.partes).forEach(function(k9){
+            np[k9]=_tr9(extra.partes[k9])});
+          extra=Object.assign({},extra,{partes:np})}
+        if(extra&&typeof extra.grafico==='string')
+          extra=Object.assign({},extra,{grafico:_tr9(extra.grafico)});
+        return [nom,xml,extra]})}
+  }catch(_em9){}
   var ov=function(i){return '<Override PartName="/xl/worksheets/sheet'+i+
     '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'};
   /* Las piezas copiadas conservan su nombre original; las generadas se
@@ -13337,7 +13370,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828a7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828a8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
