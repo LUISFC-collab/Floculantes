@@ -3611,6 +3611,49 @@ function _crTramos(nivel,tar,alc,u,grupoDe){
 /* El avance REAL acumulado al cierre de cada semana, ponderado por las HH del
    alcance de ESTE cronograma. Las partidas que el aplicativo ya no tiene vivas
    (las retiradas) cuentan como 0: estaban en el alcance y no se ejecutaron. */
+/* A donde se llega si se cumple lo colocado en el calendario, de LAS TRES
+   especialidades. Parte del acumulado real de cada semana y va sumando lo que
+   falta de cada actividad, repartido entre los dias que tiene puestos.
+   Devuelve un acumulado por semana, o null si no hay nada programado. */
+function _crProyeccion(u,semanas,real){
+  try{
+    var vivas={};
+    (DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id)vivas[p.id]=p});
+    var hhT=0;for(var k in u.items)hhT+=u.items[k];
+    if(!(hhT>0))return null;
+    /* lo que falta de cada actividad programada, repartido por dia */
+    var porDia={},hay=false;
+    var P=(typeof _pgProg==='function')?_pgProg():(state.prog||{});
+    Object.keys(P||{}).forEach(function(id){
+      var pr=P[id];if(!pr||!pr.start)return;
+      if(state.progDel&&state.progDel[id])return;
+      var w=u.items[id];if(!(w>0))return;          /* fuera del alcance: no pesa */
+      var p=vivas[id];if(!p)return;
+      var pc=0;try{pc=Number(pctOfAt(p,(typeof todayISO==='function'?todayISO():'')))||0}catch(e){}
+      pc=Math.max(0,Math.min(100,pc));
+      var falta=w*(1-pc/100);if(!(falta>0))return;
+      var ds=(typeof occupiedDays==='function')?(occupiedDays(pr.start,pr.dias||1)||[]):[];
+      if(!ds.length)return;
+      var cada=falta/ds.length;
+      ds.forEach(function(d){porDia[d]=(porDia[d]||0)+cada;hay=true})});
+    if(!hay)return null;
+    /* se acumula por semana, arrancando de lo realmente hecho */
+    var hoy=(typeof todayISO==='function')?todayISO():'';
+    var iHoy=-1;
+    for(var i=0;i<semanas.length;i++){
+      var fi=(typeof _crDeSerial==='function')?_crDeSerial(semanas[i].fin):'';
+      if(fi&&fi>=hoy){iHoy=i;break}}
+    if(iHoy<0)return null;
+    var base=(real&&real.acum&&real.acum[iHoy]!=null)?real.acum[iHoy]:0;
+    var out=[],t=base;
+    for(var j=0;j<semanas.length;j++){
+      if(j<iHoy){out.push(null);continue}
+      var ini=(typeof _crDeSerial==='function')?_crDeSerial(semanas[j].ini):'';
+      var fin=(typeof _crDeSerial==='function')?_crDeSerial(semanas[j].fin):'';
+      Object.keys(porDia).forEach(function(d){
+        if(d>hoy&&d>=ini&&d<=fin)t+=porDia[d]/hhT});
+      out.push(Math.min(1.2,t))}
+    return out}catch(e){return null}}
 function _crCurvaReal(u,semanas){
   var vivas={};
   (DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id)vivas[p.id]=p});
@@ -3728,7 +3771,8 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
   var W=Math.max(320,Math.min(900,(window.innerWidth||360)-40)),H=310;
   var mx=44,my=30,gw=W-mx-14,gh=H-my-42;
   var maxSem=0;cur.porSem.forEach(function(v){if(v>maxSem)maxSem=v});
-  var barras='',linea='',ptos='',lreal='',preal='';
+  var barras='',linea='',ptos='',lreal='',preal='',lproy='',pproy='';
+  var proy=null;try{proy=_crProyeccion(u,sem,real)}catch(_ep){}
   var casilla=gw/Math.max(1,sem.length);
   /* el centro de la casilla de cada semana: asi la barra cae DENTRO de su
      semana y no a caballo entre dos */
@@ -3774,6 +3818,11 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
       lreal+=(i?' L':'M')+x.toFixed(1)+' '+yr.toFixed(1);
       preal+='<circle cx="'+x.toFixed(1)+'" cy="'+yr.toFixed(1)+'" r="2.6" fill="#C0392B"/>';
       }
+    /* la proyeccion: a donde se llega con lo puesto en el calendario */
+    if(proy&&proy[i]!=null){
+      var yp=my+gh-Math.min(1,proy[i])*gh;
+      lproy+=(lproy?' L':'M')+x.toFixed(1)+' '+yp.toFixed(1);
+      pproy+='<circle cx="'+x.toFixed(1)+'" cy="'+yp.toFixed(1)+'" r="2.4" fill="#2ECC71"/>'}
     /* el acumulado, sobre el punto de la curva */
     /* el acumulado va pegado a la linea: si no hay sitio, alterna */
     if(casilla>=24||!(i%2)||i===sem.length-1)
@@ -3863,6 +3912,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     '<svg width="'+W+'" height="'+H+'" style="display:block">'+ejes+barras+
     '<path d="'+linea+'" fill="none" stroke="'+esc(c.color||'#2E86C1')+'" stroke-width="2.2" stroke-linejoin="round"/>'+
     (lreal?('<path d="'+lreal+'" fill="none" stroke="#C0392B" stroke-width="2.4" stroke-linejoin="round"/>'):'')+
+    (lproy?('<path d="'+lproy+'" fill="none" stroke="#2ECC71" stroke-width="2.2" stroke-dasharray="5 4" stroke-linejoin="round"/>'):'')+
     (function(){
       if(!realHoy)return '';
       var xh=mx+(realHoy.i+0.5)*casilla+ (realHoy.frac-0.5)*casilla;
@@ -3875,10 +3925,12 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
       return col+'<circle cx="'+xh.toFixed(1)+'" cy="'+yh.toFixed(1)+'" r="4" fill="#C0392B" stroke="#fff" stroke-width="1.4"/>'+
         '<text x="'+xh.toFixed(1)+'" y="'+(yh+15).toFixed(1)+'" fill="#F0A3A3" font-size="9.5" font-weight="800" text-anchor="middle">HOY '+
         (Math.round(realHoy.v*1000)/10)+'%</text>'})()+
-    ptos+preal+etq+
+    ptos+preal+pproy+etq+
     '<text x="'+mx+'" y="'+(my-18)+'" fill="#7d8590" font-size="9">barras = % que toca hacer esa semana · números en blanco = programado acumulado</text>'+
     '<rect x="'+mx+'" y="'+(my-13)+'" width="16" height="2.5" fill="'+esc(c.color||'#2E86C1')+'"/>'+
     '<text x="'+(mx+20)+'" y="'+(my-9)+'" fill="#9db4d6" font-size="9">programado</text>'+
+    (lproy?('<rect x="'+(mx+150)+'" y="'+(my-13)+'" width="16" height="2.5" fill="#2ECC71"/>'+
+      '<text x="'+(mx+170)+'" y="'+(my-9)+'" fill="#9db4d6" font-size="9">proyección del calendario</text>'):'')+
     '<rect x="'+(mx+90)+'" y="'+(my-13)+'" width="16" height="2.5" fill="#C0392B"/>'+
     '<text x="'+(mx+110)+'" y="'+(my-9)+'" fill="#F0A3A3" font-size="9">real del aplicativo</text>'+
     /* de que es cada trozo de las barras */
@@ -13047,7 +13099,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260826b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260826b4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
