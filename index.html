@@ -6760,28 +6760,32 @@ async function _crPlanRecupera(cronId,corte,semN){
     if(hh>0)(t.items||[]).forEach(function(i){
       var hi=(Number(u.items[i])||0)/_crVeces(rp,i);
       if(!(hi>0))return;
+      /* sobre dias HABILES, con la misma puerta del calendario; si la
+         ventana entera cae en feriado, corrida para no perder las HH */
+      var _diasHab=function(x0,x1){
+        var hab=_crLaborables(x0,x1).filter(function(f9){return f9>=gIni&&f9<=gFin});
+        if(hab.length)return hab;
+        var o9=[],a0=_crASerial(x0),a1=_crASerial(x1);
+        for(var k9=a0;k9<=a1;k9++){
+          var f9=_crDeSerial(k9);
+          if(f9>=gIni&&f9<=gFin)o9.push(f9)}
+        return o9};
       var dentro=[],a8=alc&&alc[i];
-      if(a8&&a8.ini&&a8.fin){
-        var e8=_crASerial(a8.ini),e9=_crASerial(a8.fin);
-        for(var k8=e8;k8<=e9;k8++){
-          var f8=_crDeSerial(k8);
-          if(f8>=gIni&&f8<=gFin)dentro.push(f8)}}
-      if(!dentro.length&&t.ini&&t.fin){
-        var e0=_crASerial(t.ini),e1=_crASerial(t.fin);
-        for(var kk=e0;kk<=e1;kk++){
-          var ff=_crDeSerial(kk);
-          if(ff>=gIni&&ff<=gFin)dentro.push(ff)}}
+      if(a8&&a8.ini&&a8.fin)dentro=_diasHab(a8.ini,a8.fin);
+      if(!dentro.length&&t.ini&&t.fin)dentro=_diasHab(t.ini,t.fin);
       if(!dentro.length)return;
       var pdb=(hi/hh)/dentro.length;
       dentro.forEach(function(d){back[cod][d]=(back[cod][d]||0)+pdb})});
-    /* --- lo que el LB1 pedia esos dias --- */
+    /* --- lo que el LB1 pedia esos dias, sobre dias HABILES: ni findes ni
+       feriados del calendario del admin; si la ventana entera cae en
+       feriado, corrida para no perder las HH --- */
     var d0=t.ini?_crASerial(t.ini):0,d1=t.fin?_crASerial(t.fin):0;
     var nd=(d0&&d1)?Math.max(1,d1-d0+1):0;
     if(nd){
-      var pd=1/nd;
-      for(var k=0;k<nd;k++){
-        var f=_crDeSerial(d0+k);
-        if(f>=gIni&&f<=gFin)plan[cod][f]=pd}}
+      var dLab=_crLaborables(t.ini,t.fin);
+      if(!dLab.length){dLab=[];for(var k=0;k<nd;k++)dLab.push(_crDeSerial(d0+k))}
+      var pd=1/dLab.length;
+      dLab.forEach(function(f){if(f>=gIni&&f<=gFin)plan[cod][f]=pd})}
     /* --- lo ejecutado --- Solo se pregunta en los dias que TIENEN movimiento:
        entre dos movimientos el avance no cambia, asi que preguntar dia a dia
        daria lo mismo a cambio de cien veces mas cuentas. */
@@ -13483,7 +13487,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828b6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828b7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
