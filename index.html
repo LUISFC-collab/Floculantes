@@ -13712,7 +13712,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828d2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828d3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -15595,7 +15595,11 @@ async function _rxPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
   var all=_rxAll(),ahora=(typeof nowSrv==='function'?nowSrv():Date.now()),cambio=false;
   (R||[]).forEach(function(r){if(!r||!r.rid)return;
     var loc=all[r.rid]||{},lts=Number(loc.ts)||0,sts=Number(r.ts)||0;
-    if(lts>sts)return;if(lts&&lts===sts&&(ahora-lts)<120000)return;
+    if(lts>sts)return;
+    /* mismo ts = misma data: nada que copiar ni que repintar; antes esto
+       repintaba el panel en cada pasada del sync y la ventana parecia
+       actualizarse a cada rato */
+    if(lts&&lts===sts)return;
     cambio=true;
     var x={rid:r.rid,semana:Number(r.semana)||0,quien:String(r.quien||''),
       creado:Number(r.creado)||0,ts:sts,cell_at:Number(r.cell_at)||0,
@@ -15676,10 +15680,15 @@ async function _rxAnexaNo(){
 var _RX_STI='background:#0b1220;color:#cfe3ff;border:1px solid #24344f;border-radius:7px;padding:6px 8px;font-size:12px;font-family:inherit';
 function _rxCard(x){
   var rid=x.rid,stI=_RX_STI;
-  var sel=function(campo,ops,val){return '<select class="_rxCam" data-rid="'+esc(rid)+'" data-campo="'+campo+'" style="'+stI+'"><option value=""></option>'+
-    ops.map(function(o){return '<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>'}).join('')+'</select>'};
-  var inp=function(campo,val,tipo,ancho){return '<input type="'+(tipo||'text')+'" class="_rxCam" data-rid="'+esc(rid)+'" data-campo="'+campo+'" value="'+esc(val==null?'':val)+'" style="'+stI+(ancho?(';width:'+ancho):';flex:1;min-width:130px')+'">'};
-  var ta=function(campo,val,ph){return '<textarea class="_rxCam" data-rid="'+esc(rid)+'" data-campo="'+campo+'" placeholder="'+esc(ph||'')+'" style="'+stI+';width:100%;min-height:44px;resize:vertical;box-sizing:border-box">'+esc(val||'')+'</textarea>'};
+  /* esc() del aplicativo solo escapa <: en un value="..." una comilla parte
+     el atributo y el texto se recorta (pernos de 1/2" x 5"...). Aqui los
+     atributos van con su escapador completo. */
+  var at=function(v){return String(v==null?'':v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')};
+  var sel=function(campo,ops,val){return '<select class="_rxCam" data-rid="'+at(rid)+'" data-campo="'+campo+'" style="'+stI+'"><option value=""></option>'+
+    ops.map(function(o){return '<option'+(o===val?' selected':'')+'>'+at(o)+'</option>'}).join('')+'</select>'};
+  var inp=function(campo,val,tipo,ancho){return '<input type="'+(tipo||'text')+'" class="_rxCam" data-rid="'+at(rid)+'" data-campo="'+campo+'" value="'+at(val)+'" style="'+stI+(ancho?(';width:'+ancho):';flex:1;min-width:130px')+'">'};
+  var ta=function(campo,val,ph){return '<textarea class="_rxCam" data-rid="'+at(rid)+'" data-campo="'+campo+'" placeholder="'+at(ph)+'" style="'+stI+';width:100%;min-height:44px;resize:vertical;box-sizing:border-box">'+at(val)+'</textarea>'};
   var lab=function(t){return '<span style="font-size:9.5px;font-weight:800;color:#7d8590;letter-spacing:.05em">'+t+'</span>'};
   return '<div style="background:#0f1726;border:1px solid '+(x.estado==='LIBERADA'?'#1d3a2a':'#33415c')+';border-radius:12px;padding:10px;margin-bottom:10px">'+
     '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:7px">'+
@@ -15715,7 +15724,9 @@ function _rxCard(x){
 function _rxUI(vista){
   if(vista)window._rxVista=vista;
   vista=window._rxVista||'no';
-  var ov=document.getElementById('_rxOv');if(ov)ov.remove();
+  var ov=document.getElementById('_rxOv');
+  var _scr=ov?ov.scrollTop:0;
+  if(ov)ov.remove();
   ov=document.createElement('div');ov.id='_rxOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483589;background:#0d1117;color:#cfe3ff;overflow:auto;padding:14px 12px 46px';
   var vivas=_rxVivas();
@@ -15745,6 +15756,7 @@ function _rxUI(vista){
     '<div style="background:#101a2b;border:1px solid #1d2a3d;border-radius:0 12px 12px 12px;padding:10px">'+cuerpo+'</div>'+
   '</div>';
   document.body.appendChild(ov);
+  ov.scrollTop=_scr;
   document.getElementById('_rxX').onclick=function(){ov.remove()};
   document.getElementById('_rxNueva').onclick=function(){
     _rxSet(_rxNuevoRid(),{task_code:'',partida_id:'',actividad:'',descripcion:'',accion:'',
@@ -15764,11 +15776,9 @@ function _rxUI(vista){
   else _rxNoLlena()}
 /* la vi\u00f1eta de NO cumplidas: el + junto al nombre anexa y abre la ficha;
    la X borra el registro; el desglosable recuerda si estaba abierto */
-async function _rxNoLlena(){
-  if(!document.getElementById('_rxNoLista'))return;
+function _rxNoPinta(r){
+  var cont=document.getElementById('_rxNoLista');if(!cont)return;
   try{
-    var r=await _rxNoCumplidas();
-    var cont=document.getElementById('_rxNoLista');if(!cont)return;
     window._rxNoAbre=window._rxNoAbre||{};
     window._rxNoR=r;
     var fut=_rxFuturas();window._rxFutR=fut;
@@ -15859,6 +15869,24 @@ async function _rxNoLlena(){
     if(bt)bt.onclick=function(){bt.disabled=true;_rxAnexaNo()};
   }catch(e){var c3=document.getElementById('_rxNoLista');
     if(c3)c3.innerHTML='<div style="color:#FFB4A8">No se pudo calcular: '+esc(String((e&&e.message)||e))+'</div>'}}
+/* pinta al toque lo ultimo conocido y recalcula por detras: solo repinta si
+   de verdad cambio algo, y el Calculando... solo sale la primera vez */
+async function _rxNoLlena(){
+  if(!document.getElementById('_rxNoLista'))return;
+  if(window._rxNoR)_rxNoPinta(window._rxNoR);
+  try{
+    var r=await _rxNoCumplidas();
+    if(!document.getElementById('_rxNoLista'))return;
+    var huella=JSON.stringify([r,_rxVivas().map(function(x){return x.rid+':'+x.ts})]);
+    var igual=!!window._rxNoR&&(window._rxNoHuella===huella);
+    window._rxNoR=r;window._rxNoHuella=huella;
+    if(!igual){
+      /* si estas escribiendo, el repintado espera: nada de robar el teclado */
+      if(typeof _escribiendoEn==='function'&&_escribiendoEn('_rxOv')){
+        if(typeof _renAplaza==='function')_renAplaza('_rxNoPinta',function(){_rxNoPinta(window._rxNoR)})}
+      else _rxNoPinta(r)}}
+  catch(e){var c9=document.getElementById('_rxNoLista');
+    if(c9&&!window._rxNoR)c9.innerHTML='<div style="color:#FFB4A8">No se pudo calcular: '+esc(String((e&&e.message)||e))+'</div>'}}
 /* la ficha para ponerlo o quitarlo */
 function _rpUI(id){try{
   var m=metaOf(id);
