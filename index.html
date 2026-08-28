@@ -13709,7 +13709,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828c8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828c9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -15607,39 +15607,50 @@ async function _rxPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
     else _rxUI()}}catch(e){}}
 try{var _rxPushBase=syncPush;syncPush=async function(){try{await _rxPush()}catch(e){}return await _rxPushBase.apply(this,arguments)};
 var _rxPullBase=syncPull;syncPull=async function(){var r=await _rxPullBase.apply(this,arguments);try{await _rxPull()}catch(e){}return r};}catch(_rxw){}
-/* anexa las actividades NO cumplidas de la semana que toca: programado en la
-   semana y hecho por debajo; las que ya tienen registro no se duplican */
+/* las NO cumplidas de la semana que toca: programado en la semana y hecho
+   por debajo; dice cuales ya tienen registro para no duplicar */
+async function _rxNoCumplidas(){
+  var semA=(typeof _wkQueToca==='function')?_wkQueToca():0;
+  var L=(await _crPull()).filter(function(c){return !c.eliminado});
+  var cc=null;L.forEach(function(z){if(String(z.tipo||'')==='ACTUAL')cc=z});
+  if(!cc)cc=L[L.length-1];
+  if(!cc)return {sem:semA,lista:[]};
+  var hoy=(typeof todayISO==='function')?todayISO():'';
+  var R=await _crPlanRecupera(cc.cron_id,hoy,semA);
+  var sm=_wkSem(semA),ini=_wkISO(sm.ini),fin=_wkISO(sm.fin);
+  var tar=await _crTareas(cc.cron_id);
+  var nom={},itemsDe={};
+  tar.forEach(function(t){nom[t.task_code]=String(t.nombre||'');itemsDe[t.task_code]=(t.items||[])});
+  var lista=[];
+  Object.keys(R.plan||{}).forEach(function(cod){
+    var pg=0,ac=0,d;
+    for(d in (R.plan[cod]||{}))if(d>=ini&&d<=fin)pg+=R.plan[cod][d];
+    for(d in (R.actual[cod]||{}))if(d>=ini&&d<=fin)ac+=R.actual[cod][d];
+    if(!(pg>1e-9)||ac>=pg-1e-9)return;
+    lista.push({cod:cod,nom:nom[cod]||'',items:(itemsDe[cod]||[]).slice(),
+      prog:Math.round(pg*1000)/10,hecho:Math.round(ac*1000)/10,
+      reg:!!_rxDeAct(cod,itemsDe[cod])})});
+  lista.sort(function(a,b){return a.cod<b.cod?-1:a.cod>b.cod?1:0});
+  return {sem:semA,lista:lista}}
+function _rxAnexaUna(q,sem){
+  _rxSet(_rxNuevoRid(),{task_code:q.cod,actividad:q.nom||'',
+    partida_id:(q.items&&q.items[0])||'',
+    descripcion:'',accion:'',f_ident:(typeof todayISO==='function')?todayISO():'',
+    f_req:'',f_prev:'',f_nueva:'',area:'',personal:'',importancia:'',f_prog:'',
+    estado:'PENDIENTE',razon:'',comentario:'',semana:sem||0})}
 async function _rxAnexaNo(){
   try{
-    var semA=(typeof _wkQueToca==='function')?_wkQueToca():0;
-    var L=(await _crPull()).filter(function(c){return !c.eliminado});
-    var cc=null;L.forEach(function(z){if(String(z.tipo||'')==='ACTUAL')cc=z});
-    if(!cc)cc=L[L.length-1];
-    if(!cc){toast('No hay ningún cronograma');return}
-    var hoy=(typeof todayISO==='function')?todayISO():'';
-    var R=await _crPlanRecupera(cc.cron_id,hoy,semA);
-    var sm=_wkSem(semA),ini=_wkISO(sm.ini),fin=_wkISO(sm.fin);
-    var tar=await _crTareas(cc.cron_id);
-    var nom={},itemsDe={};
-    tar.forEach(function(t){nom[t.task_code]=String(t.nombre||'');itemsDe[t.task_code]=(t.items||[])});
-    var n=0;
-    Object.keys(R.plan||{}).forEach(function(cod){
-      var pg=0,ac=0,d;
-      for(d in (R.plan[cod]||{}))if(d>=ini&&d<=fin)pg+=R.plan[cod][d];
-      for(d in (R.actual[cod]||{}))if(d>=ini&&d<=fin)ac+=R.actual[cod][d];
-      if(!(pg>1e-9)||ac>=pg-1e-9)return;
-      if(_rxDeAct(cod,itemsDe[cod]))return;
-      n++;
-      _rxSet(_rxNuevoRid(),{task_code:cod,actividad:nom[cod]||'',
-        partida_id:(itemsDe[cod]&&itemsDe[cod][0])||'',
-        descripcion:'',accion:'',f_ident:hoy,f_req:'',f_prev:'',f_nueva:'',
-        area:'',personal:'',importancia:'',f_prog:'',estado:'PENDIENTE',
-        razon:'',comentario:'',semana:semA})});
-    toast(n?('➕ '+n+' actividad(es) NO cumplida(s) anexada(s) — llena su información')
-           :'No hay NO cumplidas nuevas esta semana');
-    _rxUI()}catch(e){toast('No se pudo: '+((e&&e.message)||e))}}
-/* el panel: todo lo que la hoja pide, para que los supervisores lo llenen */
-function _rxUI(){
+    var r=await _rxNoCumplidas(),n=0;
+    r.lista.forEach(function(q){if(q.reg)return;n++;_rxAnexaUna(q,r.sem)});
+    toast(n?('\u2795 '+n+' actividad(es) anexada(s) \u2014 ll\u00e9nalas en la vi\u00f1eta Restricciones')
+           :'No hay NO cumplidas sin registro');
+    _rxUI(window._rxVista||'no')}catch(e){toast('No se pudo: '+((e&&e.message)||e))}}
+/* el panel, con dos vi\u00f1etas: al entrar salen las NO CUMPLIDAS de la
+   semana, cada una con su desglosable y su Anexar; la otra vi\u00f1eta es el
+   mundo de RESTRICCIONES que llena la hoja del reporte */
+function _rxUI(vista){
+  if(vista)window._rxVista=vista;
+  vista=window._rxVista||'no';
   var ov=document.getElementById('_rxOv');if(ov)ov.remove();
   ov=document.createElement('div');ov.id='_rxOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483589;background:#0d1117;color:#cfe3ff;overflow:auto;padding:14px 12px 46px';
@@ -15654,22 +15665,22 @@ function _rxUI(){
   var lab=function(t){return '<span style="font-size:9.5px;font-weight:800;color:#7d8590;letter-spacing:.05em">'+t+'</span>'};
   var card=function(x){
     var rid=x.rid;
-    return '<div style="background:#101a2b;border:1px solid '+(x.estado==='LIBERADA'?'#1d3a2a':'#33415c')+';border-radius:12px;padding:10px;margin-bottom:10px">'+
+    return '<div style="background:#0f1726;border:1px solid '+(x.estado==='LIBERADA'?'#1d3a2a':'#33415c')+';border-radius:12px;padding:10px;margin-bottom:10px">'+
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:7px">'+
-        '<b style="color:#8ECBF5;font-size:12px;min-width:52px">'+esc(x.task_code||'—')+'</b>'+
+        '<b style="color:#8ECBF5;font-size:12px;min-width:52px">'+esc(x.task_code||'\u2014')+'</b>'+
         inp(rid,'task_code',x.task_code,'text','80px')+
         inp(rid,'partida_id',x.partida_id,'text','100px')+
         inp(rid,'actividad',x.actividad)+
         sel(rid,'estado',RX_EST,x.estado||'PENDIENTE')+
-        '<button class="_rxDel" data-rid="'+esc(rid)+'" title="Eliminar" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:7px;padding:6px 10px;font-weight:900;cursor:pointer">✕</button>'+
+        '<button class="_rxDel" data-rid="'+esc(rid)+'" title="Eliminar" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:7px;padding:6px 10px;font-weight:900;cursor:pointer">\u2715</button>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:7px">'+
-        '<div>'+lab('DESCRIPCIÓN DE LA RESTRICCIÓN')+ta(rid,'descripcion',x.descripcion,'qué está frenando la actividad')+'</div>'+
-        '<div>'+lab('ACCIÓN NECESARIA / SOLUCIÓN PROPUESTA')+ta(rid,'accion',x.accion,'qué hay que hacer para liberarla')+'</div>'+
+        '<div>'+lab('DESCRIPCI\u00d3N DE LA RESTRICCI\u00d3N')+ta(rid,'descripcion',x.descripcion,'qu\u00e9 est\u00e1 frenando la actividad')+'</div>'+
+        '<div>'+lab('ACCI\u00d3N NECESARIA / SOLUCI\u00d3N PROPUESTA')+ta(rid,'accion',x.accion,'qu\u00e9 hay que hacer para liberarla')+'</div>'+
       '</div>'+
       '<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-end;margin-bottom:7px">'+
-        '<div>'+lab('RAZÓN')+'<br>'+sel(rid,'razon',RX_RAZONES,x.razon)+'</div>'+
-        '<div>'+lab('QUIEN / ÁREA')+'<br>'+sel(rid,'area',RX_AREAS,x.area)+'</div>'+
+        '<div>'+lab('RAZ\u00d3N')+'<br>'+sel(rid,'razon',RX_RAZONES,x.razon)+'</div>'+
+        '<div>'+lab('QUIEN / \u00c1REA')+'<br>'+sel(rid,'area',RX_AREAS,x.area)+'</div>'+
         '<div>'+lab('PERSONAL RESPONSABLE')+'<br>'+inp(rid,'personal',x.personal,'text','160px')+'</div>'+
         '<div>'+lab('IMPORTANCIA')+'<br>'+sel(rid,'importancia',RX_IMP,x.importancia)+'</div>'+
       '</div>'+
@@ -15678,22 +15689,32 @@ function _rxUI(){
         '<div>'+lab('LIBERAR ANTES DE')+'<br>'+inp(rid,'f_req',x.f_req,'date','138px')+'</div>'+
         '<div>'+lab('PREVISTA')+'<br>'+inp(rid,'f_prev',x.f_prev,'date','138px')+'</div>'+
         '<div>'+lab('NUEVA FECHA')+'<br>'+inp(rid,'f_nueva',x.f_nueva,'date','138px')+'</div>'+
-        '<div>'+lab('LIBERACIÓN PROGRAMADA')+'<br>'+inp(rid,'f_prog',x.f_prog,'date','138px')+'</div>'+
+        '<div>'+lab('LIBERACI\u00d3N PROGRAMADA')+'<br>'+inp(rid,'f_prog',x.f_prog,'date','138px')+'</div>'+
       '</div>'+
       '<div style="margin-top:7px">'+lab('COMENTARIO')+ta(rid,'comentario',x.comentario,'')+'</div>'+
     '</div>'};
+  var tab=function(id,txt,activa){return '<button class="_rxTab" data-v="'+id+'" style="border:0;border-radius:10px 10px 0 0;padding:10px 14px;font-weight:800;font-size:12px;cursor:pointer;'+
+    (activa?'background:#101a2b;color:#fff;box-shadow:inset 0 -2px 0 #2ECC71':'background:#0b1220;color:#7d8590')+'">'+txt+'</button>'};
+  var cuerpo;
+  if(vista==='res'){
+    cuerpo='<div style="font-size:11px;font-weight:800;color:#E8C9A0;letter-spacing:.06em;margin:2px 0 6px">PENDIENTES ('+pend.length+')</div>'+
+      (pend.map(card).join('')||'<div style="color:#7d8590;padding:6px 0 12px">Sin pendientes</div>')+
+      '<div style="font-size:11px;font-weight:800;color:#9FE8B0;letter-spacing:.06em;margin:12px 0 6px">RESUELTAS \u00b7 LIBERADAS ('+res.length+')</div>'+
+      (res.map(card).join('')||'<div style="color:#7d8590;padding:6px 0">Ninguna todav\u00eda</div>')}
+  else{
+    cuerpo='<div id="_rxNoLista" style="color:#7d8590;padding:8px 0">Calculando las NO cumplidas de la semana\u2026</div>'}
   ov.innerHTML='<div style="max-width:980px;margin:0 auto">'+
-    '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">'+
-      '<b style="font-size:16px;color:#fff">🧱 Análisis de restricciones</b>'+
-      '<span style="color:#7d8590;font-size:11.5px">lo que llenes aquí llena la hoja del reporte</span>'+
-      '<button id="_rxNueva" style="margin-left:auto;background:#1E7A46;color:#fff;border:0;border-radius:9px;padding:9px 12px;font-weight:800;cursor:pointer">➕ Nueva</button>'+
-      '<button id="_rxTrae" style="background:#1B5E8A;color:#fff;border:0;border-radius:9px;padding:9px 12px;font-weight:800;cursor:pointer">⚡ Anexar NO cumplidas de la semana</button>'+
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+      '<b style="font-size:16px;color:#fff">An\u00e1lisis de restricciones</b>'+
+      '<span style="color:#7d8590;font-size:11.5px">lo que llenes aqu\u00ed llena la hoja del reporte</span>'+
+      '<button id="_rxNueva" style="margin-left:auto;background:#1E7A46;color:#fff;border:0;border-radius:9px;padding:9px 12px;font-weight:800;cursor:pointer">\u2795 Nueva</button>'+
       '<button id="_rxX" style="background:#2b3444;color:#cfe3ff;border:0;border-radius:9px;padding:9px 12px;font-weight:800;cursor:pointer">Cerrar</button>'+
     '</div>'+
-    '<div style="font-size:11px;font-weight:800;color:#E8C9A0;letter-spacing:.06em;margin:8px 0 6px">PENDIENTES ('+pend.length+')</div>'+
-    (pend.map(card).join('')||'<div style="color:#7d8590;padding:8px 0 14px">Sin pendientes</div>')+
-    '<div style="font-size:11px;font-weight:800;color:#9FE8B0;letter-spacing:.06em;margin:14px 0 6px">RESUELTAS · LIBERADAS ('+res.length+')</div>'+
-    (res.map(card).join('')||'<div style="color:#7d8590;padding:8px 0">Ninguna todavía</div>')+
+    '<div style="display:flex;gap:6px;margin-top:10px">'+
+      tab('no','\u26d4 No cumplidas de la semana',vista==='no')+
+      tab('res','\ud83d\uddc2 Restricciones ('+vivas.length+')',vista==='res')+
+    '</div>'+
+    '<div style="background:#101a2b;border:1px solid #1d2a3d;border-radius:0 12px 12px 12px;padding:10px">'+cuerpo+'</div>'+
   '</div>';
   document.body.appendChild(ov);
   document.getElementById('_rxX').onclick=function(){ov.remove()};
@@ -15702,15 +15723,57 @@ function _rxUI(){
       f_ident:(typeof todayISO==='function')?todayISO():'',f_req:'',f_prev:'',f_nueva:'',
       area:'',personal:'',importancia:'',f_prog:'',estado:'PENDIENTE',razon:'',comentario:'',
       semana:(typeof _wkQueToca==='function')?_wkQueToca():0});
-    _rxUI()};
-  document.getElementById('_rxTrae').onclick=function(){var b=this;b.disabled=true;
-    _rxAnexaNo().then(function(){b.disabled=false})};
+    _rxUI('res')};
+  ov.querySelectorAll('._rxTab').forEach(function(b){
+    b.onclick=function(){_rxUI(b.getAttribute('data-v'))}});
   ov.querySelectorAll('._rxCam').forEach(function(el){
     el.onchange=function(){var o={};o[el.getAttribute('data-campo')]=el.value;
       _rxSet(el.getAttribute('data-rid'),o)}});
   ov.querySelectorAll('._rxDel').forEach(function(b){
-    b.onclick=function(){if(!confirm('¿Eliminar esta restricción? Queda registrada como eliminada.'))return;
-      _rxBorra(b.getAttribute('data-rid'));_rxUI()}})}
+    b.onclick=function(){if(!confirm('\u00bfEliminar esta restricci\u00f3n? Queda registrada como eliminada.'))return;
+      _rxBorra(b.getAttribute('data-rid'));_rxUI()}});
+  if(vista!=='res')_rxNoLlena()}
+/* la vi\u00f1eta de NO cumplidas: cada actividad con su desglosable y su Anexar */
+async function _rxNoLlena(){
+  if(!document.getElementById('_rxNoLista'))return;
+  try{
+    var r=await _rxNoCumplidas();
+    var cont=document.getElementById('_rxNoLista');if(!cont)return;
+    if(!r.lista.length){
+      cont.innerHTML='<div style="color:#9FE8B0;font-weight:700;padding:6px 0">\u2713 Semana '+r.sem+': sin actividades NO cumplidas</div>';return}
+    window._rxNoR=r;
+    cont.innerHTML='<div style="font-size:11px;color:#E8C9A0;font-weight:800;margin-bottom:7px">SEMANA '+r.sem+' \u00b7 '+r.lista.length+' actividad(es) NO cumplida(s) \u2014 an\u00e9xalas para llenar su restricci\u00f3n</div>'+
+      '<div style="margin-bottom:9px"><button id="_rxTodas" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;cursor:pointer">\u26a1 Anexar todas las que faltan</button></div>'+
+      r.lista.map(function(q,i){return '<div style="border:1px solid '+(q.reg?'#1d3a2a':'#33415c')+';border-radius:10px;margin-bottom:7px;overflow:hidden">'+
+        '<div class="_rxNoCab" data-i="'+i+'" style="display:flex;gap:8px;align-items:center;padding:9px 10px;cursor:pointer;background:#0f1726;flex-wrap:wrap">'+
+          '<b style="color:#8ECBF5;font-size:12px">'+esc(q.cod)+'</b>'+
+          '<span style="flex:1;min-width:160px;font-size:12px;overflow-wrap:anywhere">'+esc(q.nom)+'</span>'+
+          '<span style="font-size:10.5px;color:#E8C9A0;font-weight:800;white-space:nowrap">prog '+q.prog+'% \u00b7 hecho '+q.hecho+'%</span>'+
+          (q.reg?'<span style="font-size:10px;font-weight:800;color:#9FE8B0;background:#14261d;border:1px solid #1d3a2a;border-radius:7px;padding:2px 7px">\u2713 anexada</span>'
+                :'<button class="_rxAne" data-i="'+i+'" style="background:#1E7A46;color:#fff;border:0;border-radius:7px;padding:5px 10px;font-weight:800;cursor:pointer">\u2795 Anexar</button>')+
+          '<span style="color:#7d8590">\u25be</span>'+
+        '</div>'+
+        '<div class="_rxNoDet" style="display:none;padding:8px 12px;background:#0b1220;font-size:11.5px;color:#9db4d6">'+
+          'Partidas: '+esc((q.items||[]).join(', ')||'\u2014')+
+          '<br>Programado esta semana: <b>'+q.prog+'%</b> \u00b7 Hecho: <b>'+q.hecho+'%</b>'+
+          (q.reg?'<br>Ya tiene registro: ll\u00e9nalo en la vi\u00f1eta Restricciones.'
+                :'<br>An\u00e9xala y llena su restricci\u00f3n, acci\u00f3n, QUIEN y fechas en la vi\u00f1eta Restricciones.')+
+        '</div></div>'}).join('');
+    cont.querySelectorAll('._rxNoCab').forEach(function(c){
+      c.onclick=function(ev){
+        if(ev.target&&ev.target.classList&&ev.target.classList.contains('_rxAne'))return;
+        var det=c.parentNode.querySelector('._rxNoDet');
+        det.style.display=(det.style.display==='none')?'block':'none'}});
+    cont.querySelectorAll('._rxAne').forEach(function(b){
+      b.onclick=function(ev){ev.stopPropagation();
+        var q=window._rxNoR.lista[+b.getAttribute('data-i')];
+        _rxAnexaUna(q,window._rxNoR.sem);
+        toast('\u2795 '+q.cod+' anexada \u2014 ll\u00e9nala en la vi\u00f1eta Restricciones');
+        _rxUI('no')}});
+    var bt=document.getElementById('_rxTodas');
+    if(bt)bt.onclick=function(){bt.disabled=true;_rxAnexaNo()};
+  }catch(e){var c3=document.getElementById('_rxNoLista');
+    if(c3)c3.innerHTML='<div style="color:#FFB4A8">No se pudo calcular: '+esc(String((e&&e.message)||e))+'</div>'}}
 /* la ficha para ponerlo o quitarlo */
 function _rpUI(id){try{
   var m=metaOf(id);
