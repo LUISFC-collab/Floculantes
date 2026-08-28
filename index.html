@@ -133,6 +133,9 @@ input[type=checkbox],input[type=radio]{width:auto;min-width:0;height:auto;flex:n
      esquina de arriba a la derecha, en la misma linea. Antes el rotulo iba
      colocado en absoluto y la primera ficha -que lleva z-index- se le ponia
      encima, asi que no llegaba a verse. */
+  /* el engranaje late despacio cuando hay un rendimiento de programacion
+     puesto: lo que se ve en dias no es lo del contrato y conviene recordarlo */
+  @keyframes _rpLate{0%,100%{box-shadow:0 0 0 0 rgba(255,210,122,.75)}50%{box-shadow:0 0 0 4px rgba(255,210,122,0)}}
   .cdhd{display:flex;align-items:center;gap:4px;flex:none;min-height:15px;position:relative;z-index:3}
   .cdn{font-weight:800;color:var(--ink);font-size:11px;margin-left:auto;flex:none}
   .cday{position:relative}
@@ -13115,7 +13118,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260826b6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260826b7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -14869,6 +14872,98 @@ async function _ppfPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator
   try{var sp=$('scrProg');if(sp&&!sp.classList.contains('hidden')&&typeof renderProgSelect==='function')renderProgSelect()}catch(e){}}
 try{var _ppfPushBase=syncPush;syncPush=async function(){try{await _ppfPush()}catch(e){}return await _ppfPushBase.apply(this,arguments)};
 var _ppfPullBase=syncPull;syncPull=async function(){var r=await _ppfPullBase.apply(this,arguments);try{await _ppfPull()}catch(e){}return r};}catch(_ppw){}
+/* === RENDIMIENTO FICTICIO PARA PROGRAMAR ===
+   Solo cambia los dias que se sugieren al repartir en el calendario. El
+   rendimiento del contrato no se toca: el avance se sigue midiendo con el. */
+var T_RPG='rend_prog_create_260826';
+function _rpAll(){if(!state.rendprog){try{state.rendprog=JSON.parse(localStorage.getItem('obf4_rendprog')||'{}')||{}}catch(e){state.rendprog={}}}if(!state.rendprog)state.rendprog={};return state.rendprog}
+function _rpSaveLocal(){try{localStorage.setItem('obf4_rendprog',JSON.stringify(_rpAll()))}catch(e){}}
+function _rpDe(id){var x=_rpAll()[id];if(!x||x.eliminado)return null;var r=Number(x.rend);return (isFinite(r)&&r>0)?r:null}
+function _rpSet(id,r){
+  var t=(typeof nowSrv==='function'?nowSrv():Date.now());
+  _rpAll()[id]={rend:Number(r)||0,quien:(state.user&&state.user.supervisor)||'',
+    ts:t,cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0};
+  _rpSaveLocal();try{if(typeof syncNow==='function')syncNow(true)}catch(e){}}
+function _rpBorra(id){var x=_rpAll()[id];if(!x)return;
+  var t=(typeof nowSrv==='function'?nowSrv():Date.now());
+  x.eliminado=true;x.elim_por=(state.user&&state.user.supervisor)||'';x.elim_ts=t;x.ts=t;x.cell_at=Date.now();
+  _rpSaveLocal();try{if(typeof syncNow==='function')syncNow(true)}catch(e){}}
+/* el rendimiento con el que se programa: el ficticio si lo hay, si no el del contrato */
+function _rpRend(id){var f=_rpDe(id);if(f!=null)return f;
+  var m=metaOf(id);return (m&&m.rend>0)?Number(m.rend):0}
+/* los dias que salen con ese rendimiento */
+function _rpDias(id){try{
+  var f=_rpDe(id);if(f==null)return (typeof diasDe==='function')?diasDe(id):null;
+  var m=metaOf(id);if(!m)return null;
+  if(m.unidad==='glb')return (m.dias>0?m.dias:null);
+  return (m.total>0&&f>0)?Math.ceil(m.total/f):null}catch(e){return null}}
+async function _rpPush(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
+  var all=_rpAll(),out=[];
+  Object.keys(all).forEach(function(id){var x=all[id]||{};if(!x.ts)return;
+    out.push({proyecto:DATA.proyecto,partida_id:id,rend:Number(x.rend)||0,
+      quien:String(x.quien||''),ts:Number(x.ts)||0,cell_at:Number(x.cell_at)||0,
+      eliminado:!!x.eliminado,elim_por:String(x.elim_por||''),elim_ts:Number(x.elim_ts)||0})});
+  if(!out.length)return;
+  out=onlyChanged(T_RPG,out,function(r){return r.partida_id});if(!out.length)return;
+  await sbUpsert(T_RPG,out,'proyecto,partida_id');commitSent(out)}
+async function _rpPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
+  var R=await sbSelect(T_RPG,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto));
+  var all=_rpAll(),ahora=(typeof nowSrv==='function'?nowSrv():Date.now()),cambio=false;
+  (R||[]).forEach(function(r){if(!r||!r.partida_id)return;
+    var loc=all[r.partida_id]||{},lts=Number(loc.ts)||0,sts=Number(r.ts)||0;
+    if(lts>sts)return;if(lts&&lts===sts&&(ahora-lts)<120000)return;
+    cambio=true;
+    all[r.partida_id]={rend:Number(r.rend)||0,quien:String(r.quien||''),ts:sts,
+      cell_at:Number(r.cell_at)||0,eliminado:!!r.eliminado,
+      elim_por:String(r.elim_por||''),elim_ts:Number(r.elim_ts)||0}});
+  if(!cambio)return;_rpSaveLocal();
+  try{var sp=$('scrProg');if(sp&&!sp.classList.contains('hidden')){
+    if(typeof renderProgSelect==='function')renderProgSelect();
+    if(typeof renderCal==='function')renderCal()}}catch(e){}}
+try{var _rpPushBase=syncPush;syncPush=async function(){try{await _rpPush()}catch(e){}return await _rpPushBase.apply(this,arguments)};
+var _rpPullBase=syncPull;syncPull=async function(){var r=await _rpPullBase.apply(this,arguments);try{await _rpPull()}catch(e){}return r};}catch(_rpw){}
+/* la ficha para ponerlo o quitarlo */
+function _rpUI(id){try{
+  var m=metaOf(id);
+  if(!m||m.unidad==='glb'||!(m.total>0)){if(typeof toast==='function')toast('Esta actividad no se mide por rendimiento');return}
+  var nom=id;try{var b=(DATA._byId&&DATA._byId[id])||{};nom=(typeof pNom==='function'?pNom(b):(b.nombre||''))||id}catch(e){}
+  var act=_rpDe(id),contr=Number(m.rend)||0,u=m.unidad||'';
+  var ov=document.createElement('div');ov.id='_rpOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483000;background:rgba(15,25,45,.55);display:flex;align-items:flex-end;justify-content:center';
+  var h='<div style="background:#fff;width:100%;max-width:440px;max-height:88vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px 15px 18px">';
+  h+='<div style="font-weight:900;font-size:15px;color:#1F3864">'+esc(nom)+'</div>';
+  h+='<div style="font-size:11.5px;color:#5C6779;margin:2px 0 12px">'+esc(id)+'</div>';
+  h+='<div style="background:#FCEFD9;border:1px solid #EFC98A;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#7A4B00">'+
+     'Este rendimiento es <b>solo para programar</b>: cambia los días que se sugieren en el calendario. '+
+     'El del contrato no se toca y el avance se sigue midiendo con él.</div>';
+  h+='<div style="margin-top:12px;font-size:12.5px;color:#1B2433">Del contrato: <b>'+
+     (contr>0?(qty(contr)+' '+esc(u)+'/día'):'sin definir')+'</b> · metrado '+qty(m.total)+' '+esc(u)+'</div>';
+  h+='<div class="field" style="margin-top:10px"><label>Rendimiento para programar ('+esc(u)+' por día)</label>'+
+     '<input id="_rpVal" type="number" min="0" step="any" value="'+(act!=null?act:'')+'" placeholder="'+(contr>0?qty(contr):'')+'"></div>';
+  h+='<div id="_rpPrev" style="font-size:12px;color:#0C5132;font-weight:700;margin:-6px 0 6px"></div>';
+  h+='<div style="display:flex;gap:8px;margin-top:12px"><button id="_rpX" style="flex:1;background:#eef2f7;border:0;border-radius:10px;padding:13px;font-weight:700">Cerrar</button>'+
+     (act!=null?'<button id="_rpDel" style="flex:1;background:#B42318;color:#fff;border:0;border-radius:10px;padding:13px;font-weight:800">Quitar</button>':'')+
+     '<button id="_rpOk" style="flex:1;background:#7A4B00;color:#fff;border:0;border-radius:10px;padding:13px;font-weight:800">Guardar</button></div>';
+  h+='</div>';ov.innerHTML=h;document.body.appendChild(ov);
+  var prev=function(){var v=Number(document.getElementById('_rpVal').value)||0;
+    var d=document.getElementById('_rpPrev');
+    d.textContent=(v>0)?('Saldrían '+Math.ceil(m.total/v)+' día(s) para '+qty(m.total)+' '+u):''};
+  prev();document.getElementById('_rpVal').oninput=prev;
+  ov.onclick=function(e){if(e.target===ov)ov.remove()};
+  document.getElementById('_rpX').onclick=function(){ov.remove()};
+  var dl=document.getElementById('_rpDel');
+  if(dl)dl.onclick=function(){if(!confirm('¿Quitar el rendimiento de programación y volver al del contrato?'))return;
+    _rpBorra(id);ov.remove();try{renderProgSelect();renderCal()}catch(e){}
+    if(typeof logCambio==='function')logCambio('PROGRAMACION',id,'rendimiento de programación quitado');
+    if(typeof toast==='function')toast('Vuelve al rendimiento del contrato')};
+  document.getElementById('_rpOk').onclick=function(){
+    var v=Number(document.getElementById('_rpVal').value)||0;
+    if(!(v>0)){toast('Escribe un rendimiento mayor que cero');return}
+    _rpSet(id,v);ov.remove();try{renderProgSelect();renderCal()}catch(e){}
+    if(typeof logCambio==='function')logCambio('PROGRAMACION',id,'rendimiento de programación '+v+' '+u+'/día');
+    if(typeof toast==='function')toast('⚙ Programando a '+v+' '+u+'/día (solo para el calendario)')};
+}catch(e){if(typeof toast==='function')toast('⚠ '+((e&&e.message)||e))}}
+
 /* La base con la que el PANEL mide los pesos. Es cosa de cada persona y no
    toca el ajuste del proyecto -ese sigue en el panel de control y manda en el
    resto del aplicativo-: aqui solo cambia lo que uno ve para programar. */
@@ -14937,7 +15032,12 @@ function renderProgSelect(){try{window._pgPesoTot=null}catch(_e){}var wrap=$('pr
       (_dtx?(' · '+esc(_dtx)):'')+(m.rend?(' · rinde '+m.rend+'/d'):'')+'</div>'+
       _ap.map(function(x){return '<div'+(x.fin?' style="font-weight:800"':'')+'>'+esc(x.t)+'</div>'}).join('')+
       '</div>'}
-  else{var rest=Math.max(0,m.total-((typeof acumCant==='function')?acumCant(p.id):0));_ri='<div style="font-size:10.5px;background:rgba(255,255,255,.22);border-radius:6px;padding:2px 7px;margin-top:4px;display:inline-block">Resta: <b>'+qty(rest)+' '+(m.unidad||'')+'</b> de '+qty(m.total)+(_dtx?(' → '+_dtx):'')+(m.rend?(' · rinde '+m.rend+'/d'):'')+'</div>'}}}catch(_e){}/* Lo que esta actividad aporta al avance si se termina, con la MISMA base que
+  else{var rest=Math.max(0,m.total-((typeof acumCant==='function')?acumCant(p.id):0));
+    var _rf=(typeof _rpDe==='function')?_rpDe(p.id):null;
+    var _rv=(_rf!=null)?_rf:(m.rend||0);
+    /* el "rinde" llevaba el numero pelado, sin decir de que unidad */
+    var _rt=_rv>0?(' · rinde '+qty(_rv)+' '+(m.unidad||'')+'/día'+(_rf!=null?' (programación)':'')):'';
+    _ri='<div style="font-size:10.5px;background:rgba(255,255,255,.22);border-radius:6px;padding:2px 7px;margin-top:4px;display:inline-block">Resta: <b>'+qty(rest)+' '+(m.unidad||'')+'</b> de '+qty(m.total)+(_dtx?(' → '+_dtx):'')+_rt+'</div>'}}}catch(_e){}/* Lo que esta actividad aporta al avance si se termina, con la MISMA base que
    este puesta en el panel: por especialidad o sobre todo el proyecto. Sin
    decir contra que se mide, el numero no significa nada. */
 /* verde para lo que ya arranco, cuando ese orden esta encendido: es lo que se
@@ -14952,7 +15052,16 @@ var _pw='';try{
       'border-radius:6px;padding:2px 7px;margin-top:4px;margin-left:5px;display:inline-block">'+
       'vale '+_hhPct(_pv)+' <span style="opacity:.8">'+(_pb?'de las 3 especialidades':'de la especialidad')+'</span></div>'}
 }catch(_epw){}
-return '<div class="pgitem" data-id="'+esc(p.id)+'" style="background:'+color+';color:#fff;border-radius:10px;padding:9px 11px;margin-bottom:6px;cursor:pointer"><b class="_pgIr" data-id="'+esc(p.id)+'" title="Ir a su tarjeta de avance" style="text-decoration:underline;text-decoration-style:dotted;cursor:pointer">'+esc(codeOf(p))+'</b> '+esc(p.nombre||'')+(_dtx?(' <span style="opacity:.85">('+_dtx+')</span>'):'')+_ri+_pw+(extra||'')+'</div>'}function _pgSec(k,color,titulo,inner){var open=!!_pgSecOpen[k];return '<div class="pgsec" data-k="'+k+'" style="font-size:11.5px;font-weight:800;color:'+color+';margin:6px 0 4px;cursor:pointer;background:#EDF2F9;border-radius:8px;padding:7px 10px;display:flex;align-items:center"><span style="margin-right:6px">'+(open?'▾':'▸')+'</span>'+titulo+'</div>'+(open?inner:'')}function bySis(arr,rend){var ga={},ao=[];arr.forEach(function(o){var pp=o.p||o;var a=((typeof areaOf==='function')&&areaOf(pp))||'— Sin área —';var k=(pp.sistema||'— Sin sistema —');if(!ga[a]){ga[a]={};ao.push(a)}(ga[a][k]=ga[a][k]||[]).push(o)});
+return '<div class="pgitem" data-id="'+esc(p.id)+'" style="background:'+color+';color:#fff;border-radius:10px;padding:9px 11px;margin-bottom:6px;cursor:pointer">'+'<button class="_pgRend" data-id="'+esc(p.id)+'" title="'+
+      ((typeof _rpDe==='function'&&_rpDe(p.id)!=null)
+        ?('Programando a '+qty(_rpDe(p.id))+' por día — rendimiento propio de la programación')
+        :'Poner un rendimiento solo para programar')+'" '+
+      'style="float:right;margin:-2px -4px 0 6px;width:22px;height:22px;border-radius:7px;cursor:pointer;'+
+      'display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;padding:0;'+
+      ((typeof _rpDe==='function'&&_rpDe(p.id)!=null)
+        ?'border:1.5px solid #FFD27A;background:#7A4B00;color:#FFD27A;animation:_rpLate 1.6s ease-in-out infinite'
+        :'border:1.5px solid rgba(255,255,255,.45);background:rgba(255,255,255,.14);color:#fff')+'">⚙</button>'+
+     '<b class="_pgIr" data-id="'+esc(p.id)+'" title="Ir a su tarjeta de avance" style="text-decoration:underline;text-decoration-style:dotted;cursor:pointer">'+esc(codeOf(p))+'</b> '+esc(p.nombre||'')+(_dtx?(' <span style="opacity:.85">('+_dtx+')</span>'):'')+_ri+_pw+(extra||'')+'</div>'}function _pgSec(k,color,titulo,inner){var open=!!_pgSecOpen[k];return '<div class="pgsec" data-k="'+k+'" style="font-size:11.5px;font-weight:800;color:'+color+';margin:6px 0 4px;cursor:pointer;background:#EDF2F9;border-radius:8px;padding:7px 10px;display:flex;align-items:center"><span style="margin-right:6px">'+(open?'▾':'▸')+'</span>'+titulo+'</div>'+(open?inner:'')}function bySis(arr,rend){var ga={},ao=[];arr.forEach(function(o){var pp=o.p||o;var a=((typeof areaOf==='function')&&areaOf(pp))||'— Sin área —';var k=(pp.sistema||'— Sin sistema —');if(!ga[a]){ga[a]={};ao.push(a)}(ga[a][k]=ga[a][k]||[]).push(o)});
  return ao.sort(function(x,y){var ix=(typeof AREAS!=='undefined')?AREAS.indexOf(x):-1,iy=(typeof AREAS!=='undefined')?AREAS.indexOf(y):-1;ix=ix<0?99:ix;iy=iy<0?99:iy;if(ix!==iy)return ix-iy;return String(x).localeCompare(String(y))}).map(function(a){
   var sys=Object.keys(ga[a]).sort();
   return '<div style="font-size:10.5px;font-weight:900;color:#1F3864;background:#DCE6F2;border-radius:7px;padding:5px 9px;margin:8px 0 3px;text-transform:uppercase;letter-spacing:.03em">'+esc(a)+'</div>'
@@ -14963,6 +15072,8 @@ return '<div class="pgitem" data-id="'+esc(p.id)+'" style="background:'+color+';
   try{renderProgSelect()}catch(e){}try{if(typeof renderCal==='function')renderCal()}catch(e){}
   if(typeof toast==='function')toast(aProy?'🌐 Repartido entre las 3 especialidades':'🏷 Repartido dentro de esta especialidad')}});
 wrap.querySelectorAll('._pgOrdB').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();var k=b.getAttribute('data-k');_ppfSet(k,!_ppfGet(k,false));renderProgSelect();if(typeof toast==='function')toast(_ppfGet(k,false)?(k==='enMarchaArriba'?'▶ Primero las que están en ejecución':'⚖ Ordenado por lo que aporta'):'Orden normal');}});wrap.querySelectorAll('.pgsec').forEach(function(h){h.onclick=function(){var k=h.getAttribute('data-k');_pgSecOpen[k]=!_pgSecOpen[k];renderProgSelect()}});wrap.querySelectorAll('.pgitem').forEach(function(el){
+    try{var _cr=el.querySelector('._pgRend');if(_cr)_cr.onclick=function(ev){ev.stopPropagation();
+      if(typeof _rpUI==='function')_rpUI(_cr.getAttribute('data-id'))}}catch(_e){}
     try{var _ci=el.querySelector('._pgIr');if(_ci)_ci.onclick=function(ev){ev.stopPropagation();if(typeof _irYParpadear==='function')_irYParpadear(_ci.getAttribute('data-id'))}}catch(_e){}
 el.setAttribute('draggable','true');
 el.addEventListener('dragstart',function(ev){var id=el.getAttribute('data-id');if(diasDe(id)==null){ev.preventDefault();toast('Esta necesita días: elígela con un toque');return}try{ev.dataTransfer.setData('text/plain',id)}catch(_e){}});
@@ -17542,11 +17653,32 @@ async function _pgCurvaFlotante(){try{
   await _crCurvaUI(c);
   var ov=document.getElementById('_crCurOv');if(!ov)return;
   ov.setAttribute('data-flot','1');
-  /* de pantalla completa a ventana: se conserva el contenido tal cual */
+  /* de pantalla completa a ventana. Se puede agarrar de la esquina de abajo a
+     la derecha para hacerla mas grande o mas pequena. */
   ov.style.cssText='position:fixed;left:auto;top:64px;right:18px;bottom:auto;'+
-    'width:min(940px,86vw);max-height:78vh;overflow:auto;z-index:2147482500;'+
-    'background:#0d1117;border:1px solid #1d2c47;border-radius:14px;padding:12px;'+
+    'width:min(940px,86vw);height:min(520px,70vh);min-width:320px;min-height:220px;'+
+    'overflow:hidden;resize:both;z-index:2147482500;display:flex;flex-direction:column;'+
+    'background:#0d1117;border:1px solid #1d2c47;border-radius:14px;padding:10px;'+
     'box-shadow:0 18px 50px rgba(0,0,0,.55)';
+  /* Solo la curva: el resto del panel -filtros, listados, botones- se queda
+     fuera. Aqui se abre para mirar la curva mientras se programa, no para
+     manejar el cronograma; para eso esta su pantalla. */
+  try{
+    var graf=ov.querySelector('#_crGraf');
+    Array.prototype.forEach.call(ov.children,function(ch){
+      if(ch!==graf)ch.style.display='none'});
+    if(graf){graf.style.display='';graf.style.flex='1';graf.style.minHeight='0';
+      graf.style.overflow='auto';graf.style.margin='0'}
+  }catch(e){}
+  /* que el dibujo se estire con la ventana en vez de quedarse fijo */
+  try{
+    var svg=ov.querySelector('#_crGraf svg');
+    if(svg){var W=+svg.getAttribute('width')||900,H=+svg.getAttribute('height')||360;
+      if(!svg.getAttribute('viewBox'))svg.setAttribute('viewBox','0 0 '+W+' '+H);
+      svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+      svg.setAttribute('width','100%');svg.removeAttribute('height');
+      svg.style.width='100%';svg.style.height='100%';svg.style.display='block'}
+  }catch(e){}
   /* barra para moverla y su propia X */
   var bar=document.createElement('div');
   bar.style.cssText='display:flex;align-items:center;gap:8px;margin:-4px -4px 8px;padding:6px 8px;'+
@@ -17554,6 +17686,7 @@ async function _pgCurvaFlotante(){try{
   bar.innerHTML='<b style="flex:1;color:#8ECBF5;font-size:12.5px">📈 '+esc(c.cron_id||'')+
     ' · <span style="color:#9db4d6;font-weight:600">arrastra para moverla</span></b>'+
     '<button id="_crFlotX" title="Cerrar" style="background:#8A2018;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:800;cursor:pointer">✕</button>';
+  bar.style.flex='none';
   ov.insertBefore(bar,ov.firstChild);
   document.getElementById('_crFlotX').onclick=function(e){e.stopPropagation();ov.remove()};
   /* arrastrar: se guarda de donde se agarro para que no pegue saltos */
@@ -17561,10 +17694,13 @@ async function _pgCurvaFlotante(){try{
   var baja=function(x,y){var r=ov.getBoundingClientRect();
     ov.style.right='auto';ov.style.left=r.left+'px';ov.style.top=r.top+'px';
     dx=x-r.left;dy=y-r.top;mov=true};
+  /* Se puede sacar casi entera de la pantalla. Se dejan 60 px alcanzables a
+     proposito: si se pudiera empujar del todo fuera, no habria manera de
+     volver a agarrarla salvo cerrando y abriendo. */
   var mueve=function(x,y){if(!mov)return;
-    var w=ov.offsetWidth,h=ov.offsetHeight;
-    ov.style.left=Math.max(4,Math.min(window.innerWidth-w-4,x-dx))+'px';
-    ov.style.top=Math.max(4,Math.min(window.innerHeight-40,y-dy))+'px'};
+    var w=ov.offsetWidth;
+    ov.style.left=Math.max(60-w,Math.min(window.innerWidth-60,x-dx))+'px';
+    ov.style.top=Math.max(0,Math.min(window.innerHeight-40,y-dy))+'px'};
   bar.addEventListener('mousedown',function(e){if(e.target.id==='_crFlotX')return;baja(e.clientX,e.clientY);e.preventDefault()});
   document.addEventListener('mousemove',function(e){mueve(e.clientX,e.clientY)});
   document.addEventListener('mouseup',function(){mov=false});
