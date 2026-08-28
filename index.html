@@ -441,7 +441,7 @@ body.webmode #scrBita .scroll>*,body.webmode #scrPend .scroll>*,body.webmode #sc
         <div id="progDiscMenu" class="hidden" style="position:absolute;top:100%;left:0;z-index:30;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 26px rgba(0,0,0,.16);overflow:hidden;min-width:170px;margin-top:8px"></div>
       </div>
       <div class="spacer"></div>
-      <button class="iconbtn" id="progVaciar" type="button" aria-label="Quitar del calendario todas las actividades de esta especialidad" title="Quitar del calendario todas las actividades de esta especialidad" style="width:auto;padding:0 11px;gap:6px;background:#8A2018;color:#fff;font-weight:800;font-size:13px">🗑 Vaciar</button><button class="iconbtn" id="progGantt" type="button" aria-label="Ver Gantt / PDF de esta especialidad" title="Ver Gantt y PDF de esta especialidad" style="width:auto;padding:0 11px;gap:6px;background:#0C5132;color:#fff;font-weight:800;font-size:13px"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="20" x2="3" y2="10"/><line x1="9" y1="20" x2="9" y2="4"/><line x1="15" y1="20" x2="15" y2="13"/><line x1="21" y1="20" x2="21" y2="8"/></svg>Gantt / PDF</button>
+      <button class="iconbtn" id="progCurva" type="button" aria-label="Ver la curva del cronograma actual en una ventana flotante" title="Ver la curva del cronograma actual sin salir de aquí" style="width:auto;padding:0 11px;gap:6px;background:#1F3864;color:#fff;font-weight:800;font-size:13px">📈 Curva</button><button class="iconbtn" id="progVaciar" type="button" aria-label="Quitar del calendario todas las actividades de esta especialidad" title="Quitar del calendario todas las actividades de esta especialidad" style="width:auto;padding:0 11px;gap:6px;background:#8A2018;color:#fff;font-weight:800;font-size:13px">🗑 Vaciar</button><button class="iconbtn" id="progGantt" type="button" aria-label="Ver Gantt / PDF de esta especialidad" title="Ver Gantt y PDF de esta especialidad" style="width:auto;padding:0 11px;gap:6px;background:#0C5132;color:#fff;font-weight:800;font-size:13px"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="20" x2="3" y2="10"/><line x1="9" y1="20" x2="9" y2="4"/><line x1="15" y1="20" x2="15" y2="13"/><line x1="21" y1="20" x2="21" y2="8"/></svg>Gantt / PDF</button>
       <button class="iconbtn" id="progToggleList" aria-label="Desplegar actividades" title="Desplegar actividades" style="width:auto;padding:0 10px;gap:5px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span style="font-size:11.5px;font-weight:800">Actividades</span></button>
     </header>
     <div class="progctrl"><div class="segview"><button id="vSem" class="segb" type="button">Semana</button><button id="vMes" class="segb on" type="button">Mes</button></div><div style="flex:1"></div><button class="navb" id="progPrev" type="button">‹</button><button class="navb" id="progToday" type="button">Hoy</button><button class="navb" id="progNext" type="button">›</button><button class="navb" id="btnProgRot" type="button" title="Girar pantalla (horizontal/vertical)">🔄</button><button class="navb" id="btnFs" type="button" title="Pantalla completa (oculta la barra del navegador)">⛶</button><button class="navb" id="btnProgModo" type="button" title="Modo del cronograma">👁</button></div>
@@ -1148,6 +1148,22 @@ function _rtOnCambio(tabla){
   /* La tabla de lapidas. Cuando alguien vacia el calendario o borra un
      metrado, la lapida llega aqui: hay que bajarla para que este equipo no
      resucite lo borrado en su siguiente subida. */
+  /* El avance en si: metrados y partes. Sin esto, una carga hecha en otro
+     equipo no movia ni la curva ni las tarjetas hasta la siguiente pasada del
+     sync. Se juntan los avisos y se baja una sola vez: en una jornada llegan
+     muchos seguidos y no tiene sentido un sync por cada uno. */
+  if(tabla==='metrados'||tabla==='partes'){
+    try{clearTimeout(window._rtAvT)}catch(e){}
+    window._rtAvT=setTimeout(function(){
+      try{if(typeof syncNow==='function')syncNow(true)}catch(e){}
+      setTimeout(function(){try{
+        if($('scrList')&&!$('scrList').classList.contains('hidden')&&typeof renderList==='function')renderList();
+        var sp=$('scrProg');
+        if(sp&&!sp.classList.contains('hidden')){
+          if(typeof renderProgSelect==='function')renderProgSelect();
+          if(typeof renderCal==='function')renderCal()}
+      }catch(e){}},1400)},1500);
+    return}
   if(tabla==='borrados'){
     try{if(typeof syncNow==='function')syncNow(true)}catch(e){}return}
   if(tabla==='prefs_prog_create_260826'){
@@ -1217,7 +1233,7 @@ function _rtInit(){
   _RT.ws=ws;
   ws.onopen=function(){
    _RT.tries=0;
-   ws.send(JSON.stringify({topic:'realtime:obf_wbs',event:'phx_join',ref:'1',join_ref:'1',payload:{config:{broadcast:{ack:false,self:false},presence:{key:''},postgres_changes:[{event:'*',schema:'public',table:'wbs_extra'},{event:'*',schema:'public',table:'nuevas'},{event:'*',schema:'public',table:'personal'},{event:'*',schema:'public',table:'personal_dia'},{event:'*',schema:'public',table:'personal_esp'},{event:'*',schema:'public',table:'cuadrillas'},{event:'*',schema:'public',table:'crono_cuadrillas_create_090826'},{event:'*',schema:'public',table:'config_usuario_create_110826'},{event:'*',schema:'public',table:'actividades_create_110826'},{event:'*',schema:'public',table:'ajustes_create_110826'},{event:'*',schema:'public',table:'app_config'},{event:'*',schema:'public',table:'tormenta'},{event:'*',schema:'public',table:'reportabilidad'},{event:'*',schema:'public',table:'doc_carpetas_create_120826'},{event:'*',schema:'public',table:'doc_archivos_create_120826'},{event:'*',schema:'public',table:'fotos'},{event:'*',schema:'public',table:'fotos_borradas'},{event:'*',schema:'public',table:'agrupaciones_create_220826'},{event:'*',schema:'public',table:'cronogramas_create_230826'},{event:'*',schema:'public',table:'cron_tareas_create_230826'},{event:'*',schema:'public',table:'cron_alcance_create_230826'},{event:'*',schema:'public',table:'cron_plan_create_230826'},{event:'*',schema:'public',table:'cron_wbs_create_230826'},{event:'*',schema:'public',table:'ficticio_create_250826'},{event:'*',schema:'public',table:'conexiones_create_250826'},{event:'*',schema:'public',table:'alcance_create_090826'},{event:'*',schema:'public',table:'galeria_fotos_create_210826'},{event:'*',schema:'public',table:'restricciones_partida'},{event:'*',schema:'public',table:'restricciones_generales'},{event:'*',schema:'public',table:'interf_log'},{event:'*',schema:'public',table:'dias_habilitados'},{event:'*',schema:'public',table:'pendientes'},{event:'*',schema:'public',table:'programacion'},{event:'*',schema:'public',table:'prefs_prog_create_260826'},{event:'*',schema:'public',table:'borrados'}]}}}));
+   ws.send(JSON.stringify({topic:'realtime:obf_wbs',event:'phx_join',ref:'1',join_ref:'1',payload:{config:{broadcast:{ack:false,self:false},presence:{key:''},postgres_changes:[{event:'*',schema:'public',table:'wbs_extra'},{event:'*',schema:'public',table:'nuevas'},{event:'*',schema:'public',table:'personal'},{event:'*',schema:'public',table:'personal_dia'},{event:'*',schema:'public',table:'personal_esp'},{event:'*',schema:'public',table:'cuadrillas'},{event:'*',schema:'public',table:'crono_cuadrillas_create_090826'},{event:'*',schema:'public',table:'config_usuario_create_110826'},{event:'*',schema:'public',table:'actividades_create_110826'},{event:'*',schema:'public',table:'ajustes_create_110826'},{event:'*',schema:'public',table:'app_config'},{event:'*',schema:'public',table:'tormenta'},{event:'*',schema:'public',table:'reportabilidad'},{event:'*',schema:'public',table:'doc_carpetas_create_120826'},{event:'*',schema:'public',table:'doc_archivos_create_120826'},{event:'*',schema:'public',table:'fotos'},{event:'*',schema:'public',table:'fotos_borradas'},{event:'*',schema:'public',table:'agrupaciones_create_220826'},{event:'*',schema:'public',table:'cronogramas_create_230826'},{event:'*',schema:'public',table:'cron_tareas_create_230826'},{event:'*',schema:'public',table:'cron_alcance_create_230826'},{event:'*',schema:'public',table:'cron_plan_create_230826'},{event:'*',schema:'public',table:'cron_wbs_create_230826'},{event:'*',schema:'public',table:'ficticio_create_250826'},{event:'*',schema:'public',table:'conexiones_create_250826'},{event:'*',schema:'public',table:'alcance_create_090826'},{event:'*',schema:'public',table:'galeria_fotos_create_210826'},{event:'*',schema:'public',table:'restricciones_partida'},{event:'*',schema:'public',table:'restricciones_generales'},{event:'*',schema:'public',table:'interf_log'},{event:'*',schema:'public',table:'dias_habilitados'},{event:'*',schema:'public',table:'pendientes'},{event:'*',schema:'public',table:'programacion'},{event:'*',schema:'public',table:'prefs_prog_create_260826'},{event:'*',schema:'public',table:'borrados'},{event:'*',schema:'public',table:'metrados'},{event:'*',schema:'public',table:'partes'}]}}}));
    _RT.hb=setInterval(function(){try{ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:String(++_RT.ref)}))}catch(e){}},22000);
   };
   ws.onmessage=function(m){try{var d=JSON.parse(m.data);
@@ -13099,7 +13115,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260826b4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260826b5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -14968,6 +14984,11 @@ function cronoExport(){var MO=['Enero','Febrero','Marzo','Abril','Mayo','Junio',
 if($('btnCronoPdf'))$('btnCronoPdf').onclick=cronoExport;
 if($('progGantt'))$('progGantt').onclick=function(){if(typeof _ganttDirecto==='function')_ganttDirecto(progDisc||(state.user&&state.user.disc)||null)};
 if($('progVaciar'))$('progVaciar').onclick=function(){if(typeof progVaciarTodas==='function')progVaciarTodas()};
+if($('progCurva')){
+  /* en el telefono no se ofrece: el grafico de 19 semanas no se lee y taparia
+     el calendario, que es con lo que hay que compararlo */
+  if(window.innerWidth<820)$('progCurva').style.display='none';
+  $('progCurva').onclick=function(){if(typeof _pgCurvaFlotante==='function')_pgCurvaFlotante()}}
 /* ===== Cuadrillas del CRONOGRAMA: etiquetas visuales (C1, C2…) para agrupar las partidas asignadas en cuadros de color. Independientes de las cuadrillas reales. Guardado local por disciplina. ===== */
 var _CC_COLORS=['#1F6FEB','#E8821A','#1E7A46','#8A3FA0','#B42318','#0C8577','#B0177A','#5B3A8A','#7A4A00','#2E5496'];
 /* === CUADRILLAS DEL CRONOGRAMA — ahora viven en la base ===
@@ -17476,6 +17497,51 @@ function _cronoAsigHtml(_asg){var cc=_cronoCuadGet();var act=window._cronoActivo
 /* Quita del calendario TODAS las de la especialidad que se esta viendo. Una
    a una por progQuitar seria lo mismo pero con un aviso por actividad; aqui se
    pregunta una sola vez, con el numero exacto delante. */
+/* Abre la curva del cronograma ACTUAL en una ventana flotante, encima del
+   calendario. Se reusa la vista del panel de cronogramas para no tener dos
+   dibujos que puedan acabar diciendo cosas distintas. */
+async function _pgCurvaFlotante(){try{
+  if(window.innerWidth<820){
+    if(typeof toast==='function')toast('La curva necesita pantalla grande — ábrela desde el panel de cronogramas');return}
+  var ya=document.getElementById('_crCurOv');
+  if(ya&&ya.getAttribute('data-flot')==='1'){ya.remove();return}
+  var L=(typeof _crLista==='function')?_crLista():[];
+  if(!L||!L.length){try{if(typeof _crPull==='function')L=await _crPull()}catch(e){}}
+  L=(L||[]).filter(function(x){return x&&!x.eliminado});
+  if(!L.length){if(typeof toast==='function')toast('No hay ningún cronograma cargado');return}
+  /* el ACTUAL; si no hay ninguno marcado asi, el primero de la lista */
+  var c=L.filter(function(x){return String(x.tipo||'').toUpperCase()==='ACTUAL'})[0]||L[0];
+  if(typeof toast==='function')toast('Abriendo la curva de '+(c.cron_id||'')+'…');
+  await _crCurvaUI(c);
+  var ov=document.getElementById('_crCurOv');if(!ov)return;
+  ov.setAttribute('data-flot','1');
+  /* de pantalla completa a ventana: se conserva el contenido tal cual */
+  ov.style.cssText='position:fixed;left:auto;top:64px;right:18px;bottom:auto;'+
+    'width:min(940px,86vw);max-height:78vh;overflow:auto;z-index:2147482500;'+
+    'background:#0d1117;border:1px solid #1d2c47;border-radius:14px;padding:12px;'+
+    'box-shadow:0 18px 50px rgba(0,0,0,.55)';
+  /* barra para moverla y su propia X */
+  var bar=document.createElement('div');
+  bar.style.cssText='display:flex;align-items:center;gap:8px;margin:-4px -4px 8px;padding:6px 8px;'+
+    'background:#152436;border:1px solid #1d3550;border-radius:10px;cursor:move;user-select:none;position:sticky;top:0;z-index:5';
+  bar.innerHTML='<b style="flex:1;color:#8ECBF5;font-size:12.5px">📈 '+esc(c.cron_id||'')+
+    ' · <span style="color:#9db4d6;font-weight:600">arrastra para moverla</span></b>'+
+    '<button id="_crFlotX" title="Cerrar" style="background:#8A2018;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:800;cursor:pointer">✕</button>';
+  ov.insertBefore(bar,ov.firstChild);
+  document.getElementById('_crFlotX').onclick=function(e){e.stopPropagation();ov.remove()};
+  /* arrastrar: se guarda de donde se agarro para que no pegue saltos */
+  var dx=0,dy=0,mov=false;
+  var baja=function(x,y){var r=ov.getBoundingClientRect();
+    ov.style.right='auto';ov.style.left=r.left+'px';ov.style.top=r.top+'px';
+    dx=x-r.left;dy=y-r.top;mov=true};
+  var mueve=function(x,y){if(!mov)return;
+    var w=ov.offsetWidth,h=ov.offsetHeight;
+    ov.style.left=Math.max(4,Math.min(window.innerWidth-w-4,x-dx))+'px';
+    ov.style.top=Math.max(4,Math.min(window.innerHeight-40,y-dy))+'px'};
+  bar.addEventListener('mousedown',function(e){if(e.target.id==='_crFlotX')return;baja(e.clientX,e.clientY);e.preventDefault()});
+  document.addEventListener('mousemove',function(e){mueve(e.clientX,e.clientY)});
+  document.addEventListener('mouseup',function(){mov=false});
+}catch(e){if(typeof toast==='function')toast('⚠ '+((e&&e.message)||e))}}
 function progVaciarTodas(){
  if(window._bkcSrc){toast('Estás viendo un respaldo — sal de él para modificar');return}
  if(typeof _gateAcc==='function'&&!_gateAcc('prog_cambiar','Vaciar el cronograma'))return;
