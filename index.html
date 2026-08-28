@@ -2258,7 +2258,7 @@ function _agShow(){
     var sel=document.getElementById('_agSelCron');if(!sel)return;
     if(!L.length){sel.innerHTML='<option value="">— sin cronogramas —</option>';return}
     if(!window._agCron||!L.filter(function(c){return c.cron_id===window._agCron}).length)window._agCron=L[0].cron_id;
-    sel.innerHTML=L.map(function(c){return '<option value="'+esc(c.cron_id)+'"'+(c.cron_id===window._agCron?' selected':'')+'>'+esc(c.cron_id)+' — '+esc(String(c.nombre||'').slice(0,34))+'</option>'}).join('');
+    sel.innerHTML=L.map(function(c){return '<option value="'+esc(_crNomVis(c))+'"'+(c.cron_id===window._agCron?' selected':'')+'>'+esc(_crNomVis(c))+' — '+esc(String(c.nombre||'').slice(0,34))+'</option>'}).join('');
     sel.onchange=function(){
       var B=document.getElementById('_agBody');if(B)B.innerHTML='Cargando…';
       _agPull(sel.value).then(_agPinta)};
@@ -2421,8 +2421,11 @@ function _crDeXer(txt,archivo){
 
 /* ---------- datos ---------- */
 function _crLista(){return window._crCache||[]}
+/* lo que se ENSEÑA de un cronograma: su etiqueta si la tiene, si no su id.
+   El id no se toca nunca: ata tareas, alcance y plan en sus tablas. */
+function _crNomVis(c){try{var e=String((c&&c.etiqueta)||'').trim();return e||(c&&c.cron_id)||''}catch(_e){return (c&&c.cron_id)||''}}
 async function _crPull(){
-  try{window._crCache=await sbSelect(T_CRO,'select=proyecto,cron_id,nombre,tipo,orden,fecha_datos,inicio,fin,archivo,proj_nombre,color,hh_total,n_tareas,activo,meta&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&eliminado=is.false&order=orden.asc&limit=200')||[]}
+  try{window._crCache=await sbSelect(T_CRO,'select=proyecto,cron_id,nombre,etiqueta,tipo,orden,fecha_datos,inicio,fin,archivo,proj_nombre,color,hh_total,n_tareas,activo,meta&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&eliminado=is.false&order=orden.asc&limit=200')||[]}
   catch(e){window._crCache=window._crCache||[]}
   return window._crCache}
 async function _crTareas(cronId){
@@ -2654,7 +2657,7 @@ function _rsShow(){
   document.getElementById('_rsExp').onclick=function(){_crExportUI()};
   _crPull().then(function(L){
     var m=document.getElementById('_rsMsg');if(!m)return;
-    m.innerHTML=L.length?('Cronogramas cargados: <b>'+L.map(function(c){return esc(c.cron_id)}).join(' · ')+'</b>')
+    m.innerHTML=L.length?('Cronogramas cargados: <b>'+L.map(function(c){return esc(_crNomVis(c))}).join(' · ')+'</b>')
       :'Todavía no hay cronogramas cargados — empieza por 📅 y sube tu .xer del LB0.'});
 }
 
@@ -2713,7 +2716,7 @@ function _crPinta(){
     H+='<div style="border:1px solid #1d3550;border-radius:11px;padding:10px 12px;margin-bottom:8px;background:#0f1a26">'+
       '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
       '<span style="width:11px;height:11px;border-radius:3px;background:'+esc(c.color||'#2E86C1')+';flex:none"></span>'+
-      '<b style="color:#8ECBF5;font-size:12.5px">'+esc(c.cron_id)+'</b>'+
+      '<b style="color:#8ECBF5;font-size:12.5px">'+esc(_crNomVis(c))+'</b>'+
       '<span style="background:#152436;border:1px solid #1d3550;border-radius:7px;padding:2px 7px;font-size:10.5px;font-weight:800;color:#9db4d6">'+esc(c.tipo||'LB')+'</span>'+
       '<span style="flex:1;min-width:150px;color:#cfe3ff;font-weight:700;font-size:12px;overflow-wrap:anywhere">'+esc(c.nombre||c.proj_nombre||'')+'</span>'+
       '</div>'+
@@ -2739,12 +2742,12 @@ function _crPinta(){
             (hu.n?('⚠ '+hu.n+' partida(s) con HH incluidas SIN tarea · '+hu.hh+' hh'):'✓ toda partida con HH incluida está en una tarea')+
             '</span>'):'')})()+'</div>'+
       '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'+
-      '<button data-alc="'+esc(c.cron_id)+'" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">☑ Alcance (qué HH aplican)</button>'+
-      '<button data-cur="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">📈 Ver curva</button>'+
-      '<button data-map="'+esc(c.cron_id)+'" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">🔗 Mapeo tareas ↔ partidas</button>'+
-      '<button data-ver="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">👁 Tareas</button>'+
-      '<button data-ed="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">✎ Nombre / tipo / color</button>'+
-      '<button data-del="'+esc(c.cron_id)+'" style="margin-left:auto;background:#5A1F1F;color:#FFD9D4;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">🗑</button>'+
+      '<button data-alc="'+esc(_crNomVis(c))+'" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">☑ Alcance (qué HH aplican)</button>'+
+      '<button data-cur="'+esc(_crNomVis(c))+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">📈 Ver curva</button>'+
+      '<button data-map="'+esc(_crNomVis(c))+'" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">🔗 Mapeo tareas ↔ partidas</button>'+
+      '<button data-ver="'+esc(_crNomVis(c))+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">👁 Tareas</button>'+
+      '<button data-ed="'+esc(_crNomVis(c))+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">✎ Nombre / tipo / color</button>'+
+      '<button data-del="'+esc(_crNomVis(c))+'" style="margin-left:auto;background:#5A1F1F;color:#FFD9D4;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">🗑</button>'+
       '</div></div>'});
   B.innerHTML=H;
   function elC(id){return _crLista().filter(function(x){return x.cron_id===id})[0]}
@@ -2825,7 +2828,7 @@ async function _crAlcanceUI(c){
   var ov=document.createElement('div');ov.id='_crAlcOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
   ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'+
-    '<b style="font-size:14.5px;color:#8ECBF5">☑ Alcance de '+esc(c.cron_id)+'</b>'+
+    '<b style="font-size:14.5px;color:#8ECBF5">☑ Alcance de '+esc(_crNomVis(c))+'</b>'+
     '<span id="_crSum" style="background:#14261d;border:1px solid #1d3a2a;border-radius:8px;padding:3px 9px;font-size:11.5px;font-weight:800;color:#9FE8B0">—</span>'+
     '<span id="_crSinT" style="background:#14261d;border:1px solid #1d3a2a;border-radius:8px;padding:3px 9px;font-size:11.5px;font-weight:800;color:#9FE8B0">—</span>'+
     '<button id="_crAlcX" style="margin-left:auto;background:#444;color:#fff;border:0;border-radius:8px;padding:8px 12px">✕</button></div>'+
@@ -3233,7 +3236,7 @@ async function _crTareasUI(c){
       (t.estado?(' · '+esc(t.estado)):'')+((Number(t.pct)||0)>0?(' · '+t.pct+'%'):'')+
       (t.wbs?('<br>'+esc(String(t.wbs).slice(0,90))):'')+'</div></div>'});
   ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'+
-    '<b style="font-size:14.5px;color:#8ECBF5">👁 '+esc(c.cron_id)+' · '+tar.length+' tareas</b>'+
+    '<b style="font-size:14.5px;color:#8ECBF5">👁 '+esc(_crNomVis(c))+' · '+tar.length+' tareas</b>'+
     '<button id="_crTarX" style="margin-left:auto;background:#444;color:#fff;border:0;border-radius:8px;padding:8px 12px">✕</button></div>'+
     '<div style="flex:1;overflow:auto;background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:7px">'+(H||'sin tareas')+'</div>';
   document.body.appendChild(ov);
@@ -3246,7 +3249,10 @@ function _crEditarUI(c){
   var ov=document.createElement('div');ov.id='_crEdOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(4,10,20,.86);display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box';
   ov.innerHTML='<div style="background:#0f1a26;border:1px solid #1d3550;border-radius:14px;padding:15px;max-width:480px;width:100%;color:#cfe3ff">'+
-    '<div style="font-weight:900;font-size:14px;color:#8ECBF5;margin-bottom:10px">✎ '+esc(c.cron_id)+'</div>'+
+    '<div style="font-weight:900;font-size:14px;color:#8ECBF5;margin-bottom:2px">✎ '+esc(_crNomVis(c))+'</div>'+
+    '<div style="font-size:10.5px;color:#7d8590;margin-bottom:10px">id: '+esc(c.cron_id)+' — el id no cambia; lo que se cambia es cómo se muestra</div>'+
+    '<label style="display:block;font-size:11px;font-weight:800;color:#8ECBF5;margin-bottom:4px">Nombre visible (etiqueta)</label>'+
+    '<input id="_crEdEti" value="'+esc(c.etiqueta||'')+'" placeholder="'+esc(c.cron_id)+'" style="width:100%;box-sizing:border-box;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:9px;padding:10px;font-size:13px;margin-bottom:9px">'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#8ECBF5;margin-bottom:4px">Descripción</label>'+
     '<input id="_crEdNom" value="'+esc(c.nombre||'')+'" style="width:100%;box-sizing:border-box;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:9px;padding:10px;font-size:13px;margin-bottom:9px">'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#8ECBF5;margin-bottom:4px">Tipo</label>'+
@@ -3270,6 +3276,7 @@ function _crEditarUI(c){
       var t=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'';
       await sbUpsert(T_CRO,[{proyecto:DATA.proyecto,cron_id:c.cron_id,
         nombre:String(document.getElementById('_crEdNom').value||'').trim(),
+        etiqueta:String((document.getElementById('_crEdEti')||{}).value||'').trim(),
         tipo:document.getElementById('_crEdTipo').value,color:color,
         quien:yo,ts:t,cell_at:Date.now()}],'proyecto,cron_id');
       await _crPull();ov.remove();toast('✓ Guardado');_crPinta();
@@ -3979,7 +3986,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     fMan+=pp.hh;nMan++});
   var r1=function(x){return Math.round(x*100)/100};
   ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'+
-    '<b style="font-size:14.5px;color:'+esc(c.color||'#8ECBF5')+'">📈 Curva de '+esc(c.cron_id)+
+    '<b style="font-size:14.5px;color:'+esc(c.color||'#8ECBF5')+'">📈 Curva de '+esc(_crNomVis(c))+
       (esp?(' · <span style="color:#C39BD3">'+esc(esp)+'</span>'):'')+'</b>'+
     '<span style="background:#152436;border:1px solid #1d3550;border-radius:8px;padding:3px 9px;font-size:11.5px;color:#9db4d6">'+
     sem.length+' semanas · <b style="color:#9FE8B0">'+u.hh+' hh válidas</b> · '+conHoras.length+' tareas con horas'+
@@ -4234,7 +4241,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
             (como==='capitulo'?chip('ubicada por su capítulo QPS','#8A94A6','#161d28'):'')+
             '<span style="flex:none;width:58px;text-align:right;color:#9FE8B0">'+pp.hh+' hh</span></div>'});
         return '<div style="font-size:11px;color:#7d8590;font-weight:700;margin-bottom:5px">'+
-          'PARTIDAS bajo los títulos de WBS de '+esc(c.cron_id)+' ('+lista.length+') — dentro de cada rama, en el orden del QPS'+
+          'PARTIDAS bajo los títulos de WBS de '+esc(_crNomVis(c))+' ('+lista.length+') — dentro de cada rama, en el orden del QPS'+
           ((nHer||nCap)?('<br><span style="font-weight:400">'+(nHer+nCap)+
             ' no las reclama ninguna tarea (retiradas, sobre todo): '+nHer+
             ' se colocan donde están sus hermanas del mismo título del QPS y '+nCap+
@@ -4341,7 +4348,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
             '<span style="flex:none;color:#9db4d6">'+x.dias+'d</span>'+
             '<span style="flex:none;width:64px;text-align:right;color:'+(x.info?'#5C6779':'#9FE8B0')+';font-weight:800">'+x.hh+' hh</span></div>'});
         return '<div style="font-size:11px;color:#7d8590;font-weight:700;margin-bottom:5px">'+
-          'EL CRONOGRAMA — títulos de WBS de '+esc(c.cron_id)+' con sus agrupaciones y tareas</div>'+H3}
+          'EL CRONOGRAMA — títulos de WBS de '+esc(_crNomVis(c))+' con sus agrupaciones y tareas</div>'+H3}
       /* ---------- nivel TAREAS (y con WBS) ---------- */
       function linea(x){
         var col=x.hhDia>200?'#F0A3A3':(x.hhDia>90?'#E8C9A0':'#9FE8B0');
@@ -5525,7 +5532,7 @@ async function _crMapeoUI(c){
   var ov=document.createElement('div');ov.id='_crMapOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
   ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'+
-    '<b style="font-size:14.5px;color:#8ECBF5">🔗 Mapeo de '+esc(c.cron_id)+'</b>'+
+    '<b style="font-size:14.5px;color:#8ECBF5">🔗 Mapeo de '+esc(_crNomVis(c))+'</b>'+
     '<span id="_crMapN" style="background:#152436;border:1px solid #1d3550;border-radius:8px;padding:3px 9px;font-size:11.5px;font-weight:800;color:#9db4d6">—</span>'+
     '<button id="_crMapAuto" style="background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:8px 12px;font-weight:800;font-size:11.5px">⚡ Auto por nombre</button>'+
     '<button id="_crMapFalta" style="background:#5A2A2A;color:#FFD9D4;border:0;border-radius:8px;padding:8px 12px;font-weight:800;font-size:11.5px">⚠ Ver las que faltan</button>'+
@@ -6051,7 +6058,7 @@ function _crExportUI(){
       document.getElementById('_crExpGo').disabled=true;
       document.getElementById('_crExpGo').style.opacity='.5';
       document.getElementById('_crExpMsg').innerHTML='Primero carga un .xer en 📅 Cronogramas.';return}
-    s.innerHTML=L.map(function(c){return '<option value="'+esc(c.cron_id)+'">'+esc(c.cron_id)+' — '+esc(String(c.nombre||'').slice(0,48))+'</option>'}).join('')});
+    s.innerHTML=L.map(function(c){return '<option value="'+esc(_crNomVis(c))+'">'+esc(_crNomVis(c))+' — '+esc(String(c.nombre||'').slice(0,48))+'</option>'}).join('')});
   document.getElementById('_crExpGo').onclick=async function(){
     var b=this,msg=document.getElementById('_crExpMsg');
     b.disabled=true;b.textContent='Armando…';
@@ -11570,9 +11577,9 @@ function _wkExcel(){
       var nt=(window._crNT||{})[c.cron_id];
       var n=nt?nt.n:(c.n_tareas||0);
       return '<label style="display:flex;gap:7px;align-items:center;padding:3px 0;cursor:pointer;line-height:1.35">'+
-        '<input type="checkbox" class="_wkCk" value="'+esc(c.cron_id)+'"'+(c.activo!==false?' checked':'')+' style="flex:none;margin:0">'+
+        '<input type="checkbox" class="_wkCk" value="'+esc(_crNomVis(c))+'"'+(c.activo!==false?' checked':'')+' style="flex:none;margin:0">'+
         '<span style="flex:none;width:9px;height:9px;border-radius:2px;background:'+esc(c.color||'#2E86C1')+'"></span>'+
-        '<b style="flex:none;color:#1F3864">'+esc(c.cron_id)+'</b>'+
+        '<b style="flex:none;color:#1F3864">'+esc(_crNomVis(c))+'</b>'+
         '<span style="flex:1;min-width:0;color:#5C6779;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
           esc(String(c.nombre||''))+'</span>'+
         '<span style="flex:none;font-size:10.5px;color:#8A94A6;white-space:nowrap">'+n+' tar · '+
@@ -13241,7 +13248,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260827a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -18484,7 +18491,7 @@ function _bkcAplicarView(){var ov=document.getElementById('_bkcOv')||_bkcOverlay
   /* los cronogramas cargados: de ahi sale el programado de las cartillas */
   var opts='';
   try{(_crLista()||[]).forEach(function(c){
-    opts+='<option value="cron:'+esc(c.cron_id)+'">📅 '+esc(c.cron_id)+' — '+
+    opts+='<option value="cron:'+esc(_crNomVis(c))+'">📅 '+esc(_crNomVis(c))+' — '+
       esc(String(c.nombre||'').slice(0,48))+'</option>'})}catch(_ec){}
   opts+='<option value="__base0__">📐 Línea base 0 — fechas originales aprobadas (catálogo)</option>';(state.backcron||[]).slice().sort(function(a,b){return (b.ts||0)-(a.ts||0)}).forEach(function(bk){var tot=0;Object.keys(bk.snap||{}).forEach(function(d){tot+=(bk.snap[d]||[]).length});if(tot)opts+='<option value="'+esc(bk.id)+'">'+esc(bk.nombre)+' ('+tot+' act'+(bk.fecha?(' · '+bk.fecha):'')+')</option>'});var inner=_bkcHead('Aplicar planeamiento','Elige de dónde tomar las fechas Inicio/Fin de las tarjetas')+'<div style="padding:14px"><div style="font-size:12px;color:#c9bfd2;margin-bottom:7px;font-weight:700">Fuente del planeamiento</div><select id="_bkcBaseSel" style="width:100%;box-sizing:border-box;padding:11px 12px;border-radius:10px;border:1px solid #3a3442;background:#0f1014;color:#fff;font-size:14px;font-weight:700;margin-bottom:12px">'+opts+'</select><div style="font-size:11px;color:#9a8fa2;margin-bottom:14px;line-height:1.45">Al aplicar, se escribe el <b style="color:#EFC98A">Inicio / Fin (el «programado»)</b> de cada tarjeta según la fuente elegida. Cambia el planeamiento en todos lados (modal, %, forecast) y se sincroniza a todos.</div><button id="_bkcAplGo" class="admGlass" style="margin:0"><span class="admpz admpz-heart" style="color:#EFC98A;-webkit-text-stroke:.5px #B8801E">Aplicar a las tarjetas</span></button><button id="_bkcBack" style="width:100%;margin-top:9px;background:#26232b;color:#c9bfd2;border:0;border-radius:10px;padding:11px;font-weight:700">Volver</button></div>';ov.innerHTML=_bkcShell(inner);document.getElementById('_bkcX').onclick=function(){ov.remove()};document.getElementById('_bkcBack').onclick=_showBackCron;document.getElementById('_bkcAplGo').onclick=function(){var v=document.getElementById('_bkcBaseSel').value;_bkcAplicarPlan(v)};
   /* si la lista de cronogramas aun no estaba leida, se anaden al llegar */
@@ -18494,7 +18501,7 @@ function _bkcAplicarView(){var ov=document.getElementById('_bkcOv')||_bkcOverlay
     var falta='';
     L.forEach(function(c){
       if(hay['cron:'+c.cron_id])return;
-      falta+='<option value="cron:'+esc(c.cron_id)+'">📅 '+esc(c.cron_id)+' — '+
+      falta+='<option value="cron:'+esc(_crNomVis(c))+'">📅 '+esc(_crNomVis(c))+' — '+
         esc(String(c.nombre||'').slice(0,48))+'</option>'});
     if(falta)sel.innerHTML=falta+sel.innerHTML})}catch(_ep){}}
 async function _bkcAplicarPlan(srcId){if(!((typeof esAdmin==='function'&&esAdmin())||(typeof puedeAcc==='function'&&puedeAcc('plan_fechas')))){if(typeof _gateAcc==='function')_gateAcc('plan_fechas','Cambiar planificación');return}var n=0;function setEdit(id,ini,fin){if(!id)return;var cur=state.edits[id]||{};cur.inicio=ini||'';cur.fin=fin||'';cur.ts=(typeof nowSrv==='function'?nowSrv():Date.now());state.edits[id]=cur;n++}if(String(srcId).indexOf('cron:')===0){
