@@ -2967,7 +2967,7 @@ async function _crAlcanceUI(c){
         })()+'</div>'});
     var B=document.getElementById('_crAlcBody');
     if(_crHoja===2&&_crH2){
-      B.innerHTML=_crPintaHoja2(_crH2,P,sel,fec);
+      B.innerHTML=_crPintaHoja2(_crH2,P,sel,fec,q);
       /* las actividades con mas de una partida se abren para ver cuales son */
       B.querySelectorAll('[data-abre="1"]').forEach(function(d){
         d.onclick=function(ev){
@@ -3455,7 +3455,7 @@ function _crPickTarea(tar,idP,titulo){
 /* La hoja 2 tal como sale en el Excel: los titulos de WBS y, bajo cada uno,
    sus tareas con las partidas que reclaman. Las agrupaciones van con su color,
    el mismo que se ve en el resto del aplicativo. */
-function _crPintaHoja2(D,P,sel,fec){
+function _crPintaHoja2(D,P,sel,fec,q){
   var porId={};(P||[]).forEach(function(p){porId[p.id]=p});
   var grupoDe={},nomG={},colG={};
   (D.gs||[]).forEach(function(g,i){
@@ -3507,8 +3507,21 @@ function _crPintaHoja2(D,P,sel,fec){
                (Math.abs(hhSue-(alc-total))<0.005?'':' ('+r2(hhSue)+' hh)')):'')+
         '</span>')+
     '</div>';
-  var prev=[];
+  var prev=[],_hallo=0;
   orden.forEach(function(t,k){
+    /* la busqueda tambien manda aqui: la actividad sale si casa ella o alguna
+       de sus partidas; si lo que caso fue una partida, se abre para verla.
+       prev no se toca al saltar, para que la siguiente que si case traiga
+       sus titulos de WBS completos. */
+    var _abreQ=false;
+    if(q){
+      var _casa=_crNrm(t.task_code+' '+(t.nombre||'')).indexOf(q)>=0;
+      if(!_casa)(t.items||[]).forEach(function(i){
+        if(_casa)return;
+        var pp=porId[i];
+        if(_crNrm(i+' '+((pp&&pp.nom)||'')).indexOf(q)>=0){_casa=true;_abreQ=true}});
+      if(!_casa)return;
+      _hallo++}
     /* los titulos de WBS, solo cuando cambian */
     var ruta=String(t.wbs||'').split(' / ').filter(function(z){return z});
     var i0=0;while(i0<ruta.length&&i0<prev.length&&ruta[i0]===prev[i0])i0++;
@@ -3555,7 +3568,7 @@ function _crPintaHoja2(D,P,sel,fec){
       '<span style="flex:none;width:14px;text-align:center;color:#7d8590;font-size:11px">'+
         (abrible?(_crAbre[t.task_code]?'▾':'▸'):'')+'</span></div>';
     /* abierta: que partidas del alcance esta contando, y cuales no */
-    if(abrible&&_crAbre[t.task_code]){
+    if(abrible&&(_crAbre[t.task_code]||_abreQ)){
       H+='<div style="margin:0 0 6px '+(ruta.length*13+16)+'px;padding:5px 0 2px;'+
         'border-left:2px solid #24344f">';
       (t.items||[]).forEach(function(i){
@@ -3584,6 +3597,7 @@ function _crPintaHoja2(D,P,sel,fec){
             'background:#2a1c1c;border:1px solid #4a2a2a">✕</span></div>'});
       H+='</div>'}});
   if(!orden.length)return '<div style="padding:14px;color:#7d8590;text-align:center">Sin tareas</div>';
+  if(q&&!_hallo)H+='<div style="padding:14px;color:#7d8590;text-align:center">Sin coincidencias en el AGRUPADO</div>';
   H+='<div style="display:flex;gap:8px;align-items:center;margin-top:8px;'+
     'padding:8px 9px;background:#0d1626;border:1px solid #1d2a3d;border-radius:9px">'+
     '<b style="flex:1;font-size:11.5px;color:#cfe3ff;letter-spacing:.04em">TOTAL AGRUPADO</b>'+
@@ -13434,7 +13448,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828b4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}

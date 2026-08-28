@@ -1,7 +1,7 @@
 /* Service worker — Parte de obra (Water Transition II)
    Guarda la app en el telefono y la abre SIN conexion, pero SIEMPRE trae la version
    mas nueva cuando hay internet. Cambia CACHE en cada despliegue para no servir data vieja. */
-const CACHE = 'floculantes-v20260828b3';
+const CACHE = 'floculantes-v20260828b4';
 const SHELL = ['./', './index.html', './config.js', './manifest.json', './icon-192.png', './icon-512.png', './heic2any.min.js'];
 
 self.addEventListener('install', function (e) {
