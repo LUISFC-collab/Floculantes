@@ -6753,29 +6753,29 @@ async function _crPlanRecupera(cronId,corte,semN){
       if(u.items[i]!=null)hh+=(Number(u.items[i])||0)/_crVeces(rp,i)});
     var cod=t.task_code;
     plan[cod]={};actual[cod]={};fore[cod]={};back[cod]={};
-    /* La linea del cronograma dice lo que el CRONOGRAMA dice: cada partida
-       se reparte UNA vez sobre sus fechas del alcance y, si no tiene, sobre
-       las de su tarea. El respaldo ya no manda aqui: llegaba a pintar
-       recuperaciones inventadas (26/08) donde el cronograma decia 10/08. */
-    if(hh>0)(t.items||[]).forEach(function(i){
-      var hi=(Number(u.items[i])||0)/_crVeces(rp,i);
-      if(!(hi>0))return;
-      /* sobre dias HABILES, con la misma puerta del calendario; si la
-         ventana entera cae en feriado, corrida para no perder las HH */
-      var _diasHab=function(x0,x1){
-        var hab=_crLaborables(x0,x1).filter(function(f9){return f9>=gIni&&f9<=gFin});
-        if(hab.length)return hab;
-        var o9=[],a0=_crASerial(x0),a1=_crASerial(x1);
-        for(var k9=a0;k9<=a1;k9++){
-          var f9=_crDeSerial(k9);
-          if(f9>=gIni&&f9<=gFin)o9.push(f9)}
-        return o9};
-      var dentro=[],a8=alc&&alc[i];
-      if(a8&&a8.ini&&a8.fin)dentro=_diasHab(a8.ini,a8.fin);
-      if(!dentro.length&&t.ini&&t.fin)dentro=_diasHab(t.ini,t.fin);
-      if(!dentro.length)return;
-      var pdb=(hi/hh)/dentro.length;
-      dentro.forEach(function(d){back[cod][d]=(back[cod][d]||0)+pdb})});
+    /* La linea del cronograma dice lo que el CRONOGRAMA dice y CUADRA con
+       la curva S: la tarea reparte por semanas IGUAL que la curva -sus dias
+       corridos deciden la cuota de cada semana, con el mismo pegado a la
+       primera y la ultima semana de la rejilla-, y la cuota de cada semana
+       se pinta SOLO en los dias habiles de esa semana. Asi el acumulado
+       semanal es el de la curva y los findes y feriados quedan limpios. */
+    if(hh>0&&t.ini&&t.fin&&G.length){
+      var bd0=_crASerial(t.ini),bd1=_crASerial(t.fin);
+      var bnd=Math.max(1,bd1-bd0+1),porSem={};
+      for(var d9=bd0;d9<=bd1;d9++){
+        var f9=_crDeSerial(d9),w9=-1;
+        if(f9>G[G.length-1].fin)w9=G.length-1;
+        else if(f9<G[0].ini)w9=0;
+        else for(var j9=0;j9<G.length;j9++)if(f9>=G[j9].ini&&f9<=G[j9].fin){w9=j9;break}
+        if(w9>=0)porSem[w9]=(porSem[w9]||0)+1}
+      Object.keys(porSem).forEach(function(k7){
+        var gS=G[+k7],cuota=porSem[k7]/bnd;
+        var i0=(t.ini>gS.ini?t.ini:gS.ini),i1=(t.fin<gS.fin?t.fin:gS.fin);
+        var habs=(i0<=i1)?_crLaborables(i0,i1):[];
+        if(!habs.length)habs=_crLaborables(gS.ini,gS.fin);
+        if(!habs.length)habs=[gS.ini];
+        var pdb=cuota/habs.length;
+        habs.forEach(function(d8){back[cod][d8]=(back[cod][d8]||0)+pdb})})}
     /* --- lo que el LB1 pedia esos dias, sobre dias HABILES: ni findes ni
        feriados del calendario del admin; si la ventana entera cae en
        feriado, corrida para no perder las HH --- */
@@ -13487,7 +13487,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828b7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828b8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
