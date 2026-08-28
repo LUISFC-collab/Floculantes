@@ -13248,7 +13248,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -13327,23 +13327,37 @@ function _elimCatHTML(R){
   var H='<div style="font-weight:800;color:#f5b8d4;font-size:12.5px;margin:14px 0 6px">📄 Retiradas del alcance por el contrato ('+R.length+')</div>';
   H+='<div style="font-size:11px;color:#9db4d6;margin-bottom:7px;line-height:1.5">Vinieron así en el Excel: '+act.length+' actividad(es) y '+tit.length+' encabezado(s). '+
      'Están guardadas con lápida, por eso no salen en la lista ni suman al avance. Dejan fuera '+(hh?(Math.round(hh)+' hh'):'0 hh')+(cost?(' y '+_nMon(cost)+' de costo'):'')+'.</div>';
+  /* Se lee como la lista principal: los encabezados del Excel SON los
+     titulos del WBS y se pintan como bandas, con su sangria por nivel; las
+     actividades cuelgan debajo, todas con la misma tarjeta. Antes iban de dos
+     colores y parecian dos cosas distintas. */
   R.forEach(function(r){
     var esTit=!!r.es_titulo;
-    H+='<div style="border:1px solid '+(esTit?'#2a3550':'#4a1a2e')+';border-radius:10px;padding:8px 10px;margin-bottom:6px;background:'+(esTit?'#141c2e':'#221019')+'">';
-    H+='<div style="display:flex;align-items:baseline;gap:7px"><b style="color:'+(esTit?'#9db4d6':'#f5b8d4')+';font-size:11px">'+esc(r.item||'')+'</b>';
-    if(esTit)H+='<span style="font-size:9px;font-weight:800;color:#0b1220;background:#9db4d6;border-radius:20px;padding:1px 7px">SISTEMA</span>';
-    H+='<span style="margin-left:auto;font-size:10px;color:#7d8590">'+esc(r.especialidad||'')+'</span></div>';
+    var niv=Math.max(0,String(r.item||'').split('.').length-2);
+    if(esTit){
+      H+='<div style="margin:'+(niv?'8':'13')+'px 0 5px '+(niv*14)+'px;background:'+(niv?'#182338':'#1B2B45')+
+        ';border-left:3px solid #4A6EA8;border-radius:0 8px 8px 0;padding:6px 10px;display:flex;align-items:baseline;gap:8px">'+
+        '<b style="color:#8ECBF5;font-size:11px">'+esc(r.item||'')+'</b>'+
+        '<span style="color:#cfe3ff;font-size:'+(niv?'11.5':'12.5')+'px;font-weight:'+(niv?'700':'800')+'">'+esc(r.descripcion||'')+'</span>'+
+        '<span style="margin-left:auto;font-size:10px;color:#7d8590;flex:none">'+esc(r.especialidad||'')+'</span></div>';
+      return}
+    H+='<div style="border:1px solid #2a3550;border-radius:10px;padding:8px 10px;margin:0 0 6px '+((niv+1)*14)+'px;background:#141c2e">';
+    H+='<div style="display:flex;align-items:baseline;gap:7px"><b style="color:#f5b8d4;font-size:11px">'+esc(r.item||'')+'</b>'+
+       '<span style="margin-left:auto;font-size:10px;color:#7d8590">'+esc(r.especialidad||'')+'</span></div>';
     H+='<div style="color:#cfe3ff;font-size:12px;margin-top:3px;line-height:1.4">'+esc(r.descripcion||'')+'</div>';
-    if(esTit){H+='<div style="color:#7d8590;font-size:10.5px;margin-top:3px">Sin metrado ni unidad: es un encabezado, no una actividad.</div>'}
-    else{var det=[];
-      if(r.cantidad!=null)det.push(_nNum(r.cantidad)+' '+esc(r.unidad||''));
-      if(r.hh_t!=null)det.push(_nNum(r.hh_t,1)+' hh');
-      if(r.precio_unitario!=null)det.push('PU '+_nMon(r.precio_unitario));
-      if(r.oferta_total!=null)det.push('Total '+_nMon(r.oferta_total));
-      if(det.length)H+='<div style="color:#9db4d6;font-size:10.5px;margin-top:3px">'+det.join(' · ')+'</div>';
-      if(typeof esAdmin==='function'&&esAdmin())
-        H+='<button class="_elCatV" data-pid="'+esc(r.partida_id)+'" style="margin-top:7px;background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11px;cursor:pointer">↩ Devolver al alcance</button>';
-    }
+    var det=[];
+    if(r.cantidad!=null)det.push(_nNum(r.cantidad)+' '+esc(r.unidad||''));
+    if(r.hh_t!=null)det.push(_nNum(r.hh_t,1)+' hh');
+    if(r.precio_unitario!=null)det.push('PU '+_nMon(r.precio_unitario));
+    if(r.oferta_total!=null)det.push('Total '+_nMon(r.oferta_total));
+    if(det.length)H+='<div style="color:#9db4d6;font-size:10.5px;margin-top:3px">'+det.join(' · ')+'</div>';
+    var _tieneApu=false;try{var _a9=(typeof _apuDe==='function')?_apuDe(r.partida_id):null;
+      _tieneApu=!!(_a9&&(_a9.insumos||[]).filter(function(x){return !x.eliminado}).length)}catch(_e9){}
+    var _bots='';
+    if(_tieneApu)_bots+='<button class="_elApu" data-pid="'+esc(r.partida_id)+'" style="background:#0C5132;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11px;cursor:pointer">📊 APU</button>';
+    if(typeof esAdmin==='function'&&esAdmin())
+      _bots+='<button class="_elCatV" data-pid="'+esc(r.partida_id)+'" style="background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11px;cursor:pointer">↩ Devolver al alcance</button>';
+    if(_bots)H+='<div style="display:flex;gap:7px;margin-top:7px">'+_bots+'</div>';
     H+='</div>'});
   return H}
 async function _elimCatVolver(pid){
@@ -13479,8 +13493,17 @@ async function _showActEliminadas(){if(!(typeof esAdmin==='function'&&esAdmin())
  var _catH='';try{_catH=_elimCatHTML(await _elimCatalogo())}catch(_ec2){}
  var B=document.getElementById('_aeBody');if(!state.wbsX)state.wbsX=store.get('obf4_wbsx')||[];var _wxDel=(state.wbsX||[]).filter(function(r){return r.eliminado});var _wxH=_wxDel.length?('<div style="font-weight:800;color:#f5b8d4;font-size:12.5px;margin:2px 0 6px">🗂 Sistemas y áreas eliminados</div>'+_wxDel.map(function(r,i){return '<div style="border:1px solid #4a1a2e;border-radius:10px;padding:8px 10px;margin-bottom:6px;background:#221019;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:0"><b style="color:#f5b8d4">'+(r.tipo==='area'?'📍 Área':'🔧 Sistema')+': '+esc(r.nombre)+'</b><div style="color:#9db4d6;font-size:11px">'+esc(r.disciplina)+(r.area?(' · área '+esc(r.area)):'')+' · elim. por '+esc(r.elim_por||'?')+'</div></div><button class="_wxRest" data-i="'+i+'" style="background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800">♻ Restablecer todo</button><button class="_wxKill" data-i="'+i+'" style="background:#7A1A1A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800" title="Borrar definitivamente (las actividades quedan como snapshots individuales)">🗑</button></div>'}).join('')):'';function _wxWire(ovR){B.querySelectorAll('._elCatV').forEach(function(b){b.onclick=function(){_elimCatVolver(b.getAttribute('data-pid'))}});B.querySelectorAll('._wxRest').forEach(function(b){b.onclick=function(){var r=_wxDel[+b.getAttribute('data-i')];ovR.remove();_wbsXRest(r.tipo,r.nombre,r.disciplina,r.area||'')}});B.querySelectorAll('._wxKill').forEach(function(b){b.onclick=async function(){var r=_wxDel[+b.getAttribute('data-i')];if(!confirm('¿Borrar DEFINITIVAMENTE '+(r.tipo==='area'?'el área':'el sistema')+' "'+r.nombre+'" de eliminados?\n\nSus actividades eliminadas siguen recuperables una por una.'))return;try{await fetch(sbBase()+'/rest/v1/wbs_extra?proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&disciplina=eq.'+encodeURIComponent(r.disciplina)+'&tipo=eq.'+encodeURIComponent(r.tipo)+'&nombre=eq.'+encodeURIComponent(r.nombre)+'&area=eq.'+encodeURIComponent(r.area||''),{method:'DELETE',headers:sbHead({'Prefer':'return=minimal'})})}catch(_e){}state.wbsX=(state.wbsX||[]).filter(function(x){return !(x.tipo===r.tipo&&x.nombre===r.nombre&&x.disciplina===r.disciplina)});try{_wbsXDeriva()}catch(_e){}toast('Borrado de eliminados');_showActEliminadas()}})}var paths=await _actElimList();if(!paths.length){B.innerHTML=_wxH+'<div style="color:#7d8590;padding:14px;text-align:center">No hay actividades eliminadas en la app.</div>'+_catH;_wxWire(ov);return}
  var cards=[];for(var i=0;i<paths.length;i++){var snap=null;try{snap=await (await fetch(sbBase()+'/storage/v1/object/obra-fotos/'+paths[i]+'?nc='+Date.now(),{headers:sbHead()})).json()}catch(e){}if(!snap)continue;cards.push({path:paths[i],s:snap})}
- B.innerHTML=_wxH+cards.map(function(c){var s=c.s;var nf=s.fotos_files?Object.keys(s.fotos_files).length:0;return '<div style="border:1px solid #2e1622;border-radius:10px;padding:9px 10px;margin-bottom:8px;background:#1a0f16"><div style="font-weight:800;color:#f5b8d4;font-size:13px">['+esc(s.codigo||s.id)+'] '+esc(s.nombre||'')+'</div><div style="color:#9db4d6;font-size:11px;margin:2px 0 8px">'+esc(s.peru||'')+' · '+esc(s.disc||'')+' · '+((s.tablas&&s.tablas.partes&&s.tablas.partes.length)||0)+' carga(s) · '+nf+' foto(s) · elim. por '+esc(s.quien||'?')+'</div><div style="display:flex;gap:8px"><button class="_aeGo" data-go="'+esc(s.id||'')+'" style="background:#33406a;color:#fff;border:0;border-radius:8px;padding:9px 11px;font-weight:800" title="Ir a verla en la lista (rojo tenue)">📍 Ir</button><button class="_aeRest" data-p="'+esc(c.path)+'" style="flex:1;background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:9px;font-weight:800">♻ Restablecer completa</button><button class="_aeDel" data-p="'+esc(c.path)+'" data-l="'+esc((s.codigo||s.id))+'" style="background:#7A1A1A;color:#fff;border:0;border-radius:8px;padding:9px 11px;font-weight:800" title="Borrar definitivamente de eliminadas">🗑</button></div></div>'}).join('')+_catH||'<div style="color:#7d8590">No hay actividades eliminadas.</div>';
- _wxWire(ov);B.querySelectorAll('._aeGo').forEach(function(b){b.onclick=function(){var id=b.getAttribute('data-go');ov.remove();if(typeof _gotoElim==='function')_gotoElim(id)}});
+ B.innerHTML=_wxH+cards.map(function(c){var s=c.s;var nf=s.fotos_files?Object.keys(s.fotos_files).length:0;return '<div style="border:1px solid #2e1622;border-radius:10px;padding:9px 10px;margin-bottom:8px;background:#1a0f16"><div style="font-weight:800;color:#f5b8d4;font-size:13px">['+esc(s.codigo||s.id)+'] '+esc(s.nombre||'')+'</div><div style="color:#9db4d6;font-size:11px;margin:2px 0 8px">'+esc(s.peru||'')+' · '+esc(s.disc||'')+' · '+((s.tablas&&s.tablas.partes&&s.tablas.partes.length)||0)+' carga(s) · '+nf+' foto(s) · elim. por '+esc(s.quien||'?')+'</div><div style="display:flex;gap:8px"><button class="_aeGo" data-go="'+esc(s.id||'')+'" style="background:#33406a;color:#fff;border:0;border-radius:8px;padding:9px 11px;font-weight:800" title="Ir a verla en la lista (rojo tenue)">📍 Ir</button>'+
+ ((typeof _apuDe==='function'&&(function(){try{var _a=_apuDe(s.id);return !!(_a&&(_a.insumos||[]).filter(function(x){return !x.eliminado}).length)}catch(_e){return false}})())
+   ?'<button class="_aeApu" data-apu="'+esc(s.id||'')+'" style="background:#0C5132;color:#fff;border:0;border-radius:8px;padding:9px 11px;font-weight:800" title="Ver el APU de esta actividad — el APU es del contrato y no se pierde al eliminarla">📊 APU</button>':'')+'<button class="_aeRest" data-p="'+esc(c.path)+'" style="flex:1;background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:9px;font-weight:800">♻ Restablecer completa</button><button class="_aeDel" data-p="'+esc(c.path)+'" data-l="'+esc((s.codigo||s.id))+'" style="background:#7A1A1A;color:#fff;border:0;border-radius:8px;padding:9px 11px;font-weight:800" title="Borrar definitivamente de eliminadas">🗑</button></div></div>'}).join('')+_catH||'<div style="color:#7d8590">No hay actividades eliminadas.</div>';
+ _wxWire(ov);
+ /* el APU se abre aunque la actividad este eliminada: es informacion del
+    contrato, no del estado */
+ B.querySelectorAll('._aeApu, ._elApu').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();
+   var id=b.getAttribute('data-apu')||b.getAttribute('data-pid');
+   var p=(DATA._byId&&DATA._byId[id])||{id:id,nombre:''};
+   try{_apuUI(p)}catch(e){if(typeof toast==='function')toast('⚠ '+((e&&e.message)||e))}}});
+ B.querySelectorAll('._aeGo').forEach(function(b){b.onclick=function(){var id=b.getAttribute('data-go');ov.remove();if(typeof _gotoElim==='function')_gotoElim(id)}});
  B.querySelectorAll('._aeRest').forEach(function(b){b.onclick=function(){_restaurarActElim(b.getAttribute('data-p'),ov)}});
  B.querySelectorAll('._aeDel').forEach(function(b){b.onclick=async function(){if(!confirm('¿Borrar DEFINITIVAMENTE de eliminadas la actividad '+b.getAttribute('data-l')+'?\n\nYa no se podrá restablecer.'))return;try{var _rD=await fetch(sbBase()+'/storage/v1/object/obra-fotos/'+b.getAttribute('data-p').split('/').map(encodeURIComponent).join('/'),{method:'DELETE',headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}});/* sin Content-Type: el storage rechaza DELETE json con body vacío */toast(_rD.ok?'Borrada de eliminadas':('No se pudo borrar ('+_rD.status+')'))}catch(e){toast('No se pudo borrar')}_showActEliminadas()}});
 }
