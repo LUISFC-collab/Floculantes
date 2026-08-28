@@ -9166,6 +9166,31 @@ function _wkPaqueteApp(hojas,styles,ss){
           extra=Object.assign({},extra,{grafico:_tr9(extra.grafico)});
         return [nom,xml,extra]})}
   }catch(_em9){}
+  /* La MEMORIA de los graficos copiados: panel.xlsx guarda en numCache los
+     valores de cuando se guardo aquel libro, y Excel puede pintar esa memoria
+     vieja -por eso el Actual del REPORTE SEMANAL no llegaba a la semana
+     generada-. Se vacia la cache de las piezas copiadas que miran a nuestras
+     hojas y Excel la rehace de las celdas al abrir. Los graficos hechos por
+     el aplicativo llevan cache fresca y no se tocan. */
+  try{
+    hojas=hojas.map(function(h8){
+      var ex8=h8[2];
+      if(!ex8||!ex8.partes)return h8;
+      var np8={},toco8=false;
+      Object.keys(ex8.partes).forEach(function(k8){
+        var v8=ex8.partes[k8];
+        if(typeof v8==='string'&&/^xl\/charts\/chart\d+\.xml$/.test(k8)&&
+           /PHYSICAL % PROGRESS|REPORTE SEMANAL/.test(v8)){
+          var n8=v8.replace(/(<c:numCache>)([\s\S]*?)(<\/c:numCache>)/g,
+            function(_t8,a8,cu8,b8){
+              var fc8=(cu8.match(/<c:formatCode>[\s\S]*?<\/c:formatCode>/)||[''])[0];
+              return a8+fc8+'<c:ptCount val="0"/>'+b8});
+          n8=n8.replace(/(<c:strCache>)[\s\S]*?(<\/c:strCache>)/g,
+            '$1<c:ptCount val="0"/>$2');
+          if(n8!==v8){v8=n8;toco8=true}}
+        np8[k8]=v8});
+      return toco8?[h8[0],h8[1],Object.assign({},ex8,{partes:np8})]:h8})
+  }catch(_em8){}
   var ov=function(i){return '<Override PartName="/xl/worksheets/sheet'+i+
     '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'};
   /* Las piezas copiadas conservan su nombre original; las generadas se
@@ -13370,7 +13395,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828a8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828a9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
