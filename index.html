@@ -6753,18 +6753,19 @@ async function _crPlanRecupera(cronId,corte,semN){
       if(u.items[i]!=null)hh+=(Number(u.items[i])||0)/_crVeces(rp,i)});
     var cod=t.task_code;
     plan[cod]={};actual[cod]={};fore[cod]={};back[cod]={};
-    /* La secuencia del cronograma: cada partida se reparte UNA vez, sobre
-       los dias del respaldo si esta en el y, si no, sobre los suyos del LB1.
-       Asi la linea suma exactamente uno, sin colas anadidas aparte. */
+    /* La linea del cronograma dice lo que el CRONOGRAMA dice: cada partida
+       se reparte UNA vez sobre sus fechas del alcance y, si no tiene, sobre
+       las de su tarea. El respaldo ya no manda aqui: llegaba a pintar
+       recuperaciones inventadas (26/08) donde el cronograma decia 10/08. */
     if(hh>0)(t.items||[]).forEach(function(i){
       var hi=(Number(u.items[i])||0)/_crVeces(rp,i);
       if(!(hi>0))return;
-      var dentro=[],b2=bkSnap[i];
-      if(b2&&b2.start){
-        var oc=[];
-        try{oc=(typeof occupiedDays==='function')?occupiedDays(b2.start,b2.dias||1):[b2.start]}
-        catch(_eo2){oc=[b2.start]}
-        dentro=oc.filter(function(d){return d>=gIni&&d<=gFin})}
+      var dentro=[],a8=alc&&alc[i];
+      if(a8&&a8.ini&&a8.fin){
+        var e8=_crASerial(a8.ini),e9=_crASerial(a8.fin);
+        for(var k8=e8;k8<=e9;k8++){
+          var f8=_crDeSerial(k8);
+          if(f8>=gIni&&f8<=gFin)dentro.push(f8)}}
       if(!dentro.length&&t.ini&&t.fin){
         var e0=_crASerial(t.ini),e1=_crASerial(t.fin);
         for(var kk=e0;kk<=e1;kk++){
@@ -7032,7 +7033,8 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
   var LINEAS=R?['PROG. SEM. ANT.','ACTUAL','PROG. SEM. SIG.']:['PROGRAMADO'];
   /* la cuarta linea se llama como el cronograma en CRONOGRAMAS, no como la
      pantalla de donde sale */
-  if(R&&R.hayBack)LINEAS.push(String(bloque.id||'RESPALDO'));
+  if(R&&R.hayBack)LINEAS.push(String(
+    ((typeof _wkNomCr==='function')?_wkNomCr(bloque.id):bloque.id)||'RESPALDO'));
   /* PPC y 3WLA: la misma hoja con SOLO algunas lineas. k0 conserva el indice
      original de cada linea -de el salen sus datos, su color y el gate del
      Cumplimiento-; el lugar en la hoja lo lleva pos. */
@@ -13481,7 +13483,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828b5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828b6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
