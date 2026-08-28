@@ -13047,7 +13047,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260826b2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260826b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17348,9 +17348,17 @@ function _pgAporteDia(pr){try{
   pc=Math.max(0,Math.min(100,pc));
   var falta=w*(1-pc/100);
   return falta/Math.max(1,Number(pr.dias)||1)}catch(e){return 0}}
-/* Lo que la especialidad lleva hecho, con la misma vara que todo lo demas */
+/* De donde se parte el acumulado. Con la vara puesta en las tres, es lo que
+   llevan hechas LAS TRES -que es el numero de la curva-, no lo que aporta esta
+   especialidad: si se sumara solo lo suyo, el acumulado arrancaria por debajo
+   de donde va el proyecto y no cuadraria con nada. */
+function _pgTodas(){try{
+  if(!_pgBaseProy())return acts(progDisc)||[];
+  return DATA.partidas.concat(state.nuevas||[]).map(applyEdit).filter(function(p){
+    return !(typeof tombHas==='function'&&tombHas('partida',p.id))&&_visVe(p)})}
+  catch(e){return acts(progDisc)||[]}}
 function _pgAvanceEsp(){try{
-  var t=0;(acts(progDisc)||[]).forEach(function(p){
+  var t=0;(_pgTodas()||[]).forEach(function(p){
     if(typeof esNA==='function'&&esNA(p))return;
     var w=Number(_pgPeso(p))||0;if(!(w>0))return;
     var pc=0;try{pc=Number(pctRawOf(p))||0}catch(e){}
