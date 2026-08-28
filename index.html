@@ -13189,7 +13189,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260827a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260827a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -15122,7 +15122,14 @@ function _pgBotonesOrden(){
     b('enMarchaArriba',arriba,'▶ En ejecución arriba','Sube las actividades que ya tienen avance y las pinta de verde')+
     b('porAporte',porPeso,'⚖ Por lo que aporta','Ordena de mayor a menor peso, con la base que esté activa')+
     bBase+'</div>'}
-function renderProgSelect(){try{window._pgPesoTot=null}catch(_e){}var wrap=$('progListWrap');var all=acts(progDisc);var unsched=all.filter(function(p){return !_pgProg()[p.id]});var listas=[],faltan=[],restr=[],term=[];unsched.forEach(function(p){var r=(state.repo[p.id]||[]).filter(function(x){return (x.cat==='int'||x.cat==='mina')&&!x.lev});try{if(typeof bakedRestrActive==='function'&&bakedRestrActive(p))r=r.concat([{cat:'plan',texto:p.restriccion||((state.restrPart&&state.restrPart[p.id]&&state.restrPart[p.id].texto)||'Restricción del plan')}])}catch(e){}if((typeof pctRawOf==='function'?pctRawOf(p):0)>=100){term.push(p)}/* terminada = NO programable, aunque tenga restricción (antes la restricción se evaluaba primero y la dejaba programable) */else if(r.length)restr.push({p:p,r:r});else if(diasDe(p.id)!=null)listas.push(p);else faltan.push(p)});
+function renderProgSelect(){try{window._pgPesoTot=null}catch(_e){}var wrap=$('progListWrap');
+  /* si se estaba escribiendo en el cajetin, el repintado lo reconstruye:
+     se guarda el cursor y se devuelve al terminar, para no cortar a nadie */
+  var _fq9=null;try{var _ae9=document.activeElement;
+    if(_ae9&&_ae9.id==='_pgBusqIn')_fq9=_ae9.selectionStart}catch(_e9){}
+  if(_fq9!=null)setTimeout(function(){try{
+    var n9=document.getElementById('_pgBusqIn');
+    if(n9){n9.focus();n9.setSelectionRange(_fq9,_fq9)}}catch(_e8){}},0);var all=acts(progDisc);var unsched=all.filter(function(p){return !_pgProg()[p.id]});var listas=[],faltan=[],restr=[],term=[];unsched.forEach(function(p){var r=(state.repo[p.id]||[]).filter(function(x){return (x.cat==='int'||x.cat==='mina')&&!x.lev});try{if(typeof bakedRestrActive==='function'&&bakedRestrActive(p))r=r.concat([{cat:'plan',texto:p.restriccion||((state.restrPart&&state.restrPart[p.id]&&state.restrPart[p.id].texto)||'Restricción del plan')}])}catch(e){}if((typeof pctRawOf==='function'?pctRawOf(p):0)>=100){term.push(p)}/* terminada = NO programable, aunque tenga restricción (antes la restricción se evaluaba primero y la dejaba programable) */else if(r.length)restr.push({p:p,r:r});else if(diasDe(p.id)!=null)listas.push(p);else faltan.push(p)});
   /* el filtro del cajetin, sin tildes: cada lista se queda con lo que casa */
   if(window._pgBusq&&String(window._pgBusq).trim()){
     var _fq=function(arr){var nq=_busqNrm(String(window._pgBusq).trim());
@@ -15198,11 +15205,8 @@ return '<div class="pgitem" data-id="'+esc(p.id)+'" style="background:'+color+';
   var i9=wrap.querySelector('#_pgBusqIn');
   if(i9){
     i9.oninput=function(){
-      window._pgBusq=i9.value;
-      /* re-pintar borra el cajetin: se devuelve el foco y el cursor al final */
-      renderProgSelect();
-      var n9=document.getElementById('_pgBusqIn');
-      if(n9){n9.focus();try{n9.setSelectionRange(n9.value.length,n9.value.length)}catch(e){}}};
+      /* el repintado guarda y devuelve el cursor por si solo */
+      window._pgBusq=i9.value;renderProgSelect()};
     i9.onclick=function(ev){ev.stopPropagation()}}
   var x9=wrap.querySelector('#_pgBusqX');
   if(x9)x9.onclick=function(ev){ev.stopPropagation();window._pgBusq='';renderProgSelect()};
@@ -15429,7 +15433,7 @@ function _busqItem(p){try{
   return String((bp&&bp.item)||'')}catch(e){return ''}}
 function _busqMatch(p,q){
   q=_busqNrm(String(q||'').trim());if(!q)return true;
-  var m=window._busqModo||'cod';
+  var m=window._busqModo||'todo';
   /* cada modo a lo suyo: Codigo es el codigo de la actividad; QPS es el item
      del contrato. Antes Codigo buscaba en los dos y hacia lo del otro modo. */
   var id=_busqNrm(p.id),item=_busqNrm(_busqItem(p));
@@ -15444,28 +15448,13 @@ function _busqBarra(){
   var tools=document.querySelector('#scrList .tools');if(!tools)return null;
   b=document.createElement('div');b.id='_busqBar';
   b.style.cssText='display:none;width:100%;background:#fff;border:1.5px solid #C9D2E0;border-radius:12px;padding:10px 11px;margin-top:8px';
-  b.innerHTML='<div style="font-size:11.5px;font-weight:800;color:#5C6779;margin-bottom:6px">¿Dónde busco?</div>'+
-    '<div id="_busqModos" style="display:flex;gap:6px;margin-bottom:9px"></div>'+
-    '<div style="display:flex;gap:7px">'+
-    '<input id="_busqTxt" placeholder="Escribe y va filtrando…" style="flex:1;min-width:0;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:10px;padding:11px;font-size:13.5px">'+
+  b.innerHTML='<div style="display:flex;gap:7px">'+
+    '<input id="_busqTxt" placeholder="Buscar por código, código QPS o nombre — sin tildes…" style="flex:1;min-width:0;box-sizing:border-box;border:1.5px solid #C9D2E0;border-radius:10px;padding:11px;font-size:13.5px">'+
     '<button id="_busqX" style="flex:none;background:#eef2f7;border:0;border-radius:10px;padding:0 13px;font-weight:800;cursor:pointer">✕</button></div>'+
     '<div id="_busqInfo" style="font-size:11px;color:var(--muted);margin-top:7px"></div>';
   tools.appendChild(b);
-  var modos=[['cod','🔢 Código','Busca por el código de la actividad, como 4.03.01'],
-             ['qps','📋 Código QPS','Busca por el artículo de pago del contrato, como 8.4.3'],
-             ['nom','🔤 Nombre','Busca dentro del nombre de la actividad']];
-  var pinta=function(){
-    var c=b.querySelector('#_busqModos');
-    c.innerHTML=modos.map(function(m){var on=(window._busqModo===m[0]);
-      return '<button class="_busqM" data-m="'+m[0]+'" title="'+esc(m[2])+'" style="flex:1;padding:9px 4px;border:0;border-radius:9px;font-weight:800;font-size:11.5px;cursor:pointer;background:'+(on?'#1F3864':'#EEF2F7')+';color:'+(on?'#fff':'#5C6779')+'">'+m[1]+'</button>'}).join('');
-    Array.prototype.forEach.call(c.querySelectorAll('._busqM'),function(x){x.onclick=function(){
-      window._busqModo=x.getAttribute('data-m');pinta();
-      var t=document.getElementById('_busqTxt');if(t){t.focus();_busqAplica()}}});
-    var m0=modos.filter(function(m){return m[0]===window._busqModo})[0];
-    var inp=document.getElementById('_busqTxt');
-    if(inp)inp.placeholder=(window._busqModo==='cod')?'Ej.: 4.03.01':((window._busqModo==='qps')?'Ej.: 8.4.3':'Ej.: bandeja, variador, cable…');
-    var inf=document.getElementById('_busqInfo');if(inf&&m0)inf.textContent=m0[2]};
-  b._pinta=pinta;pinta();
+  window._busqModo='todo';   /* una sola barra: busca en todo a la vez */
+  
   document.getElementById('_busqTxt').addEventListener('input',_busqAplica);
   document.getElementById('_busqX').onclick=function(){
     var t=document.getElementById('_busqTxt');if(t)t.value='';_busqAplica();_busqToggle(false)};
@@ -15483,7 +15472,7 @@ function _busqAplica(){
     if(inf&&t&&t.value.trim()){
       var n=document.querySelectorAll('#list .leaf[data-id]').length;
       inf.textContent=n?(n+' actividad(es) encontrada(s)'):'Nada con ese texto — prueba otro modo'}
-    else if(inf){var b=document.getElementById('_busqBar');if(b&&b._pinta)b._pinta()}
+    else if(inf){inf.textContent='Busca por código, código QPS o nombre — las tildes no cuentan'}
   }catch(e){}}
 function _busqToggle(abrir){
   var b=_busqBarra();if(!b)return;
@@ -15497,7 +15486,7 @@ function _busqBoton(){try{
   var tools=document.querySelector('#scrList .tools');if(!tools)return;
   var b=document.getElementById('btnBuscar');
   if(!b){b=document.createElement('button');b.id='btnBuscar';b.type='button';
-    b.textContent='🔎 Buscar';b.title='Buscar tecleando por código, código QPS o nombre';
+    b.textContent='🔎 Buscar';b.title='Buscar por código, código QPS o nombre — las tildes no cuentan';
     b.onclick=function(){_busqToggle()}}
   var g=document.getElementById('_toolsGrid');
   if(!g){g=document.createElement('div');g.id='_toolsGrid';
@@ -15520,6 +15509,30 @@ function _busqBoton(){try{
   var bar=document.getElementById('_busqBar');if(bar&&bar.parentNode!==tools)tools.appendChild(bar);
 }catch(e){}}
 try{setTimeout(_busqBoton,900);setInterval(_busqBoton,2500)}catch(_bqw){}
+
+/* === QUE ESCRIBIR NO SE CORTE ===
+   Los avisos de tiempo real repintan pantallas, y repintar reconstruye el
+   DOM: si en ese momento habia alguien tecleando en un cajetin de esa zona,
+   el cajetin muere a mitad de palabra. Aqui se aplaza el repintado mientras
+   se escribe dentro de la zona afectada, y se reintenta solo. */
+function _escribiendoEn(idZona){try{
+  var a=document.activeElement;if(!a||a===document.body)return false;
+  var t=String(a.tagName||'').toLowerCase();
+  if(t!=='input'&&t!=='textarea'&&!a.isContentEditable)return false;
+  if(t==='input'){var tp=String(a.type||'').toLowerCase();
+    if(['checkbox','radio','button','range','file','submit','color'].indexOf(tp)>=0)return false}
+  var z=document.getElementById(idZona);
+  return !!(z&&z.contains(a))}catch(e){return false}}
+function _renAplaza(clave,fn){
+  window._renT=window._renT||{};
+  try{clearTimeout(window._renT[clave])}catch(e){}
+  window._renT[clave]=setTimeout(fn,800);}
+try{var _fgList=renderList;renderList=function(){
+  if(_escribiendoEn('list')){_renAplaza('list',renderList);return}
+  return _fgList.apply(this,arguments)}}catch(_fg1){}
+try{var _fgDia=renderDiario;renderDiario=function(){
+  if(_escribiendoEn('diaList')){_renAplaza('dia',renderDiario);return}
+  return _fgDia.apply(this,arguments)}}catch(_fg2){}
 
 /* === PARTES DE LA PARTIDA (suministro · montaje · pruebas · lo que haga falta) ===
    Una partida del contrato suele traer trabajos que no valen lo mismo: suministrar
