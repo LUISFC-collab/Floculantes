@@ -5914,6 +5914,24 @@ async function _crXerCompleta(lineas,c,corte,rpX){
   var yaEsta={};TA.filas.forEach(function(f){yaEsta[_crTx(f.o.task_code)]=f});
   var r2=function(x){return String(Math.round((Number(x)||0)*100)/100)};
   var r4=function(x){return (Number(x)||0).toFixed(4)};
+  /* las tareas SIN datos en el aplicativo (fuera del alcance, o sin HH ni
+     costo) se vacian: si conservan sus horas y su costo originales, P6 suma
+     un total que el aplicativo ya no reconoce */
+  TA.filas.forEach(function(fi){
+    var cod0=_crTx(fi.o.task_code);
+    if(datos[cod0])return;
+    var pw=function(campo,val){var j=TA.col[campo];if(j!=null)fi.v[j]=val};
+    if((Number(fi.o.target_work_qty)||0)>0){
+      pw('target_work_qty','0');pw('remain_work_qty','0');pw('act_work_qty','0');
+      lineas[fi.i]='%R\t'+fi.v.join('\t');
+      out.vaciadas=(out.vaciadas||0)+1}
+    if(TR)TR.filas.forEach(function(x){
+      if(x.o.task_id!==fi.o.task_id)return;
+      if(!((Number(x.o.target_cost)||0)>0||(Number(x.o.target_qty)||0)>0))return;
+      var pr=function(campo,val){var j=TR.col[campo];if(j!=null)x.v[j]=val};
+      pr('target_qty','0');pr('remain_qty','0');pr('act_reg_qty','0');
+      pr('target_cost','0');pr('remain_cost','0');pr('act_reg_cost','0');
+      lineas[x.i]='%R\t'+x.v.join('\t')})});
   var nuevasT=[],nuevasR=[];
   Object.keys(datos).forEach(function(cod){
     var D=datos[cod],t=D.t,av=pctDe(t);
@@ -6018,6 +6036,23 @@ var _XER_PROY='REPOSICION DEL SISTEMA DE FLOCULANTES';
 /* Renombra el proyecto: el Project ID de P6 es `proj_short_name`, y el nodo
    raiz del WBS -el que lleva proj_node_flag='Y'- repite ese codigo y guarda el
    nombre largo. Hay que tocar los dos o P6 ensena uno viejo y otro nuevo. */
+/* la fecha de DATOS del proyecto: sin esto P6 importa con la fecha vieja
+   y el cronograma no sale corrido a la fecha elegida */
+function _crXerFechaDatos(lineas,corte){
+  if(!corte)return 0;
+  var enT='',campos=null,col={},n=0;
+  for(var i=0;i<lineas.length;i++){
+    var ln=lineas[i];
+    if(ln.indexOf('%T')===0){enT=String(ln.split('\t')[1]||'').trim();campos=null;continue}
+    if(ln.indexOf('%F')===0){campos=ln.split('\t').slice(1).map(function(x){return String(x).trim()});
+      col={};campos.forEach(function(c2,j){col[c2]=j});continue}
+    if(ln.indexOf('%R')!==0||!campos||enT!=='PROJECT')continue;
+    var v=ln.split('\t'),d=v.slice(1),toca=false;
+    ['last_recalc_date','sum_data_date'].forEach(function(campo){
+      var j=(col[campo]===undefined?-1:col[campo]);
+      if(j>=0){d[j]=_crXerFec(corte,'18:00');toca=true}});
+    if(toca){lineas[i]=[v[0]].concat(d).join('\t');n++}}
+  return n}
 function _crXerRenombra(lineas,cronId,sem){
   if(!(sem>0))return 0;
   var nom=cronId+'-SEMANA'+sem,n=0;
@@ -6096,6 +6131,7 @@ async function _crExportar(c,corte,sem){
   var nomV=c.cron_id;
   try{nomV=((typeof _wkNomCr==='function')?_wkNomCr(c.cron_id):c.cron_id)||c.cron_id}catch(_en){}
   var renom=_crXerRenombra(lineas,nomV,sem);
+  try{_crXerFechaDatos(lineas,corte)}catch(_ef){}
   return {txt:lineas.join('\n'),tocadas:tocadas,sinMatch:sinMatch,detalle:detalle,
     faltan:faltan,renom:renom,comp:comp,
     nombre:(sem>0?(nomV+'-SEMANA'+sem):'')}}
@@ -13735,7 +13771,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828e3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828e4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
