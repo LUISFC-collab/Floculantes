@@ -1221,7 +1221,7 @@ function _rtOnCambio(tabla){
     try{if(tabla==='ficticio_create_250826'&&typeof _ficPull==='function')_ficPull()}catch(e){}
     try{if(tabla==='conexiones_create_250826'&&typeof _cnxPull==='function')_cnxPull()}catch(e){}
     return}
-  if(tabla==='ajustes_create_110826'){try{if(typeof _ajPull==='function')_ajPull()}catch(e){}try{if(typeof _cbPull==='function')_cbPull()}catch(e){}try{if(typeof _galPull==='function')_galPull().then(function(){try{if(document.getElementById('_docOv')&&typeof _docRender==='function')_docRender()}catch(e){}})}catch(e){}return}
+  if(tabla==='ajustes_create_110826'){try{if(typeof _ajPull==='function')_ajPull()}catch(e){}try{if(typeof _apuPull==='function')_apuPull()}catch(e){}try{if(typeof _cbPull==='function')_cbPull()}catch(e){}try{if(typeof _galPull==='function')_galPull().then(function(){try{if(document.getElementById('_docOv')&&typeof _docRender==='function')_docRender()}catch(e){}})}catch(e){}return}
   if(tabla==='actividades_create_110826'){try{if(typeof _catPull==='function')_catPull()}catch(e){}return}
   if(tabla==='config_usuario_create_110826'){try{if(typeof _cuPull==='function')_cuPull()}catch(e){}return}
   if(tabla==='crono_cuadrillas_create_090826'){try{if(typeof _ccPull==='function')_ccPull()}catch(e){}return}
@@ -13771,7 +13771,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828e8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828e9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17291,7 +17291,12 @@ function _apuParcial(x){
   if(x.parcial!=null&&x.parcial!=='')return _apuNum(x.parcial);
   return Math.round(_apuNum(x.cantidad)*_apuNum(x.precio)*1e6)/1e6}
 function _apuTotal(r){var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado)t+=_apuParcial(x)});return Math.round(t*1e6)/1e6}
-function _apuSum(r){var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado&&x.suministro)t+=_apuParcial(x)});return Math.round(t*1e6)/1e6}
+/* que parte del insumo se considera en su apartado (0..1; sin dato = entero) */
+function _apuFrac(x){
+  if(!x||x.grupo_pct==null||x.grupo_pct==='')return 1;
+  var f=Number(x.grupo_pct);if(!isFinite(f))return 1;
+  return Math.max(0,Math.min(100,f))/100}
+function _apuSum(r){var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado&&x.suministro)t+=_apuParcial(x)*_apuFrac(x)});return Math.round(t*1e6)/1e6}
 function _apuPctSum(r){var t=_apuTotal(r);return t>0?(_apuSum(r)/t*100):0}
 /* --- APARTADOS: los crea el supervisor (Suministro, Montaje, Pruebas...).
    Cada insumo pertenece a UNO solo; el que ya esta tomado no se puede asignar
@@ -17315,7 +17320,7 @@ function _apuGrupoDe(r,x){
   if(!x||!x.grupo_id)return null;
   return (_apuGrupos(r)||[]).filter(function(g){return g.id===x.grupo_id})[0]||null}
 function _apuGrupoTot(r,gid){
-  var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado&&x.grupo_id===gid)t+=_apuParcial(x)});
+  var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado&&x.grupo_id===gid)t+=_apuParcial(x)*_apuFrac(x)});
   return Math.round(t*1e6)/1e6}
 function _apuGrupoPct(r,gid){var t=_apuTotal(r);return t>0?(_apuGrupoTot(r,gid)/t*100):0}
 /* si todos los insumos del apartado comparten unidad, se puede hablar de una
@@ -17333,7 +17338,7 @@ function _apuGrupoCant(r,gid){
   var g=(_apuGrupos(r)||[]).filter(function(z){return z.id===gid||z.nombre===gid})[0];
   if(!g)return 0;
   if(!_apuGrupoUnd(r,g.id))return 0;
-  var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado&&x.grupo_id===g.id)t+=(Number(x.cantidad)||0)});
+  var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado&&x.grupo_id===g.id)t+=(Number(x.cantidad)||0)*_apuFrac(x)});
   return Math.round(t*1e4)/1e4}
 function _apuGrupoCol(g){return _APU_COL[(g&&g.col)||0]||_APU_COL[0]}
 function _apuNuevoGid(r){
@@ -17370,7 +17375,7 @@ async function _apuPull(){
       v.eliminado=!!r.eliminado;v.ts=_apuNum(r.ts);
       if(JSON.stringify(loc)!==JSON.stringify(v)){H[id]=v;cambio=true}});
     state.apus=H;_apuSaveLocal();
-    if(cambio){try{if(document.getElementById('_apuOv'))_apuUI(window._apuP)}catch(e){}}
+    if(cambio){try{if(document.getElementById('_apuOv')&&!document.getElementById('_apuEdOv')&&!document.getElementById('_apuCabOv'))_apuUI(window._apuP)}catch(e){}}
   }catch(e){}}
 try{var _apuPullBase=syncPull;syncPull=async function(){var r=await _apuPullBase.apply(this,arguments);try{await _apuPull()}catch(e){}return r}}catch(_apw){}
 try{setTimeout(function(){try{_apuPull()}catch(e){}},2800)}catch(_apt){}
@@ -17510,6 +17515,22 @@ function _apuUI(p){
         '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:800;color:'+(on?'#0C5132':'#1B2433')+'">Multiplicar por el metrado</div>'+
         '<div style="font-size:10.5px;color:#5C6779">'+(on?('Mostrando lo que hace falta para las '+_apuCant(metQ())+' '+esc(metU())):('Ahora se ve por 1 '+esc(r.unidad||p.unidad||'und')+' · el metrado es '+metQ()+' '+esc(metU())))+'</div></div></label>';
     }
+    /* como entra al apartado cada insumo que se toca: entero, con su propio
+       porcentaje, o todos con un mismo porcentaje */
+    var modo=window._apuModo||'todo';
+    var segB=function(v,txt){return '<button class="_apuModo" data-m="'+v+'" style="flex:1;border-radius:8px;padding:7px 5px;font-size:10.5px;font-weight:800;cursor:pointer;border:1.5px solid '+(modo===v?'#1F3864':'var(--line)')+';background:'+(modo===v?'#1F3864':'#fff')+';color:'+(modo===v?'#fff':'#1B2433')+'">'+txt+'</button>'};
+    H+='<div style="margin-top:8px;background:#F4F7FB;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px">'+
+      '<div style="font-size:9.5px;font-weight:800;color:#5C6779;letter-spacing:.03em;margin-bottom:6px">CÓMO ENTRA CADA INSUMO AL APARTADO QUE TOQUES</div>'+
+      '<div style="display:flex;gap:5px">'+segB('todo','Entero')+segB('indep','% independiente')+segB('uno','Un % para todos')+'</div>'+
+      (modo==='uno'?('<div style="display:flex;align-items:center;gap:8px;margin-top:7px">'+
+        '<span style="font-size:11px;color:#1B2433;font-weight:700;flex:1">Porcentaje que se considera de cada insumo que marques</span>'+
+        '<input id="_apuPctC" type="number" min="0" max="100" step="any" value="'+_apuCant(window._apuPctComun==null?100:window._apuPctComun)+'" style="width:74px;border:1.5px solid #C9D2E0;border-radius:8px;padding:6px 8px;font-size:13px;font-weight:800;text-align:right">'+
+        '<b style="font-size:12px;color:#1B2433">%</b></div>'):'')+
+      '<div style="font-size:10px;color:#5C6779;margin-top:6px;line-height:1.4">'+
+        (modo==='todo'?'Cada insumo que toques entra completo: sirve para repartir recursos o materiales según el apartado.'
+        :modo==='indep'?'Al tocar cada insumo te pregunta qué porcentaje de él se considera; el resto queda sin apartado.'
+        :'Todo lo que marques entra con ese mismo porcentaje; si lo cambias, se actualiza en los ya marcados del apartado elegido.')+
+      '</div></div>';
     if(r.familia)H+='<div style="margin-top:8px;background:#FCEFD9;border:1px solid #EFC98A;border-radius:9px;padding:8px 10px;font-size:10.5px;color:#7A4B00;line-height:1.45">'+
       '<b>APU de familia.</b> El contrato analiza en un solo APU el ítem '+esc(r.familia_qps||'')+', que en la lista está partido en '+(r.familia_n||0)+' actividades. '+
       'El costo de abajo es el del análisis completo, no el de esta actividad sola.</div>';
@@ -17575,7 +17596,12 @@ function _apuUI(p){
            (x.cuadrilla?('<span>cuad. <b style="color:#1B2433">'+esc(x.cuadrilla)+'</b></span>'):'')+
            '<span>P.U. <b style="color:#1B2433">'+_apuMon(x.precio)+'</b></span>'+
            '<span style="margin-left:auto">Parcial <b style="color:#0C5132;font-size:12px">'+_apuMon(par)+'</b></span></div>';
-        if(gx)H+='<div style="margin-top:5px;font-size:10px;font-weight:800;color:'+cx[0]+'">'+esc(String(gx.nombre).toUpperCase())+' · '+(tot>0?(Math.round(par/tot*1000)/10):0)+'% del costo</div>';
+        if(gx){var fr=Math.round(_apuFrac(x)*1000)/10;
+          H+='<div style="margin-top:5px;font-size:10px;font-weight:800;color:'+cx[0]+';display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
+            '<span>'+esc(String(gx.nombre).toUpperCase())+' · '+(tot>0?(Math.round(par*_apuFrac(x)/tot*1000)/10):0)+'% del costo</span>'+
+            ((fr<100||modo!=='todo')?('<button class="_apuPct" data-i="'+i+'" title="Qué porcentaje de este insumo se considera en el apartado" style="background:#fff;color:'+cx[0]+';border:1.5px solid '+cx[0]+';border-radius:7px;padding:1px 7px;font-weight:900;font-size:10px;cursor:pointer">'+_apuCant(fr)+'% del insumo</button>'):'')+
+            (fr<100?('<span style="opacity:.8">el '+_apuCant(Math.round((100-fr)*10)/10)+'% restante queda sin apartado</span>'):'')+
+          '</div>'}
         H+='</div>';
         if(adm)H+='<div style="flex:none;display:flex;flex-direction:column;gap:5px">'+
           '<button class="_apuEd" data-i="'+i+'" title="Modificar valor" style="background:#EAF1FB;color:#1F3864;border:1px solid #BFD3EE;border-radius:8px;width:30px;height:30px;font-size:13px;cursor:pointer">✎</button>'+
@@ -17648,12 +17674,40 @@ function _apuUI(p){
       var nm=prompt('Nuevo nombre del apartado:',g.nombre);if(nm==null)return;nm=String(nm).trim();
       if(!nm)return;g.nombre=nm;pinta();try{await _apuGuardar(id,r,false)}catch(e){}
       try{if(_fzVieneDelApu(id))await _fzDesdeApu(id,p,true)}catch(e){}};
+    /* los tres modos y el porcentaje que se considera */
+    var _leePct=function(txt,def){
+      var v=prompt(txt,def);if(v==null)return null;
+      v=Number(String(v).replace('%','').replace(',','.').trim());
+      if(!isFinite(v)||v<0||v>100){if(typeof toast==='function')toast('Pon un porcentaje entre 0 y 100');return null}
+      return Math.round(v*100)/100};
+    var _guardaPct=async function(){
+      try{await _apuGuardar(id,r,false)}catch(e){}
+      try{if(_fzVieneDelApu(id))await _fzDesdeApu(id,p,true)}catch(e){}};
+    Array.prototype.forEach.call(w.querySelectorAll('._apuModo'),function(b){b.onclick=function(){
+      window._apuModo=b.getAttribute('data-m');pinta()}});
+    var pcC=document.getElementById('_apuPctC');
+    if(pcC)pcC.onchange=async function(){
+      var v=Number(String(pcC.value).replace(',','.'));
+      if(!isFinite(v)||v<0||v>100){if(typeof toast==='function')toast('Pon un porcentaje entre 0 y 100');
+        pcC.value=_apuCant(window._apuPctComun==null?100:window._apuPctComun);return}
+      v=Math.round(v*100)/100;window._apuPctComun=v;
+      var n=0;
+      if(window._apuGSel)vivos().forEach(function(x){if(x.grupo_id===window._apuGSel){x.grupo_pct=(v>=100?null:v);n++}});
+      pinta();
+      if(n){await _guardaPct();if(typeof toast==='function')toast(_apuCant(v)+'% aplicado a los '+n+' insumo(s) del apartado')}};
+    Array.prototype.forEach.call(w.querySelectorAll('._apuPct'),function(b){b.onclick=async function(ev){
+      ev.stopPropagation();
+      var x=r.insumos[+b.getAttribute('data-i')];if(!x)return;
+      var gq=_apuGrupoDe(r,x);
+      var v=_leePct('¿Qué % de "'+String(x.descripcion||'').slice(0,50)+'" se considera en "'+((gq&&gq.nombre)||'el apartado')+'"?\n(0 a 100 · el resto queda sin apartado)',_apuCant(_apuFrac(x)*100));
+      if(v==null)return;
+      x.grupo_pct=(v>=100?null:v);pinta();await _guardaPct()}});
     var gdel=document.getElementById('_apuGDel');
     if(gdel)gdel.onclick=async function(){
       var g=(_apuGrupos(r)||[]).filter(function(z){return z.id===window._apuGSel})[0];if(!g)return;
       var n=vivos().filter(function(x){return x.grupo_id===g.id}).length;
       if(!confirm('Borrar el apartado "'+g.nombre+'"?'+(n?('\n\nSus '+n+' insumo(s) quedan sin apartado.'):'')))return;
-      (r.insumos||[]).forEach(function(x){if(x.grupo_id===g.id){x.grupo_id='';x.suministro=false}});
+      (r.insumos||[]).forEach(function(x){if(x.grupo_id===g.id){x.grupo_id='';x.suministro=false;x.grupo_pct=null}});
       r.grupos=(r.grupos||[]).filter(function(z){return z.id!==g.id});
       window._apuGSel=null;pinta();try{await _apuGuardar(id,r,false)}catch(e){}
       try{if(_fzVieneDelApu(id))await _fzDesdeApu(id,p,false)}catch(e){}};
@@ -17666,8 +17720,15 @@ function _apuUI(p){
         var otro=_apuGrupoDe(r,x);
         if(typeof toast==='function')toast('Ya está en "'+((otro&&otro.nombre)||'otro apartado')+'" — sácalo de ahí primero');
         return}
-      if(x.grupo_id===window._apuGSel){x.grupo_id='';x.suministro=false}
-      else{x.grupo_id=window._apuGSel;
+      if(x.grupo_id===window._apuGSel){x.grupo_id='';x.suministro=false;x.grupo_pct=null}
+      else{
+        var modoX=window._apuModo||'todo',pctX=null;
+        var gN=(_apuGrupos(r)||[]).filter(function(z){return z.id===window._apuGSel})[0];
+        if(modoX==='indep'){
+          pctX=_leePct('¿Qué % de "'+String(x.descripcion||'').slice(0,50)+'" se considera en "'+((gN&&gN.nombre)||'el apartado')+'"?\n(0 a 100 · el resto queda sin apartado)','100');
+          if(pctX==null)return}
+        else if(modoX==='uno')pctX=(window._apuPctComun==null)?100:window._apuPctComun;
+        x.grupo_id=window._apuGSel;x.grupo_pct=(pctX==null||pctX>=100)?null:pctX;
         var g2=_apuGrupoDe(r,x);x.suministro=!!(g2&&/suministr/i.test(g2.nombre))}
       pinta();try{await _apuGuardar(id,r,false)}catch(e){}
       try{if(_fzVieneDelApu(id))await _fzDesdeApu(id,p,true)}catch(e){}}});
