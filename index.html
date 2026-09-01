@@ -13771,7 +13771,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828e6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828e7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -15714,6 +15714,21 @@ async function _rxNoCumplidas(){
       if(id9&&e9.start)bkSnap[id9]={start:e9.start,dias:e9.dias||1}})})}
   var u9=null,rp9=null;
   if(bkSnap){try{u9=_crUniverso(cc.cron_id,alc);rp9=_crReparto(tar)}catch(_e1){bkSnap=null}}
+  /* la VENTANA que manda: con respaldo, desde la semana de su primer dia
+     programado hasta el CIERRE de la semana de su ultimo dia (hoy la 36;
+     la otra semana, con su respaldo nuevo, la 37; y asi); sin respaldo, la
+     semana que toca, como siempre */
+  var ini2=ini,fin2=fin,semV=semA;
+  if(bkSnap){
+    var minS='',maxS='';
+    Object.keys(bkSnap).forEach(function(id9){var b2=bkSnap[id9];
+      var oc9=[];try{oc9=(typeof occupiedDays==='function')?occupiedDays(b2.start,b2.dias||1):[b2.start]}catch(_eo){oc9=[b2.start]}
+      b2.oc=oc9;
+      oc9.forEach(function(d8){if(!minS||d8<minS)minS=d8;if(!maxS||d8>maxS)maxS=d8})});
+    if(maxS){
+      var s1=27+Math.floor((_crASerial(minS)-46199)/7);
+      var s2=27+Math.floor((_crASerial(maxS)-46199)/7);
+      semV=s2;ini2=_wkISO(_wkSem(s1).ini);fin2=_wkISO(_wkSem(s2).fin)}}
   var nom={},itemsDe={},fIni={},fFin={};
   tar.forEach(function(t){nom[t.task_code]=String(t.nombre||'');itemsDe[t.task_code]=(t.items||[]);
     fIni[t.task_code]=String(t.ini||'');fFin[t.task_code]=String(t.fin||'')});
@@ -15729,13 +15744,13 @@ async function _rxNoCumplidas(){
         var hi9=(Number(u9.items[i9])||0)/_crVeces(rp9,i9);
         if(!(hi9>0))return;hh9+=hi9;
         var b2=bkSnap[i9];if(!b2)return;
-        var oc9=[];try{oc9=(typeof occupiedDays==='function')?occupiedDays(b2.start,b2.dias||1):[b2.start]}catch(_eo){oc9=[b2.start]}
+        var oc9=b2.oc||[];
         if(!oc9.length)return;
-        var nW9=0;oc9.forEach(function(d8){if(d8>=ini&&d8<=fin)nW9++});
+        var nW9=0;oc9.forEach(function(d8){if(d8>=ini2&&d8<=fin2)nW9++});
         pg9+=hi9*(nW9/oc9.length)});
       pg=hh9>0?(pg9/hh9):0}
-    else for(d in (R.plan[cod]||{}))if(d>=ini&&d<=fin)pg+=R.plan[cod][d];
-    for(d in (R.actual[cod]||{}))if(d>=ini&&d<=fin)ac+=R.actual[cod][d];
+    else for(d in (R.plan[cod]||{}))if(d>=ini2&&d<=fin2)pg+=R.plan[cod][d];
+    for(d in (R.actual[cod]||{}))if(d>=ini2&&d<=fin2)ac+=R.actual[cod][d];
     if(!(pg>1e-9)||ac>=pg-1e-9)return;
     lista.push({cod:cod,nom:nom[cod]||'',items:(itemsDe[cod]||[]).slice(),
       prog:Math.round(pg*1000)/10,hecho:Math.round(ac*1000)/10,
@@ -15745,7 +15760,7 @@ async function _rxNoCumplidas(){
         return m})(),
       reg:!!_rxDeAct(cod,itemsDe[cod])})});
   lista.sort(function(a,b){return a.cod<b.cod?-1:a.cod>b.cod?1:0});
-  return {sem:semA,base:{id:baseId,nombre:(bkSel&&bkSel.nombre)||''},lista:lista}}
+  return {sem:semV,cierre:!!bkSnap,base:{id:baseId,nombre:(bkSel&&bkSel.nombre)||''},lista:lista}}
 function _rxAnexaUna(q,sem){
   _rxSet(_rxNuevoRid(),{task_code:q.cod,actividad:q.nom||'',
     partida_id:(q.items&&q.items[0])||'',
@@ -15981,8 +15996,8 @@ function _rxNoPinta(r){
               :('<b style="font-size:11.5px;color:#cfe3ff">'+esc(nomBase)+'</b><span style="font-size:10px;color:#7d8590">(lo fija el admin)</span>'))+
         '</div>'})();
     if(!r.lista.length)
-      h+='<div style="color:#9FE8B0;font-weight:700;padding:6px 0">\u2713 Semana '+r.sem+': sin actividades NO cumplidas</div>';
-    else h+='<div style="font-size:11px;color:#E8C9A0;font-weight:800;margin-bottom:7px">SEMANA '+r.sem+' \u00b7 '+r.lista.length+' actividad(es) NO cumplida(s) \u2014 el \u2795 anexa y abre su ficha</div>'+
+      h+='<div style="color:#9FE8B0;font-weight:700;padding:6px 0">\u2713 '+(r.cierre?('Al cierre de la semana '+r.sem):('Semana '+r.sem))+': sin actividades NO cumplidas</div>';
+    else h+='<div style="font-size:11px;color:#E8C9A0;font-weight:800;margin-bottom:7px">'+(r.cierre?('HASTA EL CIERRE DE LA SEMANA '+r.sem):('SEMANA '+r.sem))+' \u00b7 '+r.lista.length+' actividad(es) NO cumplida(s) \u2014 el \u2795 anexa y abre su ficha</div>'+
       '<div style="margin-bottom:9px"><button id="_rxTodas" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;cursor:pointer">\u26a1 Anexar todas las que faltan</button></div>'+
       (function(){
       var _item=function(q,i){
