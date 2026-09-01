@@ -13771,7 +13771,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828e9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260901a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17291,12 +17291,41 @@ function _apuParcial(x){
   if(x.parcial!=null&&x.parcial!=='')return _apuNum(x.parcial);
   return Math.round(_apuNum(x.cantidad)*_apuNum(x.precio)*1e6)/1e6}
 function _apuTotal(r){var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado)t+=_apuParcial(x)});return Math.round(t*1e6)/1e6}
-/* que parte del insumo se considera en su apartado (0..1; sin dato = entero) */
-function _apuFrac(x){
-  if(!x||x.grupo_pct==null||x.grupo_pct==='')return 1;
-  var f=Number(x.grupo_pct);if(!isFinite(f))return 1;
-  return Math.max(0,Math.min(100,f))/100}
-function _apuSum(r){var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado&&x.suministro)t+=_apuParcial(x)*_apuFrac(x)});return Math.round(t*1e6)/1e6}
+/* los repartos de un insumo: {apartado: porcentaje}. Un insumo puede estar
+   en varios apartados mientras la suma no pase de 100; lo grabado antes
+   (grupo_id / grupo_pct) se lee como un reparto unico */
+function _apuRep(x){
+  if(!x)return {};
+  if(x.repartos&&typeof x.repartos==='object'){
+    var o={};Object.keys(x.repartos).forEach(function(g){var v=Number(x.repartos[g]);
+      if(g&&isFinite(v)&&v>0)o[g]=Math.min(100,Math.round(v*100)/100)});
+    return o}
+  if(x.grupo_id){var o1={};
+    var pv=Number(x.grupo_pct);
+    o1[x.grupo_id]=(x.grupo_pct==null||x.grupo_pct===''||!isFinite(pv))?100:Math.max(0,Math.min(100,pv));
+    return o1}
+  return {}}
+function _apuRepUsado(x,sinGid){var t=0,R=_apuRep(x);
+  Object.keys(R).forEach(function(g){if(g!==sinGid)t+=R[g]});return Math.round(t*100)/100}
+/* lo que le queda libre al insumo, sin contar lo que ya tiene en gid */
+function _apuRepSaldo(x,gid){return Math.max(0,Math.round((100-_apuRepUsado(x,gid))*100)/100)}
+function _apuFracDe(x,gid){var R=_apuRep(x);return (R[gid]||0)/100}
+/* escribe un reparto (pct nulo o 0 lo saca) y deja los campos viejos
+   coherentes con el primer reparto para quien aun los lea */
+function _apuRepSet(r,x,gid,pct){
+  var R=_apuRep(x);
+  if(pct==null||!(Number(pct)>0))delete R[gid];else R[gid]=Math.min(100,Math.round(Number(pct)*100)/100);
+  x.repartos=R;
+  var gids=Object.keys(R);
+  x.grupo_id=gids[0]||'';
+  x.grupo_pct=(gids.length===1&&R[gids[0]]<100)?R[gids[0]]:null;
+  x.suministro=gids.some(function(g){var gg=(_apuGrupos(r)||[]).filter(function(z){return z.id===g})[0];
+    return !!(gg&&/suministr/i.test(gg.nombre))})}
+function _apuSum(r){var t=0,sg={};
+  (_apuGrupos(r)||[]).forEach(function(g){if(/suministr/i.test(String(g.nombre||'')))sg[g.id]=1});
+  ((r&&r.insumos)||[]).forEach(function(x){if(x.eliminado)return;var R=_apuRep(x);
+    Object.keys(R).forEach(function(g){if(sg[g])t+=_apuParcial(x)*R[g]/100})});
+  return Math.round(t*1e6)/1e6}
 function _apuPctSum(r){var t=_apuTotal(r);return t>0?(_apuSum(r)/t*100):0}
 /* --- APARTADOS: los crea el supervisor (Suministro, Montaje, Pruebas...).
    Cada insumo pertenece a UNO solo; el que ya esta tomado no se puede asignar
@@ -17316,11 +17345,13 @@ function _apuGrupos(r){
       (r.insumos||[]).forEach(function(x){if(x.suministro)x.grupo_id='G1'})}
   }
   return r.grupos}
-function _apuGrupoDe(r,x){
-  if(!x||!x.grupo_id)return null;
-  return (_apuGrupos(r)||[]).filter(function(g){return g.id===x.grupo_id})[0]||null}
+/* el apartado de un insumo: el preferido si lo tiene, si no el primero */
+function _apuGrupoDe(r,x,pref){
+  if(!x)return null;var R=_apuRep(x),gids=Object.keys(R);if(!gids.length)return null;
+  var gid=(pref&&R[pref]!=null)?pref:gids[0];
+  return (_apuGrupos(r)||[]).filter(function(g){return g.id===gid})[0]||null}
 function _apuGrupoTot(r,gid){
-  var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado&&x.grupo_id===gid)t+=_apuParcial(x)*_apuFrac(x)});
+  var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado)t+=_apuParcial(x)*_apuFracDe(x,gid)});
   return Math.round(t*1e6)/1e6}
 function _apuGrupoPct(r,gid){var t=_apuTotal(r);return t>0?(_apuGrupoTot(r,gid)/t*100):0}
 /* si todos los insumos del apartado comparten unidad, se puede hablar de una
@@ -17330,7 +17361,7 @@ function _apuGrupoUnd(r,gid){
   if(!g)return '';
   var u=null,ok=true;
   ((r&&r.insumos)||[]).forEach(function(x){
-    if(x.eliminado||x.grupo_id!==g.id)return;
+    if(x.eliminado||!_apuRep(x)[g.id])return;
     var uu=String(x.unidad||'').trim();if(!uu)return;
     if(u===null)u=uu;else if(u!==uu)ok=false});
   return ok?(u||''):''}
@@ -17338,7 +17369,7 @@ function _apuGrupoCant(r,gid){
   var g=(_apuGrupos(r)||[]).filter(function(z){return z.id===gid||z.nombre===gid})[0];
   if(!g)return 0;
   if(!_apuGrupoUnd(r,g.id))return 0;
-  var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado&&x.grupo_id===g.id)t+=(Number(x.cantidad)||0)*_apuFrac(x)});
+  var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado)t+=(Number(x.cantidad)||0)*_apuFracDe(x,g.id)});
   return Math.round(t*1e4)/1e4}
 function _apuGrupoCol(g){return _APU_COL[(g&&g.col)||0]||_APU_COL[0]}
 function _apuNuevoGid(r){
@@ -17474,7 +17505,9 @@ function _apuUI(p){
   var base=_apuAll()[id];
   var r=base?JSON.parse(JSON.stringify(base)):{partida_id:id,unidad:(p.unidad||''),rendimiento:(p.rend||null),cuadrilla:'',insumos:[]};
   if(r.eliminado){r.eliminado=false;r.insumos=r.insumos||[]}
-  var ov=document.getElementById('_apuOv');if(ov)ov.remove();
+  var ov=document.getElementById('_apuOv');
+  var _scr0=0;try{var _b0=document.getElementById('_apuBody');_scr0=_b0?_b0.scrollTop:0}catch(_e0){}
+  if(ov)ov.remove();
   ov=document.createElement('div');ov.id='_apuOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483412;background:var(--bg,#eef2f7);display:flex;flex-direction:column';
   ov.innerHTML='<div style="background:#0C5132;color:#fff;padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));display:flex;align-items:center;gap:10px;flex:none">'+
@@ -17495,6 +17528,7 @@ function _apuUI(p){
   var fac=function(){return (window._apuXMet&&metQ()>0)?metQ():1};
   var pinta=function(){
     var w=document.getElementById('_apuBody');if(!w)return;
+    var _scrY=w.scrollTop;
     var tot=_apuTotal(r)*fac(),sum=_apuSum(r)*fac(),pc=_apuPctSum(r);
     var puC=(p.pu!=null)?Number(p.pu):null;
     var H='';
@@ -17585,23 +17619,29 @@ function _apuUI(p){
         var i=(r.insumos||[]).indexOf(x);
         var par=_apuParcial(x)*fac();
         var cantX=(Number(x.cantidad)||0)*fac();
-        var gx=_apuGrupoDe(r,x),cx=gx?_apuGrupoCol(gx):null;
+        var Rx=_apuRep(x),gidsX=Object.keys(Rx);
+        var enSel=!!(window._apuGSel&&Rx[window._apuGSel]);
+        var gx=_apuGrupoDe(r,x,window._apuGSel),cx=gx?_apuGrupoCol(gx):null;
         var marcable=!!window._apuGSel;
         H+='<div class="_apuFila" data-i="'+i+'" style="background:'+(cx?cx[1]:'#fff')+';border:1.5px solid '+(cx?cx[0]:'var(--line)')+';border-radius:12px;padding:10px 11px;margin-bottom:8px'+(cx?(';box-shadow:inset 4px 0 0 '+cx[0]):'')+(marcable?';cursor:pointer':'')+'">';
         H+='<div style="display:flex;gap:9px;align-items:flex-start">';
-        if(marcable)H+='<span style="flex:none;width:21px;height:21px;border-radius:6px;border:2px solid '+(gx?cx[0]:'#C9D2E0')+';background:'+(gx?cx[0]:'#fff')+';color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:900">'+(gx?'✓':'')+'</span>';
+        if(marcable)H+='<span style="flex:none;width:21px;height:21px;border-radius:6px;border:2px solid '+(enSel?cx[0]:'#C9D2E0')+';background:'+(enSel?cx[0]:'#fff')+';color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:900">'+(enSel?'✓':'')+'</span>';
         H+='<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:700;color:#1B2433;line-height:1.35;overflow-wrap:anywhere">'+esc(x.descripcion||'')+'</div>';
         H+='<div style="display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:5px;font-size:10.5px;color:#5C6779">'+
            '<span><b style="color:#1B2433">'+_apuCant(cantX)+'</b> '+esc(x.unidad||'')+'</span>'+
            (x.cuadrilla?('<span>cuad. <b style="color:#1B2433">'+esc(x.cuadrilla)+'</b></span>'):'')+
            '<span>P.U. <b style="color:#1B2433">'+_apuMon(x.precio)+'</b></span>'+
            '<span style="margin-left:auto">Parcial <b style="color:#0C5132;font-size:12px">'+_apuMon(par)+'</b></span></div>';
-        if(gx){var fr=Math.round(_apuFrac(x)*1000)/10;
-          H+='<div style="margin-top:5px;font-size:10px;font-weight:800;color:'+cx[0]+';display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
-            '<span>'+esc(String(gx.nombre).toUpperCase())+' · '+(tot>0?(Math.round(par*_apuFrac(x)/tot*1000)/10):0)+'% del costo</span>'+
-            ((fr<100||modo!=='todo')?('<button class="_apuPct" data-i="'+i+'" title="Qué porcentaje de este insumo se considera en el apartado" style="background:#fff;color:'+cx[0]+';border:1.5px solid '+cx[0]+';border-radius:7px;padding:1px 7px;font-weight:900;font-size:10px;cursor:pointer">'+_apuCant(fr)+'% del insumo</button>'):'')+
-            (fr<100?('<span style="opacity:.8">el '+_apuCant(Math.round((100-fr)*10)/10)+'% restante queda sin apartado</span>'):'')+
-          '</div>'}
+        if(gidsX.length){
+          var usadoX=_apuRepUsado(x);
+          H+='<div style="margin-top:5px;font-size:10px;font-weight:800;display:flex;gap:4px 10px;align-items:center;flex-wrap:wrap">';
+          gidsX.forEach(function(gid){
+            var gg=(_apuGrupos(r)||[]).filter(function(z){return z.id===gid})[0];if(!gg)return;
+            var cg=_apuGrupoCol(gg),frg=Rx[gid];
+            H+='<span style="color:'+cg[0]+';display:inline-flex;gap:5px;align-items:center">'+esc(String(gg.nombre).toUpperCase())+' · '+(tot>0?(Math.round(par*frg/100/tot*1000)/10):0)+'% del costo'+
+              '<button class="_apuPct" data-i="'+i+'" data-g="'+esc(gid)+'" title="Qué porcentaje de este insumo se considera en '+esc(gg.nombre)+' (0 lo saca)" style="background:#fff;color:'+cg[0]+';border:1.5px solid '+cg[0]+';border-radius:7px;padding:1px 7px;font-weight:900;font-size:10px;cursor:pointer">'+_apuCant(frg)+'% del insumo</button></span>'});
+          if(usadoX<100)H+='<span style="color:#5C6779">libre '+_apuCant(Math.round((100-usadoX)*100)/100)+'%</span>';
+          H+='</div>'}
         H+='</div>';
         if(adm)H+='<div style="flex:none;display:flex;flex-direction:column;gap:5px">'+
           '<button class="_apuEd" data-i="'+i+'" title="Modificar valor" style="background:#EAF1FB;color:#1F3864;border:1px solid #BFD3EE;border-radius:8px;width:30px;height:30px;font-size:13px;cursor:pointer">✎</button>'+
@@ -17611,6 +17651,8 @@ function _apuUI(p){
     });
     if(adm)H+='<button id="_apuAdd" style="width:100%;background:#EAF3EC;color:#0C5132;border:1.5px dashed #7FB894;border-radius:11px;padding:12px;font-weight:800;font-size:13px;cursor:pointer;margin-top:6px">+ Agregar insumo</button>';
     w.innerHTML=H;
+    /* la pantalla no salta arriba al tocar un insumo */
+    if(_scrY)w.scrollTop=_scrY;
     /* el pie: total, suministro y el puente con los pesos */
     var pie=document.getElementById('_apuPie');
     var difTxt='';
@@ -17691,23 +17733,30 @@ function _apuUI(p){
       if(!isFinite(v)||v<0||v>100){if(typeof toast==='function')toast('Pon un porcentaje entre 0 y 100');
         pcC.value=_apuCant(window._apuPctComun==null?100:window._apuPctComun);return}
       v=Math.round(v*100)/100;window._apuPctComun=v;
-      var n=0;
-      if(window._apuGSel)vivos().forEach(function(x){if(x.grupo_id===window._apuGSel){x.grupo_pct=(v>=100?null:v);n++}});
+      var n=0,topados=0;
+      if(window._apuGSel)vivos().forEach(function(x){
+        if(!_apuRep(x)[window._apuGSel])return;
+        var tope=_apuRepSaldo(x,window._apuGSel),v2=Math.min(v,tope);
+        if(v2<v)topados++;
+        _apuRepSet(r,x,window._apuGSel,v2);n++});
       pinta();
-      if(n){await _guardaPct();if(typeof toast==='function')toast(_apuCant(v)+'% aplicado a los '+n+' insumo(s) del apartado')}};
+      if(n){await _guardaPct();if(typeof toast==='function')toast(_apuCant(v)+'% aplicado a los '+n+' insumo(s) del apartado'+(topados?(' · '+topados+' topado(s) a su saldo libre'):''))}};
     Array.prototype.forEach.call(w.querySelectorAll('._apuPct'),function(b){b.onclick=async function(ev){
       ev.stopPropagation();
       var x=r.insumos[+b.getAttribute('data-i')];if(!x)return;
-      var gq=_apuGrupoDe(r,x);
-      var v=_leePct('¿Qué % de "'+String(x.descripcion||'').slice(0,50)+'" se considera en "'+((gq&&gq.nombre)||'el apartado')+'"?\n(0 a 100 · el resto queda sin apartado)',_apuCant(_apuFrac(x)*100));
+      var gid=b.getAttribute('data-g')||x.grupo_id;
+      var gq=(_apuGrupos(r)||[]).filter(function(z){return z.id===gid})[0];
+      var tope=_apuRepSaldo(x,gid);
+      var v=_leePct('¿Qué % de "'+String(x.descripcion||'').slice(0,50)+'" se considera en "'+((gq&&gq.nombre)||'el apartado')+'"?\n(máximo '+_apuCant(tope)+'% disponible · 0 lo saca del apartado)',_apuCant(_apuFracDe(x,gid)*100));
       if(v==null)return;
-      x.grupo_pct=(v>=100?null:v);pinta();await _guardaPct()}});
+      if(v>tope){if(typeof toast==='function')toast('Solo hay '+_apuCant(tope)+'% disponible de este insumo — bájale en los otros apartados');return}
+      _apuRepSet(r,x,gid,v);pinta();await _guardaPct()}});
     var gdel=document.getElementById('_apuGDel');
     if(gdel)gdel.onclick=async function(){
       var g=(_apuGrupos(r)||[]).filter(function(z){return z.id===window._apuGSel})[0];if(!g)return;
-      var n=vivos().filter(function(x){return x.grupo_id===g.id}).length;
-      if(!confirm('Borrar el apartado "'+g.nombre+'"?'+(n?('\n\nSus '+n+' insumo(s) quedan sin apartado.'):'')))return;
-      (r.insumos||[]).forEach(function(x){if(x.grupo_id===g.id){x.grupo_id='';x.suministro=false;x.grupo_pct=null}});
+      var n=vivos().filter(function(x){return !!_apuRep(x)[g.id]}).length;
+      if(!confirm('Borrar el apartado "'+g.nombre+'"?'+(n?('\n\nSus '+n+' insumo(s) sueltan lo que tenían en él.'):'')))return;
+      (r.insumos||[]).forEach(function(x){if(_apuRep(x)[g.id])_apuRepSet(r,x,g.id,null)});
       r.grupos=(r.grupos||[]).filter(function(z){return z.id!==g.id});
       window._apuGSel=null;pinta();try{await _apuGuardar(id,r,false)}catch(e){}
       try{if(_fzVieneDelApu(id))await _fzDesdeApu(id,p,false)}catch(e){}};
@@ -17716,20 +17765,27 @@ function _apuUI(p){
       if(!window._apuGSel)return;
       if(ev.target&&ev.target.closest&&ev.target.closest('button'))return;
       var x=r.insumos[+f.getAttribute('data-i')];if(!x)return;
-      if(x.grupo_id&&x.grupo_id!==window._apuGSel){
-        var otro=_apuGrupoDe(r,x);
-        if(typeof toast==='function')toast('Ya está en "'+((otro&&otro.nombre)||'otro apartado')+'" — sácalo de ahí primero');
-        return}
-      if(x.grupo_id===window._apuGSel){x.grupo_id='';x.suministro=false;x.grupo_pct=null}
+      var gSel=window._apuGSel,Rx=_apuRep(x);
+      var gN=(_apuGrupos(r)||[]).filter(function(z){return z.id===gSel})[0];
+      if(Rx[gSel]){_apuRepSet(r,x,gSel,null)}
       else{
-        var modoX=window._apuModo||'todo',pctX=null;
-        var gN=(_apuGrupos(r)||[]).filter(function(z){return z.id===window._apuGSel})[0];
+        /* solo entra lo que le queda libre: el saldo es el limite */
+        var saldo=_apuRepSaldo(x,gSel);
+        if(saldo<=0){
+          var en=Object.keys(Rx).map(function(g){var gg=(_apuGrupos(r)||[]).filter(function(z){return z.id===g})[0];
+            return ((gg&&gg.nombre)||g)+' '+_apuCant(Rx[g])+'%'}).join(', ');
+          if(typeof toast==='function')toast('Ya está repartido al 100% ('+en+') — bájale ahí para dejarle saldo');
+          return}
+        var modoX=window._apuModo||'todo',pctX=saldo;
         if(modoX==='indep'){
-          pctX=_leePct('¿Qué % de "'+String(x.descripcion||'').slice(0,50)+'" se considera en "'+((gN&&gN.nombre)||'el apartado')+'"?\n(0 a 100 · el resto queda sin apartado)','100');
-          if(pctX==null)return}
-        else if(modoX==='uno')pctX=(window._apuPctComun==null)?100:window._apuPctComun;
-        x.grupo_id=window._apuGSel;x.grupo_pct=(pctX==null||pctX>=100)?null:pctX;
-        var g2=_apuGrupoDe(r,x);x.suministro=!!(g2&&/suministr/i.test(g2.nombre))}
+          pctX=_leePct('¿Qué % de "'+String(x.descripcion||'').slice(0,50)+'" se considera en "'+((gN&&gN.nombre)||'el apartado')+'"?\n(máximo '+_apuCant(saldo)+'% disponible · el resto queda libre)',_apuCant(saldo));
+          if(pctX==null||pctX<=0)return;
+          if(pctX>saldo){if(typeof toast==='function')toast('Solo hay '+_apuCant(saldo)+'% disponible de este insumo');return}}
+        else if(modoX==='uno'){
+          var comun=(window._apuPctComun==null)?100:window._apuPctComun;
+          pctX=Math.min(comun,saldo);
+          if(pctX<comun&&typeof toast==='function')toast('Topado al '+_apuCant(saldo)+'% que le queda libre')}
+        _apuRepSet(r,x,gSel,pctX)}
       pinta();try{await _apuGuardar(id,r,false)}catch(e){}
       try{if(_fzVieneDelApu(id))await _fzDesdeApu(id,p,true)}catch(e){}}});
     if(adm){
@@ -17811,6 +17867,7 @@ function _apuUI(p){
       }catch(e){if(typeof toast==='function')toast('No se pudo aplicar')}};
   };
   pinta();
+  try{var _b1=document.getElementById('_apuBody');if(_b1&&_scr0)_b1.scrollTop=_scr0}catch(_e1){}
 }
 /* editar un insumo (solo admin) */
 function _apuEditar(r,i,onOk){
@@ -17858,7 +17915,14 @@ function _apuEditar(r,i,onOk){
     x.precio=_apuNum(ov.querySelector('._eP').value);
     var pv=ov.querySelector('._ePar').value;
     x.parcial=(pv===''?null:_apuNum(pv));
-    x.suministro=ov.querySelector('._eS').checked;
+    var chkS=ov.querySelector('._eS').checked;
+    try{
+      var gS=(_apuGrupos(r)||[]).filter(function(g){return /suministr/i.test(String(g.nombre||''))})[0];
+      if(gS){
+        if(chkS&&!_apuRep(x)[gS.id]){var sal=_apuRepSaldo(x,gS.id);if(sal>0)_apuRepSet(r,x,gS.id,sal)}
+        else if(!chkS&&_apuRep(x)[gS.id])_apuRepSet(r,x,gS.id,null)}
+      else x.suministro=chkS;
+    }catch(_es){x.suministro=chkS}
     if(!x.descripcion){if(typeof toast==='function')toast('Ponle una descripción');return}
     ov.remove();if(onOk)onOk()};
 }
