@@ -13771,7 +13771,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260828e5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260828e6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -15614,7 +15614,7 @@ var RX_RAZONES=['CLIENTE - MATERIALES','CLIENTE - INGENIERÍA','CLIENTE - PRIORI
   'DOCUMENTACION TECNICA','ACTIVIDADES PREVIAS','TORMENTAS ELECTRICAS / LLUVIAS INTENSAS',
   'EXTERNO','SUBCONTRATAS','ERRORES DE INGENIERÍA','CONTROL DE CALIDAD'];
 var _RX_CAMPOS=['partida_id','task_code','actividad','descripcion','accion','f_ident',
-  'f_req','f_prev','f_nueva','area','personal','importancia','f_prog','estado','razon','comentario'];
+  'f_req','f_prev','f_nueva','area','personal','importancia','f_prog','estado','razon','comentario','sem_res'];
 function _rxAll(){if(!state.restrx){try{state.restrx=JSON.parse(localStorage.getItem('obf4_restrx')||'{}')||{}}catch(e){state.restrx={}}}if(!state.restrx)state.restrx={};return state.restrx}
 function _rxSaveLocal(){try{localStorage.setItem('obf4_restrx',JSON.stringify(_rxAll()))}catch(e){}}
 function _rxVivas(){var all=_rxAll(),out=[];Object.keys(all).forEach(function(k){var x=all[k];if(x&&!x.eliminado)out.push(x)});
@@ -15624,11 +15624,25 @@ function _rxDeAct(cod,items){var out=null;_rxVivas().forEach(function(x){if(out)
   if(cod&&x.task_code===cod)out=x;
   else if(items&&items.length&&x.partida_id&&items.indexOf(x.partida_id)>=0)out=x});
   return out}
+/* la semana de un registro: la grabada o, si falta, derivada de su fecha
+   de creacion (el inverso de _wkSem) */
+function _rxSemDe(x){
+  var n=Number(x&&x.semana)||0;if(n)return n;
+  try{var d=new Date(Number(x&&x.creado)||0);
+    if(d.getTime()>0){var iso=d.toISOString().slice(0,10);
+      return 27+Math.floor((_crASerial(iso)-46199)/7)}}catch(e){}
+  return 0}
 function _rxNuevoRid(){return 'rx'+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function _rxSet(rid,campos){
   var all=_rxAll(),t=(typeof nowSrv==='function'?nowSrv():Date.now());
   var x=all[rid]||{rid:rid,creado:t};
   Object.keys(campos||{}).forEach(function(k){x[k]=campos[k]});
+  /* la semana en que se resolvio queda sellada al pasar a LIBERADA, y se
+     limpia si vuelve a PENDIENTE */
+  if(campos&&campos.estado!==undefined){
+    if(String(campos.estado)==='LIBERADA'){
+      if(!x.sem_res)x.sem_res=String((typeof _wkQueToca==='function')?_wkQueToca():'')}
+    else x.sem_res=''}
   x.rid=rid;x.ts=t;x.cell_at=Date.now();
   if(x.eliminado==null)x.eliminado=false;
   if(!x.quien)x.quien=(state.user&&state.user.supervisor)||'';
@@ -15829,12 +15843,24 @@ function _rxUI(vista){
   var res=vivas.filter(function(x){return x.estado==='LIBERADA'});
   var tab=function(id,txt,activa){return '<button class="_rxTab" data-v="'+id+'" style="border:0;border-radius:10px 10px 0 0;padding:10px 14px;font-weight:800;font-size:12px;cursor:pointer;'+
     (activa?'background:#101a2b;color:#fff;box-shadow:inset 0 -2px 0 #2ECC71':'background:#0b1220;color:#7d8590')+'">'+txt+'</button>'};
+  /* fichas agrupadas por semana, cada grupo con su cabecera */
+  var _porSem=function(arr,semDe,color,rotulo){
+    var por={},ord=[];
+    arr.forEach(function(x){var n=semDe(x)||0;
+      if(!por[n]){por[n]=[];ord.push(n)}
+      por[n].push(x)});
+    ord.sort(function(a,b){return b-a});
+    return ord.map(function(n){
+      return '<div style="font-size:11px;font-weight:800;color:'+color+';letter-spacing:.06em;margin:10px 0 6px">'+
+        (n?(rotulo+' SEMANA '+n):'SIN SEMANA')+' \u00b7 ('+por[n].length+')</div>'+
+        por[n].map(_rxCard).join('')}).join('')};
   var cuerpo;
   if(vista==='res'){
-    cuerpo='<div style="font-size:11px;font-weight:800;color:#E8C9A0;letter-spacing:.06em;margin:2px 0 6px">PENDIENTES ('+pend.length+')</div>'+
-      (pend.map(_rxCard).join('')||'<div style="color:#7d8590;padding:6px 0 12px">Sin pendientes</div>')+
-      '<div style="font-size:11px;font-weight:800;color:#9FE8B0;letter-spacing:.06em;margin:12px 0 6px">RESUELTAS \u00b7 LIBERADAS ('+res.length+')</div>'+
-      (res.map(_rxCard).join('')||'<div style="color:#7d8590;padding:6px 0">Ninguna todav\u00eda</div>')}
+    cuerpo=_porSem(pend,_rxSemDe,'#E8C9A0','PENDIENTES \u00b7 DE LA')||
+      '<div style="color:#7d8590;padding:6px 0 12px">Sin pendientes</div>'}
+  else if(vista==='lib'){
+    cuerpo=_porSem(res,function(x){return Number(x.sem_res)||_rxSemDe(x)},'#9FE8B0','RESUELTAS \u00b7 EN LA')||
+      '<div style="color:#7d8590;padding:6px 0">Ninguna todav\u00eda</div>'}
   else{
     cuerpo='<div id="_rxNoLista" style="color:#7d8590;padding:8px 0">Calculando las NO cumplidas de la semana\u2026</div>'}
   ov.innerHTML='<div style="max-width:980px;margin:0 auto">'+
@@ -15846,7 +15872,8 @@ function _rxUI(vista){
     '</div>'+
     '<div style="display:flex;gap:6px;margin-top:10px">'+
       tab('no','\u26d4 No cumplidas de la semana',vista==='no')+
-      tab('res','\ud83d\uddc2 Restricciones ('+vivas.length+')',vista==='res')+
+      tab('res','\ud83d\uddc2 Pendientes ('+pend.length+')',vista==='res')+
+      tab('lib','\u2705 Resueltas ('+res.length+')',vista==='lib')+
     '</div>'+
     '<div style="background:#101a2b;border:1px solid #1d2a3d;border-radius:0 12px 12px 12px;padding:10px">'+cuerpo+'</div>'+
   '</div>';
@@ -15861,7 +15888,7 @@ function _rxUI(vista){
     _rxUI('res')};
   ov.querySelectorAll('._rxTab').forEach(function(b){
     b.onclick=function(){_rxUI(b.getAttribute('data-v'))}});
-  if(vista==='res'){
+  if(vista==='res'||vista==='lib'){
     ov.querySelectorAll('._rxCam').forEach(function(el){
       el.onchange=function(){var o={};o[el.getAttribute('data-campo')]=el.value;
         _rxSet(el.getAttribute('data-rid'),o)}});
