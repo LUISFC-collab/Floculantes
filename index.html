@@ -3987,14 +3987,16 @@ function _crPintaHoja2(D,P,sel,fec,q){
   var orden=D.tar.slice().sort(function(a,b){return (a.orden||0)-(b.orden||0)});
   /* Primero las cuentas: las horas de cada actividad, el subtotal de cada WBS
      de primer nivel y el total, para poder cuadrarlo contra el alcance. */
-  var hhs=[],subs={},total=0;
+  /* lo ya avanzado, en HH: las HH que cuentan por el % del aplicativo */
+  var pctDe=function(pp){try{return Math.max(0,Math.min(100,Number(pctOf(pp))||0))}catch(e){return 0}};
+  var hhs=[],subs={},total=0,gans=[],subsG={},totalG=0;
   orden.forEach(function(t,k){
-    var h=0;(t.items||[]).forEach(function(i){
+    var h=0,g=0;(t.items||[]).forEach(function(i){
       if(!sel[i])return;
-      var pp=porId[i];if(pp)h+=hhEd(pp)/_crVeces(rp,i)});
-    hhs[k]=h;total+=h;
+      var pp=porId[i];if(!pp)return;var hi=hhEd(pp)/_crVeces(rp,i);h+=hi;g+=hi*pctDe(pp)/100});
+    hhs[k]=h;total+=h;gans[k]=g;totalG+=g;
     var r0=String(t.wbs||'').split(' / ').filter(function(z){return z})[0]||'—';
-    subs[r0]=(subs[r0]||0)+h});
+    subs[r0]=(subs[r0]||0)+h;subsG[r0]=(subsG[r0]||0)+g});
   /* Lo que el alcance dice que hay, contando cada partida una sola vez, y lo
      que ninguna actividad reclama: la diferencia entre ambos. */
   var recl={};D.tar.forEach(function(t){
@@ -4019,6 +4021,9 @@ function _crPintaHoja2(D,P,sel,fec,q){
         '<button id="_rhRedo" class="_crNoTog" title="Rehacer (Ctrl+Y)" '+(k.adelante?'':'disabled')+' style="background:'+(k.adelante?'#243b55':'#151c28')+';color:'+(k.adelante?'#cfe3ff':'#5a6b85')+';border:0;border-radius:7px;padding:4px 9px;font-weight:800;font-size:11px;cursor:pointer">\u27f3 rehacer'+(k.adelante?(' ('+k.adelante+')'):'')+'</button>'+
         (window._rlRelink?('<span style="font-size:10px;color:#FFB4A8;font-weight:800">\ud83d\udd17 eligiendo nueva predecesora de '+esc(window._rlRelink.succ)+' \u00b7 Esc cancela</span>'):'')+
         '</span>'}catch(e){return ''}})()+
+    '<span style="flex:none;padding:2px 9px;border-radius:7px;font-size:11px;'+
+      'font-weight:800;background:#101d2e;border:1px solid #24344f;color:#8ECBF5" title="HH ya avanzadas seg\u00fan los avances del aplicativo">'+
+      r2(totalG)+' hh avanzadas ('+(total>0?(Math.round(totalG/total*1000)/10):0)+'%)</span>'+
     '<span style="flex:none;padding:2px 9px;border-radius:7px;font-size:11px;'+
       'font-weight:800;background:#14261d;border:1px solid #1d3a2a;color:#9FE8B0">'+
       r2(total)+' hh en actividades</span>'+
@@ -4061,8 +4066,9 @@ function _crPintaHoja2(D,P,sel,fec,q){
         'font-size:'+(j?11:12)+'px;color:'+(j?'#8ECBF5':'#9FE8B0')+';letter-spacing:.02em">'+
         '<span style="flex:1;overflow-wrap:anywhere">'+
         esc(String(D.nom[rj]||ruta[j]).toUpperCase())+'</span>'+
-        (j?'':'<span style="flex:none;font-size:11px;color:#9FE8B0">'+
-             r2(subs[ruta[0]]||0)+' hh</span>')+'</div>'}
+        (j?'':('<span style="flex:none;font-size:11px;color:#8ECBF5" title="HH ya avanzadas">'+r2(subsG[ruta[0]]||0)+' hh</span>'+
+             '<span style="flex:none;font-size:11px;color:#9FE8B0">'+
+             r2(subs[ruta[0]]||0)+' hh</span>'))+'</div>'}
     prev=ruta;
     /* las partidas que esta tarea reclama y estan marcadas */
     var ms=(t.items||[]).filter(function(i){return sel[i]});
@@ -4087,6 +4093,7 @@ function _crPintaHoja2(D,P,sel,fec,q){
             'border-radius:999px;font-size:10px;font-weight:800;color:#101820;'+
             'background:'+(colG[g]||'#8DD6ED')+'">'+esc(nomG[g]||g)+'</span>'}).join('')):'')+
       '</span>'+
+      (info?'':('<span style="flex:none;font-size:11px;font-weight:800;color:#8ECBF5" title="HH ya avanzadas">'+(Math.round((gans[k]||0)*100)/100)+' hh</span>'))+
       '<span style="flex:none;font-size:11px;font-weight:800;color:'+
         (info?'#7d8590':(hh>0?'#9FE8B0':'#E8C9A0'))+'">'+
         (info?'informativa':(Math.round(hh*100)/100)+' hh')+'</span>'+
@@ -4107,6 +4114,7 @@ function _crPintaHoja2(D,P,sel,fec,q){
           '<span style="flex:1;min-width:80px;font-size:10.5px;overflow-wrap:anywhere;'+
             'color:'+(dentro?'#cfe3ff':'#6b7688')+'">'+_crMarca(pp?pp.nom:'(no esta en el catalogo)',q)+
             (notas.length?('<br><span style="color:#E8C9A0;font-size:9.5px;font-weight:700">\u23f8 '+esc(notas.join(' \u00b7 '))+'</span>'):'')+'</span>'+
+          (dentro?('<span style="flex:none;font-size:10px;font-weight:800;color:#8ECBF5" title="HH ya avanzadas ('+(pp?pctDe(pp):0)+'%)">'+(Math.round(hi*(pp?pctDe(pp):0))/100)+' hh</span>'):'')+
           '<span style="flex:none;font-size:10px;font-weight:800;color:'+
             (dentro?'#9FE8B0':'#7d8590')+'">'+(Math.round(hi*100)/100)+' hh'+
             (Math.abs(hi-hc)>0.005?('<span style="color:#7d8590;font-weight:600"> de '+(Math.round(hc*100)/100)+'</span>'):'')+'</span>'+
@@ -14290,7 +14298,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904b5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904b6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
