@@ -2575,6 +2575,11 @@ function _crUniverso(cronId,alc){
     if(!inc)return;
     var hh=(a&&a.hh!=null)?a.hh:p.hh;
     if(!(hh>0))return;
+    /* los apartados del APU que no se realizan se llevan su fraccion de las
+       HH: asi el universo, la curva, el forecast, 3WLA/PPC y el .xer cuentan
+       solo lo que si se va a hacer */
+    try{if(typeof _apuOffFrac==='function'){var fo=_apuOffFrac(p.id);if(fo>0)hh=Math.round(hh*(1-fo)*10000)/10000}}catch(_eo){}
+    if(!(hh>0))return;
     hhT+=hh;n++;items[p.id]=hh});
   return {hh:Math.round(hhT*100)/100,n:n,items:items}}
 
@@ -2907,7 +2912,10 @@ async function _crAlcanceUI(c){
     fec[p.id]={ini:(a&&a.ini)||'',fin:(a&&a.fin)||'',origen:(a&&a.origen)||''}});
   /* las HH que valen aquí: las del contrato, salvo que este cronograma tenga
      las suyas propias puestas desde la plantilla */
-  var hhDe=function(p){return (hhx[p.id]!=null)?Number(hhx[p.id]):p.hh};
+  var hhDe=function(p){var h=(hhx[p.id]!=null)?Number(hhx[p.id]):p.hh;
+    /* menos la fraccion de los apartados del APU que no se realizan */
+    try{if(typeof _apuOffFrac==='function'){var fo=_apuOffFrac(p.id);if(fo>0)h=h*(1-fo)}}catch(_eo){}
+    return h};
   function suma(){
     var hh=0,n=0,nr=0,cf=0,sinT=0,hhSinT=0;
     var dueno=window._crDueno||{};
@@ -13771,7 +13779,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260901a7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260901a8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17863,6 +17871,10 @@ function _apuUI(p){
       try{await _apuGuardar(id,r,false)}catch(e){}
       try{if(_fzVieneDelApu(id))await _fzDesdeApu(id,p,true)}catch(e){}
       try{if(typeof renderList==='function')renderList()}catch(e){}
+      /* el universo del cronograma cambia: la curva abierta se repinta */
+      try{var e9=window._crCurEstado;if(e9&&document.getElementById('_crCurOv')){document.getElementById('_crCurOv').remove();_crCurvaUI(e9.c,e9.nivel,e9.conWbs,e9.esp)}}catch(_e9){}
+      try{if(typeof _pgCurvaRefresca==='function')_pgCurvaRefresca()}catch(_e8){}
+      try{if(document.getElementById('_crOv')&&typeof _crPinta==='function')_crPinta()}catch(_e7){}
       if(typeof toast==='function')toast(g.off?('\u23f8 "'+g.nombre+'" ya no cuenta para los pesos ni para las HH'):('\u25b6 "'+g.nombre+'" vuelve a contar'))};
     var gdel=document.getElementById('_apuGDel');
     if(gdel)gdel.onclick=async function(){
