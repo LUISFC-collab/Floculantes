@@ -7812,6 +7812,18 @@ async function _wkCronDatos(ids,semanas){
       sem:cur.porSem.map(function(x){return cur.pesoTot>0?(x/cur.pesoTot):0}),
       fuera:fuera})}
   return out}
+/* el % real de un cronograma a una fecha: HH ganadas (con el reparto en
+   orden) sobre las HH de su alcance; la misma vara que la curva y que la
+   hoja PROGRAMACION del semanal */
+async function _wkPctCron(cronId,corte){
+  var tar=await _crTareas(cronId),alc=await _crAlc(cronId);
+  var u=_crUniverso(cronId,alc),rp=_crReparto(tar),vivas={};
+  try{(DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id)vivas[p.id]=p})}catch(e){}
+  var pts=0;
+  tar.forEach(function(t){(t.items||[]).forEach(function(i){if(u.items[i]==null)return;var p=vivas[i];if(!p)return;
+    var pc=0;try{pc=(Number(pctOfAt(p,corte))||0)/100}catch(e){}
+    pts+=_crGanadas(rp,i,t.task_code,Number(u.items[i])||0,Math.max(0,Math.min(1,pc)))})});
+  return {pct:u.hh>0?Math.min(1,pts/u.hh):0,hhT:Math.round(u.hh*100)/100,pts:Math.round(pts*100)/100}}
 /* la curva REAL del aplicativo, semana a semana, con la misma vara del panel */
 function _wkCurvaApp(semanas,conSobre){
   var acum=[],prev=0,sem=[];
@@ -13273,16 +13285,26 @@ function _wkExcel(){
     var corte2=_wkISO(_wkSem(n2).fin);
     var topar2=((document.getElementById('_wkTope')||{}).value!=='todo');
     var hoySel=((document.getElementById('_wkCorte')||{}).value!=='jueves');
-    var pC=_wkPctApp(_wkAcum(corte2),!topar2);
-    var pH=_wkPctApp(_wkAcum((typeof todayISO==='function')?todayISO():corte2),!topar2);
-    var bH='<b style="color:'+(hoySel?'#0C5132':'#5C6779')+'">'+(Math.round(pH.pct*1e4)/100)+'%</b>';
-    var bC='<b style="color:'+(hoySel?'#5C6779':'#0C5132')+'">'+(Math.round(pC.pct*1e4)/100)+'%</b>';
+    var hoy2=(typeof todayISO==='function')?todayISO():corte2;
     var el=document.getElementById('_wkPrev');
-    if(el)el.innerHTML='Hasta hoy: '+bH+' · al jueves de corte ('+corte2.slice(8,10)+'/'+corte2.slice(5,7)+'): '+bC+
-      '<br><span style="color:var(--muted)">Va a salir el marcado en verde, según el corte elegido.</span>';
+    var pinta=function(pC,pH,vara){
+      var bH='<b style="color:'+(hoySel?'#0C5132':'#5C6779')+'">'+(Math.round(pH.pct*1e4)/100)+'%</b>';
+      var bC='<b style="color:'+(hoySel?'#5C6779':'#0C5132')+'">'+(Math.round(pC.pct*1e4)/100)+'%</b>';
+      if(el)el.innerHTML='Hasta hoy: '+bH+' \u00b7 al jueves de corte ('+corte2.slice(8,10)+'/'+corte2.slice(5,7)+'): '+bC+
+        '<br><span style="color:var(--muted)">Va a salir el marcado en verde, seg\u00fan el corte elegido. '+vara+'</span>'};
+    /* con cronograma marcado: la vara del cronograma vigente (el ultimo
+       marcado), la misma de la curva y de PROGRAMACION */
+    var marc=[].slice.call(document.querySelectorAll('._wkCk:checked')).map(function(k){return k.value});
+    if(marc.length&&typeof _wkPctCron==='function'){
+      var esp=marc[marc.length-1];
+      Promise.all([_wkPctCron(esp,corte2),_wkPctCron(esp,hoy2)]).then(function(r){
+        pinta(r[0],r[1],'Medido sobre las '+r[0].hhT+' hh del alcance de '+esp+'.')}).catch(function(){
+        pinta(_wkPctApp(_wkAcum(corte2),!topar2),_wkPctApp(_wkAcum(hoy2),!topar2),'')})}
+    else pinta(_wkPctApp(_wkAcum(corte2),!topar2),_wkPctApp(_wkAcum(hoy2),!topar2),'Medido sobre todas las partidas de la app.');
   }catch(_e){}};
-  setTimeout(previa,50);
+  setTimeout(previa,50);setTimeout(previa,1500);
   document.getElementById('_wkSel').onchange=previa;
+  try{document.getElementById('_wkCronBox').addEventListener('change',previa)}catch(_ec9){}
   var _tp=document.getElementById('_wkTope');if(_tp)_tp.addEventListener('change',previa);
   var _tc=document.getElementById('_wkCorte');if(_tc)_tc.addEventListener('change',previa);
   document.getElementById('_wkPick').onclick=function(){document.getElementById('_wkFile').click()};
@@ -15001,7 +15023,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904g5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904g6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
