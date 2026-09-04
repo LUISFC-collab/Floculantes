@@ -8386,8 +8386,8 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
   if(!SEMS.length)SEMS=[semN,semN+1,semN+2];
   /* opc.sig3 (3WLA): las tres semanas SIGUIENTES a la del reporte; si no,
      la del reporte y las dos que siguen */
-  var _s3=!!(opc&&opc.sig3);
-  var VIS={};if(_s3){VIS[semN+1]=1;VIS[semN+2]=1;VIS[semN+3]=1}else{VIS[semN]=1;VIS[semN+1]=1;VIS[semN+2]=1}
+  var _s3=!!(opc&&opc.sig3),_s1=!!(opc&&opc.sem1);
+  var VIS={};if(_s1){VIS[semN]=1}else if(_s3){VIS[semN+1]=1;VIS[semN+2]=1;VIS[semN+3]=1}else{VIS[semN]=1;VIS[semN+1]=1;VIS[semN+2]=1}
   /* con QUIEN (opc.quien), la columna nueva es el nuevo O, la LINEA pasa a
      P y la rejilla corre una columna */
   var QN=!!(opc&&opc.quien), FIL=!!(opc&&opc.filtro);
@@ -8436,7 +8436,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
      dos siguientes): lo que vive en semanas ocultas ya desaparecio de la
      vista y no debe hacer Considerar a nadie */
   var _vIniF='',_vFinF='';
-  try{_vIniF=_wkISO(_wkSem(_s3?semN+1:semN).ini);_vFinF=_wkISO(_wkSem(_s3?semN+3:semN+2).fin)}catch(_ev9){}
+  try{_vIniF=_wkISO(_wkSem(_s3?semN+1:semN).ini);_vFinF=_wkISO(_wkSem(_s1?semN:(_s3?semN+3:semN+2)).fin)}catch(_ev9){}
   var _filtDe=function(f){
     var k=(f&&f.clave)||'';
     if(_filtMemo[k]!=null)return _filtMemo[k];
@@ -8573,7 +8573,15 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
   LINEAS.forEach(function(_L,k){ponResumen(k,true)});
   /* ---- las actividades ---- */
   var n=r0,nFilas=0;
-  cuerpo.forEach(function(z){
+  /* el FILTRO por formula: los dias de las semanas VISIBLES de la hoja */
+  var _visBlq=[];BLQ.forEach(function(c0,b){if(VIS[SEMS[b]])_visBlq.push(c0)});
+  var _finRama=function(i0){var z0=cuerpo[i0];for(var j=i0+1;j<cuerpo.length;j++){var zj=cuerpo[j];if(zj.tit!=null&&zj.niv<=z0.niv)return j-1}return cuerpo.length-1};
+  var _fFiltroAct=function(n0,L){var rg=_visBlq.map(function(c0){return _wkColL(c0)+n0+':'+_wkColL(c0+6)+(n0+L-1)});
+    var txt=(opc&&opc.lmn)?('LEN(L'+n0+')+LEN(N'+n0+')'):('LEN(M'+n0+')+LEN(N'+n0+')');
+    return 'IF('+(rg.length?('SUM('+rg.join(',')+')+'):'')+txt+'>0,"Considerar","No considerar")'};
+  var _fFiltroTit=function(i0){var a=r0+i0+1,b=r0+_finRama(i0);if(b<a)return '"No considerar"';
+    return 'IF(COUNTIF('+cFIL+a+':'+cFIL+b+',"Considerar")>0,"Considerar","No considerar")'};
+  cuerpo.forEach(function(z,_idx){
     if(z.tit!=null){
       /* la banda entera pintada, no una celda suelta en medio del vacio */
       var fT=z.niv?WBS1:WBS0;   /* mas oscuro: es un titulo */
@@ -8582,7 +8590,8 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
       /* la banda cruza la hoja entera, no se corta en la L */
       for(var cc=0;cc<=BLQ[BLQ.length-1]+8;cc++){
         var _cl9=_wkColL(cc),_esF=FIL&&_cl9===cFIL;
-        bs.push(_wkCelE(_cl9,n,(cc===2)?z.tit:(_esF?'Considerar':''),(cc===2)||_esF,eT))}
+        if(_esF)bs.push(_wkCelE(_cl9,n,'',true,eT,_fFiltroTit(_idx)));
+        else bs.push(_wkCelE(_cl9,n,(cc===2)?z.tit:'',(cc===2),eT))}
       fila(n,bs,18);n++;return}
     var f=z.f,C=COL[z.k||0]||COL[0];
     if(opc&&opc.lmn&&(z.pos||0)===0&&_minaDe(f))
@@ -8638,8 +8647,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
       _wkCelE('N',n,((z.pos||0)===0?((opc&&opc.lmn)?_rxInfo(f).accion:((opc&&opc.quien)?_rxInfo(f).razon:'')):''),true,_wkCentrado(tinta(CAB.N,PLOMO,PLOMOB))),
       QN?_wkCelE('O',n,((z.pos||0)===0?_rxInfo(f).quien:''),true,
            _wkCentrado(tinta(CAB.O,PLOMO,PLOMOB))):null,
-      FIL?_wkCelE(cFIL,n,(_filtDe(f)?'Considerar':'No considerar'),true,
-           _wkCentrado(tinta(CAB[cFIL],PLOMO,PLOMOB))):null,
+      FIL?_wkCelE(cFIL,n,'',true,_wkCentrado(tinta(CAB[cFIL],PLOMO,PLOMOB)),_fFiltroAct(n-(z.pos||0),LINEAS.length)):null,
       _wkCelE(cLIN,n,z.linea||'',true,st(_extra?CAB[cLIN]:CAB.O))].filter(Boolean);
     /* las tres, combinadas de arriba abajo del bloque */
     if(R&&(z.pos||0)===0&&LINEAS.length>1){
@@ -10566,7 +10574,7 @@ async function _wkLibroApp(semN,corte,ids){
     try{_hdVal=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,true)}catch(_ev){}
     /* PPC (lo anterior y lo hecho) y 3WLA (lo programado): la misma hoja
        partida en dos, con colores mas sobrios. PARA 3WLA sigue estando. */
-    try{_hdPPC=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,false,{idx:[0,1],sobrio:true,quien:1,filtro:1})}catch(_e4){}
+    try{_hdPPC=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,false,{idx:[0,1],sobrio:true,quien:1,filtro:1,sem1:1})}catch(_e4){}
     try{_hd3W=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,false,{idx:[2,3],sobrio:true,lmn:1,filtro:1,sig3:1})}catch(_e5){}
   }catch(_ehd){try{console.warn('PARA 3WLA no se pudo armar:',_ehd)}catch(_e2){}}
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
@@ -15056,7 +15064,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904h3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904h4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
