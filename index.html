@@ -3496,7 +3496,7 @@ async function _rlPush(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
   var all=_rlAll(),out=[];
   Object.keys(all).forEach(function(k){var x=all[k]||{};if(!x.ts||!x.cron_id||!x.succ||!x.pred)return;
     out.push({proyecto:DATA.proyecto,cron_id:String(x.cron_id),succ:String(x.succ),pred:String(x.pred),
-      tipo:String(x.tipo||'FS'),lag_d:Number(x.lag_d)||0,origen:String(x.origen||''),quien:String(x.quien||''),
+      tipo:String(x.tipo||'FS'),lag_d:Number(x.lag_d)||0,lag0:(x.lag0==null?null:Number(x.lag0)),origen:String(x.origen||''),quien:String(x.quien||''),
       ts:Number(x.ts)||0,cell_at:Number(x.cell_at)||0,eliminado:!!x.eliminado,elim_por:String(x.elim_por||''),elim_ts:Number(x.elim_ts)||0})});
   if(!out.length)return;
   out=onlyChanged(T_REL,out,function(r){return r.cron_id+'|'+r.succ+'|'+r.pred});if(!out.length)return;
@@ -3510,6 +3510,7 @@ async function _rlPull(cronId){if(!(typeof sbReady==='function'&&sbReady()&&navi
     if(lts>sts)return;if(lts&&lts===sts)return;
     cambio=true;
     all[k]={cron_id:String(r.cron_id),succ:String(r.succ),pred:String(r.pred),tipo:String(r.tipo||'FS'),lag_d:Number(r.lag_d)||0,
+      lag0:(r.lag0==null?null:Number(r.lag0)),
       origen:String(r.origen||''),quien:String(r.quien||''),ts:sts,cell_at:Number(r.cell_at)||0,
       eliminado:!!r.eliminado,elim_por:String(r.elim_por||''),elim_ts:Number(r.elim_ts)||0}});
   if(cambio){_rlSaveLocal();try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(e){}}
@@ -3529,7 +3530,7 @@ async function _rlSembrar(cronId){
     var su=codDe[o.task_id],pr=codDe[o.pred_task_id];if(!su||!pr||su===pr)return;
     var tipo=String(o.pred_type||'PR_FS').replace(/^PR_/,'').toUpperCase();if(RL_TIPOS.indexOf(tipo)<0)tipo='FS';
     var lag=Math.round((Number(o.lag_hr_cnt)||0)/8*100)/100;
-    _rlSet(cronId,su,pr,{tipo:tipo,lag_d:lag,origen:'xer'},false,true);n++});
+    _rlSet(cronId,su,pr,{tipo:tipo,lag_d:lag,lag0:lag,origen:'xer'},false,true);n++});
   if(n){_rlSaveLocal();try{await _rlPush()}catch(e){}}
   return n}
 /* la programacion por relaciones: sin predecesoras, la fecha efectiva de
@@ -3554,13 +3555,18 @@ function _crFechaTareaManual(t,alc){
    sin cambios queda identica al .xer y solo lo movido cambia. */
 function _rlPrograma(cronId,tar,alcX){
   var rels=_rlVivas(cronId),base={},out={},porCod={};
+  /* las relaciones que VENIAN del .xer (aunque hoy esten quitadas), con su
+     lag de origen: contra ellas se mide lo que se corre */
+  var relsXer=[];(function(){var all=_rlAll();Object.keys(all).forEach(function(k){var x=all[k];
+    if(x&&String(x.cron_id)===String(cronId)&&x.lag0!=null)relsXer.push(x)})})();
   (tar||[]).forEach(function(t){porCod[t.task_code]=t;
     var m=_crFechaTareaManual(t,alcX||{});
     var dur=(t.ini&&t.fin)?Math.max(0,_crASerial(t.fin)-_crASerial(t.ini)):0;
     base[t.task_code]={ini0:t.ini||'',fin0:t.fin||'',dur:dur,man:m}});
-  var preds={},succs={},grado={};
+  var preds={},succs={},grado={},predsXer={};
   rels.forEach(function(r){if(!porCod[r.succ]||!porCod[r.pred])return;
     (preds[r.succ]=preds[r.succ]||[]).push(r);(succs[r.pred]=succs[r.pred]||[]).push(r);grado[r.succ]=(grado[r.succ]||0)+1});
+  relsXer.forEach(function(r){if(!porCod[r.succ]||!porCod[r.pred])return;(predsXer[r.succ]=predsXer[r.succ]||[]).push(r)});
   var cond=function(r,pi,pf,dur){var lag=Number(r.lag_d)||0;
     if(r.tipo==='SS')return pi+lag;if(r.tipo==='FF')return pf+lag-dur;if(r.tipo==='SF')return pi+lag-dur;return pf+lag+1};
   var cola=[];Object.keys(porCod).forEach(function(c){if(!grado[c])cola.push(c)});
@@ -3575,12 +3581,20 @@ function _rlPrograma(cronId,tar,alcX){
       /* lo que le imponen ahora sus predecesoras, y lo que le imponian en
          el .xer: la diferencia es lo que se corre */
       var nuevo=null,viejo=null;
-      (preds[c]||[]).forEach(function(r){var pd=out[r.pred],pb=base[r.pred];
-        if(!pd||!pd.ini||!pb.ini0)return;
+      (preds[c]||[]).forEach(function(r){var pd=out[r.pred];
+        if(!pd||!pd.ini)return;
         var cn=cond(r,_crASerial(pd.ini),_crASerial(pd.fin||pd.ini),b.dur);
-        var cv=cond(r,_crASerial(pb.ini0),_crASerial(pb.fin0||pb.ini0),b.dur);
-        if(nuevo===null||cn>nuevo)nuevo=cn;if(viejo===null||cv>viejo)viejo=cv});
-      var delta=(nuevo!==null&&viejo!==null)?(nuevo-viejo):0;
+        if(nuevo===null||cn>nuevo)nuevo=cn});
+      (predsXer[c]||[]).forEach(function(r){var pb=base[r.pred];
+        if(!pb||!pb.ini0)return;
+        var r0={tipo:r.tipo,lag_d:Number(r.lag0)||0};
+        var cv=cond(r0,_crASerial(pb.ini0),_crASerial(pb.fin0||pb.ini0),b.dur);
+        if(viejo===null||cv>viejo)viejo=cv});
+      /* sin relaciones del .xer detras, una relacion nueva solo puede
+         empujar hacia adelante */
+      var delta=0;
+      if(nuevo!==null&&viejo!==null)delta=nuevo-viejo;
+      else if(nuevo!==null&&b.ini0)delta=Math.max(0,nuevo-_crASerial(b.ini0));
       if(b.ini0){ini=_crDeSerial(_crASerial(b.ini0)+delta);fin=b.fin0?_crDeSerial(_crASerial(b.fin0)+delta):ini}
       else if(nuevo!==null){ini=_crDeSerial(nuevo);fin=_crDeSerial(nuevo+b.dur)}}
     out[c]={ini:ini,fin:fin,rel:tiene,movida:(ini!==b.ini0||fin!==b.fin0),preds:preds[c]||[]};
@@ -14091,7 +14105,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904a5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
