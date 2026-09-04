@@ -3030,8 +3030,23 @@ async function _crAlcanceUI(c){
       var cod=bt.getAttribute('data-cod'),def=bt.getAttribute('data-def'),act=bt.getAttribute('data-act');
       var v=prompt('Rendimiento para el remanente de '+cod+' (HH por d\u00eda)\nSeg\u00fan el cronograma: '+def+' hh/d\u00eda \u00b7 vac\u00edo o 0 = quitar el propio',act||def);
       if(v===null)return;var n=Number(String(v).replace(',','.'));
-      _cnSet(c.cron_id,cod,n>0?n:0);pinta();
-      fmsg(n>0?('\u2699 '+cod+' a '+(Math.round(n*100)/100)+' hh/d\u00eda \u2014 el remanente se exporta con ese rendimiento'):('Rendimiento propio de '+cod+' quitado'),'#FFD27A')}});
+      _cnSet(c.cron_id,cod,n>0?n:0);
+      /* manda al rendimiento de PROGRAMAR de cada partida de la actividad,
+         en su unidad por dia (metrado x hh/dia / HH de la actividad); al
+         reves (programar -> aqui) no se propaga */
+      var aProg=[];try{
+        var t9=(window._crTarLista||[]).filter(function(t){return t.task_code===cod})[0];
+        if(t9){var rp9=_crReparto(window._crTarLista||[]),porId9={};P.forEach(function(q){porId9[q.id]=q});
+          var hhT=0,lst=[];(t9.items||[]).forEach(function(i){if(!sel[i])return;var pp=porId9[i];if(!pp)return;
+            var hi=(Number(hhDe(pp))||0)/_crVeces(rp9,i);if(!(hi>0))return;hhT+=hi;lst.push({id:i,pp:pp,v:_crVeces(rp9,i)})});
+          lst.forEach(function(x){var m=(typeof metaOf==='function')?metaOf(x.id):null;if(!m||m.unidad==='glb'||!(Number(m.total)>0))return;
+            if(n>0&&hhT>0){var rate=Math.round((Number(m.total)/x.v)*n/hhT*100)/100;if(rate>0){_rpSet(x.id,rate);aProg.push(x.id+' a '+rate+' '+(m.unidad||'')+'/d')}}
+            else if(!(n>0)){if(typeof _rpDe==='function'&&_rpDe(x.id)!=null){_rpBorra(x.id);aProg.push(x.id+' sin propio')}}})}
+        try{if(typeof _rpPush==='function')_rpPush()}catch(_ep){}
+        try{if(typeof _pgPinta==='function'&&document.getElementById('progPanel'))_pgPinta()}catch(_ep2){}
+      }catch(_e9){}
+      pinta();
+      fmsg((n>0?('\u2699 '+cod+' a '+(Math.round(n*100)/100)+' hh/d\u00eda \u2014 el remanente se exporta con ese rendimiento'):('Rendimiento propio de '+cod+' quitado'))+(aProg.length?(' \u00b7 programar: '+aProg.join(', ')):''),'#FFD27A')}});
     var tM=B.querySelector('#_h2TModo');if(tM)tM.onclick=function(ev){ev.stopPropagation();try{localStorage.setItem('obf4_h2modo',(localStorage.getItem('obf4_h2modo')||'sem')==='dia'?'sem':'dia')}catch(e){}pinta()};
     var tF=B.querySelector('#_h2TFijo');if(tF)tF.onclick=function(ev){ev.stopPropagation();try{localStorage.setItem('obf4_h2fijo',localStorage.getItem('obf4_h2fijo')==='0'?'1':'0')}catch(e){}pinta()};
     B.onscroll=function(){if(B._h2raf)return;B._h2raf=requestAnimationFrame(function(){B._h2raf=0;try{_h2Fijar(B)}catch(e){}})};
@@ -14763,7 +14778,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904e6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904e7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
