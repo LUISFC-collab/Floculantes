@@ -8059,11 +8059,17 @@ async function _crPlanRecupera(cronId,corte,semN){
   var desde=_crDeSerial(_crASerial(corte)+1);
   if(desde<vIni)desde=vIni;
   var plan={},actual={},fore={},back={},recup=[],porPart={};
-  /* el respaldo que manda: el mas reciente de BACK_CRONOGRAMAS */
-  var bkSnap={};
+  /* la FUENTE DEL PLANEAMIENTO (ajuste plan_fuente): un respaldo de
+     BACK_CRONOGRAMAS manda sobre lo programado; si no, el mas reciente solo
+     sirve de referencia y lo programado sale del cronograma */
+  var fuente='';try{fuente=String(_ajGet('plan_fuente','')||'')}catch(_ef){}
+  var fuenteBk=false,bkSnap={};
   try{
-    var bk=(state.backcron||[]).slice().sort(function(a,b){
-      return (b.ts||0)-(a.ts||0)})[0];
+    if(fuente&&fuente.indexOf('cron:')!==0&&fuente!=='__base0__'&&!((state.backcron||[]).length)){
+      try{await new Promise(function(r9){_bkcPull(r9)})}catch(_e0){}}
+    var bks=(state.backcron||[]).slice().sort(function(a,b){return (b.ts||0)-(a.ts||0)}),bk=null;
+    if(fuente&&fuente.indexOf('cron:')!==0&&fuente!=='__base0__'){bk=bks.filter(function(b){return String(b.id)===fuente})[0]||null;fuenteBk=!!bk}
+    if(!bk)bk=bks[0];
     if(bk)Object.keys(bk.snap||{}).forEach(function(d){
       (bk.snap[d]||[]).forEach(function(e){
         var id=e._id||e.partida_id;
@@ -8113,6 +8119,16 @@ async function _crPlanRecupera(cronId,corte,semN){
       if(!dLab.length){dLab=[];for(var k=0;k<nd;k++)dLab.push(_crDeSerial(d0+k))}
       var pd=fr/dLab.length;
       dLab.forEach(function(f){if(f>=gIni&&f<=gFin)plan[cod][f]=(plan[cod][f]||0)+pd})});
+    /* con un RESPALDO como fuente: lo programado es lo que ese respaldo tenia
+       en el calendario para las partidas de la tarea (sus dias ocupados),
+       ponderado por las HH de cada partida; lo que el respaldo no programo
+       queda en blanco */
+    if(fuenteBk){plan[cod]={};
+      (t.items||[]).forEach(function(i){if(u.items[i]==null||!(hh>0))return;var b2=bkSnap[i];if(!b2)return;
+        var hi=(Number(u.items[i])||0)/_crVeces(rp,i);if(!(hi>0))return;
+        var oc=[];try{oc=(typeof occupiedDays==='function')?(occupiedDays(b2.start,b2.dias||1)||[]):[b2.start]}catch(_eo){oc=[b2.start]}
+        if(!oc.length)return;var pd2=(hi/hh)/oc.length;
+        oc.forEach(function(f){if(f>=gIni&&f<=gFin)plan[cod][f]=(plan[cod][f]||0)+pd2})})}
     /* la ventana de la tarea entera (para la cola del LB1 y lo demas): de la
        primera fecha efectiva de sus partidas a la ultima */
     var fTe=_crFechaTarea(t,alc);
@@ -8390,7 +8406,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
   var _rxInfo=function(f){
     var k=(f&&f.clave)||'';
     if(_rxMemo[k])return _rxMemo[k];
-    var reg=(typeof _rxDeAct==='function')?_rxDeAct(f&&f.cod,(f&&f.items)||[]):null;
+    var reg=(typeof _rxDeActSem==='function')?_rxDeActSem(f&&f.cod,(f&&f.items)||[],semN):((typeof _rxDeAct==='function')?_rxDeAct(f&&f.cod,(f&&f.items)||[]):null);
     var mina=_minaDe(f);
     return (_rxMemo[k]={
       desc:String((reg&&reg.descripcion)||'')||mina||'',
@@ -15025,7 +15041,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904g7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904g8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -16874,6 +16890,14 @@ function _rxSaveLocal(){try{localStorage.setItem('obf4_restrx',JSON.stringify(_r
 function _rxVivas(){var all=_rxAll(),out=[];Object.keys(all).forEach(function(k){var x=all[k];if(x&&!x.eliminado)out.push(x)});
   out.sort(function(a,b){return (a.creado||0)-(b.creado||0)});return out}
 /* el registro vivo de una actividad, por su codigo o por sus partidas */
+/* el registro del analisis que corresponde a una SEMANA: el de esa semana
+   o, si no lo hay, uno anterior que siguiera pendiente en ella */
+function _rxDeActSem(cod,items,semN){
+  var mios=_rxVivas().filter(function(x){return (cod&&x.task_code===cod)||(items&&items.length&&x.partida_id&&items.indexOf(x.partida_id)>=0)});
+  if(!mios.length)return null;if(!semN)return mios[0];
+  var deSem=mios.filter(function(x){return _rxSemDe(x)===semN});if(deSem.length)return deSem[deSem.length-1];
+  var ab=mios.filter(function(x){var s0=_rxSemDe(x),sr=Number(x.sem_res)||0;return s0<semN&&(!sr||sr>=semN)});
+  return ab.length?ab[ab.length-1]:null}
 function _rxDeAct(cod,items){var out=null;_rxVivas().forEach(function(x){if(out)return;
   if(cod&&x.task_code===cod)out=x;
   else if(items&&items.length&&x.partida_id&&items.indexOf(x.partida_id)>=0)out=x});
@@ -21398,7 +21422,13 @@ function _bkcAplicarView(){var ov=document.getElementById('_bkcOv')||_bkcOverlay
   try{(_crLista()||[]).forEach(function(c){
     opts+='<option value="cron:'+esc(c.cron_id)+'">📅 '+esc(_crNomVis(c))+' — '+
       esc(String(c.nombre||'').slice(0,48))+'</option>'})}catch(_ec){}
-  opts+='<option value="__base0__">📐 Línea base 0 — fechas originales aprobadas (catálogo)</option>';(state.backcron||[]).slice().sort(function(a,b){return (b.ts||0)-(a.ts||0)}).forEach(function(bk){var tot=0;Object.keys(bk.snap||{}).forEach(function(d){tot+=(bk.snap[d]||[]).length});if(tot)opts+='<option value="'+esc(bk.id)+'">'+esc(bk.nombre)+' ('+tot+' act'+(bk.fecha?(' · '+bk.fecha):'')+')</option>'});var inner=_bkcHead('Aplicar planeamiento','Elige de dónde tomar las fechas Inicio/Fin de las tarjetas')+'<div style="padding:14px"><div style="font-size:12px;color:#c9bfd2;margin-bottom:7px;font-weight:700">Fuente del planeamiento</div><select id="_bkcBaseSel" style="width:100%;box-sizing:border-box;padding:11px 12px;border-radius:10px;border:1px solid #3a3442;background:#0f1014;color:#fff;font-size:14px;font-weight:700;margin-bottom:12px">'+opts+'</select><div style="font-size:11px;color:#9a8fa2;margin-bottom:14px;line-height:1.45">Al aplicar, se escribe el <b style="color:#EFC98A">Inicio / Fin (el «programado»)</b> de cada tarjeta según la fuente elegida. Cambia el planeamiento en todos lados (modal, %, forecast) y se sincroniza a todos.</div><button id="_bkcAplGo" class="admGlass" style="margin:0"><span class="admpz admpz-heart" style="color:#EFC98A;-webkit-text-stroke:.5px #B8801E">Aplicar a las tarjetas</span></button><button id="_bkcBack" style="width:100%;margin-top:9px;background:#26232b;color:#c9bfd2;border:0;border-radius:10px;padding:11px;font-weight:700">Volver</button></div>';ov.innerHTML=_bkcShell(inner);document.getElementById('_bkcX').onclick=function(){ov.remove()};document.getElementById('_bkcBack').onclick=_showBackCron;document.getElementById('_bkcAplGo').onclick=function(){var v=document.getElementById('_bkcBaseSel').value;_bkcAplicarPlan(v)};
+  opts+='<option value="__base0__">📐 Línea base 0 — fechas originales aprobadas (catálogo)</option>';(state.backcron||[]).slice().sort(function(a,b){return (b.ts||0)-(a.ts||0)}).forEach(function(bk){var tot=0;Object.keys(bk.snap||{}).forEach(function(d){tot+=(bk.snap[d]||[]).length});if(tot)opts+='<option value="'+esc(bk.id)+'">'+esc(bk.nombre)+' ('+tot+' act'+(bk.fecha?(' · '+bk.fecha):'')+')</option>'});var inner=_bkcHead('Aplicar planeamiento','Elige de dónde tomar las fechas Inicio/Fin de las tarjetas')+'<div style="padding:14px"><div style="font-size:12px;color:#c9bfd2;margin-bottom:7px;font-weight:700">Fuente del planeamiento</div><select id="_bkcBaseSel" style="width:100%;box-sizing:border-box;padding:11px 12px;border-radius:10px;border:1px solid #3a3442;background:#0f1014;color:#fff;font-size:14px;font-weight:700;margin-bottom:12px">'+opts+'</select><div style="font-size:11px;color:#9a8fa2;margin-bottom:14px;line-height:1.45">Al aplicar, se escribe el <b style="color:#EFC98A">Inicio / Fin (el «programado»)</b> de cada tarjeta según la fuente elegida. Cambia el planeamiento en todos lados (modal, %, forecast) y se sincroniza a todos.</div><button id="_bkcAplGo" class="admGlass" style="margin:0"><span class="admpz admpz-heart" style="color:#EFC98A;-webkit-text-stroke:.5px #B8801E">Aplicar a las tarjetas</span></button><button id="_bkcBack" style="width:100%;margin-top:9px;background:#26232b;color:#c9bfd2;border:0;border-radius:10px;padding:11px;font-weight:700">Volver</button></div>';ov.innerHTML=_bkcShell(inner);document.getElementById('_bkcX').onclick=function(){ov.remove()};document.getElementById('_bkcBack').onclick=_showBackCron;document.getElementById('_bkcAplGo').onclick=function(){var v=document.getElementById('_bkcBaseSel').value;
+    try{if(typeof _ajSet==='function')_ajSet('plan_fuente',v,'fuente del planeamiento')}catch(_e){}
+    _bkcAplicarPlan(v)};
+  /* la fuente elegida se recuerda (ajustes, realtime) y rige para el PPC y el plan a recuperar */
+  try{var _selF=document.getElementById('_bkcBaseSel'),_vF=String(_ajGet('plan_fuente','')||'');
+    if(_selF){if(_vF&&[].some.call(_selF.options,function(o){return o.value===_vF}))_selF.value=_vF;
+      _selF.onchange=function(){try{_ajSet('plan_fuente',_selF.value,'fuente del planeamiento');toast('Fuente del planeamiento guardada \u2014 rige para todos (PPC y plan a recuperar)')}catch(_e2){}}}}catch(_e3){}
   /* si la lista de cronogramas aun no estaba leida, se anaden al llegar */
   try{_crPull().then(function(L){
     var sel=document.getElementById('_bkcBaseSel');if(!sel||!L||!L.length)return;
