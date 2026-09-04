@@ -3435,7 +3435,7 @@ async function _crAlcanceUI(c){
       var k=r.chk,actMal=(modo==='rep')&&Math.abs(k.hhUsadas-k.actApp)>0.05;
       var mal=k.faltan.length+k.distintas.length+k.sobran.length+k.fechasMal.length+(k.presMal?1:0)+(actMal?1:0);
       var txt='\u2714 '+r.nombre+'.xer descargado \u00b7 HH presupuestadas '+k.pres+' (aplicativo '+k.presApp+')'+(modo==='rep'?(' \u00b7 HH reales '+k.hhUsadas+' (aplicativo '+k.actApp+') \u00b7 remanentes '+k.hhRem):'')+((k.comp&&k.comp.nuevas)?(' \u00b7 '+k.comp.nuevas+' actividad(es) del aplicativo a\u00f1adidas'):'')+((k.comp&&k.comp.asigNuevas)?(' \u00b7 '+k.comp.asigNuevas+' asignaci\u00f3n(es) de recurso creadas'):'')+
-        ' \u00b7 '+k.enArchivo+' relaciones en el archivo, '+k.vivas+' en el aplicativo ('+r.rel.rel_act+' cambiadas, '+r.rel.rel_new+' nuevas, '+r.rel.rel_del+' quitadas) \u00b7 fechas: '+k.fechasOk+' tarea(s) coinciden'+(r.rel.fechas?(', '+r.rel.fechas+' reescritas'):'')+extra;
+        ' \u00b7 '+k.enArchivo+' relaciones en el archivo, '+k.vivas+' en el aplicativo ('+r.rel.rel_act+' cambiadas, '+r.rel.rel_new+' nuevas, '+r.rel.rel_del+' quitadas) \u00b7 fechas: '+k.fechasOk+' tarea(s) coinciden'+(r.rel.fechas?(', '+r.rel.fechas+' reescritas'):'')+(r.rel.rend?(' \u00b7 \u2699 '+r.rel.rend+' remanente(s) con rendimiento propio'):'')+extra;
       if(k.presMal)txt='\u26a0 HH presupuestadas del archivo '+k.pres+' (tareas '+k.presTarea+') \u2260 aplicativo '+k.presApp+' \u00b7 '+txt;
       if(k.durCero&&k.durCero.length){mal++;txt='\u26a0 '+k.durCero.length+' tarea(s) con HH y duraci\u00f3n 0 (P6 les borra las unidades): '+k.durCero.slice(0,4).join(', ')+' \u00b7 '+txt}
       if(actMal)txt='\u26a0 HH reales del archivo '+k.hhUsadas+' \u2260 aplicativo '+k.actApp+' \u00b7 '+txt;
@@ -4018,6 +4018,8 @@ async function _crXerComprueba(lineas,c,alcLive){
     if((Number(f.o.target_work_qty)||0)>0&&!((Number(f.o.target_drtn_hr_cnt)||0)>0))durCero.push(cod);
     if(!o||!o.ini||!o.fin)return;
     var oi=_crXerSnap(o.ini,false),of=_crXerSnap(o.fin,true);if(of<oi)of=oi;
+    try{var rCk=_cnDe(c.cron_id,cod);if(rCk>0&&!((Number(f.o.phys_complete_pct)||0)>0)&&String(f.o.status_code)!=='TK_Complete'){
+      var hpdK=_crXerHpd(T,f),remK=Number(f.o.remain_work_qty)||0;of=_crXerFinDias(oi,Math.ceil(remK/rCk-1e-9))}}catch(_ek){}
     var ti=_crFec(f.o.target_start_date)||_crFec(f.o.early_start_date)||_crFec(f.o.act_start_date);
     var tf=_crFec(f.o.target_end_date)||_crFec(f.o.early_end_date)||_crFec(f.o.act_end_date);
     if(ti===oi&&tf===of)fOk++;else fMal.push(cod+' (archivo '+ti+'\u2192'+tf+', aplicativo '+oi+'\u2192'+of+')')});
@@ -4064,7 +4066,10 @@ async function _crXerRelaciones(lineas,c,alcLive){
     var st=String(fi.o.status_code||''),pc=Math.max(0,Math.min(100,Number(fi.o.phys_complete_pct)||0));
     var rdur=(st==='TK_Complete')?0:Math.round(dur*(1-pc/100)*100)/100;
     /* con rendimiento propio (hh/dia), el remanente dura lo que le falta en HH a ese ritmo */
-    try{var rC9=_cnDe(c.cron_id,cod);if(rC9>0&&st!=='TK_Complete'){var remHH9=Number(fi.o.remain_work_qty)||0;rdur=Math.round(remHH9/rC9*hpd*100)/100;out.rend=(out.rend||0)+1}}catch(_er9){}
+    try{var rC9=_cnDe(c.cron_id,cod);if(rC9>0&&st!=='TK_Complete'){var remHH9=Number(fi.o.remain_work_qty)||0;rdur=Math.round(remHH9/rC9*hpd*100)/100;out.rend=(out.rend||0)+1;
+      /* sin empezar: P6 iguala el remanente a la original, asi que la original
+         y la fecha fin van tambien a ese rendimiento */
+      if(!(pc>0)){dur=rdur;fin=_crXerFinDias(ini,Math.ceil(rdur/hpd-1e-9))}}}catch(_er9){}
     var cambia=(fi0!==ini||ff0!==fin||String(Number(fi.o.target_drtn_hr_cnt)||0)!==String(dur)||String(Number(fi.o.remain_drtn_hr_cnt)||0)!==String(rdur));
     if(!cambia)return;
     var pw=function(campo,val){var j=TA.col[campo];if(j!=null)fi.v[j]=val};
@@ -6779,6 +6784,9 @@ function _crXerSnap(iso,fin){if(!iso)return iso;var n=_crASerial(iso);if(n==='')
   while(!_crXerLab(_crDeSerial(n))&&k<7){n+=fin?-1:1;k++}return _crDeSerial(n)}
 function _crXerDias(ini,fin){var a=_crASerial(ini),b=_crASerial(fin);if(a===''||b==='')return 1;if(b<a)b=a;
   var n=0;for(var d=a;d<=b;d++)if(_crXerLab(_crDeSerial(d)))n++;return Math.max(1,n)}
+/* la fecha fin de n dias laborables empezando en ini (n>=1) */
+function _crXerFinDias(ini,n){var a=_crASerial(ini);if(a==='')return ini;n=Math.max(1,Math.round(n));var k=0,d=a-1;
+  while(k<n&&d<a+n*3+14){d++;if(_crXerLab(_crDeSerial(d)))k++}return _crDeSerial(d)}
 /* las horas por dia del calendario de una tarea, segun la tabla CALENDAR */
 function _crXerHpd(T,fi){try{var cal=T.CALENDAR,id=fi&&fi.o&&fi.o.clndr_id,h=0;
   if(cal)cal.filas.forEach(function(c){if(String(c.o.clndr_id)===String(id))h=Number(c.o.day_hr_cnt)||0});
@@ -14778,7 +14786,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904e7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904e8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
