@@ -2969,6 +2969,8 @@ async function _crAlcanceUI(c){
       var cod=prompt('C\u00f3digo de la actividad PREDECESORA de '+T9+' (ej. A1890):');if(cod==null)return;cod=String(cod).trim().toUpperCase();
       if(!cod||!(window._crTarIt||{})[cod]){fmsg('No existe la actividad '+cod,'#FFB4A8');return}
       if(cod===T9){fmsg('Una actividad no puede ser su propia predecesora','#FFB4A8');return}
+      var cam=_rlCamino(c.cron_id,T9,cod);
+      if(cam){fmsg('\u26d4 Cerrar\u00eda un ciclo: '+cod+' ya depende de '+T9+' ('+cam.join(' \u2192 ')+')','#FFB4A8');return}
       var tipo=prompt('Tipo de relaci\u00f3n: FS (fin\u2192inicio), SS, FF o SF','FS');if(tipo==null)return;tipo=String(tipo).trim().toUpperCase();if(RL_TIPOS.indexOf(tipo)<0)tipo='FS';
       var lag=prompt('Lag en d\u00edas (puede ser negativo):','0');if(lag==null)return;lag=Number(String(lag).replace(',','.'))||0;
       await _rhCambio(c.cron_id,T9,null,{pred:cod,tipo:tipo,lag_d:lag},'agregar');
@@ -2978,6 +2980,9 @@ async function _crAlcanceUI(c){
     B.querySelectorAll('._rlChip').forEach(function(ch){ch.onclick=function(ev){ev.stopPropagation();
       var T9=ch.getAttribute('data-t'),pr=ch.getAttribute('data-p');
       var sel9=window._rlSel||null;
+      /* tercer clic: todo vuelve a lo normal (sin flecha ni re-enlace) */
+      if(window._rlRelink&&window._rlRelink.succ===T9&&window._rlRelink.pred===pr){
+        window._rlRelink=null;window._rlSel=null;fmsg('');pinta();return}
       if(sel9&&sel9.succ===T9&&sel9.pred===pr){
         var r=_rlPredsDe(c.cron_id,T9).filter(function(x){return x.pred===pr})[0];
         window._rlRelink={succ:T9,pred:pr,tipo:(r&&r.tipo)||'FS',lag_d:(r&&r.lag_d)||0};
@@ -2991,6 +2996,8 @@ async function _crAlcanceUI(c){
       var rl=window._rlRelink;if(!rl)return;ev.stopPropagation();ev.preventDefault();
       var nuevo=row.getAttribute('data-tc');if(!nuevo||nuevo===rl.succ){fmsg('Esa no puede ser su propia predecesora','#FFB4A8');return}
       if(nuevo===rl.pred){window._rlRelink=null;fmsg('Es la misma predecesora','#9db4d6');pinta();return}
+      var cam=_rlCamino(c.cron_id,rl.succ,nuevo);
+      if(cam){fmsg('\u26d4 Cerrar\u00eda un ciclo: '+nuevo+' ya depende de '+rl.succ+' ('+cam.join(' \u2192 ')+'). Elige otra o pulsa Esc','#FFB4A8');return}
       window._rlRelink=null;window._rlSel={succ:rl.succ,pred:nuevo};
       await _rhCambio(c.cron_id,rl.succ,{pred:rl.pred,tipo:rl.tipo,lag_d:rl.lag_d},{pred:nuevo,tipo:rl.tipo,lag_d:rl.lag_d},'re-enlazar');
       await _rlTras('\ud83d\udd17 '+rl.succ+': predecesora '+rl.pred+' \u2192 '+nuevo+' \u00b7 fechas recalculadas')},true)});
@@ -3760,6 +3767,15 @@ function _rlFlecha(B,succ,pred){
     '<circle cx="13" cy="'+y1+'" r="3" fill="#FF5252"/>';
   B.appendChild(svg);
   try{rp.scrollIntoView({block:'nearest'})}catch(e){}}
+/* el camino de sucesoras de a hasta b (si b depende de a); sirve para
+   negar una relacion que cerraria un ciclo */
+function _rlCamino(cronId,a,b){
+  var succs={};_rlVivas(cronId).forEach(function(r){(succs[r.pred]=succs[r.pred]||[]).push(r.succ)});
+  var prev={};prev[a]=null;var q=[a];
+  while(q.length){var c=q.shift();
+    if(c===b){var p=[],x=b;while(x!=null){p.unshift(x);x=prev[x]}return p}
+    (succs[c]||[]).forEach(function(s2){if(!(s2 in prev)){prev[s2]=c;q.push(s2)}})}
+  return null}
 /* mover una actividad CON predecesoras a una fecha: se corrige el lag de la
    relacion que manda (la mas tardia), que es lo que P6 reconoce */
 function _rlMoverA(cronId,cod,nuevaIni,tar,alcX){
@@ -3967,6 +3983,7 @@ function _crHoja2Fechas(t,ms,fuera){
     '<input type="date" class="_crNoTog" data-tini="'+esc(t.task_code)+'" value="'+esc(vi)+'"'+((porRel||!adm)?' disabled':'')+(porRel?' title="Calculada por sus predecesoras: c\u00e1mbiala con mover o desde la relaci\u00f3n"':'')+' style="'+stI+'">'+
     '<span style="color:#5a6b85;font-size:11px">\u2192</span>'+
     '<input type="date" class="_crNoTog" data-tfin="'+esc(t.task_code)+'" value="'+esc(vf)+'"'+((porRel||!adm)?' disabled':'')+' style="'+stI+'">'+
+    ((o&&o.ciclo)?'<span style="color:#FFB4A8;font-size:10px;font-weight:800" title="Sus relaciones forman un ciclo: no se puede calcular; queda con las fechas del .xer. Deshaz o cambia la relaci\u00f3n">\u26d4 ciclo</span>':'')+
     (porRel?('<span style="color:#E8C9A0;font-size:10px;font-weight:800">por relaci\u00f3n'+(mov?' \u00b7 movida':'')+'</span>')
            :(mov?'<span style="color:#E8C9A0;font-size:10px;font-weight:800">manual</span>':'<span style="color:#5a6b85;font-size:10px">del .xer</span>'))+
     (ms.length?('<span style="color:#5a6b85;font-size:10px"> \u00b7 '+ms.length+' partida'+(ms.length>1?'s':'')+'</span>'):'')+
@@ -14348,7 +14365,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904b9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904c1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
