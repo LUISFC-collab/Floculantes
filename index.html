@@ -2993,7 +2993,7 @@ async function _crAlcanceUI(c){
             (otras.length-8)+' más</span>';
           return h})()+
         '</span></span>'+
-        '<span style="flex:none;color:'+(propio?'#C39BD3':'#9FE8B0')+';font-size:11px;font-weight:800">'+hMe+' hh</span>'+
+        '<span style="flex:none;color:'+(propio?'#C39BD3':'#9FE8B0')+';font-size:11px;font-weight:800">'+(Math.round(Number(hMe)*100)/100)+' hh</span>'+
         /* De un vistazo: si entra en el alcance y si de verdad pesa.
            Son dos cosas distintas y antes se decia solo la primera: la marca
            del alcance vale para el coste, pero para el peso del avance hace
@@ -3306,7 +3306,7 @@ async function _crTareasUI(c){
       '<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">'+
       '<b style="color:#8ECBF5;font-size:11.5px">'+esc(t.task_code)+'</b>'+
       '<span style="flex:1;min-width:150px;overflow-wrap:anywhere">'+esc(String(t.nombre).slice(0,95))+'</span>'+
-      ((Number(t.hh)||0)>0?'<span style="color:#9FE8B0;font-weight:800;font-size:11px">'+t.hh+' hh</span>':'')+'</div>'+
+      ((Number(t.hh)||0)>0?'<span style="color:#9FE8B0;font-weight:800;font-size:11px">'+(Math.round(Number(t.hh)*100)/100)+' hh</span>':'')+'</div>'+
       '<div style="color:#7d8590;font-size:10.5px">'+esc(t.ini||'—')+' → '+esc(t.fin||'—')+
       (t.estado?(' · '+esc(t.estado)):'')+((Number(t.pct)||0)>0?(' · '+t.pct+'%'):'')+
       (t.wbs?('<br>'+esc(String(t.wbs).slice(0,90))):'')+'</div></div>'});
@@ -3751,12 +3751,43 @@ function _crCarga(tar,items){
   return out}
 /* Los tramos que alimentan la curva, segun el nivel al que se mire.
    Devuelve [{ini,fin,peso,q}] — el peso siempre suma el universo elegido. */
+/* las fechas EFECTIVAS de una partida dentro de su tarea: las del alcance
+   (manuales o del Excel) mandan; si no tiene, las de la tarea del .xer */
+function _crFechaItem(t,alc,i){
+  var a=alc&&alc[i];
+  var ini=(a&&a.ini)||(t&&t.ini)||'',fin=(a&&a.fin)||(t&&t.fin)||'';
+  if(!ini&&fin)ini=fin;if(ini&&!fin)fin=ini;
+  if(ini&&fin&&fin<ini)fin=ini;
+  return {ini:ini,fin:fin}}
+/* la tarea vista con sus partidas: desde la primera hasta la ultima */
+function _crFechaTarea(t,alc){
+  var ini='',fin='',hay=false;
+  (t.items||[]).forEach(function(i){var f=_crFechaItem(t,alc,i);if(!f.ini)return;hay=true;
+    if(!ini||f.ini<ini)ini=f.ini;if(!fin||f.fin>fin)fin=f.fin});
+  return hay?{ini:ini,fin:fin}:{ini:(t&&t.ini)||'',fin:(t&&t.fin)||''}}
+/* la tarea partida en tramos por las fechas efectivas de sus partidas, cada
+   tramo con las HH que le tocan */
+function _crTramosDe(t,alc,uItems,rp){
+  var gq={},oq=[],hhT=0;
+  (t.items||[]).forEach(function(i){
+    if(!uItems||uItems[i]==null)return;
+    var h=(Number(uItems[i])||0)/(rp?_crVeces(rp,i):1);if(!(h>0))return;
+    var f=_crFechaItem(t,alc,i);if(!f.ini||!f.fin)return;
+    var k=f.ini+'|'+f.fin;
+    if(!gq[k]){gq[k]={ini:f.ini,fin:f.fin,hh:0};oq.push(k)}
+    gq[k].hh+=h;hhT+=h});
+  var out=oq.map(function(k){return gq[k]});out.hh=hhT;return out}
 function _crTramos(nivel,tar,alc,u,grupoDe){
   var pes=_crPesos(tar,u.items,u.hh).pesos;
-  var porTarea=tar.map(function(t,i){
-    return {ini:t.ini,fin:t.fin,peso:pes[i]||0,cod:t.task_code,
-            wbs:String(t.wbs||''),g:(function(){
-              var g='';(t.items||[]).forEach(function(x){if(!g&&grupoDe[x])g=grupoDe[x]});return g})()}});
+  /* cada tarea, en tramos por las fechas efectivas de sus partidas; el peso
+     de la tarea se reparte entre sus tramos por las HH de cada partida */
+  var porTarea=[];
+  tar.forEach(function(t,i){
+    var g='';(t.items||[]).forEach(function(x){if(!g&&grupoDe[x])g=grupoDe[x]});
+    var base={peso:pes[i]||0,cod:t.task_code,wbs:String(t.wbs||''),g:g};
+    var trs=_crTramosDe(t,alc,u.items,null);
+    if(!trs.length||!(trs.hh>0)){porTarea.push({ini:t.ini,fin:t.fin,peso:base.peso,cod:base.cod,wbs:base.wbs,g:base.g});return}
+    trs.forEach(function(q){porTarea.push({ini:q.ini,fin:q.fin,peso:base.peso*(q.hh/trs.hh),cod:base.cod,wbs:base.wbs,g:base.g})})});
   if(nivel==='tarea')return porTarea.filter(function(x){return x.peso>0});
   if(nivel==='partida'){
     /* cada partida con SUS fechas; si no tiene, las de su tarea */
@@ -3927,17 +3958,15 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
   (function(){
     var rp=_crReparto(tar),vis={};
     tar.forEach(function(t){
-      if(!t.ini||!t.fin)return;
-      var por={};
+      /* cada partida con SU fecha efectiva (la del alcance manda) */
       (t.items||[]).forEach(function(i){
         var h=(Number(u.items[i])||0)/_crVeces(rp,i);
         if(!(h>0))return;
+        var f=_crFechaItem(t,alc,i);if(!f.ini||!f.fin)return;
         var e=espDe[i]||'(sin especialidad)';
-        por[e]=(por[e]||0)+h});
-      for(var e in por){
         if(!vis[e]){vis[e]=1;espOrden.push(e)}
-        var v=_crReparteSem(t.ini,t.fin,por[e],sem);
-        for(var s=0;s<sem.length;s++)if(v[s]>0)porSemEsp[s][e]=(porSemEsp[s][e]||0)+v[s]}});
+        var v=_crReparteSem(f.ini,f.fin,h,sem);
+        for(var s=0;s<sem.length;s++)if(v[s]>0)porSemEsp[s][e]=(porSemEsp[s][e]||0)+v[s]})});
     /* un orden estable, para que los colores no bailen entre semanas */
     espOrden.sort()})();
   var carga=_crCarga(tar,u.items);   /* u ya viene filtrado por especialidad */
@@ -4731,7 +4760,7 @@ function _crASerial(iso){
   return Math.round((t-Date.UTC(1899,11,30))/864e5)}
 /* Las HH de cada tarea repartidas dia a dia y agregadas por semana. Una
    partida repartida entre varias tareas aporta a cada una su fraccion. */
-function _crPlanSemanal(tar,uItems,semanas){
+function _crPlanSemanal(tar,uItems,semanas,alc){
   var rp=_crReparto(tar),out=[];
   var ultW=semanas.length-1;
   var plegadoFin=0,plegadoIni=0;
@@ -4739,20 +4768,26 @@ function _crPlanSemanal(tar,uItems,semanas){
     var hh=0;(t.items||[]).forEach(function(i){hh+=(Number(uItems[i])||0)/_crVeces(rp,i)});
     hh=Math.round(hh*1e6)/1e6;
     var sem=semanas.map(function(){return 0}),nd=0,pleg=0;
-    if(t.ini&&t.fin){
-      var d0=Date.parse(t.ini+'T00:00:00Z'),d1=Date.parse(t.fin+'T00:00:00Z');
-      nd=Math.max(1,Math.round((d1-d0)/864e5)+1);
-      if(hh>0){
-        var porDia=hh/nd;
-        for(var k=0;k<nd;k++){
-          var dia=_crDeSerial(_crASerial(t.ini)+k);
-          /* fuera del cuadro no se tira: se pliega en la columna del extremo */
-          if(dia>semanas[ultW].fin){sem[ultW]+=porDia;plegadoFin+=porDia;pleg+=porDia;continue}
-          if(dia<semanas[0].ini){sem[0]+=porDia;plegadoIni+=porDia;pleg+=porDia;continue}
-          for(var w=0;w<semanas.length;w++)
-            if(dia>=semanas[w].ini&&dia<=semanas[w].fin){sem[w]+=porDia;break}}}}
+    /* la tarea se reparte por tramos: cada partida con su fecha efectiva
+       (la del alcance manda sobre la del .xer) */
+    var fT=_crFechaTarea(t,alc||{});
+    if(fT.ini&&fT.fin){
+      var d0=Date.parse(fT.ini+'T00:00:00Z'),d1=Date.parse(fT.fin+'T00:00:00Z');
+      nd=Math.max(1,Math.round((d1-d0)/864e5)+1)}
+    var trs=_crTramosDe(t,alc||{},uItems,rp);
+    trs.forEach(function(tr){
+      if(!(tr.hh>0))return;
+      var a0=_crASerial(tr.ini),a1=_crASerial(tr.fin);
+      var nd2=Math.max(1,a1-a0+1),porDia=tr.hh/nd2;
+      for(var k=0;k<nd2;k++){
+        var dia=_crDeSerial(a0+k);
+        /* fuera del cuadro no se tira: se pliega en la columna del extremo */
+        if(dia>semanas[ultW].fin){sem[ultW]+=porDia;plegadoFin+=porDia;pleg+=porDia;continue}
+        if(dia<semanas[0].ini){sem[0]+=porDia;plegadoIni+=porDia;pleg+=porDia;continue}
+        for(var w=0;w<semanas.length;w++)
+          if(dia>=semanas[w].ini&&dia<=semanas[w].fin){sem[w]+=porDia;break}}});
     out.push({cod:String(t.task_code||''),nom:String(t.nombre||''),
-      hh:hh,ini:t.ini||'',fin:t.fin||'',dias:nd,
+      hh:hh,ini:fT.ini||'',fin:fT.fin||'',dias:nd,
       pleg:Math.round(pleg*100)/100,
       sem:sem.map(function(v){return Math.round(v*1e6)/1e6})})});
   out.plegadoFin=Math.round(plegadoFin*100)/100;
@@ -5087,13 +5122,10 @@ function _crXlsArmar(cron,filas,alc,grupoDe,grupos,tareas,nomWbs,rel,planes){
     if(k.tipo==='INFORMATIVA')nInfo++;
     var esp='';
     if(k.ms.length){var pr=porItem[k.ms[0]];esp=(pr&&pr.esp)||''}
+    /* la tarea con sus partidas: desde la primera fecha efectiva hasta la
+       ultima (las del alcance mandan sobre las del .xer) */
     var ini=t.ini||'',fin=t.fin||'';
-    if(k.propios&&k.propios.length){
-      var i2='',f2='',mismo=true,prim=true;
-      k.propios.forEach(function(i){var a2=alc[i]||{};
-        if(prim){i2=a2.ini||'';f2=a2.fin||'';prim=false}
-        else if((a2.ini||'')!==i2||(a2.fin||'')!==f2)mismo=false});
-      if(mismo&&(i2||f2)){ini=i2;fin=f2}}
+    try{var fT9=_crFechaTarea(t,alc);if(fT9.ini){ini=fT9.ini;fin=fT9.fin}}catch(_ef9){}
     c+=_crXlsCel('A',e.fila,k.p6,true);
     c+=_crXlsCel('B',e.fila,k.qps||'',true,est(k.g));
     c+=_crXlsCel('C',e.fila,e.niv,false);
@@ -5434,7 +5466,7 @@ async function _crXlsExport(cron,alcVista){
       var tt=(cc.cron_id===cron.cron_id)?tareas:(await _crTareas(cc.cron_id));
       var aa=(cc.cron_id===cron.cron_id)?alc:(await _crAlc(cc.cron_id));
       var uu=_crUniverso(cc.cron_id,aa);
-      var fil=_crPlanSemanal(tt,uu.items,sem);
+      var fil=_crPlanSemanal(tt,uu.items,sem,aa);
       planes.push({nombre:'ACTIVITI_PLAN ('+_crNomHoja(cc)+')',xml:_crHojaPlan(cc,fil,sem)})}
   }catch(_ep){}
   var partes=_crXlsArmar(cron,P,alc,grupoDe,gs,tareas,nomWbs,rel,planes);
@@ -6875,33 +6907,37 @@ async function _crPlanRecupera(cronId,corte,semN){
        primera y la ultima semana de la rejilla-, y la cuota de cada semana
        se pinta SOLO en los dias habiles de esa semana. Asi el acumulado
        semanal es el de la curva y los findes y feriados quedan limpios. */
-    if(hh>0&&t.ini&&t.fin&&G.length){
-      var bd0=_crASerial(t.ini),bd1=_crASerial(t.fin);
-      var bnd=Math.max(1,bd1-bd0+1),porSem={};
-      for(var d9=bd0;d9<=bd1;d9++){
-        var f9=_crDeSerial(d9),w9=-1;
-        if(f9>G[G.length-1].fin)w9=G.length-1;
-        else if(f9<G[0].ini)w9=0;
-        else for(var j9=0;j9<G.length;j9++)if(f9>=G[j9].ini&&f9<=G[j9].fin){w9=j9;break}
-        if(w9>=0)porSem[w9]=(porSem[w9]||0)+1}
-      Object.keys(porSem).forEach(function(k7){
-        var gS=G[+k7],cuota=porSem[k7]/bnd;
-        var i0=(t.ini>gS.ini?t.ini:gS.ini),i1=(t.fin<gS.fin?t.fin:gS.fin);
-        var habs=(i0<=i1)?_crLaborables(i0,i1):[];
-        if(!habs.length)habs=_crLaborables(gS.ini,gS.fin);
-        if(!habs.length)habs=[gS.ini];
-        var pdb=cuota/habs.length;
-        habs.forEach(function(d8){back[cod][d8]=(back[cod][d8]||0)+pdb})})}
-    /* --- lo que el LB1 pedia esos dias, sobre dias HABILES: ni findes ni
-       feriados del calendario del admin; si la ventana entera cae en
-       feriado, corrida para no perder las HH --- */
-    var d0=t.ini?_crASerial(t.ini):0,d1=t.fin?_crASerial(t.fin):0;
-    var nd=(d0&&d1)?Math.max(1,d1-d0+1):0;
-    if(nd){
-      var dLab=_crLaborables(t.ini,t.fin);
+    /* la tarea se reparte por TRAMOS: cada partida con su fecha efectiva
+       (la del alcance manda sobre la del .xer) y su parte de las HH */
+    var trsT=_crTramosDe(t,alc,u.items,rp);
+    trsT.forEach(function(tr){
+      var fr=(hh>0)?tr.hh/hh:0;if(!(fr>0))return;
+      if(G.length){
+        var bd0=_crASerial(tr.ini),bd1=_crASerial(tr.fin);
+        var bnd=Math.max(1,bd1-bd0+1),porSem={};
+        for(var d9=bd0;d9<=bd1;d9++){
+          var f9=_crDeSerial(d9),w9=-1;
+          if(f9>G[G.length-1].fin)w9=G.length-1;
+          else if(f9<G[0].ini)w9=0;
+          else for(var j9=0;j9<G.length;j9++)if(f9>=G[j9].ini&&f9<=G[j9].fin){w9=j9;break}
+          if(w9>=0)porSem[w9]=(porSem[w9]||0)+1}
+        Object.keys(porSem).forEach(function(k7){
+          var gS=G[+k7],cuota=fr*porSem[k7]/bnd;
+          var i0=(tr.ini>gS.ini?tr.ini:gS.ini),i1=(tr.fin<gS.fin?tr.fin:gS.fin);
+          var habs=(i0<=i1)?_crLaborables(i0,i1):[];
+          if(!habs.length)habs=_crLaborables(gS.ini,gS.fin);
+          if(!habs.length)habs=[gS.ini];
+          var pdb=cuota/habs.length;
+          habs.forEach(function(d8){back[cod][d8]=(back[cod][d8]||0)+pdb})})}
+      /* --- lo que el LB1 pedia esos dias, sobre dias HABILES: ni findes ni
+         feriados del calendario del admin; si la ventana entera cae en
+         feriado, corrida para no perder las HH --- */
+      var d0=_crASerial(tr.ini),d1=_crASerial(tr.fin);
+      var nd=Math.max(1,d1-d0+1);
+      var dLab=_crLaborables(tr.ini,tr.fin);
       if(!dLab.length){dLab=[];for(var k=0;k<nd;k++)dLab.push(_crDeSerial(d0+k))}
-      var pd=1/dLab.length;
-      dLab.forEach(function(f){if(f>=gIni&&f<=gFin)plan[cod][f]=pd})}
+      var pd=fr/dLab.length;
+      dLab.forEach(function(f){if(f>=gIni&&f<=gFin)plan[cod][f]=(plan[cod][f]||0)+pd})});
     /* --- lo ejecutado --- Solo se pregunta en los dias que TIENEN movimiento:
        entre dos movimientos el avance no cambia, asi que preguntar dia a dia
        daria lo mismo a cambio de cien veces mas cuentas. */
@@ -12375,7 +12411,7 @@ function _wkExcel(){
             var _cc=_Lc[_ci];
             var _tt=await _crTareas(_cc.cron_id),_aa=await _crAlc(_cc.cron_id);
             var _uu=_crUniverso(_cc.cron_id,_aa);
-            var _fil=_crPlanSemanal(_tt,_uu.items,_rej);
+            var _fil=_crPlanSemanal(_tt,_uu.items,_rej,_aa);
             _tot[_cc.cron_id]=Math.round(_fil.reduce(function(a,f){return a+f.hh},0)*100)/100;
             if(_fil.plegadoFin>0)_pleg[_cc.cron_id]=_fil.plegadoFin;
             _curvasCron.push({id:_cc.cron_id,
@@ -13792,7 +13828,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260901c3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
