@@ -1002,8 +1002,8 @@ function _acLineas(p,f){try{
   var mapa=(typeof _fzFechasDe==='function')?_fzFechasDe(p.id):null;
   var out=(r.fases||[]).map(function(x){
     var av=(typeof _fzAvanceAt==='function')?_fzAvanceAt(x,f,mapa):(Number(x.avance)||0);
-    var c=Number(x.cantidad)||0;
-    var pc=c>0?Math.min(999,Math.round(av/c*100)):(av>0?100:0);
+    var c=Number(x.cantidad)||0,cH=_fzCantDe(x);
+    var pc=cH>0?Math.min(999,Math.round(av/cH*100)):(av>0?100:0);
     return {t:(x.nombre||'')+': '+qty(av)+' de '+qty(c)+' '+(x.unidad||'')+' ('+pc+'%)',
             c:x.cierra?'#1F3864':'#0C5132'}});   /* el mismo color que la tarjeta */
   var tot=(typeof _fzPctAt==='function')?_fzPctAt(p.id,f):null;
@@ -13779,7 +13779,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260901b2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260901b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -15952,7 +15952,7 @@ function _rxPartidasHTML(q){
       try{var fz=(typeof _fzDe==='function')?_fzDe(pid):null;
         if(fz){var mapa=(typeof _fzFechasDe==='function')?_fzFechasDe(pid):null;
           fases=(fz.fases||[]).map(function(x){
-            var c=Number(x.cantidad)||0,a=(typeof _fzAvanceAt==='function')?_fzAvanceAt(x,hoy,mapa):0;
+            var c=_fzCantDe(x),a=(typeof _fzAvanceAt==='function')?_fzAvanceAt(x,hoy,mapa):0;
             var pcf=c>0?Math.max(0,Math.min(100,a/c*100)):(a>0?100:0);
             return esc(String(x.nombre||'fase'))+' <b>'+(Math.round(pcf*10)/10)+'%</b>'}).join(' \u00b7 ')}}catch(e){}
       var f=(q.fechas&&q.fechas[pid])||{};
@@ -16834,8 +16834,12 @@ function _fzDe(id){var r=_fzAll()[id];
   try{if(!r.fases.some(function(f){return f.cierra}))r.fases[r.fases.length-1].cierra=true}catch(_e){}
   return r}
 function _fzNuevoId(){return 'F'+Date.now().toString(36)+Math.floor(Math.random()*46656).toString(36)}
+/* la cantidad contra la que se mide una parte: la que SI se realiza
+   (cant_hacer, recortada por los apartados apagados) si la hay; la cantidad
+   del contrato queda intacta y es la que se ve */
+function _fzCantDe(x){var h=Number(x&&x.cant_hacer),c=Number(x&&x.cantidad)||0;return (isFinite(h)&&h>0&&h<c)?h:c}
 function _fzPctParte(x){
-  var c=Number(x.cantidad)||0,a=Number(x.avance)||0;
+  var c=_fzCantDe(x),a=Number(x.avance)||0;
   if(c>0)return Math.max(0,Math.min(100,a/c*100));
   return a>0?100:0}
 function _fzPct(id){
@@ -16903,7 +16907,7 @@ function _fzPctAt(id,iso){
   var tot=0,pts=0,mapa=_fzFechasDe(id);
   (r.fases||[]).forEach(function(x){
     var w=Number(x.peso)||0;tot+=w;
-    var c=Number(x.cantidad)||0,a=0;
+    var c=_fzCantDe(x),a=0;
     (x.movs||[]).forEach(function(m){
       if(!iso||String(_fzFechaMov(m,mapa))<=String(iso))a+=Number(m.c)||0});
     var pc=c>0?Math.max(0,Math.min(100,a/c*100)):(a>0?100:0);
@@ -17118,6 +17122,7 @@ function _fzInject(){try{
         var pcRaw=cantP>0?Math.round((Number(x.avance)||0)/cantP*10000)/100:0;
         H+='<span style="display:block"><b style="color:'+col+'">'+esc(x.nombre)+'</b>'+
            ' <span style="color:#1B2433;font-weight:700">'+(Math.round((Number(x.avance)||0)*100)/100)+' / '+(Math.round((Number(x.cantidad)||0)*100)/100)+' '+esc(x.unidad||'')+'</span>'+
+           ((Number(x.cant_hacer)>0&&Number(x.cant_hacer)<(Number(x.cantidad)||0))?(' <span style="color:#7A4B00;font-weight:700">(se realizan '+(Math.round(Number(x.cant_hacer)*100)/100)+')</span>'):'')+
            ' <span style="color:'+col+';font-weight:800">'+pc+'% hecho</span>'+
            (pcRaw>100.005?(' <span style="background:#FDEAD7;color:#B45309;border:1px solid #F0B879;border-radius:5px;padding:0 4px;font-weight:800">+'+(Math.round((pcRaw-100)*100)/100)+'% sobre</span>'):'')+
            ' <span style="color:var(--muted)">· aporta '+aporta+'% de sus '+pesoP+'%</span></span>'});
@@ -17576,7 +17581,7 @@ async function _fzDesdeApu(id,p,silencioso){
     var cant=(m&&Number(m.total))||(p&&Number(p.metrado))||0;
     /* los apartados que no se realizan recortan el metrado a ejecutar: con
        lo hecho sobre lo que SI se hace, la actividad puede llegar al 100% */
-    try{var fo=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;if(fo>0)cant=Math.round(cant*(1-fo)*100)/100}catch(_eo){}
+    var cantH=null;try{var fo=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;if(fo>0)cantH=Math.round(cant*(1-fo)*100)/100}catch(_eo){}
     var undC=(m&&m.unidad)||r.unidad||(p&&p.unidad)||'UND';
     var und=r.unidad||undC;
     var prev={};try{((_fzDe(id)||{}).fases||[]).forEach(function(q){
@@ -17585,7 +17590,7 @@ async function _fzDesdeApu(id,p,silencioso){
       /* sin apartados con costo: una sola parte que cierra, con lo ya avanzado */
       var vj0=null;for(var k0 in prev){if(prev[k0].cierra)vj0=prev[k0]}
       await _fzGuardar(id,[{id:(vj0&&vj0.id)||('F'+Date.now().toString(36)),nombre:'Ejecucion en obra',
-        unidad:undC,cantidad:cant,peso:100,avance:(vj0?(Number(vj0.avance)||0):0),
+        unidad:undC,cantidad:cant,cant_hacer:cantH,peso:100,avance:(vj0?(Number(vj0.avance)||0):0),
         movs:(vj0&&vj0.movs)?vj0.movs:[],cierra:true}],false,'apu');
       try{if(typeof renderList==='function')renderList()}catch(e){}
       if(!silencioso&&typeof toast==='function')toast('Sin apartados: queda una sola parte al 100%');
@@ -17609,6 +17614,8 @@ async function _fzDesdeApu(id,p,silencioso){
           return tt>0?tt:cant})()),
         peso:z.p,avance:(vj?(Number(vj.avance)||0):0),
         movs:(vj&&vj.movs)?vj.movs:[],cierra:esUlt}});
+    /* lo que SI se realiza, por parte: su cantidad menos los apartados apagados */
+    if(cantH!=null&&cant>0){var _fH=cantH/cant;fases.forEach(function(f){var cq=Number(f.cantidad)||0;if(cq>0)f.cant_hacer=Math.round(cq*_fH*100)/100})}
     var huerf=[];
     for(var k in prev){if(!lista.some(function(z){return String(z.n||'').trim().toLowerCase()===k})){
       if((Number(prev[k].avance)||0)>0)huerf.push(prev[k].nombre)}}
@@ -17951,7 +17958,7 @@ function _apuUI(p){
       var gsx=_apuGrupos(r).filter(function(g){return !g.off&&_apuGrupoTot(r,g.id)>0});
       if(gsx.length){
         var cant=(typeof metaOf==='function'&&metaOf(id))?metaOf(id).total:(p.metrado||0);
-        try{var fo=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;if(fo>0)cant=Math.round(cant*(1-fo)*100)/100}catch(_eo){}
+        var cantH=null;try{var fo=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;if(fo>0)cantH=Math.round(cant*(1-fo)*100)/100}catch(_eo){}
         var und=r.unidad||p.unidad||'UND';
         var undC=((typeof metaOf==='function'&&metaOf(id))?metaOf(id).unidad:'')||und;
         /* cada apartado se lleva SU porcentaje real del costo; lo que no esta en
@@ -17976,6 +17983,8 @@ function _apuUI(p){
               unidad:esUlt?undC:und,cantidad:cant,peso:z.p,
               avance:(vj?(Number(vj.avance)||0):0),
               movs:(vj&&vj.movs)?vj.movs:[],cierra:esUlt}});
+    /* lo que SI se realiza, por parte: su cantidad menos los apartados apagados */
+    if(cantH!=null&&cant>0){var _fH=cantH/cant;fases.forEach(function(f){var cq=Number(f.cantidad)||0;if(cq>0)f.cant_hacer=Math.round(cq*_fH*100)/100})}
           await _fzGuardar(id,fases,false,'apu');
           if(adm)await _apuGuardar(id,r,false);
           try{if(typeof renderList==='function')renderList()}catch(e){}
