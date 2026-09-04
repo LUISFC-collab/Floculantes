@@ -2572,9 +2572,10 @@ function _crDeXer(txt,archivo){
   if(!T.TASK||!T.TASK.filas.length)throw new Error('el archivo no trae tareas (tabla TASK) — ¿es un .xer de Primavera?');
   var pr=(T.PROJECT&&T.PROJECT.filas[0])||{};
   /* HH: primero por recurso (TASKRSRC), si no las del propio TASK */
-  var hhT={};
+  var hhT={},actT={},remT={};
   if(T.TASKRSRC)T.TASKRSRC.filas.forEach(function(r){
-    var k=r.task_id;hhT[k]=(hhT[k]||0)+(Number(r.target_qty)||0)});
+    var k=r.task_id;hhT[k]=(hhT[k]||0)+(Number(r.target_qty)||0);
+    actT[k]=(actT[k]||0)+(Number(r.act_reg_qty)||0)+(Number(r.act_ot_qty)||0);remT[k]=(remT[k]||0)+(Number(r.remain_qty)||0)});
   var wbs={};
   if(T.PROJWBS)T.PROJWBS.filas.forEach(function(w){wbs[w.wbs_id]={n:_crTx(w.wbs_name),p:w.parent_wbs_id||''}});
   function ruta(id){var out=[],g=0;while(id&&wbs[id]&&g++<12){out.unshift(wbs[id].n);id=wbs[id].p}return out.join(' / ')}
@@ -2582,6 +2583,8 @@ function _crDeXer(txt,archivo){
   var tareas=T.TASK.filas.map(function(t,i){
     var hh=hhT[t.task_id];
     if(hh==null||!(hh>0))hh=Number(t.target_work_qty)||0;
+    var hReal=(hhT[t.task_id]!=null&&hhT[t.task_id]>0)?(actT[t.task_id]||0):(Number(t.act_work_qty)||0);
+    var hRem=(hhT[t.task_id]!=null&&hhT[t.task_id]>0)?(remT[t.task_id]||0):(Number(t.remain_work_qty)||0);
     var a=_crFec(t.target_start_date)||_crFec(t.early_start_date)||_crFec(t.act_start_date);
     var b=_crFec(t.target_end_date)||_crFec(t.early_end_date)||_crFec(t.act_end_date);
     if(a&&(!ini||a<ini))ini=a;
@@ -2589,6 +2592,8 @@ function _crDeXer(txt,archivo){
     hhTot+=hh;
     return {task_code:_crTx(t.task_code),nombre:_crTx(t.task_name),wbs:ruta(t.wbs_id),
       ini:a,fin:b,ini_real:_crFec(t.act_start_date),fin_real:_crFec(t.act_end_date),
+      ini_rem:_crFec(t.restart_date),fin_rem:_crFec(t.reend_date),
+      hh_real:Math.round(hReal*100)/100,hh_rem:Math.round(hRem*100)/100,
       dur_h:Math.round((Number(t.target_drtn_hr_cnt)||0)*100)/100,
       hh:Math.round(hh*100)/100,
       pct:Math.round((Number(t.phys_complete_pct)||0)*100)/100,
@@ -2744,6 +2749,7 @@ async function _crGuardar(hdr,tareas,crudo){
         return {proyecto:DATA.proyecto,cron_id:hdr.cron_id,task_code:x.task_code,nombre:x.nombre||'',
           wbs:x.wbs||'',ini:x.ini||'',fin:x.fin||'',ini_real:x.ini_real||'',fin_real:x.fin_real||'',
           dur_h:x.dur_h||0,hh:x.hh||0,pct:x.pct||0,estado:x.estado||'',tipo:x.tipo||'',
+          ini_rem:x.ini_rem||'',fin_rem:x.fin_rem||'',hh_real:x.hh_real||0,hh_rem:x.hh_rem||0,
           orden:x.orden||0,items:x.items||[],quien:yo,ts:t,cell_at:Date.now(),
           eliminado:false,elim_por:'',elim_ts:0}});
       await sbUpsert(T_CRT,lote,'proyecto,cron_id,task_code')}}
@@ -4772,13 +4778,23 @@ function _crFechaTarea(t,alc){
    tramo con las HH que le tocan */
 function _crTramosDe(t,alc,uItems,rp){
   var gq={},oq=[],hhT=0;
+  var pon=function(ini,fin,h){if(!ini||!fin)return;if(fin<ini)fin=ini;var k=ini+'|'+fin;
+    if(!gq[k]){gq[k]={ini:ini,fin:fin,hh:0};oq.push(k)}gq[k].hh+=h;hhT+=h};
+  /* tarea cargada de un .xer con avance: lo hecho va hasta la fecha de
+     datos (inicio real -> dia antes del remanente) y lo que falta desde el
+     remanente (restart -> reend), como lo tiene P6 */
+  var conAv=(Number(t.hh_real)>0||!!t.ini_rem)&&Number(t.pct)>0;
+  var frac=conAv?Math.max(0,Math.min(1,(Number(t.pct)||0)/100)):0;
   (t.items||[]).forEach(function(i){
     if(!uItems||uItems[i]==null)return;
     var h=(Number(uItems[i])||0)/(rp?_crVeces(rp,i):1);if(!(h>0))return;
     var f=_crFechaItem(t,alc,i);if(!f.ini||!f.fin)return;
-    var k=f.ini+'|'+f.fin;
-    if(!gq[k]){gq[k]={ini:f.ini,fin:f.fin,hh:0};oq.push(k)}
-    gq[k].hh+=h;hhT+=h});
+    if(!conAv){pon(f.ini,f.fin,h);return}
+    var iniA=t.ini_real||f.ini,finA;
+    if(frac>=1-1e-9)finA=t.fin_real||(t.ini_rem?_crDeSerial(_crASerial(t.ini_rem)-1):f.fin);
+    else finA=t.ini_rem?_crDeSerial(_crASerial(t.ini_rem)-1):f.fin;
+    if(frac>0)pon(iniA,finA,h*frac);
+    if(frac<1-1e-9){var iniR=t.ini_rem||f.ini,finR=t.fin_rem||f.fin;if(finR<iniR)finR=iniR;pon(iniR,finR,h*(1-frac))}});
   var out=oq.map(function(k){return gq[k]});out.hh=hhT;return out}
 function _crTramos(nivel,tar,alc,u,grupoDe){
   var pes=_crPesos(tar,u.items,u.hh).pesos;
@@ -14939,7 +14955,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904f5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904f6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
