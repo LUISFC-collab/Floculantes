@@ -2474,12 +2474,14 @@ async function _crReordenarXer(cronId){
   var wbs={};((T.PROJWBS&&T.PROJWBS.filas)||[]).forEach(function(w){wbs[w.wbs_id]={n:_crTx(w.wbs_name),p:w.parent_wbs_id||''}});
   var rutaDe=function(id){var out=[],g=0;while(id&&wbs[id]&&g++<12){out.unshift(wbs[id].n);id=wbs[id].p}return out.join(' / ')};
   var maxDir={},minSub={};
-  T.TASK.filas.forEach(function(t){var o=ordX[t.task_id],r=rutaDe(t.wbs_id);if(maxDir[r]==null||o>maxDir[r])maxDir[r]=o;
+  /* las rutas se casan sin tildes ni mayusculas: el .xer guardado va plano */
+  var nk=function(r){return String(r||'').split(' / ').map(function(z){return _crNrm(z)}).join(' / ')};
+  T.TASK.filas.forEach(function(t){var o=ordX[t.task_id],r=nk(rutaDe(t.wbs_id));if(maxDir[r]==null||o>maxDir[r])maxDir[r]=o;
     var segs=r.split(' / ');for(var k=1;k<=segs.length;k++){var pre=segs.slice(0,k).join(' / ');if(minSub[pre]==null||o<minSub[pre])minSub[pre]=o}});
   delete (window._crTar||{})[cronId];
   var tar=(await _crTareas(cronId))||[];
   var lst=tar.map(function(t,i){var o=porCod[t.task_code];
-    if(o==null){var r=String(t.wbs||'');
+    if(o==null){var r=nk(t.wbs);
       /* creada en la app: tras las directas de su nodo; si no tiene, antes de sus sub-WBS */
       o=(maxDir[r]!=null)?(maxDir[r]+0.5+i*1e-6):((minSub[r]!=null)?(minSub[r]-0.5+i*1e-6):(1e6+(Number(t.orden)||0)))}
     return {t:t,o:o}});
@@ -14853,7 +14855,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904f2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904f3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
