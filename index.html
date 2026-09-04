@@ -2990,7 +2990,7 @@ async function _crAlcanceUI(c){
         fmsg('\ud83d\udd17 Toca la actividad que ser\u00e1 la nueva predecesora de '+T9+' (Esc cancela)','#FFB4A8');return}
       window._rlRelink=null;window._rlSel={succ:T9,pred:pr};
       B.querySelectorAll('._rlChip').forEach(function(x){x.style.outline=''});ch.style.outline='2px solid #FF5252';
-      _rlFlecha(B,T9,pr)}});
+      _rlFlecha(B,T9,pr);try{_rlFlechasGrid(B)}catch(e){}}});
     /* en modo re-enlace, tocar una actividad la hace la nueva predecesora */
     B.querySelectorAll('[data-tc]').forEach(function(row){row.addEventListener('click',async function(ev){
       var rl=window._rlRelink;if(!rl)return;
@@ -3010,8 +3010,8 @@ async function _crAlcanceUI(c){
     /* los separadores del cuadro: arrastrar ajusta el ancho de esa semana */
     B.querySelectorAll('._h2h').forEach(function(h){h.onpointerdown=function(ev){ev.stopPropagation();ev.preventDefault();
       var w=+h.getAttribute('data-w'),x0=ev.clientX,w0=((window._h2W||{})[w])||46;
-      var mv=function(e){var nw=Math.max(22,Math.min(180,w0+(e.clientX-x0)));window._h2W=window._h2W||{};window._h2W[w]=nw;document.documentElement.style.setProperty('--h2w'+w,nw+'px')};
-      var up=function(){document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);try{localStorage.setItem('obf4_h2w',JSON.stringify(window._h2W||{}))}catch(e){}};
+      var mv=function(e){var nw=Math.max(22,Math.min(180,w0+(e.clientX-x0)));window._h2W=window._h2W||{};window._h2W[w]=nw;document.documentElement.style.setProperty('--h2w'+w,nw+'px');try{_rlFlechasGrid(B)}catch(e2){}};
+      var up=function(){document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);try{localStorage.setItem('obf4_h2w',JSON.stringify(window._h2W||{}))}catch(e){}try{_rlFlechasGrid(B)}catch(e3){}};
       document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up)}});
     var hn=B.querySelector('._h2hn');if(hn)hn.onpointerdown=function(ev){ev.stopPropagation();ev.preventDefault();
       var x0=ev.clientX,w0=400;try{var _w=Number(localStorage.getItem('obf4_h2nw'));if(_w>=160)w0=_w}catch(e){}
@@ -3161,6 +3161,7 @@ async function _crAlcanceUI(c){
       B.style.paddingLeft='18px';   /* el margen de la flecha roja */
       B.innerHTML=_crPintaHoja2(_crH2,P,sel,fec,q);
       try{if(window._rlSel)_rlFlecha(B,window._rlSel.succ,window._rlSel.pred)}catch(_ef){}
+      try{_rlFlechasGrid(B)}catch(_eg){}
       /* las fechas de la actividad (solo sin predecesoras) van a todas sus
          partidas; las relaciones se manejan aqui */
       B.querySelectorAll('[data-tini],[data-tfin]').forEach(function(i){
@@ -3779,6 +3780,34 @@ function _rlCamino(cronId,a,b){
     if(c===b){var p=[],x=b;while(x!=null){p.unshift(x);x=prev[x]}return p}
     (succs[c]||[]).forEach(function(s2){if(!(s2 in prev)){prev[s2]=c;q.push(s2)}})}
   return null}
+/* las flechas del cuadro de semanas: de la celda donde termina la
+   predecesora (sin punta) a la celda donde empieza la sucesora (con punta) */
+function _rlFlechasGrid(B){
+  var old=B.querySelector('#_rlSvgG');if(old)old.remove();
+  var X=window._rlEdCtx||{};if(!X.cron)return;
+  var semanas=X.semanas||[];if(!semanas.length)return;
+  B.style.position='relative';
+  var rb=B.getBoundingClientRect();
+  var idxDe=function(iso){if(!iso)return -1;var n=_crSemNum(iso);
+    for(var i=0;i<semanas.length;i++)if(semanas[i].n===n)return i;
+    return n<semanas[0].n?0:semanas.length-1};
+  var pos=function(row,i,lado){var cs=row.querySelectorAll('._h2s > span');var c=cs[i];if(!c)return null;
+    var r=c.getBoundingClientRect();
+    return {x:(lado==='der'?r.right:r.left)-rb.left+B.scrollLeft,y:r.top-rb.top+B.scrollTop+r.height/2}};
+  var sel=window._rlSel,paths='';
+  _rlVivas(X.cron).forEach(function(r){
+    var rs=B.querySelector('[data-tc="'+r.succ+'"]'),rp=B.querySelector('[data-tc="'+r.pred+'"]');if(!rs||!rp)return;
+    var op=(X.prog||{})[r.pred]||{},os=(X.prog||{})[r.succ]||{};
+    var a=pos(rp,idxDe(op.fin||op.ini),'der'),b=pos(rs,idxDe(os.ini||os.fin),'izq');if(!a||!b)return;
+    var hi=!!(sel&&sel.succ===r.succ&&sel.pred===r.pred);
+    var xv=a.x+5;
+    paths+='<path d="M '+a.x+' '+a.y+' L '+xv+' '+a.y+' L '+xv+' '+b.y+' L '+(b.x-1)+' '+b.y+'" fill="none" stroke="#FF5252" stroke-width="'+(hi?2.6:1.2)+'" opacity="'+(hi?1:.5)+'" marker-end="url(#_rlPtaG)"/>'});
+  if(!paths)return;
+  var svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.id='_rlSvgG';
+  svg.setAttribute('width',String(B.scrollWidth));svg.setAttribute('height',String(B.scrollHeight));
+  svg.style.cssText='position:absolute;left:0;top:0;pointer-events:none;overflow:visible;z-index:3';
+  svg.innerHTML='<defs><marker id="_rlPtaG" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#FF5252"/></marker></defs>'+paths;
+  B.appendChild(svg)}
 /* mover una actividad CON predecesoras a una fecha: se corrige el lag de la
    relacion que manda (la mas tardia), que es lo que P6 reconoce */
 function _rlMoverA(cronId,cod,nuevaIni,tar,alcX){
@@ -4063,7 +4092,9 @@ function _crPintaHoja2(D,P,sel,fec,q){
     fil.forEach(function(f){plan[f.cod]=f.sem;f.sem.forEach(function(v){if(v>maxV)maxV=v})});
     semTot=semanas.map(function(s,i){var a=0;fil.forEach(function(f){a+=(f.sem[i]||0)});return a});
     semanas.forEach(function(s,w){document.documentElement.style.setProperty('--h2w'+w,((window._h2W||{})[w]||46)+'px')});
+    X9.semanas=semanas;
   }catch(e){verSem=false}}
+  if(!verSem)X9.semanas=[];
   var stripAncho=0;semanas.forEach(function(s,w){stripAncho+=((window._h2W||{})[w]||46)});
   var celdas=function(cod){if(!verSem)return '';var sem=plan[cod]||[];
     return '<span class="_h2s" style="flex:none;display:flex">'+semanas.map(function(s,w){var v=sem[w]||0;
@@ -14368,7 +14399,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904c2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904c3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
