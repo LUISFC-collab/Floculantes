@@ -13790,7 +13790,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260901b6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260901b7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17426,7 +17426,13 @@ function _apuSaveLocal(){try{localStorage.setItem('obf4_apus',JSON.stringify(_ap
 function _apuDe(id){var r=_apuAll()[id];return (r&&!r.eliminado)?r:null}
 function _apuNuevoId(){return 'A'+Date.now().toString(36)+Math.floor(Math.random()*46656).toString(36)}
 function _apuNum(v){var n=Number(v);return isFinite(n)?n:0}
+/* las hh de un insumo: la cantidad de la mano de obra (o de lo que venga en
+   hh); materiales y equipos no llevan */
+function _apuHHde(x){if(!x)return 0;var u=String(x.unidad||'').trim().toLowerCase();
+  if(String(x.grupo||'')==='MO'||u==='hh'||u==='h-h'||u==='hh.')return Math.round(_apuNum(x.cantidad)*1e6)/1e6;return 0}
 function _apuParcial(x){
+  /* vista en horas-hombre: solo mientras se pinta el panel */
+  if(window._apuVistaHH)return _apuHHde(x);
   if(x.parcial!=null&&x.parcial!=='')return _apuNum(x.parcial);
   return Math.round(_apuNum(x.cantidad)*_apuNum(x.precio)*1e6)/1e6}
 function _apuTotal(r){var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado)t+=_apuParcial(x)});return Math.round(t*1e6)/1e6}
@@ -17532,6 +17538,7 @@ function _apuCant(n){n=Number(n);if(!isFinite(n))return '0';
   var t=v.toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
   return t===''?'0':t}
 function _apuMon(n){n=Number(n);if(!isFinite(n))return '—';
+  if(window._apuVistaHH)return _apuCant(n)+' hh';
   var s=Math.abs(n).toFixed(2).split('.');
   return (n<0?'-':'')+s[0].replace(/\B(?=(\d{3})+(?!\d))/g,',')+'.'+s[1]}
 async function _apuGuardar(id,r,borrar){
@@ -17686,7 +17693,7 @@ function _apuUI(p){
   var metU=function(){var m=(typeof metaOf==='function')?metaOf(id):null;
     return (m&&m.unidad)||r.unidad||p.unidad||''};
   var fac=function(){return (window._apuXMet&&metQ()>0)?metQ():1};
-  var pinta=function(){
+  var _pintaCore=function(){
     var w=document.getElementById('_apuBody');if(!w)return;
     var _scrY=w.scrollTop;
     var tot=_apuTotal(r)*fac(),sum=_apuSum(r)*fac(),pc=_apuPctSum(r);
@@ -17702,13 +17709,21 @@ function _apuUI(p){
        '<div style="font-size:13px;font-weight:800;color:#1B2433">'+(r.rendimiento!=null&&r.rendimiento!==''?_apuCant(r.rendimiento):'—')+'</div></div>'+
        '<div style="background:#F4F7FB;border-radius:9px;padding:7px 8px"><div style="font-size:9.5px;font-weight:800;color:#5C6779">CUADRILLA</div>'+
        '<div style="font-size:13px;font-weight:800;color:#1B2433">'+esc(r.cuadrilla||'—')+'</div></div></div>';
+    H+='<div style="display:grid;grid-template-columns:'+(metQ()>0?'1fr 1fr':'1fr')+';gap:7px;margin-top:9px">';
     if(metQ()>0){
       var on=!!window._apuXMet;
-      H+='<label id="_apuXM" style="display:flex;align-items:center;gap:9px;margin-top:9px;background:'+(on?'#EAF3EC':'#F4F7FB')+';border:1.5px solid '+(on?'#0C5132':'var(--line)')+';border-radius:10px;padding:9px 11px;cursor:pointer">'+
+      H+='<label id="_apuXM" style="display:flex;align-items:center;gap:9px;background:'+(on?'#EAF3EC':'#F4F7FB')+';border:1.5px solid '+(on?'#0C5132':'var(--line)')+';border-radius:10px;padding:9px 11px;cursor:pointer">'+
         '<input type="checkbox" id="_apuXMc" '+(on?'checked':'')+' style="width:19px;height:19px;flex:none;cursor:pointer">'+
         '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:800;color:'+(on?'#0C5132':'#1B2433')+'">Multiplicar por el metrado</div>'+
         '<div style="font-size:10.5px;color:#5C6779">'+(on?('Mostrando lo que hace falta para las '+_apuCant(metQ())+' '+esc(metU())):('Ahora se ve por 1 '+esc(r.unidad||p.unidad||'und')+' · el metrado es '+metQ()+' '+esc(metU())))+'</div></div></label>';
     }
+    /* ver el APU en horas-hombre en vez de costo */
+    var onH=!!window._apuVerHH;
+    H+='<label id="_apuVH" style="display:flex;align-items:center;gap:9px;background:'+(onH?'#EAF1FB':'#F4F7FB')+';border:1.5px solid '+(onH?'#1F3864':'var(--line)')+';border-radius:10px;padding:9px 11px;cursor:pointer">'+
+      '<input type="checkbox" id="_apuVHc" '+(onH?'checked':'')+' style="width:19px;height:19px;flex:none;cursor:pointer">'+
+      '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:800;color:'+(onH?'#1F3864':'#1B2433')+'">Ver en horas-hombre</div>'+
+      '<div style="font-size:10.5px;color:#5C6779">'+(onH?'Parciales, apartados y total en hh de mano de obra':'Ahora se ve en costo \u00b7 toca para ver en hh')+'</div></div></label>';
+    H+='</div>';
     /* como entra al apartado cada insumo que se toca: entero, con su propio
        porcentaje, o todos con un mismo porcentaje */
     var modo=window._apuModo||'todo';
@@ -17791,15 +17806,15 @@ function _apuUI(p){
         H+='<div style="display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:5px;font-size:10.5px;color:#5C6779">'+
            '<span><b style="color:#1B2433">'+_apuCant(cantX)+'</b> '+esc(x.unidad||'')+'</span>'+
            (x.cuadrilla?('<span>cuad. <b style="color:#1B2433">'+esc(x.cuadrilla)+'</b></span>'):'')+
-           '<span>P.U. <b style="color:#1B2433">'+_apuMon(x.precio)+'</b></span>'+
-           '<span style="margin-left:auto">Parcial <b style="color:#0C5132;font-size:12px">'+_apuMon(par)+'</b></span></div>';
+           (window._apuVistaHH?'':('<span>P.U. <b style="color:#1B2433">'+_apuMon(x.precio)+'</b></span>'))+
+           '<span style="margin-left:auto">'+(window._apuVistaHH?'HH':'Parcial')+' <b style="color:#0C5132;font-size:12px">'+_apuMon(par)+'</b></span></div>';
         if(gidsX.length){
           var usadoX=_apuRepUsado(x);
           H+='<div style="margin-top:5px;font-size:10px;font-weight:800;display:flex;gap:4px 10px;align-items:center;flex-wrap:wrap">';
           gidsX.forEach(function(gid){
             var gg=(_apuGrupos(r)||[]).filter(function(z){return z.id===gid})[0];if(!gg)return;
             var cg=_apuGrupoCol(gg),frg=Rx[gid];
-            H+='<span style="color:'+cg[0]+';display:inline-flex;gap:5px;align-items:center'+(gg.off?';opacity:.65':'')+'">'+esc(String(gg.nombre).toUpperCase())+(gg.off?' · \u23f8 no se considera':(' · '+(tot>0?(Math.round(par*frg/100/tot*1000)/10):0)+'% del costo'))+
+            H+='<span style="color:'+cg[0]+';display:inline-flex;gap:5px;align-items:center'+(gg.off?';opacity:.65':'')+'">'+esc(String(gg.nombre).toUpperCase())+(gg.off?' · \u23f8 no se considera':(' · '+(tot>0?(Math.round(par*frg/100/tot*1000)/10):0)+(window._apuVistaHH?'% de las hh':'% del costo')))+
               '<button class="_apuPct" data-i="'+i+'" data-g="'+esc(gid)+'" title="Qué porcentaje de este insumo se considera en '+esc(gg.nombre)+' (0 lo saca)" style="background:#fff;color:'+cg[0]+';border:1.5px solid '+cg[0]+';border-radius:7px;padding:1px 7px;font-weight:900;font-size:10px;cursor:pointer">'+_apuCant(frg)+'% del insumo</button></span>'});
           if(usadoX<100)H+='<span style="color:#5C6779">libre '+_apuCant(Math.round((100-usadoX)*100)/100)+'%</span>';
           H+='</div>'}
@@ -17817,7 +17832,7 @@ function _apuUI(p){
     /* el pie: total, suministro y el puente con los pesos */
     var pie=document.getElementById('_apuPie');
     var difTxt='';
-    if(!r.familia&&!window._apuXMet&&puC!=null&&isFinite(puC)&&puC>0&&tot>0){
+    if(!r.familia&&!window._apuXMet&&!window._apuVistaHH&&puC!=null&&isFinite(puC)&&puC>0&&tot>0){
       var d=tot-puC,dp=Math.abs(d)/puC*100;
       difTxt=(Math.abs(d)<0.01)?'<span style="color:#0C5132;font-weight:800">= al contrato</span>'
         :('<span style="color:'+(d>0?'#B42318':'#B45309')+';font-weight:800">'+(d>0?'+':'')+_apuMon(d)+' vs contrato ('+(Math.round(dp*10)/10)+'%)</span>')}
@@ -17839,7 +17854,7 @@ function _apuUI(p){
         '<b style="font-size:12.5px;color:#5C6779;flex:none;min-width:44px;text-align:right">'+libre+'%</b></div>';
       resumenG+='</div>'}
     pie.innerHTML='<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:7px">'+
-      '<span style="font-size:11.5px;color:#5C6779;font-weight:700">Costo del APU</span>'+
+      '<span style="font-size:11.5px;color:#5C6779;font-weight:700">'+(window._apuVistaHH?'Horas-hombre del APU':'Costo del APU')+'</span>'+
       '<b style="font-size:17px;color:#0C5132">'+_apuMon(tot)+'</b>'+
       '<span style="font-size:11px;color:#5C6779">'+(window._apuXMet&&metQ()>0?('por las '+_apuCant(metQ())+' '+esc(metU())):('por '+esc(r.unidad||p.unidad||'und')))+'</span>'+
       '<span style="margin-left:auto;font-size:10.5px">'+difTxt+'</span></div>'+
@@ -17854,6 +17869,8 @@ function _apuUI(p){
     /* crear, elegir, renombrar y borrar apartados */
     var xm=document.getElementById('_apuXMc');
     if(xm)xm.onchange=function(){window._apuXMet=xm.checked;pinta()};
+    var vh=document.getElementById('_apuVHc');
+    if(vh)vh.onchange=function(){window._apuVerHH=vh.checked;pinta()};
     var gadd=document.getElementById('_apuGAdd');
     if(gadd)gadd.onclick=async function(){
       var nm=prompt('Nombre del apartado (ej.: Suministro, Montaje, Pruebas):');
@@ -18042,6 +18059,9 @@ function _apuUI(p){
         if(typeof toast==='function')toast('⚖ Pesos puestos desde el APU');
       }catch(e){if(typeof toast==='function')toast('No se pudo aplicar')}};
   };
+  /* la vista en hh solo rige mientras se pinta: fuera del panel todo sigue
+     en costo (pesos, universo, guardado) */
+  var pinta=function(){window._apuVistaHH=!!window._apuVerHH;try{_pintaCore()}finally{window._apuVistaHH=false}};
   pinta();
   try{var _b1=document.getElementById('_apuBody');if(_b1&&_scr0)_b1.scrollTop=_scr0}catch(_e1){}
 }
