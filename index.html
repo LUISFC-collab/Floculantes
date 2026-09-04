@@ -4779,12 +4779,12 @@ function _crFechaTarea(t,alc){
 /* los dias con avance real de una partida hasta un corte: [{f, d}] con la
    fraccion (0..1) que se gano ese dia, segun sus partes (y sus fases). Se
    memoriza por partida, corte y numero de partes. */
-function _crHechoDias(id,corte){
-  var M=window._crHechoMemo=window._crHechoMemo||{};
+function _crHechoDias(id,corte,desde){
+  var M=window._crHechoMemo=window._crHechoMemo||{};desde=desde||'2000-01-01';
   var pp=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0]);
   if(!pp)return [];
   var ps=[];try{ps=partesOf(id)||[]}catch(e){}
-  var k=id+'|'+(corte||'')+'|'+ps.length;
+  var k=id+'|'+(corte||'')+'|'+desde+'|'+ps.length;
   if(M[k])return M[k];
   var fechas={};ps.forEach(function(x){var f=String(x.fecha||'');if(f&&(!corte||f<=corte))fechas[f]=1});
   try{var r=(typeof _fzDe==='function')?_fzDe(id):null,mapa=(typeof _fzFechasDe==='function')?_fzFechasDe(id):{};
@@ -4792,7 +4792,7 @@ function _crHechoDias(id,corte){
   var L=Object.keys(fechas).sort(),out=[],prev=0;
   /* lo que cuenta sin fecha (saldo retirado, % inicial): al principio, como
      en la curva real; la rejilla lo pega a su primera columna */
-  try{var pc0=Math.max(0,Math.min(100,Number(pctOfAt(pp,'2000-01-01'))||0));if(pc0>1e-9){out.push({f:'2000-01-01',d:pc0/100});prev=pc0}}catch(e){}
+  try{var pc0=Math.max(0,Math.min(100,Number(pctOfAt(pp,'2000-01-01'))||0));if(pc0>1e-9){out.push({f:desde,d:pc0/100});prev=pc0}}catch(e){}
   L.forEach(function(f){var pc=0;try{pc=Math.max(0,Math.min(100,Number(pctOfAt(pp,f))||0))}catch(e){}
     var d=(pc-prev)/100;if(d>1e-9)out.push({f:f,d:d});if(pc>prev)prev=pc});
   /* lo que el % de hoy tenga de mas (retiros, partes sin fecha) cae en el corte */
@@ -4811,8 +4811,8 @@ function _crTramosDe(t,alc,uItems,rp){
   /* el corte de lo hecho: el dia anterior a la fecha de datos del cronograma
      (en P6 la fecha de datos es fin de dia); si no la hay, el dia antes del
      remanente */
-  var corte='';try{var c0=(_crLista()||[]).filter(function(z){return String(z.cron_id)===String(t.cron_id)})[0];
-    if(c0&&c0.fecha_datos)corte=_crDeSerial(_crASerial(c0.fecha_datos)-1)}catch(e){}
+  var corte='',iniCron='';try{var c0=(_crLista()||[]).filter(function(z){return String(z.cron_id)===String(t.cron_id)})[0];
+    if(c0&&c0.fecha_datos)corte=_crDeSerial(_crASerial(c0.fecha_datos)-1);if(c0&&c0.inicio)iniCron=String(c0.inicio)}catch(e){}
   var antesRem=t.ini_rem?_crDeSerial(_crASerial(t.ini_rem)-1):'';
   var finHecho=(corte&&antesRem)?(corte<antesRem?corte:antesRem):(corte||antesRem);
   (t.items||[]).forEach(function(i){
@@ -4823,7 +4823,7 @@ function _crTramosDe(t,alc,uItems,rp){
     /* lo HECHO, dia a dia con los partes reales de la partida hasta el corte
        (el mismo dato que la curva real); lo que falta, desde el remanente */
     var hecho=0;
-    try{var pasos=_crHechoDias(i,finHecho||f.fin);
+    try{var pasos=_crHechoDias(i,finHecho||f.fin,iniCron||f.ini);
       pasos.forEach(function(x){var d=h*x.d;if(d>1e-9){pon(x.f,x.f,d);hecho+=d}})}catch(e){}
     var resto=h-hecho;
     if(resto>1e-9){var sig=finHecho?_crDeSerial(_crASerial(finHecho)+1):'';
@@ -14988,7 +14988,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904g1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904g2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
