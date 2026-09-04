@@ -4802,8 +4802,9 @@ function _crTramosDe(t,alc,uItems,rp){
   /* tarea cargada de un .xer con avance: lo hecho va hasta la fecha de
      datos (inicio real -> dia antes del remanente) y lo que falta desde el
      remanente (restart -> reend), como lo tiene P6 */
-  var conAv=(Number(t.hh_real)>0||!!t.ini_rem)&&Number(t.pct)>0;
-  var frac=conAv?Math.max(0,Math.min(1,(Number(t.pct)||0)/100)):0;
+  /* el cronograma se cargo con avance (alguna tarea trae HH reales o
+     remanente): todas sus tareas reparten lo hecho por los partes reales */
+  var conAv=false;try{var lst9=(window._crTar||{})[t.cron_id]||[];conAv=lst9.some(function(z){return Number(z.hh_real)>0||!!z.ini_rem})}catch(e){}
   /* el corte de lo hecho: el dia anterior a la fecha de datos del cronograma
      (en P6 la fecha de datos es fin de dia); si no la hay, el dia antes del
      remanente */
@@ -4822,7 +4823,8 @@ function _crTramosDe(t,alc,uItems,rp){
     try{var pasos=_crHechoDias(i,finHecho||f.fin);
       pasos.forEach(function(x){var d=h*x.d;if(d>1e-9){pon(x.f,x.f,d);hecho+=d}})}catch(e){}
     var resto=h-hecho;
-    if(resto>1e-9){var iniR=t.ini_rem||(finHecho?_crDeSerial(_crASerial(finHecho)+1):f.ini),finR=t.fin_rem||f.fin;if(finR<iniR)finR=iniR;pon(iniR,finR,resto)}});
+    if(resto>1e-9){var sig=finHecho?_crDeSerial(_crASerial(finHecho)+1):'';
+      var iniR=t.ini_rem||((sig&&f.ini<sig)?sig:f.ini),finR=t.fin_rem||f.fin;if(finR<iniR)finR=iniR;pon(iniR,finR,resto)}});
   var out=oq.map(function(k){return gq[k]});out.hh=hhT;return out}
 function _crTramos(nivel,tar,alc,u,grupoDe){
   var pes=_crPesos(tar,u.items,u.hh).pesos;
@@ -14983,7 +14985,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904f8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904f9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
