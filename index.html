@@ -2995,6 +2995,7 @@ async function _crAlcanceUI(c){
                 (adm9?('<span class="_crNoTog _rlEd" data-t="'+esc(T9)+'" data-p="'+esc(r.pred)+'" title="Cambiar tipo o lag" style="cursor:pointer">\u270e</span><span class="_crNoTog _rlDel" data-t="'+esc(T9)+'" data-p="'+esc(r.pred)+'" title="Quitar relaci\u00f3n" style="cursor:pointer;color:#FFB4A8">\u2715</span>'):'')+'</span>'}).join('')+
               (pr9.length?'':'<span style="font-size:10px;color:#5a6b85">ninguna \u00b7 fecha libre</span>')+
               (adm9?('<span class="_crNoTog _rlAdd" data-t="'+esc(T9)+'" title="Agregar predecesora" style="cursor:pointer;background:#14261d;border:1px solid #1d3a2a;border-radius:6px;padding:1px 6px;font-size:10px;color:#9FE8B0;font-weight:800">+ pred</span>'):'')+
+              ((adm9&&porRel)?('<span class="_crNoTog _rlMov" data-t="'+esc(T9)+'" title="Mover a otra fecha de inicio: se ajusta el lag de la predecesora que manda y se corren sus sucesoras" style="cursor:pointer;background:#2a2314;border:1px solid #4a3c1d;border-radius:6px;padding:1px 6px;font-size:10px;color:#E8C9A0;font-weight:800">\ud83d\udcc5 mover</span>'):'')+
               (su9.length?('<span style="font-size:9.5px;color:#7d8590;font-weight:800;margin-left:4px">SUC:</span>'+su9.map(function(r){return '<span style="font-size:10px;color:#9db4d6">'+esc(r.succ)+' '+esc(r.tipo)+'</span>'}).join(' ')):'')+
             '</span>'}
           return h})()+
@@ -3189,6 +3190,15 @@ async function _crAlcanceUI(c){
       var lag=prompt('Lag en d\u00edas:',String(r.lag_d||0));if(lag==null)return;lag=Number(String(lag).replace(',','.'))||0;
       _rlSet(c.cron_id,T9,pr,{tipo:tipo,lag_d:lag,origen:'manual'});
       await _rlTras('Relaci\u00f3n '+pr+' \u2192 '+T9+' actualizada \u00b7 fechas recalculadas')}});
+    B.querySelectorAll('._rlMov').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();
+      var T9=b.getAttribute('data-t'),o=(_rlProgEd||{})[T9];if(!o||!o.ini)return;
+      var v=prompt('Nueva fecha de INICIO de '+T9+' (AAAA-MM-DD). Hoy calcula '+o.ini+' \u2192 '+o.fin+'.\nSe ajusta el lag de la predecesora que manda y se corren sus sucesoras.',o.ini);
+      if(v==null)return;v=String(v).trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){fmsg('Fecha inv\u00e1lida (AAAA-MM-DD)','#FFB4A8');return}
+      var fecX={};Object.keys(fec).forEach(function(k){fecX[k]={ini:fec[k].ini,fin:fec[k].fin,origen:fec[k].origen}});
+      var m=_rlMoverA(c.cron_id,T9,v,window._crTarLista||[],fecX);if(!m){fmsg('No se pudo calcular la relaci\u00f3n que manda','#FFB4A8');return}
+      if(!m.delta){fmsg('Ya empieza ese d\u00eda','#9db4d6');return}
+      _rlSet(c.cron_id,T9,m.pred,{lag_d:m.lagNuevo,origen:'manual'});
+      await _rlTras('\ud83d\udcc5 '+T9+' movida '+(m.delta>0?'+':'')+m.delta+' d: lag de '+m.pred+' \u2192 '+T9+' ('+m.tipo+') de '+m.lagAntes+' a '+m.lagNuevo+' d \u00b7 sucesoras corridas')}});
     B.querySelectorAll('._rlDel').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();
       var T9=b.getAttribute('data-t'),pr=b.getAttribute('data-p');
       if(!confirm('\u00bfQuitar la relaci\u00f3n '+pr+' \u2192 '+T9+'? Queda con l\u00e1pida y la actividad pasa a fecha libre.'))return;
@@ -3577,6 +3587,18 @@ function _rlPrograma(cronId,tar,alcX){
     (succs[c]||[]).forEach(function(r){grado[r.succ]--;if(grado[r.succ]<=0)cola.push(r.succ)})}
   Object.keys(porCod).forEach(function(c){if(!out[c])out[c]={ini:base[c].ini0,fin:base[c].fin0,rel:!!(preds[c]&&preds[c].length),ciclo:true,movida:false,preds:preds[c]||[]}});
   return out}
+/* mover una actividad CON predecesoras a una fecha: se corrige el lag de la
+   relacion que manda (la mas tardia), que es lo que P6 reconoce */
+function _rlMoverA(cronId,cod,nuevaIni,tar,alcX){
+  var prog=_rlPrograma(cronId,tar,alcX),o=prog[cod];if(!o||!o.rel||!o.ini)return null;
+  var mejor=null;
+  (o.preds||[]).forEach(function(r){var pd=prog[r.pred];if(!pd||!pd.ini)return;
+    var lag=Number(r.lag_d)||0,pi=_crASerial(pd.ini),pf=_crASerial(pd.fin||pd.ini),dur=Math.max(0,_crASerial(o.fin||o.ini)-_crASerial(o.ini)),c;
+    if(r.tipo==='SS')c=pi+lag;else if(r.tipo==='FF')c=pf+lag-dur;else if(r.tipo==='SF')c=pi+lag-dur;else c=pf+lag+1;
+    if(!mejor||c>mejor.c)mejor={r:r,c:c}});
+  if(!mejor)return null;
+  var delta=_crASerial(nuevaIni)-_crASerial(o.ini);
+  return {pred:mejor.r.pred,tipo:mejor.r.tipo,lagAntes:Number(mejor.r.lag_d)||0,lagNuevo:Math.round(((Number(mejor.r.lag_d)||0)+delta)*100)/100,delta:delta}}
 /* escribir en el alcance las fechas que salen de las relaciones */
 async function _rlAplicar(cronId){
   var tar=await _crTareas(cronId),alc=await _crAlc(cronId);
@@ -14069,7 +14091,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904a5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
