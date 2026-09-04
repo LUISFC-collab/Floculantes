@@ -2952,7 +2952,7 @@ async function _crAlcanceUI(c){
     var q=_crNrm(document.getElementById('_crBus').value||'');
     var adm9=(typeof esAdmin==='function'&&esAdmin());
     /* las fechas por relacion, con lo que hay en pantalla (aun sin guardar) */
-    try{var fecX={};Object.keys(fec).forEach(function(k){fecX[k]={ini:fec[k].ini,fin:fec[k].fin}});
+    try{var fecX={};Object.keys(fec).forEach(function(k){fecX[k]={ini:fec[k].ini,fin:fec[k].fin,origen:fec[k].origen}});
       _rlProgEd=_rlPrograma(c.cron_id,window._crTarLista||[],fecX)}catch(_ep){_rlProgEd=null}
     var H='';
     P.forEach(function(p){
@@ -3526,27 +3526,56 @@ async function _rlSembrar(cronId){
    la actividad (manual, del alcance o del .xer); con predecesoras, la mas
    tardia que le imponen (FS/SS/FF/SF + lag), con su duracion de siempre.
    Dias corridos, como las fechas del .xer. */
+/* la fecha puesta A MANO (o desde el Excel) a las partidas de una tarea:
+   de la primera a la ultima; si no hay ninguna, nada */
+function _crFechaTareaManual(t,alc){
+  var ini='',fin='',hay=false;
+  (t.items||[]).forEach(function(i){var a=alc&&alc[i];if(!a)return;
+    var o=String(a.origen||'');if(o!=='manual'&&o!=='excel')return;
+    if(!(a.ini||a.fin))return;hay=true;
+    var fi=a.ini||a.fin,ff=a.fin||a.ini;
+    if(!ini||fi<ini)ini=fi;if(!fin||ff>fin)fin=ff});
+  return hay?{ini:ini,fin:fin}:null}
+/* la programacion por relaciones, POR DIFERENCIAS sobre el .xer: las fechas
+   del .xer son la base (ya vienen calculadas por P6 con sus calendarios);
+   una actividad sin predecesoras se mueve solo si se le puso fecha a mano;
+   una con predecesoras se corre exactamente lo que se corran sus
+   predecesoras (la mas tardia de sus condiciones FS/SS/FF/SF + lag), asi
+   sin cambios queda identica al .xer y solo lo movido cambia. */
 function _rlPrograma(cronId,tar,alcX){
   var rels=_rlVivas(cronId),base={},out={},porCod={};
   (tar||[]).forEach(function(t){porCod[t.task_code]=t;
-    var f=_crFechaTarea(t,alcX||{});
-    var d=(f.ini&&f.fin)?Math.max(0,_crASerial(f.fin)-_crASerial(f.ini)):((t.ini&&t.fin)?Math.max(0,_crASerial(t.fin)-_crASerial(t.ini)):0);
-    base[t.task_code]={ini:f.ini||'',fin:f.fin||'',dur:d}});
+    var m=_crFechaTareaManual(t,alcX||{});
+    var dur=(t.ini&&t.fin)?Math.max(0,_crASerial(t.fin)-_crASerial(t.ini)):0;
+    base[t.task_code]={ini0:t.ini||'',fin0:t.fin||'',dur:dur,man:m}});
   var preds={},succs={},grado={};
   rels.forEach(function(r){if(!porCod[r.succ]||!porCod[r.pred])return;
     (preds[r.succ]=preds[r.succ]||[]).push(r);(succs[r.pred]=succs[r.pred]||[]).push(r);grado[r.succ]=(grado[r.succ]||0)+1});
+  var cond=function(r,pi,pf,dur){var lag=Number(r.lag_d)||0;
+    if(r.tipo==='SS')return pi+lag;if(r.tipo==='FF')return pf+lag-dur;if(r.tipo==='SF')return pi+lag-dur;return pf+lag+1};
   var cola=[];Object.keys(porCod).forEach(function(c){if(!grado[c])cola.push(c)});
   var vis={};
   while(cola.length){var c=cola.shift();if(vis[c])continue;vis[c]=1;
-    var b=base[c],tiene=!!(preds[c]&&preds[c].length),ini=tiene?'':b.ini,fin=b.fin;
-    (preds[c]||[]).forEach(function(r){var pd=out[r.pred]||base[r.pred];if(!pd||!pd.ini)return;
-      var lag=Number(r.lag_d)||0,pi=_crASerial(pd.ini),pf=_crASerial(pd.fin||pd.ini),cand;
-      if(r.tipo==='SS')cand=pi+lag;else if(r.tipo==='FF')cand=pf+lag-b.dur;else if(r.tipo==='SF')cand=pi+lag-b.dur;else cand=pf+lag+1;
-      if(!ini||cand>_crASerial(ini))ini=_crDeSerial(cand)});
-    if(tiene){if(!ini)ini=b.ini;fin=ini?_crDeSerial(_crASerial(ini)+b.dur):''}
-    out[c]={ini:ini,fin:fin,rel:tiene,preds:preds[c]||[]};
+    var b=base[c],tiene=!!(preds[c]&&preds[c].length),ini='',fin='';
+    if(!tiene){
+      if(b.man){ini=b.man.ini;fin=(b.man.fin&&b.man.fin!==b.man.ini)?b.man.fin:(ini?_crDeSerial(_crASerial(ini)+b.dur):'');
+        if(b.man.fin&&b.man.ini&&b.man.fin>=b.man.ini)fin=b.man.fin}
+      else{ini=b.ini0;fin=b.fin0}}
+    else{
+      /* lo que le imponen ahora sus predecesoras, y lo que le imponian en
+         el .xer: la diferencia es lo que se corre */
+      var nuevo=null,viejo=null;
+      (preds[c]||[]).forEach(function(r){var pd=out[r.pred],pb=base[r.pred];
+        if(!pd||!pd.ini||!pb.ini0)return;
+        var cn=cond(r,_crASerial(pd.ini),_crASerial(pd.fin||pd.ini),b.dur);
+        var cv=cond(r,_crASerial(pb.ini0),_crASerial(pb.fin0||pb.ini0),b.dur);
+        if(nuevo===null||cn>nuevo)nuevo=cn;if(viejo===null||cv>viejo)viejo=cv});
+      var delta=(nuevo!==null&&viejo!==null)?(nuevo-viejo):0;
+      if(b.ini0){ini=_crDeSerial(_crASerial(b.ini0)+delta);fin=b.fin0?_crDeSerial(_crASerial(b.fin0)+delta):ini}
+      else if(nuevo!==null){ini=_crDeSerial(nuevo);fin=_crDeSerial(nuevo+b.dur)}}
+    out[c]={ini:ini,fin:fin,rel:tiene,movida:(ini!==b.ini0||fin!==b.fin0),preds:preds[c]||[]};
     (succs[c]||[]).forEach(function(r){grado[r.succ]--;if(grado[r.succ]<=0)cola.push(r.succ)})}
-  Object.keys(porCod).forEach(function(c){if(!out[c])out[c]={ini:base[c].ini,fin:base[c].fin,rel:!!(preds[c]&&preds[c].length),ciclo:true,preds:preds[c]||[]}});
+  Object.keys(porCod).forEach(function(c){if(!out[c])out[c]={ini:base[c].ini0,fin:base[c].fin0,rel:!!(preds[c]&&preds[c].length),ciclo:true,movida:false,preds:preds[c]||[]}});
   return out}
 /* escribir en el alcance las fechas que salen de las relaciones */
 async function _rlAplicar(cronId){
@@ -3557,6 +3586,8 @@ async function _rlAplicar(cronId){
   tar.forEach(function(tk){var o=prog[tk.task_code];if(!o||!o.rel||!o.ini)return;
     (tk.items||[]).forEach(function(i){var a=alc[i]||{};
       if((a.ini||'')===o.ini&&(a.fin||'')===o.fin)return;
+      /* si queda como en el .xer y no habia fila de relacion, no se escribe nada */
+      if(!o.movida&&!(String(a.origen||'')==='relacion'&&(a.ini||a.fin)))return;
       var inc=(a.inc!=null)?a.inc:(cat[i]?_crPorDefecto(cat[i]):true);
       filas.push({proyecto:DATA.proyecto,cron_id:cronId,item:i,incluir:inc,ini:o.ini,fin:o.fin,origen:'relacion',
         hh_override:(a.hh!=null?a.hh:null),nota:'',quien:yo,ts:t,cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0})})});
@@ -14038,7 +14069,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
