@@ -4013,16 +4013,16 @@ async function _crXerComprueba(lineas,c,alcLive){
   var sobran=[];Object.keys(enArch).forEach(function(k){if(!vistas[k])sobran.push(k.replace('|','\u2190'))});
   var tar=await _crTareas(c.cron_id),alc9=alcLive||await _crAlc(c.cron_id);
   var prog=_rlPrograma(c.cron_id,tar,alc9),fOk=0,fMal=[];
-  var durCero=[];
+  var durCero=[],tOriK={};tar.forEach(function(t){tOriK[t.task_code]=t});
+  var dataDateK=(function(){try{var P0=T.PROJECT&&T.PROJECT.filas[0];var d=P0&&_crFec(P0.o.last_recalc_date);return d||todayISO()}catch(e){return (typeof todayISO==='function')?todayISO():''}})();
   TA.filas.forEach(function(f){var cod=_crTx(f.o.task_code),o=prog[cod];
     if((Number(f.o.target_work_qty)||0)>0&&!((Number(f.o.target_drtn_hr_cnt)||0)>0))durCero.push(cod);
     if(!o||!o.ini||!o.fin)return;
-    var oi=_crXerSnap(o.ini,false),of=_crXerSnap(o.fin,true);if(of<oi)of=oi;
-    try{var rCk=_cnDe(c.cron_id,cod);if(rCk>0&&!((Number(f.o.phys_complete_pct)||0)>0)&&String(f.o.status_code)!=='TK_Complete'){
-      var hpdK=_crXerHpd(T,f),remK=Number(f.o.remain_work_qty)||0;of=_crXerFinDias(oi,Math.ceil(remK/rCk-1e-9))}}catch(_ek){}
+    var rCk=0;try{rCk=_cnDe(c.cron_id,cod)||0}catch(_ek){}
+    var R=_crXerPlanTarea(f,o,tOriK[cod],_crXerHpd(T,f),rCk,dataDateK);
     var ti=_crFec(f.o.target_start_date)||_crFec(f.o.early_start_date)||_crFec(f.o.act_start_date);
     var tf=_crFec(f.o.target_end_date)||_crFec(f.o.early_end_date)||_crFec(f.o.act_end_date);
-    if(ti===oi&&tf===of)fOk++;else fMal.push(cod+' (archivo '+ti+'\u2192'+tf+', aplicativo '+oi+'\u2192'+of+')')});
+    if(ti===R.ini&&tf===R.fin)fOk++;else fMal.push(cod+' (archivo '+ti+'\u2192'+tf+', aplicativo '+R.ini+'\u2192'+R.fin+')')});
   /* las HH del archivo: P6 suma las unidades LABOR de las asignaciones; sin
      asignaciones, las de la tarea */
   var conAvance=0,hhUsadas=0,hhRem=0,pres=0,presT=0,actT=0,conAsig={};
@@ -4055,36 +4055,26 @@ async function _crXerRelaciones(lineas,c,alcLive){
   TA.filas.forEach(function(fi){var cod=_crTx(fi.o.task_code);idDe[cod]=fi.o.task_id;codDeId[fi.o.task_id]=cod;projDe[fi.o.task_id]=fi.o.proj_id});
   tar.forEach(function(t){tOri[t.task_code]=t});
   var TRd=T.TASKRSRC,rsDe={};if(TRd)TRd.filas.forEach(function(x){(rsDe[x.o.task_id]=rsDe[x.o.task_id]||[]).push(x)});
-  TA.filas.forEach(function(fi){var cod=_crTx(fi.o.task_code),o=prog[cod];if(!o||!o.ini||!o.fin)return;
-    /* las fechas efectivas, ajustadas al calendario (lunes a viernes): en un
-       domingo P6 calcula duracion 0 y borra las unidades */
-    var ini=_crXerSnap(o.ini,false),fin=_crXerSnap(o.fin,true);if(fin<ini)fin=ini;
-    var fi0=_crFec(fi.o.target_start_date)||_crFec(fi.o.early_start_date)||_crFec(fi.o.act_start_date);
-    var ff0=_crFec(fi.o.target_end_date)||_crFec(fi.o.early_end_date)||_crFec(fi.o.act_end_date);
-    /* la duracion en horas sale de las fechas y el remanente del % fisico */
-    var hpd=_crXerHpd(T,fi),dur=Math.round(_crXerDias(ini,fin)*hpd*100)/100;
-    var st=String(fi.o.status_code||''),pc=Math.max(0,Math.min(100,Number(fi.o.phys_complete_pct)||0));
-    var rdur=(st==='TK_Complete')?0:Math.round(dur*(1-pc/100)*100)/100;
-    /* con rendimiento propio (hh/dia), el remanente dura lo que le falta en HH a ese ritmo */
-    try{var rC9=_cnDe(c.cron_id,cod);if(rC9>0&&st!=='TK_Complete'){var remHH9=Number(fi.o.remain_work_qty)||0;rdur=Math.round(remHH9/rC9*hpd*100)/100;out.rend=(out.rend||0)+1;
-      /* sin empezar: P6 iguala el remanente a la original, asi que la original
-         y la fecha fin van tambien a ese rendimiento */
-      if(!(pc>0)){dur=rdur;fin=_crXerFinDias(ini,Math.ceil(rdur/hpd-1e-9))}}}catch(_er9){}
-    var cambia=(fi0!==ini||ff0!==fin||String(Number(fi.o.target_drtn_hr_cnt)||0)!==String(dur)||String(Number(fi.o.remain_drtn_hr_cnt)||0)!==String(rdur));
-    if(!cambia)return;
-    var pw=function(campo,val){var j=TA.col[campo];if(j!=null)fi.v[j]=val};
-    pw('target_start_date',_crXerFec(ini,'08:00'));pw('target_end_date',_crXerFec(fin,'17:00'));
-    pw('early_start_date',_crXerFec(ini,'08:00'));pw('early_end_date',_crXerFec(fin,'17:00'));
-    pw('late_start_date',_crXerFec(ini,'08:00'));pw('late_end_date',_crXerFec(fin,'17:00'));
-    pw('rem_late_start_date',_crXerFec(ini,'08:00'));pw('rem_late_end_date',_crXerFec(fin,'17:00'));
-    pw('target_drtn_hr_cnt',String(dur));pw('remain_drtn_hr_cnt',String(rdur));
-    if(st==='TK_Active'){pw('reend_date',_crXerFec(fin,'17:00'))}
-    else if(st!=='TK_Complete'){pw('restart_date',_crXerFec(ini,'08:00'));pw('reend_date',_crXerFec(fin,'17:00'))}
-    lineas[fi.i]='%R\t'+fi.v.join('\t');out.fechas++;
-    /* las unidades/hora de sus asignaciones, con la duracion nueva */
+  var dataDate=(function(){try{var P0=T.PROJECT&&T.PROJECT.filas[0];var d=P0&&_crFec(P0.o.last_recalc_date);return d||todayISO()}catch(e){return (typeof todayISO==='function')?todayISO():''}})();
+  TA.filas.forEach(function(fi){var cod=_crTx(fi.o.task_code),o=prog[cod],toca=false;
+    var pw=function(campo,val){var j=TA.col[campo];if(j!=null&&fi.v[j]!==val){fi.v[j]=val;toca=true}};
+    /* TODAS con duracion fija por unidades (Fixed Units) */
+    pw('duration_type','DT_FixedQty');
+    if(!o||!o.ini||!o.fin){if(toca)lineas[fi.i]='%R\t'+fi.v.join('\t');return}
+    var hpd=_crXerHpd(T,fi),rC=0;try{rC=_cnDe(c.cron_id,cod)||0}catch(_e0){}
+    var R=_crXerPlanTarea(fi,o,tOri[cod],hpd,rC,dataDate);
+    if(rC>0&&R.st!=='TK_Complete')out.rend=(out.rend||0)+1;
+    pw('target_start_date',_crXerFec(R.ini,R.hIni));pw('target_end_date',_crXerFec(R.fin,R.hFin));
+    pw('early_start_date',_crXerFec(R.ini,R.hIni));pw('early_end_date',_crXerFec(R.fin,R.hFin));
+    pw('late_start_date',_crXerFec(R.ini,R.hIni));pw('late_end_date',_crXerFec(R.fin,R.hFin));
+    pw('restart_date',R.restart?_crXerFec(R.restart,'07:00'):'');pw('reend_date',R.reend?_crXerFec(R.reend,R.hRe):'');
+    pw('rem_late_start_date',R.restart?_crXerFec(R.restart,'07:00'):'');pw('rem_late_end_date',R.reend?_crXerFec(R.reend,R.hRe):'');
+    pw('target_drtn_hr_cnt',String(R.dur));pw('remain_drtn_hr_cnt',String(R.rdur));
+    if(toca){lineas[fi.i]='%R\t'+fi.v.join('\t');out.fechas++}
+    /* las unidades/hora de sus asignaciones, con esas duraciones */
     (rsDe[fi.o.task_id]||[]).forEach(function(x){var pr=function(campo,val){var j=TRd.col[campo];if(j!=null)x.v[j]=val};
       var q=Number(x.o.target_qty)||0,rq=Number(x.o.remain_qty)||0;
-      pr('target_qty_per_hr',(dur>0?(q/dur):0).toFixed(4));pr('remain_qty_per_hr',(rdur>0?(rq/rdur):0).toFixed(4));
+      pr('target_qty_per_hr',(R.dur>0?(q/R.dur):0).toFixed(6));pr('remain_qty_per_hr',(R.rdur>0?(rq/R.rdur):0).toFixed(6));
       lineas[x.i]='%R\t'+x.v.join('\t')})});
   /* cada asignacion lleva las fechas de su tarea: las del archivo guardado
      pueden ser de otra corrida */
@@ -6787,6 +6777,32 @@ function _crXerDias(ini,fin){var a=_crASerial(ini),b=_crASerial(fin);if(a===''||
 /* la fecha fin de n dias laborables empezando en ini (n>=1) */
 function _crXerFinDias(ini,n){var a=_crASerial(ini);if(a==='')return ini;n=Math.max(1,Math.round(n));var k=0,d=a-1;
   while(k<n&&d<a+n*3+14){d++;if(_crXerLab(_crDeSerial(d)))k++}return _crDeSerial(d)}
+/* la hora a la que termina una jornada parcial de h horas (calendario de
+   07:00 a 18:00 con almuerzo de 12 a 13): 10 h = 18:00, 5 h = 12:00 */
+function _crXerHoraFin(h,hpd){h=Number(h)||0;if(!(h>0)||h>=(hpd||10)-1e-9)return '18:00';
+  var t=7+h+(h>5?1:0);var hh=Math.floor(t),mm=Math.round((t-hh)*60);if(mm===60){hh++;mm=0}
+  return (hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm}
+/* las fechas y duraciones de una tarea en el .xer, como en AGRUPADO:
+   ORIGINAL = sus fechas originales del cronograma; REMANENTE = lo que resta
+   a su rendimiento (propio, o HH entre sus dias vigentes). Sin empezar, P6
+   iguala original y remanente: las dos van con el restante desde el inicio
+   vigente. Iniciada: planificadas = originales, remanente desde la fecha de
+   datos. Completa: planificadas = originales, remanente 0. */
+function _crXerPlanTarea(fi,o,t0,hpd,rC,dataDate){
+  var iniC=_crXerSnap(o.ini,false),finC=_crXerSnap(o.fin,true);if(finC<iniC)finC=iniC;
+  var diasC=_crXerDias(iniC,finC);
+  var oi=(t0&&t0.ini)?_crXerSnap(t0.ini,false):iniC,of=(t0&&t0.fin)?_crXerSnap(t0.fin,true):finC;if(of<oi)of=oi;
+  var diasO=_crXerDias(oi,of);
+  var st=String(fi.o.status_code||''),pc=Math.max(0,Math.min(100,Number(fi.o.phys_complete_pct)||0));
+  var remHH=Number(fi.o.remain_work_qty)||0;
+  var restaD=(st==='TK_Complete')?0:((rC>0)?(remHH/rC):(diasC*(1-pc/100)));
+  var r2=function(x){return Math.round(x*100)/100};
+  var nR=Math.max(1,Math.ceil(restaD-1e-9)),hFin=_crXerHoraFin(restaD*hpd-(nR-1)*hpd,hpd);
+  var R={st:st,restaD:r2(restaD),rdur:r2(restaD*hpd),hIni:'07:00',hFin:'18:00',hRe:'18:00'};
+  if(st==='TK_NotStart'){R.ini=iniC;R.fin=_crXerFinDias(iniC,nR);R.dur=R.rdur;R.hFin=hFin;R.restart=R.ini;R.reend=R.fin;R.hRe=hFin}
+  else if(st==='TK_Active'){R.ini=oi;R.fin=of;R.dur=r2(diasO*hpd);var dd=_crXerSnap(dataDate||((typeof todayISO==='function')?todayISO():o.ini),false);R.restart=dd;R.reend=_crXerFinDias(dd,nR);R.hRe=hFin}
+  else{R.ini=oi;R.fin=of;R.dur=r2(diasO*hpd);R.rdur=0;R.restart='';R.reend=''}
+  return R}
 /* las horas por dia del calendario de una tarea, segun la tabla CALENDAR */
 function _crXerHpd(T,fi){try{var cal=T.CALENDAR,id=fi&&fi.o&&fi.o.clndr_id,h=0;
   if(cal)cal.filas.forEach(function(c){if(String(c.o.clndr_id)===String(id))h=Number(c.o.day_hr_cnt)||0});
@@ -6908,7 +6924,7 @@ async function _crXerCompleta(lineas,c,corte,rpX,soloPres){
       fi.v[TA.col.remain_work_qty]=r2(D.hh*(1-f));
       fi.v[TA.col.act_work_qty]=r2(D.hh*f);
       /* duracion fija y unidades: al correr la duracion en P6 las HH no cambian */
-      if(TA.col.duration_type!=null)fi.v[TA.col.duration_type]='DT_FixedDUR2';
+      if(TA.col.duration_type!=null)fi.v[TA.col.duration_type]='DT_FixedQty';
       var dur=Number(fi.o.target_drtn_hr_cnt)||0,rdur=Number(fi.o.remain_drtn_hr_cnt)||0;
       if(!soloPres){
         /* el avance de la tarea, coherente con sus unidades: % fisico, estado,
@@ -6918,7 +6934,7 @@ async function _crXerCompleta(lineas,c,corte,rpX,soloPres){
         pw('phys_complete_pct',r2(f*100));pw('complete_pct_type','CP_Phys');
         pw('remain_drtn_hr_cnt',String(rdur));
         var aIni=av.ini?_crXerFec(av.ini,'07:00'):(fi.o.act_start_date||_crXerFec(corte,'07:00'));
-        if(f>=1-1e-9){pw('status_code','TK_Complete');pw('act_start_date',aIni);pw('act_end_date',_crXerFec(av.fin||corte,'17:00'));pw('restart_date','');pw('reend_date','')}
+        if(f>=1-1e-9){pw('status_code','TK_Complete');pw('act_start_date',aIni);pw('act_end_date',_crXerFec(av.fin||corte,'18:00'));pw('restart_date','');pw('reend_date','')}
         else if(f>0){pw('status_code','TK_Active');pw('act_start_date',aIni);pw('act_end_date','');pw('restart_date',_crXerFec(corte,'07:00'));pw('reend_date',fi.o.target_end_date||'')}
         else{pw('status_code','TK_NotStart');pw('act_start_date','');pw('act_end_date','');pw('restart_date',fi.o.target_start_date||'');pw('reend_date',fi.o.target_end_date||'')}}
       lineas[fi.i]='%R\t'+fi.v.join('\t');
@@ -6978,7 +6994,7 @@ async function _crXerCompleta(lineas,c,corte,rpX,soloPres){
     pon('target_work_qty',r2(D.hh));
     pon('remain_work_qty',r2(D.hh*(1-f)));
     pon('act_work_qty',r2(D.hh*f));
-    pon('duration_type','DT_FixedDUR2');
+    pon('duration_type','DT_FixedQty');
     pon('target_drtn_hr_cnt',String(horas));
     pon('remain_drtn_hr_cnt',String(Math.round(horas*(1-f)*100)/100));
     pon('target_start_date',_crXerFec(ini,'07:00'));
@@ -14786,7 +14802,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904e8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904e9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
