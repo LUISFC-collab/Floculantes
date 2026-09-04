@@ -8123,12 +8123,17 @@ async function _crPlanRecupera(cronId,corte,semN){
        en el calendario para las partidas de la tarea (sus dias ocupados),
        ponderado por las HH de cada partida; lo que el respaldo no programo
        queda en blanco */
-    if(fuenteBk){plan[cod]={};
+    if(fuenteBk){
+      /* solo la SEMANA del reporte sale del respaldo; el resto de semanas
+         sigue con lo programado por el cronograma, y asi el ACUMULADO es la
+         curva programada hasta esa semana */
+      var wI=_wkISO(_wkSem(semN).ini),wF=_wkISO(_wkSem(semN).fin);
+      Object.keys(plan[cod]).forEach(function(d){if(d>=wI&&d<=wF)delete plan[cod][d]});
       (t.items||[]).forEach(function(i){if(u.items[i]==null||!(hh>0))return;var b2=bkSnap[i];if(!b2)return;
         var hi=(Number(u.items[i])||0)/_crVeces(rp,i);if(!(hi>0))return;
         var oc=[];try{oc=(typeof occupiedDays==='function')?(occupiedDays(b2.start,b2.dias||1)||[]):[b2.start]}catch(_eo){oc=[b2.start]}
         if(!oc.length)return;var pd2=(hi/hh)/oc.length;
-        oc.forEach(function(f){if(f>=gIni&&f<=gFin)plan[cod][f]=(plan[cod][f]||0)+pd2})})}
+        oc.forEach(function(f){if(f>=wI&&f<=wF&&f>=gIni&&f<=gFin)plan[cod][f]=(plan[cod][f]||0)+pd2})})}
     /* la ventana de la tarea entera (para la cola del LB1 y lo demas): de la
        primera fecha efectiva de sus partidas a la ultima */
     var fTe=_crFechaTarea(t,alc);
@@ -8141,17 +8146,22 @@ async function _crPlanRecupera(cronId,corte,semN){
     (t.items||[]).forEach(function(i){
       try{(partesOf(i)||[]).forEach(function(mv){
         var f2=String(mv.fecha||'');
-        if(f2&&f2>=gIni&&f2<=gFin&&f2<=corte)fechas[f2]=1})}catch(_ep){}});
+        if(f2&&f2>=gIni&&f2<=gFin&&f2<=corte)fechas[f2]=1})}catch(_ep){}
+      /* los movimientos de las partes (fases) tambien cuentan por su fecha */
+      try{var r9=(typeof _fzDe==='function')?_fzDe(i):null,mp9=(typeof _fzFechasDe==='function')?_fzFechasDe(i):{};
+        if(r9)(r9.fases||[]).forEach(function(x){(x.movs||[]).forEach(function(m){var f3=String((typeof _fzFechaMov==='function')?_fzFechaMov(m,mp9):(m.f||''));
+          if(f3&&f3>=gIni&&f3<=gFin&&f3<=corte)fechas[f3]=1})})}catch(_ef9){}});
     var lista=Object.keys(fechas).sort();
-    var ant=null;
+    /* lo ganado ANTES de la rejilla (saldo retirado, % inicial) va pegado al
+       primer dia, igual que en la curva y en PROGRAMACION */
+    var pre0=_crAvanceDe(t.items||[],_crDeSerial(_crASerial(gIni)-1),{cod:cod,rp:rp});
+    var ant=Math.max(0,Math.min(100,pre0.pct||0))/100;
+    if(ant>1e-9&&gIni<=corte)actual[cod][gIni]=(actual[cod][gIni]||0)+ant;
     lista.forEach(function(f){
       var a=_crAvanceDe(t.items||[],f,{cod:cod,rp:rp});
       var v=Math.max(0,Math.min(100,a.pct||0))/100;
-      if(ant==null){
-        var pre=_crAvanceDe(t.items||[],_crDeSerial(_crASerial(f)-1),{cod:cod,rp:rp});
-        ant=Math.max(0,Math.min(100,pre.pct||0))/100}
       var dl=v-ant;ant=v;
-      if(dl>1e-9)actual[cod][f]=dl});
+      if(dl>1e-9)actual[cod][f]=(actual[cod][f]||0)+dl});
     /* --- el saldo que hay que recuperar --- */
     var hecho=Math.max(0,Math.min(100,
       (_crAvanceDe(t.items||[],corte,{cod:cod,rp:rp}).pct)||0))/100;
@@ -15041,7 +15051,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904g9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904h1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
