@@ -2948,6 +2948,41 @@ async function _crAlcanceUI(c){
       w.style.color=sinT?'#F0A3A3':'#9FE8B0';
       w.style.borderColor=sinT?'#5A2A2A':'#1d3a2a';
       w.style.background=sinT?'#2a1414':'#14261d'}}
+  var _rlBind=function(B){
+    /* las relaciones: agregar, cambiar y quitar predecesoras */
+    var _rlTras=async function(msg){try{await _rlAplicar(c.cron_id)}catch(e){}
+      try{await _crRecargaAlc()}catch(e){}pinta();if(msg)fmsg(msg,'#9FE8B0')};
+    B.querySelectorAll('._rlAdd').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();
+      var T9=b.getAttribute('data-t');
+      var cod=prompt('C\u00f3digo de la actividad PREDECESORA de '+T9+' (ej. A1890):');if(cod==null)return;cod=String(cod).trim().toUpperCase();
+      if(!cod||!(window._crTarIt||{})[cod]){fmsg('No existe la actividad '+cod,'#FFB4A8');return}
+      if(cod===T9){fmsg('Una actividad no puede ser su propia predecesora','#FFB4A8');return}
+      var tipo=prompt('Tipo de relaci\u00f3n: FS (fin\u2192inicio), SS, FF o SF','FS');if(tipo==null)return;tipo=String(tipo).trim().toUpperCase();if(RL_TIPOS.indexOf(tipo)<0)tipo='FS';
+      var lag=prompt('Lag en d\u00edas (puede ser negativo):','0');if(lag==null)return;lag=Number(String(lag).replace(',','.'))||0;
+      _rlSet(c.cron_id,T9,cod,{tipo:tipo,lag_d:lag,origen:'manual'});
+      await _rlTras('\ud83d\udd17 '+cod+' \u2192 '+T9+' ('+tipo+(lag?(' '+lag+'d'):'')+') guardada \u00b7 fechas recalculadas')}});
+    B.querySelectorAll('._rlEd').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();
+      var T9=b.getAttribute('data-t'),pr=b.getAttribute('data-p');
+      var r=_rlPredsDe(c.cron_id,T9).filter(function(x){return x.pred===pr})[0];if(!r)return;
+      var tipo=prompt('Tipo (FS, SS, FF, SF):',r.tipo);if(tipo==null)return;tipo=String(tipo).trim().toUpperCase();if(RL_TIPOS.indexOf(tipo)<0)tipo='FS';
+      var lag=prompt('Lag en d\u00edas:',String(r.lag_d||0));if(lag==null)return;lag=Number(String(lag).replace(',','.'))||0;
+      _rlSet(c.cron_id,T9,pr,{tipo:tipo,lag_d:lag,origen:'manual'});
+      await _rlTras('Relaci\u00f3n '+pr+' \u2192 '+T9+' actualizada \u00b7 fechas recalculadas')}});
+    B.querySelectorAll('._rlMov').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();
+      var T9=b.getAttribute('data-t'),o=(_rlProgEd||{})[T9];if(!o||!o.ini)return;
+      var v=prompt('Nueva fecha de INICIO de '+T9+' (AAAA-MM-DD). Hoy calcula '+o.ini+' \u2192 '+o.fin+'.\nSe ajusta el lag de la predecesora que manda y se corren sus sucesoras.',o.ini);
+      if(v==null)return;v=String(v).trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){fmsg('Fecha inv\u00e1lida (AAAA-MM-DD)','#FFB4A8');return}
+      var fecX={};Object.keys(fec).forEach(function(k){fecX[k]={ini:fec[k].ini,fin:fec[k].fin,origen:fec[k].origen}});
+      var m=_rlMoverA(c.cron_id,T9,v,window._crTarLista||[],fecX);if(!m){fmsg('No se pudo calcular la relaci\u00f3n que manda','#FFB4A8');return}
+      if(!m.delta){fmsg('Ya empieza ese d\u00eda','#9db4d6');return}
+      _rlSet(c.cron_id,T9,m.pred,{lag_d:m.lagNuevo,origen:'manual'});
+      await _rlTras('\ud83d\udcc5 '+T9+' movida '+(m.delta>0?'+':'')+m.delta+' d: lag de '+m.pred+' \u2192 '+T9+' ('+m.tipo+') de '+m.lagAntes+' a '+m.lagNuevo+' d \u00b7 sucesoras corridas')}});
+    B.querySelectorAll('._rlDel').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();
+      var T9=b.getAttribute('data-t'),pr=b.getAttribute('data-p');
+      if(!confirm('\u00bfQuitar la relaci\u00f3n '+pr+' \u2192 '+T9+'? Queda con l\u00e1pida y la actividad pasa a fecha libre.'))return;
+      _rlSet(c.cron_id,T9,pr,{},true);
+      await _rlTras('Relaci\u00f3n quitada \u00b7 '+T9+' queda con fecha libre')}});
+  };
   function pinta(){
     var q=_crNrm(document.getElementById('_crBus').value||'');
     var adm9=(typeof esAdmin==='function'&&esAdmin());
@@ -2978,30 +3013,18 @@ async function _crAlcanceUI(c){
         (p.nva?'<span style="color:#8DD6ED;font-size:10.5px;font-weight:800"> · adicional</span>':'')+
         (propio?('<span style="color:#C39BD3;font-size:10.5px"> · HH de este cronograma (contrato: '+p.hh+')</span>'):'')+
         (function(){
-          /* con predecesoras la fecha se calcula por relacion y los cajetines
-             se bloquean; sin ellas se mueve a mano y empuja a sus sucesoras */
+          /* solo de lectura: las fechas se manejan en la hoja 2 - AGRUPADO y
+             cada partida muestra las de su actividad */
           var T9=_crTarMandaDe(p.id),o9=(T9&&_rlProgEd)?_rlProgEd[T9]:null,porRel=!!(o9&&o9.rel);
-          var vi=porRel?(o9.ini||''):fec[p.id].ini,vf=porRel?(o9.fin||''):fec[p.id].fin;
-          var stI='background:#0b1220;color:#cfe3ff;border:1px solid #24344f;border-radius:6px;padding:3px 5px;font-size:10.5px;font-family:inherit;width:128px;flex:none;box-sizing:border-box'+(porRel?';opacity:.6':'');
-          /* una sola fila: inicio a la izquierda, fin a la derecha */
-          var h='<br><span class="_crNoTog" style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:nowrap">'+
-            '<input type="date" class="_crNoTog" data-ini="'+esc(p.id)+'" value="'+esc(vi)+'"'+(porRel?' disabled title="Fecha calculada por sus predecesoras: se cambia desde la relaci\u00f3n"':'')+' style="'+stI+'">'+
+          var vi=o9?(o9.ini||''):fec[p.id].ini,vf=o9?(o9.fin||''):fec[p.id].fin;
+          var stI='background:#0b1220;color:#cfe3ff;border:1px solid #24344f;border-radius:6px;padding:3px 5px;font-size:10.5px;font-family:inherit;width:128px;flex:none;box-sizing:border-box;opacity:.75';
+          return '<br><span class="_crNoTog" style="display:flex;gap:5px;align-items:center;margin-top:4px;flex-wrap:nowrap">'+
+            '<input type="date" class="_crNoTog" data-ini="'+esc(p.id)+'" value="'+esc(vi)+'" disabled title="Las fechas se manejan en la hoja 2 \u00b7 AGRUPADO" style="'+stI+'">'+
             '<span style="color:#5a6b85;font-size:11px">\u2192</span>'+
-            '<input type="date" class="_crNoTog" data-fin="'+esc(p.id)+'" value="'+esc(vf)+'"'+(porRel?' disabled':'')+' style="'+stI+'">'+
-            (porRel?'<span style="color:#E8C9A0;font-size:10px;font-weight:800">por relaci\u00f3n</span>':(fec[p.id].origen?('<span style="color:#5a6b85;font-size:10px">'+esc(fec[p.id].origen)+'</span>'):''))+
-            '</span>';
-          /* las relaciones, en su propia linea debajo */
-          if(T9){var pr9=_rlPredsDe(c.cron_id,T9),su9=_rlSuccsDe(c.cron_id,T9);
-            h+='<span class="_crNoTog" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:3px">'+
-              '<span style="font-size:9.5px;color:#7d8590;font-weight:800">PRED:</span>'+
-              pr9.map(function(r){return '<span class="_crNoTog" style="display:inline-flex;gap:3px;align-items:center;background:#1c2440;border:1px solid #33447a;border-radius:6px;padding:1px 5px;font-size:10px;color:#A9C0FF;font-weight:800">'+esc(r.pred)+' '+esc(r.tipo)+(Number(r.lag_d)?(' '+(r.lag_d>0?'+':'')+r.lag_d+'d'):'')+
-                (adm9?('<span class="_crNoTog _rlEd" data-t="'+esc(T9)+'" data-p="'+esc(r.pred)+'" title="Cambiar tipo o lag" style="cursor:pointer">\u270e</span><span class="_crNoTog _rlDel" data-t="'+esc(T9)+'" data-p="'+esc(r.pred)+'" title="Quitar relaci\u00f3n" style="cursor:pointer;color:#FFB4A8">\u2715</span>'):'')+'</span>'}).join('')+
-              (pr9.length?'':'<span style="font-size:10px;color:#5a6b85">ninguna \u00b7 fecha libre</span>')+
-              (adm9?('<span class="_crNoTog _rlAdd" data-t="'+esc(T9)+'" title="Agregar predecesora" style="cursor:pointer;background:#14261d;border:1px solid #1d3a2a;border-radius:6px;padding:1px 6px;font-size:10px;color:#9FE8B0;font-weight:800">+ pred</span>'):'')+
-              ((adm9&&porRel)?('<span class="_crNoTog _rlMov" data-t="'+esc(T9)+'" title="Mover a otra fecha de inicio: se ajusta el lag de la predecesora que manda y se corren sus sucesoras" style="cursor:pointer;background:#2a2314;border:1px solid #4a3c1d;border-radius:6px;padding:1px 6px;font-size:10px;color:#E8C9A0;font-weight:800">\ud83d\udcc5 mover</span>'):'')+
-              (su9.length?('<span style="font-size:9.5px;color:#7d8590;font-weight:800;margin-left:4px">SUC:</span>'+su9.map(function(r){return '<span style="font-size:10px;color:#9db4d6">'+esc(r.succ)+' '+esc(r.tipo)+'</span>'}).join(' ')):'')+
-            '</span>'}
-          return h})()+
+            '<input type="date" class="_crNoTog" data-fin="'+esc(p.id)+'" value="'+esc(vf)+'" disabled style="'+stI+'">'+
+            (T9?('<span style="color:#5a6b85;font-size:10px">de <b style="color:#8ECBF5">'+esc(T9)+'</b>'+(porRel?' \u00b7 por relaci\u00f3n':((o9&&o9.movida)?' \u00b7 manual':''))+'</span>')
+               :(fec[p.id].origen?('<span style="color:#5a6b85;font-size:10px">'+esc(fec[p.id].origen)+'</span>'):''))+
+          '</span>'})()+
         /* con quien esta agrupada, y los mandos para cambiarlo */
         (function(){
           var T=_crTarMandaDe(p.id);
@@ -3060,10 +3083,21 @@ async function _crAlcanceUI(c){
         })()+'</div>'});
     var B=document.getElementById('_crAlcBody');
     if(_crHoja===2&&_crH2){
+      window._rlEdCtx={cron:c.cron_id,prog:_rlProgEd,adm:adm9};
       B.innerHTML=_crPintaHoja2(_crH2,P,sel,fec,q);
+      /* las fechas de la actividad (solo sin predecesoras) van a todas sus
+         partidas; las relaciones se manejan aqui */
+      B.querySelectorAll('[data-tini],[data-tfin]').forEach(function(i){
+        i.onclick=function(ev){ev.stopPropagation()};
+        i.onchange=function(){var T9=i.getAttribute('data-tini')||i.getAttribute('data-tfin'),esIni=!!i.getAttribute('data-tini'),v9=i.value||'';
+          ((window._crTarIt||{})[T9]||[]).forEach(function(k){if(!fec[k])return;if(esIni)fec[k].ini=v9;else fec[k].fin=v9;fec[k].origen='manual'});
+          suma();pinta()}});
+      _rlBind(B);
       /* las actividades con mas de una partida se abren para ver cuales son */
       B.querySelectorAll('[data-abre="1"]').forEach(function(d){
         d.onclick=function(ev){
+          /* los cajetines de fecha y las relaciones no abren ni cierran */
+          var z0=ev.target;while(z0&&z0!==d){if((z0.className||'').toString().indexOf('_crNoTog')>=0)return;z0=z0.parentNode}
           /* si se pulso una partida de dentro, manda ella, no la actividad */
           var z=ev.target;while(z&&z!==d&&!z.getAttribute('data-ver'))z=z.parentNode;
           if(z&&z!==d&&z.getAttribute('data-ver'))return;
@@ -3176,39 +3210,7 @@ async function _crAlcanceUI(c){
       i.onclick=function(ev){ev.stopPropagation()};
       i.onchange=function(){var id9=i.getAttribute('data-fin'),v9=i.value||'';
         _crGrupoDe9(id9).forEach(function(k){if(!fec[k])return;fec[k].fin=v9;fec[k].origen='manual'});suma();pinta()}});
-    /* las relaciones: agregar, cambiar y quitar predecesoras */
-    var _rlTras=async function(msg){try{await _rlAplicar(c.cron_id)}catch(e){}
-      try{await _crRecargaAlc()}catch(e){}pinta();if(msg)fmsg(msg,'#9FE8B0')};
-    B.querySelectorAll('._rlAdd').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();
-      var T9=b.getAttribute('data-t');
-      var cod=prompt('C\u00f3digo de la actividad PREDECESORA de '+T9+' (ej. A1890):');if(cod==null)return;cod=String(cod).trim().toUpperCase();
-      if(!cod||!(window._crTarIt||{})[cod]){fmsg('No existe la actividad '+cod,'#FFB4A8');return}
-      if(cod===T9){fmsg('Una actividad no puede ser su propia predecesora','#FFB4A8');return}
-      var tipo=prompt('Tipo de relaci\u00f3n: FS (fin\u2192inicio), SS, FF o SF','FS');if(tipo==null)return;tipo=String(tipo).trim().toUpperCase();if(RL_TIPOS.indexOf(tipo)<0)tipo='FS';
-      var lag=prompt('Lag en d\u00edas (puede ser negativo):','0');if(lag==null)return;lag=Number(String(lag).replace(',','.'))||0;
-      _rlSet(c.cron_id,T9,cod,{tipo:tipo,lag_d:lag,origen:'manual'});
-      await _rlTras('\ud83d\udd17 '+cod+' \u2192 '+T9+' ('+tipo+(lag?(' '+lag+'d'):'')+') guardada \u00b7 fechas recalculadas')}});
-    B.querySelectorAll('._rlEd').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();
-      var T9=b.getAttribute('data-t'),pr=b.getAttribute('data-p');
-      var r=_rlPredsDe(c.cron_id,T9).filter(function(x){return x.pred===pr})[0];if(!r)return;
-      var tipo=prompt('Tipo (FS, SS, FF, SF):',r.tipo);if(tipo==null)return;tipo=String(tipo).trim().toUpperCase();if(RL_TIPOS.indexOf(tipo)<0)tipo='FS';
-      var lag=prompt('Lag en d\u00edas:',String(r.lag_d||0));if(lag==null)return;lag=Number(String(lag).replace(',','.'))||0;
-      _rlSet(c.cron_id,T9,pr,{tipo:tipo,lag_d:lag,origen:'manual'});
-      await _rlTras('Relaci\u00f3n '+pr+' \u2192 '+T9+' actualizada \u00b7 fechas recalculadas')}});
-    B.querySelectorAll('._rlMov').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();
-      var T9=b.getAttribute('data-t'),o=(_rlProgEd||{})[T9];if(!o||!o.ini)return;
-      var v=prompt('Nueva fecha de INICIO de '+T9+' (AAAA-MM-DD). Hoy calcula '+o.ini+' \u2192 '+o.fin+'.\nSe ajusta el lag de la predecesora que manda y se corren sus sucesoras.',o.ini);
-      if(v==null)return;v=String(v).trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){fmsg('Fecha inv\u00e1lida (AAAA-MM-DD)','#FFB4A8');return}
-      var fecX={};Object.keys(fec).forEach(function(k){fecX[k]={ini:fec[k].ini,fin:fec[k].fin,origen:fec[k].origen}});
-      var m=_rlMoverA(c.cron_id,T9,v,window._crTarLista||[],fecX);if(!m){fmsg('No se pudo calcular la relaci\u00f3n que manda','#FFB4A8');return}
-      if(!m.delta){fmsg('Ya empieza ese d\u00eda','#9db4d6');return}
-      _rlSet(c.cron_id,T9,m.pred,{lag_d:m.lagNuevo,origen:'manual'});
-      await _rlTras('\ud83d\udcc5 '+T9+' movida '+(m.delta>0?'+':'')+m.delta+' d: lag de '+m.pred+' \u2192 '+T9+' ('+m.tipo+') de '+m.lagAntes+' a '+m.lagNuevo+' d \u00b7 sucesoras corridas')}});
-    B.querySelectorAll('._rlDel').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();
-      var T9=b.getAttribute('data-t'),pr=b.getAttribute('data-p');
-      if(!confirm('\u00bfQuitar la relaci\u00f3n '+pr+' \u2192 '+T9+'? Queda con l\u00e1pida y la actividad pasa a fecha libre.'))return;
-      _rlSet(c.cron_id,T9,pr,{},true);
-      await _rlTras('Relaci\u00f3n quitada \u00b7 '+T9+' queda con fecha libre')}});
+    _rlBind(B);
     if(_crVaP){                      /* se ha vuelto desde la hoja 2 */
       var zp=B.querySelector('._crIt[data-id="'+_crVaP+'"]');
       if(!zp){                       /* el buscador la tenia escondida */
@@ -3806,6 +3808,33 @@ function _crPickTarea(tar,idP,titulo){
 /* La hoja 2 tal como sale en el Excel: los titulos de WBS y, bajo cada uno,
    sus tareas con las partidas que reclaman. Las agrupaciones van con su color,
    el mismo que se ve en el resto del aplicativo. */
+/* las fechas y relaciones de una actividad en la hoja 2: editable solo sin
+   predecesoras; con ellas, calculada y bloqueada; PRED (cambiar / quitar /
+   agregar por codigo), mover y SUC */
+function _crHoja2Fechas(t,ms,fuera){
+  var X=window._rlEdCtx||{},o=(X.prog||{})[t.task_code]||null,porRel=!!(o&&o.rel),adm=!!X.adm,cron=X.cron;
+  var vi=o?(o.ini||''):(t.ini||''),vf=o?(o.fin||''):(t.fin||''),mov=!!(o&&o.movida);
+  var stI='background:#0b1220;color:#cfe3ff;border:1px solid #24344f;border-radius:6px;padding:2px 5px;font-size:10.5px;font-family:inherit;width:124px;flex:none;box-sizing:border-box'+(porRel?';opacity:.6':'');
+  var h='<span class="_crNoTog" style="display:flex;gap:5px;align-items:center;flex-wrap:nowrap;margin-top:3px">'+
+    '<input type="date" class="_crNoTog" data-tini="'+esc(t.task_code)+'" value="'+esc(vi)+'"'+((porRel||!adm)?' disabled':'')+(porRel?' title="Calculada por sus predecesoras: c\u00e1mbiala con mover o desde la relaci\u00f3n"':'')+' style="'+stI+'">'+
+    '<span style="color:#5a6b85;font-size:11px">\u2192</span>'+
+    '<input type="date" class="_crNoTog" data-tfin="'+esc(t.task_code)+'" value="'+esc(vf)+'"'+((porRel||!adm)?' disabled':'')+' style="'+stI+'">'+
+    (porRel?('<span style="color:#E8C9A0;font-size:10px;font-weight:800">por relaci\u00f3n'+(mov?' \u00b7 movida':'')+'</span>')
+           :(mov?'<span style="color:#E8C9A0;font-size:10px;font-weight:800">manual</span>':'<span style="color:#5a6b85;font-size:10px">del .xer</span>'))+
+    (ms.length?('<span style="color:#5a6b85;font-size:10px"> \u00b7 '+ms.length+' partida'+(ms.length>1?'s':'')+'</span>'):'')+
+    (fuera.length?('<span style="color:#E8C9A0;font-size:10px"> \u00b7 '+fuera.length+' fuera del alcance</span>'):'')+
+    '</span>';
+  if(cron){var T9=t.task_code,pr9=_rlPredsDe(cron,T9),su9=_rlSuccsDe(cron,T9);
+    h+='<span class="_crNoTog" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:3px">'+
+      '<span class="_crNoTog" style="font-size:9.5px;color:#7d8590;font-weight:800">PRED:</span>'+
+      pr9.map(function(r){return '<span class="_crNoTog" style="display:inline-flex;gap:3px;align-items:center;background:#1c2440;border:1px solid #33447a;border-radius:6px;padding:1px 5px;font-size:10px;color:#A9C0FF;font-weight:800">'+esc(r.pred)+' '+esc(r.tipo)+(Number(r.lag_d)?(' '+(r.lag_d>0?'+':'')+r.lag_d+'d'):'')+
+        (adm?('<span class="_crNoTog _rlEd" data-t="'+esc(T9)+'" data-p="'+esc(r.pred)+'" title="Cambiar tipo o lag" style="cursor:pointer">\u270e</span><span class="_crNoTog _rlDel" data-t="'+esc(T9)+'" data-p="'+esc(r.pred)+'" title="Quitar relaci\u00f3n" style="cursor:pointer;color:#FFB4A8">\u2715</span>'):'')+'</span>'}).join('')+
+      (pr9.length?'':'<span class="_crNoTog" style="font-size:10px;color:#5a6b85">ninguna \u00b7 fecha libre</span>')+
+      (adm?('<span class="_crNoTog _rlAdd" data-t="'+esc(T9)+'" title="Agregar predecesora por su c\u00f3digo (ej. A1090)" style="cursor:pointer;background:#14261d;border:1px solid #1d3a2a;border-radius:6px;padding:1px 6px;font-size:10px;color:#9FE8B0;font-weight:800">+ pred</span>'):'')+
+      ((adm&&porRel)?('<span class="_crNoTog _rlMov" data-t="'+esc(T9)+'" title="Mover a otra fecha de inicio: se ajusta el lag de la predecesora que manda y se corren sus sucesoras" style="cursor:pointer;background:#2a2314;border:1px solid #4a3c1d;border-radius:6px;padding:1px 6px;font-size:10px;color:#E8C9A0;font-weight:800">\ud83d\udcc5 mover</span>'):'')+
+      (su9.length?('<span class="_crNoTog" style="font-size:9.5px;color:#7d8590;font-weight:800;margin-left:4px">SUC:</span>'+su9.map(function(r){return '<span class="_crNoTog" style="font-size:10px;color:#9db4d6">'+esc(r.succ)+' '+esc(r.tipo)+'</span>'}).join(' ')):'')+
+    '</span>'}
+  return h}
 function _crPintaHoja2(D,P,sel,fec,q){
   var porId={};(P||[]).forEach(function(p){porId[p.id]=p});
   var grupoDe={},nomG={},colG={};
@@ -3903,11 +3932,7 @@ function _crPintaHoja2(D,P,sel,fec,q){
       '<b style="flex:none;color:#8ECBF5;font-size:11px;min-width:54px">'+_crMarca(t.task_code,q)+'</b>'+
       '<span style="flex:1;min-width:120px;overflow-wrap:anywhere">'+
         _crMarca(String(t.nombre||''),q)+
-        '<br><span style="color:#5a6b85;font-size:10.5px">'+
-          esc(t.ini||'—')+' → '+esc(t.fin||'—')+
-          (ms.length?(' · '+ms.length+' partida'+(ms.length>1?'s':'')):'')+
-          (fuera.length?('<span style="color:#E8C9A0"> · '+fuera.length+' fuera del alcance</span>'):'')+
-        '</span>'+
+        '<br>'+_crHoja2Fechas(t,ms,fuera)+
         (Object.keys(chips).length?('<br>'+Object.keys(chips).map(function(g){
           return '<span style="display:inline-block;margin:3px 4px 0 0;padding:1px 7px;'+
             'border-radius:999px;font-size:10px;font-weight:800;color:#101820;'+
@@ -14114,7 +14139,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904a9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904b1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
