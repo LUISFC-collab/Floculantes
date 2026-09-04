@@ -4804,7 +4804,7 @@ function _crHechoDias(id,corte,desde){
   /* lo que el % de hoy tenga de mas (retiros, partes sin fecha) cae en el corte */
   try{var pcC=Math.max(0,Math.min(100,Number(pctOfAt(pp,corte||todayISO()))||0));if(pcC>prev+1e-9&&corte)out.push({f:corte,d:(pcC-prev)/100})}catch(e){}
   M[k]=out;return out}
-function _crTramosDe(t,alc,uItems,rp){
+function _crTramosDe(t,alc,uItems,rp,sinAvance){
   var gq={},oq=[],hhT=0;
   var pon=function(ini,fin,h){if(!ini||!fin)return;if(fin<ini)fin=ini;var k=ini+'|'+fin;
     if(!gq[k]){gq[k]={ini:ini,fin:fin,hh:0};oq.push(k)}gq[k].hh+=h;hhT+=h};
@@ -4813,7 +4813,7 @@ function _crTramosDe(t,alc,uItems,rp){
      remanente (restart -> reend), como lo tiene P6 */
   /* el cronograma se cargo con avance (alguna tarea trae HH reales o
      remanente): todas sus tareas reparten lo hecho por los partes reales */
-  var conAv=false;try{var lst9=(window._crTar||{})[t.cron_id]||[];conAv=lst9.some(function(z){return Number(z.hh_real)>0||!!z.ini_rem})}catch(e){}
+  var conAv=false;try{if(!sinAvance){var lst9=(window._crTar||{})[t.cron_id]||[];conAv=lst9.some(function(z){return Number(z.hh_real)>0||!!z.ini_rem})}}catch(e){}
   /* el corte de lo hecho: el dia anterior a la fecha de datos del cronograma
      (en P6 la fecha de datos es fin de dia); si no la hay, el dia antes del
      remanente */
@@ -8082,7 +8082,9 @@ async function _crPlanRecupera(cronId,corte,semN){
        semanal es el de la curva y los findes y feriados quedan limpios. */
     /* la tarea se reparte por TRAMOS: cada partida con su fecha efectiva
        (la del alcance manda sobre la del .xer) y su parte de las HH */
-    var trsT=_crTramosDe(t,alc,u.items,rp);
+    /* lo PROGRAMADO: las fechas efectivas del cronograma, sin mezclar lo
+       hecho (el PPC compara este programado contra el real) */
+    var trsT=_crTramosDe(t,alc,u.items,rp,true);
     trsT.forEach(function(tr){
       var fr=(hh>0)?tr.hh/hh:0;if(!(fr>0))return;
       if(G.length){
@@ -15023,7 +15025,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904g6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904g7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
