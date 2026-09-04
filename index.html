@@ -8576,9 +8576,15 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
   /* el FILTRO por formula: los dias de las semanas VISIBLES de la hoja */
   var _visBlq=[];BLQ.forEach(function(c0,b){if(VIS[SEMS[b]])_visBlq.push(c0)});
   var _finRama=function(i0){var z0=cuerpo[i0];for(var j=i0+1;j<cuerpo.length;j++){var zj=cuerpo[j];if(zj.tit!=null&&zj.niv<=z0.niv)return j-1}return cuerpo.length-1};
-  var _fFiltroAct=function(n0,L){var rg=_visBlq.map(function(c0){return _wkColL(c0)+n0+':'+_wkColL(c0+6)+(n0+L-1)});
+  /* cada semana cuenta solo si esta VISIBLE en ese momento: CELL("width")
+     de su primer dia o de su columna de % vale 0 cuando la columna esta
+     oculta; asi el filtro sigue a lo que se ve, se oculten o se muestren
+     semanas despues (tras ocultar/mostrar, Excel recalcula con F9 o con
+     cualquier cambio) */
+  var _fFiltroAct=function(n0,L){var rg=BLQ.map(function(c0){var d1=_wkColL(c0),d7=_wkColL(c0+6),pS=_wkColL(c0+7);
+      return '(INDEX(CELL("width",'+d1+'$5),1)+INDEX(CELL("width",'+pS+'$5),1)>0)*SUM('+d1+n0+':'+d7+(n0+L-1)+')'});
     var txt=(opc&&opc.lmn)?('LEN(L'+n0+')+LEN(N'+n0+')'):('LEN(M'+n0+')+LEN(N'+n0+')');
-    return 'IF('+(rg.length?('SUM('+rg.join(',')+')+'):'')+txt+'>0,"Considerar","No considerar")'};
+    return 'IF('+rg.join('+')+'+'+txt+'>0,"Considerar","No considerar")'};
   var _fFiltroTit=function(i0){var a=r0+i0+1,b=r0+_finRama(i0);if(b<a)return '"No considerar"';
     return 'IF(COUNTIF('+cFIL+a+':'+cFIL+b+',"Considerar")>0,"Considerar","No considerar")'};
   cuerpo.forEach(function(z,_idx){
@@ -15064,7 +15070,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904h4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904h5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
