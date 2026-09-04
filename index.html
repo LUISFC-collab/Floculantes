@@ -8587,12 +8587,18 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
      Da igual que se oculten dias sueltos o semanas enteras, o que se
      muestren de nuevo (tras ocultar/mostrar, Excel recalcula con F9 o con
      cualquier cambio) */
-  var _fFiltroAct=function(n0,L){var c1=_wkColL(BLQ[0]),c2=_wkColL(BLQ[BLQ.length-1]+6),a6='$'+c1+'$6:$'+c2+'$6';
-    var sm=[];for(var k=0;k<L;k++)sm.push('SUMIF('+a6+',"?*",'+c1+(n0+k)+':'+c2+(n0+k)+')');
+  /* cada FILA escribe el nombre de su LINEA (PROG. SEM. SIG., el
+     cronograma, ACTUAL...) si tiene dato en los dias visibles o si la
+     actividad lleva texto; asi un solo filtro en esta columna deja ver solo
+     esa linea. Los titulos escriben "Titulos" cuando su rama tiene algo. */
+  var _fFiltroAct=function(n0,n1,linea){var c1=_wkColL(BLQ[0]),c2=_wkColL(BLQ[BLQ.length-1]+6),a6='$'+c1+'$6:$'+c2+'$6';
+    var sm='SUMIF('+a6+',"?*",'+c1+n1+':'+c2+n1+')';
     var txt=(opc&&opc.lmn)?('LEN(L'+n0+')+LEN(N'+n0+')'):('LEN(M'+n0+')+LEN(N'+n0+')');
-    return 'IF('+sm.join('+')+'+'+txt+'>0,"Considerar","No considerar")'};
+    var nm=String(linea||'Considerar').replace(/"/g,'""');
+    return 'IF('+sm+'+'+txt+'>0,"'+nm+'","No considerar")'};
   var _fFiltroTit=function(i0){var a=r0+i0+1,b=r0+_finRama(i0);if(b<a)return '"No considerar"';
-    return 'IF(COUNTIF('+cFIL+a+':'+cFIL+b+',"Considerar")>0,"Considerar","No considerar")'};
+    var rg=cFIL+a+':'+cFIL+b;
+    return 'IF(COUNTIF('+rg+',"No considerar")+COUNTBLANK('+rg+')<ROWS('+rg+'),"Títulos","No considerar")'};
   cuerpo.forEach(function(z,_idx){
     if(z.tit!=null){
       /* la banda entera pintada, no una celda suelta en medio del vacio */
@@ -8659,7 +8665,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
       _wkCelE('N',n,((z.pos||0)===0?((opc&&opc.lmn)?_rxInfo(f).accion:((opc&&opc.quien)?_rxInfo(f).razon:'')):''),true,_wkCentrado(tinta(CAB.N,PLOMO,PLOMOB))),
       QN?_wkCelE('O',n,((z.pos||0)===0?_rxInfo(f).quien:''),true,
            _wkCentrado(tinta(CAB.O,PLOMO,PLOMOB))):null,
-      FIL?_wkCelE(cFIL,n,'',true,_wkCentrado(tinta(CAB[cFIL],PLOMO,PLOMOB)),_fFiltroAct(n-(z.pos||0),LINEAS.length)):null,
+      FIL?_wkCelE(cFIL,n,'',true,_wkCentrado(tinta(CAB[cFIL],PLOMO,PLOMOB)),_fFiltroAct(n-(z.pos||0),n,z.linea||'')):null,
       _wkCelE(cLIN,n,z.linea||'',true,st(_extra?CAB[cLIN]:CAB.O))].filter(Boolean);
     /* las tres, combinadas de arriba abajo del bloque */
     if(R&&(z.pos||0)===0&&LINEAS.length>1){
@@ -15076,7 +15082,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904h6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904h7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
