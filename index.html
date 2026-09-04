@@ -3402,14 +3402,19 @@ async function _crAlcanceUI(c){
         var rx=await _crExportar(c,hoy,semH,alcLive);
         var lineas9=String(rx.txt||'').split('\n');
         r={txt:rx.txt,nombre:(rx.nombre||c.cron_id)+'_reprogramacion_'+hoy.replace(/-/g,''),rel:rx.rel||{fechas:0,rel_act:0,rel_new:0,rel_del:0},chk:await _crXerComprueba(lineas9,c,alcLive)};
-        extra=' \u00b7 ejecutado a '+hoy+': '+(rx.tocadas||0)+' actividad(es) con avance, '+r.chk.hhUsadas+' hh usadas y '+r.chk.hhRem+' hh remanentes'+((rx.comp&&rx.comp.nuevas)?(', '+rx.comp.nuevas+' actividad(es) del aplicativo a\u00f1adidas'):'')}
+        r.chk.comp=rx.comp||{};
+        extra=' \u00b7 ejecutado a '+hoy+': '+(rx.tocadas||0)+' actividad(es) con avance; fecha de datos '+hoy}
       else r=await _crXerConRelaciones(c,alcLive);
       var blob=new Blob([_crBytes(r.txt)],{type:'text/plain'});
       var url=URL.createObjectURL(blob),a=document.createElement('a');
       a.href=url;a.download=r.nombre+'.xer';document.body.appendChild(a);a.click();
       setTimeout(function(){URL.revokeObjectURL(url);a.remove()},1500);
-      var k=r.chk,mal=k.faltan.length+k.distintas.length+k.sobran.length+k.fechasMal.length;
-      var txt='\u2714 '+r.nombre+'.xer descargado \u00b7 '+k.enArchivo+' relaciones en el archivo, '+k.vivas+' en el aplicativo ('+r.rel.rel_act+' cambiadas, '+r.rel.rel_new+' nuevas, '+r.rel.rel_del+' quitadas) \u00b7 fechas: '+k.fechasOk+' tarea(s) coinciden'+(r.rel.fechas?(', '+r.rel.fechas+' reescritas'):'')+extra;
+      var k=r.chk,actMal=(modo==='rep')&&Math.abs(k.hhUsadas-k.actApp)>0.05;
+      var mal=k.faltan.length+k.distintas.length+k.sobran.length+k.fechasMal.length+(k.presMal?1:0)+(actMal?1:0);
+      var txt='\u2714 '+r.nombre+'.xer descargado \u00b7 HH presupuestadas '+k.pres+' (aplicativo '+k.presApp+')'+(modo==='rep'?(' \u00b7 HH reales '+k.hhUsadas+' (aplicativo '+k.actApp+') \u00b7 remanentes '+k.hhRem):'')+((k.comp&&k.comp.nuevas)?(' \u00b7 '+k.comp.nuevas+' actividad(es) del aplicativo a\u00f1adidas'):'')+((k.comp&&k.comp.asigNuevas)?(' \u00b7 '+k.comp.asigNuevas+' asignaci\u00f3n(es) de recurso creadas'):'')+
+        ' \u00b7 '+k.enArchivo+' relaciones en el archivo, '+k.vivas+' en el aplicativo ('+r.rel.rel_act+' cambiadas, '+r.rel.rel_new+' nuevas, '+r.rel.rel_del+' quitadas) \u00b7 fechas: '+k.fechasOk+' tarea(s) coinciden'+(r.rel.fechas?(', '+r.rel.fechas+' reescritas'):'')+extra;
+      if(k.presMal)txt='\u26a0 HH presupuestadas del archivo '+k.pres+' (tareas '+k.presTarea+') \u2260 aplicativo '+k.presApp+' \u00b7 '+txt;
+      if(actMal)txt='\u26a0 HH reales del archivo '+k.hhUsadas+' \u2260 aplicativo '+k.actApp+' \u00b7 '+txt;
       if(k.sinTarea.length)txt+=' \u00b7 \u26a0 '+k.sinTarea.length+' relaci\u00f3n(es) con una actividad que no est\u00e1 en el .xer: '+k.sinTarea.slice(0,3).join(', ');
       if(mal)txt='\u26a0 NO CUADRA: '+(k.faltan.length?(k.faltan.length+' sin escribir ('+k.faltan.slice(0,3).join(', ')+') '):'')+(k.distintas.length?(k.distintas.length+' distintas ('+k.distintas.slice(0,2).join('; ')+') '):'')+(k.sobran.length?(k.sobran.length+' de m\u00e1s ('+k.sobran.slice(0,3).join(', ')+') '):'')+(k.fechasMal.length?(k.fechasMal.length+' fechas distintas ('+k.fechasMal.slice(0,2).join('; ')+') '):'')+'\u00b7 '+txt;
       fmsg(txt,mal?'#FFB4A8':'#9FE8B0');
@@ -3960,8 +3965,11 @@ async function _crXerConRelaciones(c,alcLive){
   var crudo=(fila&&fila[0]&&fila[0].crudo)||'';
   if(!crudo)throw new Error('ese cronograma no guard\u00f3 su archivo original \u2014 vuelve a cargar el .xer');
   var lineas=crudo.split(/\r?\n/);
+  /* las HH del aplicativo (el universo), sin avances nuevos */
+  var comp={};try{var rpX=_crReparto(await _crTareas(c.cron_id));comp=await _crXerCompleta(lineas,c,(typeof todayISO==='function')?todayISO():'',rpX,true)}catch(_ec){try{console.warn('HH .xer:',_ec)}catch(_e2){}}
   var rel=await _crXerRelaciones(lineas,c,alcLive);
   var chk=await _crXerComprueba(lineas,c,alcLive);
+  chk.comp=comp;
   var nomV=c.cron_id;try{nomV=((typeof _wkNomCr==='function')?_wkNomCr(c.cron_id):c.cron_id)||c.cron_id}catch(_en){}
   var hoy=(typeof todayISO==='function')?todayISO():'';
   return {txt:lineas.join('\n'),nombre:String(nomV).replace(/[^\w.-]+/g,'_')+'_predecesoras_'+hoy.replace(/-/g,''),rel:rel,chk:chk}}
@@ -3985,11 +3993,27 @@ async function _crXerComprueba(lineas,c,alcLive){
     var ti=_crFec(f.o.target_start_date)||_crFec(f.o.early_start_date)||_crFec(f.o.act_start_date);
     var tf=_crFec(f.o.target_end_date)||_crFec(f.o.early_end_date)||_crFec(f.o.act_end_date);
     if(ti===o.ini&&tf===o.fin)fOk++;else fMal.push(cod+' (archivo '+ti+'\u2192'+tf+', aplicativo '+o.ini+'\u2192'+o.fin+')')});
-  /* lo ejecutado que lleva el archivo (solo en el de reprogramacion) */
-  var conAvance=0,hhUsadas=0,hhRem=0;
-  TA.filas.forEach(function(f){var pc=Number(f.o.phys_complete_pct)||0;if(pc>0)conAvance++;hhUsadas+=Number(f.o.act_work_qty)||0;hhRem+=Number(f.o.remain_work_qty)||0});
+  /* las HH del archivo: P6 suma las unidades LABOR de las asignaciones; sin
+     asignaciones, las de la tarea */
+  var conAvance=0,hhUsadas=0,hhRem=0,pres=0,presT=0,actT=0,conAsig={};
+  var TR=T.TASKRSRC,rsT={};(T.RSRC?T.RSRC.filas:[]).forEach(function(f){rsT[f.o.rsrc_id]=f.o.rsrc_type});
+  if(TR)TR.filas.forEach(function(x){var tp=x.o.rsrc_type||rsT[x.o.rsrc_id]||'RT_Labor';if(tp!=='RT_Labor')return;
+    conAsig[x.o.task_id]=1;pres+=Number(x.o.target_qty)||0;hhUsadas+=Number(x.o.act_reg_qty)||0;hhRem+=Number(x.o.remain_qty)||0});
+  TA.filas.forEach(function(f){var pc=Number(f.o.phys_complete_pct)||0;if(pc>0)conAvance++;
+    presT+=Number(f.o.target_work_qty)||0;actT+=Number(f.o.act_work_qty)||0;
+    if(!conAsig[f.o.task_id]){pres+=Number(f.o.target_work_qty)||0;hhUsadas+=Number(f.o.act_work_qty)||0;hhRem+=Number(f.o.remain_work_qty)||0}});
+  /* lo que el aplicativo tiene: el universo y su avance a hoy */
+  var presApp=0,actApp=0;
+  try{var u9=_crUniverso(c.cron_id,await _crAlc(c.cron_id)),rp9=_crReparto(tar),porId9={};_crPartidas().forEach(function(q){porId9[q.id]=q});
+    presApp=Number(u9.hh)||0;var hoy9=(typeof todayISO==='function')?todayISO():'';
+    tar.forEach(function(t){(t.items||[]).forEach(function(i){if(u9.items[i]==null)return;var pp=porId9[i];if(!pp)return;
+      var hi=(Number(u9.items[i])||0)/_crVeces(rp9,i);if(!(hi>0))return;var pc=0;
+      try{var pf=(typeof _fzPctAt==='function')?_fzPctAt(i,hoy9):null;pc=(pf!=null)?(Number(pf)||0):(Number(pctOfAt(pp,hoy9))||0)}catch(e){}
+      actApp+=hi*Math.max(0,Math.min(100,pc))/100})})}catch(_eu){}
+  var r2c=function(x){return Math.round(x*100)/100};
   return {enArchivo:Object.keys(enArch).length,vivas:vivas.length,faltan:faltan,distintas:distintas,sobran:sobran,sinTarea:sinTarea,fechasOk:fOk,fechasMal:fMal,
-    conAvance:conAvance,hhUsadas:Math.round(hhUsadas*100)/100,hhRem:Math.round(hhRem*100)/100}}
+    conAvance:conAvance,hhUsadas:r2c(hhUsadas),hhRem:r2c(hhRem),pres:r2c(pres),presTarea:r2c(presT),actTarea:r2c(actT),presApp:r2c(presApp),actApp:r2c(actApp),
+    presMal:Math.abs(pres-presApp)>0.05||Math.abs(presT-presApp)>0.05}}
 /* el .xer exportado lleva las fechas efectivas en TASK y las relaciones en
    TASKPRED: actualizadas, nuevas y quitadas */
 async function _crXerRelaciones(lineas,c,alcLive){
@@ -6651,8 +6675,8 @@ function _crXerFec(iso,hora){return iso?(iso+' '+hora):''}
 /* ---------------- Meter en el .xer lo que el aplicativo tiene y el no --------
    Las actividades que faltan se crean clonando una fila real; a las que ya
    estan se les pone el costo y las HH del aplicativo. */
-async function _crXerCompleta(lineas,c,corte,rpX){
-  var out={nuevas:0,recosteadas:0,hh:0,costo:0,sinSitio:0};
+async function _crXerCompleta(lineas,c,corte,rpX,soloPres){
+  var out={nuevas:0,recosteadas:0,hh:0,costo:0,sinSitio:0,asigNuevas:0};
   var T=_crXerTablas(lineas);
   var TA=T.TASK,TR=T.TASKRSRC,WB=T.PROJWBS;
   if(!TA||!TA.cs.length)return out;
@@ -6675,6 +6699,19 @@ async function _crXerCompleta(lineas,c,corte,rpX){
   var pctDe=function(t){
     var av=_crAvanceDe(t.items||[],corte,{cod:t.task_code,rp:rp});
     return {pct:Math.max(0,Math.min(100,av.pct||0)),ini:av.ini,fin:av.fin}};
+  /* el REAL en HH de una tarea: cada partida del universo por su % a la
+     fecha, igual que lo suma la hoja AGRUPADO */
+  var actDe=function(t){var a=0;
+    (t.items||[]).forEach(function(i){
+      if(u.items[i]==null)return;var pp=porId[i];if(!pp)return;
+      var hi=(Number(u.items[i])||0)/_crVeces(rp,i);if(!(hi>0))return;
+      var pc=0;try{var pf=(typeof _fzPctAt==='function')?_fzPctAt(i,corte):null;
+        pc=(pf!=null)?(Number(pf)||0):(Number(pctOfAt(pp,corte))||0)}catch(e){}
+      a+=hi*Math.max(0,Math.min(100,pc))/100});
+    return a};
+  /* la asignacion modelo de tipo LABOR: de ahi suma P6 las HH */
+  var rsTipo={};(T.RSRC?T.RSRC.filas:[]).forEach(function(f){rsTipo[f.o.rsrc_id]=f.o.rsrc_type});
+  var esLabor=function(x){var t=x.o.rsrc_type||rsTipo[x.o.rsrc_id]||'RT_Labor';return t==='RT_Labor'};
   /* donde colgar cada actividad: por el nombre de su WBS, y si no, del nodo
      raiz, que siempre existe */
   var raiz='',porNombre={};
@@ -6695,7 +6732,8 @@ async function _crXerCompleta(lineas,c,corte,rpX){
   if(!modelo)return out;
   var modR=null;
   if(TR)TR.filas.forEach(function(f){
-    if(!modR&&f.o.task_id===modelo.o.task_id)modR=f});
+    if(!modR&&f.o.task_id===modelo.o.task_id&&esLabor(f))modR=f});
+  if(TR&&!modR)TR.filas.forEach(function(f){if(!modR&&esLabor(f))modR=f});
   if(TR&&!modR)modR=TR.filas[0];
   /* los ids libres */
   var maxT=0;TA.filas.forEach(function(f){maxT=Math.max(maxT,Number(f.o.task_id)||0)});
@@ -6736,20 +6774,32 @@ async function _crXerCompleta(lineas,c,corte,rpX){
   var nuevasT=[],nuevasR=[];
   Object.keys(datos).forEach(function(cod){
     var D=datos[cod],t=D.t,av=pctDe(t);
-    var pct=av.pct,f=pct/100;
-    /* --- ya esta en el archivo: solo se le corrige el presupuesto --- */
+    /* el real: partida por partida; en "solo presupuesto" no hay avances
+       nuevos (la tarea que ya esta conserva el real que traia el archivo) */
+    var actHH=soloPres?0:actDe(t);
+    var f=(D.hh>0)?Math.max(0,Math.min(1,actHH/D.hh)):0;
+    var pct=soloPres?0:(D.hh>0?f*100:av.pct);
+    /* --- ya esta en el archivo: se le pone el presupuesto y el real --- */
     if(yaEsta[cod]){
       var fi=yaEsta[cod];
+      if(soloPres){var aO=Math.max(0,Math.min(D.hh,Number(fi.o.act_work_qty)||0));f=(D.hh>0)?aO/D.hh:0}
       fi.v[TA.col.target_work_qty]=r2(D.hh);
       fi.v[TA.col.remain_work_qty]=r2(D.hh*(1-f));
       fi.v[TA.col.act_work_qty]=r2(D.hh*f);
+      /* duracion fija y unidades: al correr la duracion en P6 las HH no cambian */
+      if(TA.col.duration_type!=null)fi.v[TA.col.duration_type]='DT_FixedDUR2';
       lineas[fi.i]='%R\t'+fi.v.join('\t');
+      var dur=Number(fi.o.target_drtn_hr_cnt)||0,rdur=Number(fi.o.remain_drtn_hr_cnt)||0;
       if(TR){
         var mias=TR.filas.filter(function(x){return x.o.task_id===fi.o.task_id});
         var base=0;mias.forEach(function(x){base+=Number(x.o.target_cost)||0});
+        var lab=mias.filter(esLabor);
         mias.forEach(function(x,k){
           var parte=(base>0)?((Number(x.o.target_cost)||0)/base):(1/mias.length);
-          var cst=D.cost*parte,qty=D.hh*parte;
+          /* las HH van solo a las asignaciones LABOR (de ahi las suma P6);
+             el costo se reparte entre todas como venia */
+          var parteHH=lab.length?(esLabor(x)?((base>0&&lab.some(function(z){return (Number(z.o.target_cost)||0)>0}))?((Number(x.o.target_cost)||0)/lab.reduce(function(a,z){return a+(Number(z.o.target_cost)||0)},0)):(1/lab.length)):0):parte;
+          var cst=D.cost*parte,qty=D.hh*parteHH;
           x.v[TR.col.target_qty]=r2(qty);
           x.v[TR.col.remain_qty]=r2(qty*(1-f));
           x.v[TR.col.act_reg_qty]=r2(qty*f);
@@ -6757,8 +6807,28 @@ async function _crXerCompleta(lineas,c,corte,rpX){
           x.v[TR.col.remain_cost]=r4(cst*(1-f));
           x.v[TR.col.act_reg_cost]=r4(cst*f);
           if(TR.col.cost_per_qty!=null)x.v[TR.col.cost_per_qty]=r4(qty>0?(cst/qty):0);
+          if(TR.col.target_qty_per_hr!=null)x.v[TR.col.target_qty_per_hr]=r4(dur>0?(qty/dur):0);
+          if(TR.col.remain_qty_per_hr!=null)x.v[TR.col.remain_qty_per_hr]=r4(rdur>0?(qty*(1-f)/rdur):0);
+          if(TR.col.act_this_per_qty!=null&&!soloPres)x.v[TR.col.act_this_per_qty]=r2(qty*f);
           lineas[x.i]='%R\t'+x.v.join('\t')});
-        if(mias.length)out.recosteadas++}
+        if(mias.length)out.recosteadas++;
+        /* sin asignacion labor: se le crea una, si no P6 no ve sus HH */
+        if(!lab.length&&modR){
+          maxR++;
+          var w0=modR.v.slice();
+          var pR=function(campo,val){var j=TR.col[campo];if(j!=null)w0[j]=val};
+          pR('taskrsrc_id',String(maxR));pR('task_id',fi.o.task_id);pR('proj_id',fi.o.proj_id||modR.o.proj_id);
+          pR('target_qty',r2(D.hh));pR('remain_qty',r2(D.hh*(1-f)));pR('act_reg_qty',r2(D.hh*f));
+          pR('target_cost',r4(mias.length?0:D.cost));pR('remain_cost',r4(mias.length?0:D.cost*(1-f)));pR('act_reg_cost',r4(mias.length?0:D.cost*f));
+          pR('act_ot_qty','0');pR('act_ot_cost',r4(0));pR('act_this_per_qty',r2(D.hh*f));pR('act_this_per_cost',r4(0));
+          pR('cost_per_qty',r4(mias.length?0:(D.hh>0?(D.cost/D.hh):0)));
+          pR('target_qty_per_hr',r4(dur>0?(D.hh/dur):0));pR('remain_qty_per_hr',r4(rdur>0?(D.hh*(1-f)/rdur):0));
+          pR('target_start_date',fi.o.target_start_date||'');pR('target_end_date',fi.o.target_end_date||'');
+          pR('restart_date',fi.o.restart_date||fi.o.target_start_date||'');pR('reend_date',fi.o.reend_date||fi.o.target_end_date||'');
+          pR('rem_late_start_date',fi.o.rem_late_start_date||'');pR('rem_late_end_date',fi.o.rem_late_end_date||'');
+          pR('act_start_date',fi.o.act_start_date||'');pR('act_end_date',fi.o.act_end_date||'');
+          pR('guid',_crXerGuid());
+          nuevasR.push('%R\t'+w0.join('\t'));out.asigNuevas++}}
       return}
     /* --- no esta: se clona una fila de verdad y se cambia lo que toca --- */
     var ini=t.ini||'',fin=t.fin||ini;
@@ -6776,6 +6846,7 @@ async function _crXerCompleta(lineas,c,corte,rpX){
     pon('target_work_qty',r2(D.hh));
     pon('remain_work_qty',r2(D.hh*(1-f)));
     pon('act_work_qty',r2(D.hh*f));
+    pon('duration_type','DT_FixedDUR2');
     pon('target_drtn_hr_cnt',String(horas));
     pon('remain_drtn_hr_cnt',String(Math.round(horas*(1-f)*100)/100));
     pon('target_start_date',_crXerFec(ini,'07:00'));
@@ -6813,8 +6884,8 @@ async function _crXerCompleta(lineas,c,corte,rpX){
       ponR('act_ot_qty','0');ponR('act_ot_cost',r4(0));
       ponR('act_this_per_qty',r2(D.hh*f));ponR('act_this_per_cost',r4(D.cost*f));
       ponR('cost_per_qty',r4(D.hh>0?(D.cost/D.hh):0));
-      ponR('target_qty_per_hr',r2(horas>0?(D.hh/horas):0));
-      ponR('remain_qty_per_hr',r2(horas>0?(D.hh*(1-f)/horas):0));
+      ponR('target_qty_per_hr',r4(horas>0?(D.hh/horas):0));
+      ponR('remain_qty_per_hr',r4((horas*(1-f))>0?(D.hh*(1-f)/(horas*(1-f))):0));
       ponR('target_start_date',_crXerFec(ini,'07:00'));
       ponR('target_end_date',_crXerFec(fin,'18:00'));
       ponR('restart_date',_crXerFec(ini,'07:00'));
@@ -14583,7 +14654,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904d7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904d8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
