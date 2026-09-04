@@ -13779,7 +13779,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260901a9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260901b1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -16439,6 +16439,8 @@ function _pgDiasParte(pid,fase){
   var d=(typeof _rpDias==='function')?_rpDias(pid):diasDe(pid);
   if(d==null)d=progPickedDias||null;
   if(!d)return null;
+  /* lo que no se realiza tampoco lleva dias */
+  try{var fo=(typeof _apuOffFrac==='function')?_apuOffFrac(pid):0;if(fo>0)d=d*(1-fo)}catch(_eo){}
   var w=Math.max(0,Math.min(100,Number(fase.peso)||0))/100;
   var pc=0;try{pc=(typeof _fzPctParte==='function')?_fzPctParte(fase):0}catch(e){}
   return Math.max(1,Math.ceil(d*w*(1-Math.max(0,Math.min(100,pc))/100)))}
@@ -17115,12 +17117,12 @@ function _fzInject(){try{
         var cantP=Number(x.cantidad)||0;
         var pcRaw=cantP>0?Math.round((Number(x.avance)||0)/cantP*10000)/100:0;
         H+='<span style="display:block"><b style="color:'+col+'">'+esc(x.nombre)+'</b>'+
-           ' <span style="color:#1B2433;font-weight:700">'+(Math.round((Number(x.avance)||0)*1e4)/1e4)+' / '+(Math.round((Number(x.cantidad)||0)*1e4)/1e4)+' '+esc(x.unidad||'')+'</span>'+
+           ' <span style="color:#1B2433;font-weight:700">'+(Math.round((Number(x.avance)||0)*100)/100)+' / '+(Math.round((Number(x.cantidad)||0)*100)/100)+' '+esc(x.unidad||'')+'</span>'+
            ' <span style="color:'+col+';font-weight:800">'+pc+'% hecho</span>'+
            (pcRaw>100.005?(' <span style="background:#FDEAD7;color:#B45309;border:1px solid #F0B879;border-radius:5px;padding:0 4px;font-weight:800">+'+(Math.round((pcRaw-100)*100)/100)+'% sobre</span>'):'')+
            ' <span style="color:var(--muted)">· aporta '+aporta+'% de sus '+pesoP+'%</span></span>'});
       H+='<span style="display:block;margin-top:2px"><b style="color:#1E7A46;font-size:11.5px">Actividad '+(_fzPct(id)||0)+'%</b>'+
-         '<span style="color:var(--muted)"> · le quedan '+Math.max(0,100-(_fzPct(id)||0))+'%</span>'+
+         '<span style="color:var(--muted)"> · le quedan '+(Math.round(Math.max(0,100-(_fzPct(id)||0))*100)/100)+'%</span>'+
          (dias?('<span style="color:var(--muted)"> · '+esc(dias)+'</span>'):'')+'</span>';
       ln.innerHTML=H;
       if(cq){cq.style.display='none';cq.parentNode.insertBefore(ln,cq.nextSibling)}
@@ -17572,6 +17574,9 @@ async function _fzDesdeApu(id,p,silencioso){
     var gs=(_apuGrupos(r)||[]).filter(function(g){return !g.off&&_apuGrupoTot(r,g.id)>0});
     var m=(typeof metaOf==='function')?metaOf(id):null;
     var cant=(m&&Number(m.total))||(p&&Number(p.metrado))||0;
+    /* los apartados que no se realizan recortan el metrado a ejecutar: con
+       lo hecho sobre lo que SI se hace, la actividad puede llegar al 100% */
+    try{var fo=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;if(fo>0)cant=Math.round(cant*(1-fo)*100)/100}catch(_eo){}
     var undC=(m&&m.unidad)||r.unidad||(p&&p.unidad)||'UND';
     var und=r.unidad||undC;
     var prev={};try{((_fzDe(id)||{}).fases||[]).forEach(function(q){
@@ -17946,6 +17951,7 @@ function _apuUI(p){
       var gsx=_apuGrupos(r).filter(function(g){return !g.off&&_apuGrupoTot(r,g.id)>0});
       if(gsx.length){
         var cant=(typeof metaOf==='function'&&metaOf(id))?metaOf(id).total:(p.metrado||0);
+        try{var fo=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;if(fo>0)cant=Math.round(cant*(1-fo)*100)/100}catch(_eo){}
         var und=r.unidad||p.unidad||'UND';
         var undC=((typeof metaOf==='function'&&metaOf(id))?metaOf(id).unidad:'')||und;
         /* cada apartado se lleva SU porcentaje real del costo; lo que no esta en
