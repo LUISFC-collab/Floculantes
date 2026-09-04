@@ -827,7 +827,9 @@ function lbl(s){return s==='na'?'no aporta avance':s==='done'?'Terminado':s==='c
    (apartados apagados); no es un Terminado de verdad */
 function _fzCerr(id){try{
   var fo=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;if(!(fo>0))return false;
-  var r=(typeof _fzDe==='function')?_fzDe(id):null;if(!r)return false;
+  var r=(typeof _fzDe==='function')?_fzDe(id):null;
+  if(!r){var mC=metaOf(id);var tC=(mC&&Number(mC.total))||0;if(!(tC>0))return false;
+    var fis0=(Number(acumCant(id))||0)/tC*100;return fis0<99.995&&(fis0+fo*100)>=99.995}
   var tot=0,pts=0;(r.fases||[]).forEach(function(x){var w=Number(x.peso)||0;tot+=w;pts+=w*_fzPctParte(x)/100});
   if(tot<=0)return false;
   var fisico=pts/tot*100;
@@ -1230,7 +1232,7 @@ function _rtOnCambio(tabla){
     try{if(tabla==='ficticio_create_250826'&&typeof _ficPull==='function')_ficPull()}catch(e){}
     try{if(tabla==='conexiones_create_250826'&&typeof _cnxPull==='function')_cnxPull()}catch(e){}
     return}
-  if(tabla==='ajustes_create_110826'){try{if(typeof _ajPull==='function')_ajPull()}catch(e){}try{if(typeof _apuPull==='function')_apuPull()}catch(e){}try{if(typeof _cbPull==='function')_cbPull()}catch(e){}try{if(typeof _galPull==='function')_galPull().then(function(){try{if(document.getElementById('_docOv')&&typeof _docRender==='function')_docRender()}catch(e){}})}catch(e){}return}
+  if(tabla==='ajustes_create_110826'){try{if(typeof _ajPull==='function')Promise.resolve(_ajPull()).then(function(){try{window._hhCache=null;if(typeof renderList==='function'&&document.getElementById('list'))renderList()}catch(e){}})}catch(e){}try{if(typeof _apuPull==='function')_apuPull()}catch(e){}try{if(typeof _cbPull==='function')_cbPull()}catch(e){}try{if(typeof _galPull==='function')_galPull().then(function(){try{if(document.getElementById('_docOv')&&typeof _docRender==='function')_docRender()}catch(e){}})}catch(e){}return}
   if(tabla==='actividades_create_110826'){try{if(typeof _catPull==='function')_catPull()}catch(e){}return}
   if(tabla==='config_usuario_create_110826'){try{if(typeof _cuPull==='function')_cuPull()}catch(e){}return}
   if(tabla==='crono_cuadrillas_create_090826'){try{if(typeof _ccPull==='function')_ccPull()}catch(e){}return}
@@ -13788,7 +13790,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260901b5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260901b6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -16943,6 +16945,14 @@ try{var _pctRawBaseFz=pctRawOf;pctRawOf=function(p){
 try{var _pctAtBaseFz=pctOfAt;pctOfAt=function(p,iso){
   try{var r=(p&&p.id)?_fzPctAt(p.id,iso):null;if(r!=null)return r}catch(e){}
   return _pctAtBaseFz.apply(this,arguments)}}catch(_fzp3){}
+/* sin partes, el saldo retirado tambien cuenta como hecho (con partes ya lo
+   suma _fzPct) */
+try{var _pctBaseRet=pctOf;pctOf=function(p){var v=_pctBaseRet.apply(this,arguments);
+  try{if(p&&p.id&&!_fzDe(p.id)){var f=_retFrac(p.id);if(f>0&&isFinite(Number(v)))v=Math.round(Math.min(100,Number(v)+f*100)*100)/100}}catch(e){}return v}}catch(_rp1){}
+try{var _pctRawBaseRet=pctRawOf;pctRawOf=function(p){var v=_pctRawBaseRet.apply(this,arguments);
+  try{if(p&&p.id&&!_fzDe(p.id)){var f=_retFrac(p.id);if(f>0&&isFinite(Number(v)))v=Math.round(Math.min(100,Number(v)+f*100)*100)/100}}catch(e){}return v}}catch(_rp2){}
+try{var _pctAtBaseRet=pctOfAt;pctOfAt=function(p,iso){var v=_pctAtBaseRet.apply(this,arguments);
+  try{if(p&&p.id&&!_fzDe(p.id)){var f=_retFrac(p.id);if(f>0&&isFinite(Number(v)))v=Math.round(Math.min(100,Number(v)+f*100)*100)/100}}catch(e){}return v}}catch(_rp3){}
 /* ---------- la pantalla de definicion ---------- */
 function _fzUI(p){
   if(!p||!p.id)return;
@@ -17142,7 +17152,7 @@ function _fzInject(){try{
            (pcRaw>100.005?(' <span style="background:#FDEAD7;color:#B45309;border:1px solid #F0B879;border-radius:5px;padding:0 4px;font-weight:800">+'+(Math.round((pcRaw-100)*100)/100)+'% sobre</span>'):'')+
            ' <span style="color:var(--muted)">· aporta '+aporta+'% de sus '+pesoP+'%</span></span>'});
       try{var _fo=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;
-        if(_fo>0){var _rA=_apuDe(id);var _nO=((_rA&&_rA.grupos)||[]).filter(function(g){return g&&g.off}).map(function(g){return String(g.nombre||'').toUpperCase()}).join(', ');
+        if(_fo>0){var _rA=_apuDe(id);var _rt=(typeof _retDe==='function')?_retDe(id):null;var _nO=_rt?(_apuCant(_rt.cant)+' '+String(_rt.unidad||'').toUpperCase()+' RETIRADAS'):((_rA&&_rA.grupos)||[]).filter(function(g){return g&&g.off}).map(function(g){return String(g.nombre||'').toUpperCase()}).join(', ');
           H+='<span style="display:block"><b style="color:#7A4B00">⏸ '+esc(_nO)+'</b> <span style="color:#7A4B00;font-weight:700">'+(Math.round(_fo*10000)/100)+'% no se realiza</span> <span style="color:var(--muted)">· cuenta como hecho</span></span>'}}catch(_e){}
       H+='<span style="display:block;margin-top:2px"><b style="color:#1E7A46;font-size:11.5px">Actividad '+(_fzPct(id)||0)+'%</b>'+
          '<span style="color:var(--muted)"> · le quedan '+(Math.round(Math.max(0,100-(_fzPct(id)||0))*100)/100)+'%</span>'+
@@ -17489,7 +17499,11 @@ function _apuTotalCons(r){return Math.max(0,_apuTotal(r)-_apuOffTot(r))}
 function _apuGrupoPct(r,gid){if(_apuGrupoOff(r,gid))return 0;var t=_apuTotalCons(r);return t>0?(_apuGrupoTot(r,gid)/t*100):0}
 /* la fraccion del APU que esta apagada: sale de las HH de la partida para
    los pesos del avance, como pasa con las actividades apagadas */
-function _apuOffFrac(id){try{var r=_apuDe(id);if(!r||!r.grupos||!r.grupos.some(function(g){return g&&g.off}))return 0;
+function _apuOffFrac(id){try{
+  /* la decision explicita del admin (saldo retirado) manda; si no la hay,
+     la fraccion de los apartados apagados del APU */
+  var rf=(typeof _retFrac==='function')?_retFrac(id):0;if(rf>0)return rf;
+  var r=_apuDe(id);if(!r||!r.grupos||!r.grupos.some(function(g){return g&&g.off}))return 0;
   var t=_apuTotal(r);if(!(t>0))return 0;return Math.max(0,Math.min(1,_apuOffTot(r)/t))}catch(e){return 0}}
 /* si todos los insumos del apartado comparten unidad, se puede hablar de una
    cantidad unida (30 und de tuberia); si mezclan unidades, no aplica */
@@ -18215,14 +18229,19 @@ Array.prototype.forEach.call(w.querySelectorAll('.leaf[data-id]'),function(el){
     el.style.background='#FFF3C4';el.setAttribute('data-hhoff','1');return}
   /* los apartados del APU que no se consideran: solo ellos, en un recuadro
      amarillo pastel; la tarjeta queda en blanco */
-  try{var rA=(typeof _apuDe==='function')?_apuDe(id):null;
+  try{var retC=(typeof _retDe==='function')?_retDe(id):null;
+    var rA=(typeof _apuDe==='function')?_apuDe(id):null;
     var offs=(rA&&rA.grupos)?rA.grupos.filter(function(g){return g&&g.off}):[];
-    if(offs.length){var tA=_apuTotal(rA);
+    if(retC||offs.length){
       var o=document.createElement('span');o.className='_hhTag';
-      o.title='Apartado(s) del APU que no se van a realizar: no cuentan para los pesos ni para las HH de esta actividad.';
       o.style.cssText='display:inline-block;margin-left:4px;font-size:10px;font-weight:800;color:#7A4B00;background:#FFF9E3;border:1px solid #F0D48A;border-radius:5px;padding:2px 6px;letter-spacing:.02em;white-space:nowrap;max-width:none;overflow:visible;overflow-wrap:normal;vertical-align:middle';
-      o.textContent='\u23f8 No se realiza: '+offs.map(function(g){var f=tA>0?Math.round(_apuGrupoTot(rA,g.id)/tA*1000)/10:0;
-        return String(g.nombre||'').toUpperCase()+(f?(' '+f+'%'):'')}).join(' \u00b7 ');
+      if(retC){
+        o.title='El administrador retir\u00f3 este saldo: ya no se realiza y cuenta como hecho. Se deshace en la ficha de la actividad.';
+        o.textContent='\u23f8 Saldo retirado: '+_apuCant(retC.cant)+' '+String(retC.unidad||'')+' ('+(Math.round(_retFrac(id)*10000)/100)+'%) \u00b7 no se realiza'}
+      else{var tA=_apuTotal(rA);
+        o.title='Apartado(s) del APU que no se van a realizar: no cuentan para los pesos ni para las HH de esta actividad.';
+        o.textContent='\u23f8 No se realiza: '+offs.map(function(g){var f=tA>0?Math.round(_apuGrupoTot(rA,g.id)/tA*1000)/10:0;
+          return String(g.nombre||'').toUpperCase()+(f?(' '+f+'%'):'')}).join(' \u00b7 ')}
       nm.appendChild(o)}}catch(_eo){}
   var pe=_hhPeso(p);if(!pe)return;
   var b=document.createElement('span');b.className='_hhTag';
@@ -18249,6 +18268,39 @@ Array.prototype.forEach.call(w.querySelectorAll('.wbs-sys'),function(sy){
    el resto se reparte solo. La lista de apagadas vive en la tabla de ajustes
    (ajustes_create_110826), que ya tiene lápida, trigger de updated_at y tiempo real. */
 function _hhApagadas(){try{var v=_ajGet('hh_inactivas',[]);return (v&&v.length)?v:[]}catch(e){return []}}
+/* ===== RETIRO DE SALDO: el admin decide que lo que falta de una actividad
+   ya no se realiza. Vive en la tabla ajustes (realtime, trigger, tumbas)
+   con la clave saldo_ret:<id>. La fraccion retirada cuenta como hecha y
+   sale de las HH y del universo del cronograma. ===== */
+function _retDe(id){try{var v=_ajGet('saldo_ret:'+id,null);if(!v||!(Number(v.cant)>0))return null;return v}catch(e){return null}}
+function _retFrac(id){try{var v=_retDe(id);if(!v)return 0;
+  var m=(typeof metaOf==='function')?metaOf(id):null;var tot=(m&&Number(m.total))||Number(v.total)||0;
+  if(!(tot>0))return 0;return Math.max(0,Math.min(1,Number(v.cant)/tot))}catch(e){return 0}}
+function _retRefresca(){try{window._hhCache=null}catch(e){}
+  try{if(typeof renderList==='function')renderList()}catch(e){}
+  try{var e9=window._crCurEstado;if(e9&&document.getElementById('_crCurOv')){document.getElementById('_crCurOv').remove();_crCurvaUI(e9.c,e9.nivel,e9.conWbs,e9.esp)}}catch(e){}
+  try{if(typeof _pgCurvaRefresca==='function')_pgCurvaRefresca()}catch(e){}}
+async function _retPoner(id){
+  if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return false}
+  var m=metaOf(id);var tot=(m&&Number(m.total))||0;
+  if(!(tot>0)){toast('Define el metrado primero');return false}
+  var hecho=0;try{hecho=Number(acumCant(id))||0}catch(e){}
+  var saldo=Math.max(0,Math.round((tot-hecho)*100)/100);
+  if(!(saldo>0)){toast('No hay saldo: ya est\u00e1 al 100%');return false}
+  var v=prompt('\u00bfQu\u00e9 cantidad ya NO se realiza?\n(saldo actual '+_apuCant(saldo)+' '+(m.unidad||'')+' de '+_apuCant(tot)+')',_apuCant(saldo));
+  if(v==null)return false;v=Number(String(v).replace(',','.'));
+  if(!isFinite(v)||v<=0||v>tot+1e-9){toast('Cantidad inv\u00e1lida');return false}
+  await _ajSet('saldo_ret:'+id,{cant:Math.round(v*100)/100,hecho:hecho,total:tot,unidad:m.unidad||'',
+    quien:(state.user&&state.user.supervisor)||'',fecha:(typeof todayISO==='function')?todayISO():''},'saldo retirado (no se realiza) de '+id);
+  try{logCambio('RETIRO_SALDO',id,'Retirado el saldo: '+v+' '+(m.unidad||'')+' ya no se realizan')}catch(e){}
+  _retRefresca();return true}
+async function _retDevolver(id){
+  if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return false}
+  var v=_retDe(id);if(!v)return false;
+  if(!confirm('\u00bfDevolver el saldo de '+_apuCant(v.cant)+' '+(v.unidad||'')+'?\nVuelve a ser trabajo por hacer.'))return false;
+  await _ajSet('saldo_ret:'+id,{cant:0},'saldo devuelto de '+id);
+  try{logCambio('RETIRO_SALDO',id,'Devuelto el saldo: vuelve a ser trabajo por hacer')}catch(e){}
+  _retRefresca();return true}
 function _hhOff(id){if(!id)return false;var L=_hhApagadas();for(var i=0;i<L.length;i++){if(String(L[i])===String(id))return true}return false}
 async function _hhToggle(id){
   if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return}
@@ -18315,6 +18367,16 @@ function _actDetalle(id){
   }else{
     H+='<div style="font-size:12.5px;color:#0C5132;line-height:1.5">Terminada al 100% aporta <b>'+_hhPct(peso)+'</b> del avance de <b>'+esc(p.esp||'')+'</b>, según sus '+(isFinite(hh)?_nNum(hh,1):'—')+' hh sobre el total de la especialidad.</div>';
   }
+  /* el saldo por ejecutar y su retiro: la decision de que lo que falta
+     ya no se realiza se toma y se deshace aqui */
+  try{var mR=metaOf(id);var totR=(mR&&Number(mR.total))||0;
+    if(totR>0&&mR.unidad!=='glb'){var hechoR=0;try{hechoR=Number(acumCant(id))||0}catch(_e1){}
+      var retR=_retDe(id);var saldoR=Math.max(0,Math.round((totR-hechoR)*100)/100);
+      H+='<div style="margin-top:10px;background:'+(retR?'#FCEFD9':'#F4F7FB')+';border:1.5px solid '+(retR?'#EFC98A':'var(--line)')+';border-radius:12px;padding:11px 12px">'+
+        '<div style="font-size:11px;font-weight:800;color:#5C6779;letter-spacing:.03em">SALDO POR EJECUTAR</div>'+
+        '<div style="font-size:12.5px;color:#1B2433;line-height:1.5;margin-top:3px">Hechas <b>'+_apuCant(hechoR)+'</b> de <b>'+_apuCant(totR)+' '+esc(mR.unidad||'')+'</b> \u00b7 saldo <b>'+_apuCant(saldoR)+' '+esc(mR.unidad||'')+'</b>'+
+        (retR?('<br><b style="color:#7A4B00">\u23f8 '+_apuCant(retR.cant)+' '+esc(retR.unidad||mR.unidad||'')+' retiradas ('+(Math.round(_retFrac(id)*10000)/100)+'%)</b>: ya no se realizan y cuentan como hechas'+(retR.quien?(' \u00b7 '+esc(retR.quien)+' '+esc(retR.fecha||'')):'')):'')+'</div>'+
+        '<button id="_actRet" style="width:100%;margin-top:9px;border:0;border-radius:10px;padding:11px;font-weight:800;font-size:12.5px;cursor:pointer;color:#fff;background:'+(retR?'#1E7A46':'#8A4B00')+'">'+(retR?'\u25b6 Devolver el saldo (vuelve a ser trabajo por hacer)':'\u23f8 Retirar el saldo \u2014 ya no se realiza')+'</button></div>'}}catch(_er){}
   H+='<button id="_actHH" style="width:100%;margin-top:10px;border:0;border-radius:10px;padding:12px;font-weight:800;font-size:13px;cursor:pointer;color:#fff;background:'+(off?'#1E7A46':'#8A4B00')+'">'+
      (off?'▶ Volver a contar sus HH para los pesos':'⏸ No usar sus HH para los pesos')+'</button>';
   H+='</div>';
@@ -18326,6 +18388,8 @@ function _actDetalle(id){
   document.getElementById('_actX').onclick=function(){ov.remove()};
   var bt=document.getElementById('_actHH');
   if(bt)bt.onclick=async function(){bt.disabled=true;bt.textContent='Guardando…';await _hhToggle(id);ov.remove();_actDetalle(id)};
+  var br=document.getElementById('_actRet');
+  if(br)br.onclick=async function(){br.disabled=true;var ok=false;try{ok=_retDe(id)?await _retDevolver(id):await _retPoner(id)}catch(e){}br.disabled=false;if(ok){ov.remove();_actDetalle(id)}};
 }
 /* La ficha de costos del admin vive en el menu del engranaje: el nombre ya no
    la abre, porque tocar cualquier parte de la tarjeta abre las Partes. */
