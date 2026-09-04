@@ -9000,23 +9000,25 @@ function _wkCaratulaBase(xml,semN,proyecto){
 
 /* Las HH de cada PARTIDA repartidas por semana, segun el cronograma que sea.
    Es la moneda comun entre lineas base. */
-function _wkPlanPorItem(tar,uItems,semanas){
+function _wkPlanPorItem(tar,uItems,semanas,alc){
   var rp=_crReparto(tar),ult=semanas.length-1,out={};
   (tar||[]).forEach(function(t){
-    if(!t.ini||!t.fin)return;
-    var d0=_crASerial(t.ini),nd=Math.max(1,_crASerial(t.fin)-d0+1);
     (t.items||[]).forEach(function(it){
       var hh=(Number(uItems[it])||0)/_crVeces(rp,it);
       if(!(hh>0))return;
       var fila=out[it]||(out[it]=semanas.map(function(){return 0}));
-      var porDia=hh/nd;
-      for(var k=0;k<nd;k++){
-        var dia=_crDeSerial(d0+k),w=-1;
-        if(dia>semanas[ult].fin)w=ult;
-        else if(dia<semanas[0].ini)w=0;
-        else for(var j=0;j<semanas.length;j++)
-          if(dia>=semanas[j].ini&&dia<=semanas[j].fin){w=j;break}
-        if(w>=0)fila[w]+=porDia}})});
+      /* los tramos de esta partida dentro de su tarea, como la curva */
+      var trs=[];try{var u1={};u1[it]=uItems[it];trs=_crTramosDe(Object.assign({},t,{items:[it]}),alc||{},u1,rp)}catch(_e){trs=[]}
+      if(!trs.length&&t.ini&&t.fin)trs=[{ini:t.ini,fin:t.fin,hh:hh}];
+      trs.forEach(function(tr){if(!(tr.hh>0)||!tr.ini||!tr.fin)return;
+        var d0=_crASerial(tr.ini),nd=Math.max(1,_crASerial(tr.fin)-d0+1),porDia=tr.hh/nd;
+        for(var k=0;k<nd;k++){
+          var dia=_crDeSerial(d0+k),w=-1;
+          if(dia>semanas[ult].fin)w=ult;
+          else if(dia<semanas[0].ini)w=0;
+          else for(var j=0;j<semanas.length;j++)
+            if(dia>=semanas[j].ini&&dia<=semanas[j].fin){w=j;break}
+          if(w>=0)fila[w]+=porDia}})})});
   return out}
 /* Suma el reparto de un puñado de partidas.
    `veces` dice entre cuantas actividades del cronograma vigente se reparte
@@ -10348,14 +10350,19 @@ function _wkBloquesDe(C,esp,sem,corte,porId,pctA){
       var valen=(t.items||[]).some(function(i){
         return cc.incl&&cc.incl[i]&&porId[i]&&(Number(porId[i].tot)||0)>0});
       if(!(hh>0)&&ms.length&&!valen)return;
-      /* el plan: las horas repartidas por los dias de SU tarea */
+      /* el plan: los TRAMOS de la tarea, los mismos de la curva de la app
+         (fechas efectivas del alcance y, con avance cargado, lo hecho por
+         los partes reales hasta la fecha de datos y el remanente) */
       var s=sem.map(function(){return 0}),ult=sem.length-1;
-      if(t.ini&&t.fin&&hh>0){
-        var d0=_crASerial(t.ini),nd=Math.max(1,_crASerial(t.fin)-d0+1),pd=hh/nd;
-        for(var k=0;k<nd;k++){var d=_crDeSerial(d0+k),w=-1;
-          if(d>sem[ult].fin)w=ult;else if(d<sem[0].ini)w=0;
-          else for(var j=0;j<sem.length;j++)if(d>=sem[j].ini&&d<=sem[j].fin){w=j;break}
-          if(w>=0)s[w]+=pd}}
+      if(hh>0){
+        var trs=[];try{trs=_crTramosDe(t,cc.alc,cc.u.items,cc.rp)}catch(_et){trs=[]}
+        if(!trs.length&&t.ini&&t.fin)trs=[{ini:t.ini,fin:t.fin,hh:hh}];
+        trs.forEach(function(tr){if(!(tr.hh>0)||!tr.ini||!tr.fin)return;
+          var d0=_crASerial(tr.ini),nd=Math.max(1,_crASerial(tr.fin)-d0+1),pd=tr.hh/nd;
+          for(var k=0;k<nd;k++){var d=_crDeSerial(d0+k),w=-1;
+            if(d>sem[ult].fin)w=ult;else if(d<sem[0].ini)w=0;
+            else for(var j=0;j<sem.length;j++)if(d>=sem[j].ini&&d<=sem[j].fin){w=j;break}
+            if(w>=0)s[w]+=pd}})}
       /* el avance real de SUS partidas, con el reparto en orden */
       var acumReal=sem.map(function(s2){
         if(!(hh>0))return 0;
@@ -10409,7 +10416,7 @@ async function _wkDatosLibro(semN,corte,ids){
     C.push({id:c.cron_id,nombre:c.nombre||'',ini:c.inicio||'',fin:c.fin||'',
       tar:tar,alc:alc,u:u,nomWbs:nom,
       incl:_crIncluidas(c.cron_id,alc),
-      porItem:_wkPlanPorItem(tar,u.items,sem),
+      porItem:_wkPlanPorItem(tar,u.items,sem,alc),
       tarDe:(function(){var m={};tar.forEach(function(t2){
         (t2.items||[]).forEach(function(i){(m[i]||(m[i]=[])).push(t2)})});return m})(),
       rp:_crReparto(tar)})}
@@ -14994,7 +15001,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904g4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904g5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
