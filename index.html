@@ -2586,10 +2586,15 @@ function _crIncluidas(cronId,alc){
 function _crUniverso(cronId,alc){
   alc=alc||(window._crAl&&window._crAl[cronId])||{};
   var hhT=0,n=0,items={};
+  /* solo lo que esta en alguna actividad del cronograma: una partida sin
+     actividad no entra en el calculo (las tareas ya deben estar leidas) */
+  var enT=null,T9=(window._crTar||{})[cronId];
+  if(T9&&T9.length){enT={};T9.forEach(function(t){(t.items||[]).forEach(function(i){enT[i]=1})})}
   _crPartidas().forEach(function(p){
     var a=alc[p.id];
     var inc=a?a.inc:_crPorDefecto(p);
     if(!inc)return;
+    if(enT&&!enT[p.id])return;
     var hh=(a&&a.hh!=null)?a.hh:p.hh;
     if(!(hh>0))return;
     /* los apartados del APU que no se realizan se llevan su fraccion de las
@@ -2941,11 +2946,12 @@ async function _crAlcanceUI(c){
     var dueno=window._crDueno||{};
     P.forEach(function(p){
       var h=hhDe(p);
-      if(sel[p.id]&&h>0){hh+=h;n++;if(p.ret)nr++;
-        if(!dueno[p.id]){sinT++;hhSinT+=h}}
+      if(sel[p.id]&&h>0){if(p.ret)nr++;
+        /* sin actividad no cuenta: se avisa aparte */
+        if(!dueno[p.id]){sinT++;hhSinT+=h}else{hh+=h;n++}}
       if(fec[p.id]&&(fec[p.id].ini||fec[p.id].fin))cf++});
     var e=document.getElementById('_crSum');
-    e.textContent=n+' partidas'+(nr?(' ('+nr+' retiradas)'):'')+' · '+(Math.round(hh*100)/100)+' hh · '+cf+' con fecha';
+    e.textContent=n+' partidas'+(nr?(' ('+nr+' retiradas)'):'')+' · '+(Math.round(hh*100)/100)+' hh · '+cf+' con fecha'+(sinT?(' · '+sinT+' sin actividad no cuentan'):'');
     var w=document.getElementById('_crSinT');
     if(w){w.innerHTML=sinT?('⚠ '+sinT+' con HH sin tarea ('+(Math.round(hhSinT*100)/100)+' hh) — átalas en 🔗 Mapeo'):'✓ todas en una tarea';
       w.style.color=sinT?'#F0A3A3':'#9FE8B0';
@@ -3877,8 +3883,10 @@ function _crPintaHoja2(D,P,sel,fec,q){
   var alc=0,nAlc=0,hhSue=0,nSue=0;
   (P||[]).forEach(function(p){
     if(!sel[p.id])return;
-    var h=hhEd(p);alc+=h;nAlc++;
-    if(!recl[p.id]){hhSue+=h;nSue++}});
+    var h=hhEd(p);
+    /* sin actividad no cuenta: va aparte */
+    if(!recl[p.id]){hhSue+=h;nSue++;return}
+    alc+=h;nAlc++});
   var r2=function(x){return (Math.round(x*100)/100).toFixed(2)};
   var cuadra=Math.abs(total-alc)<0.005;
   var H='<div style="position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;'+
@@ -3898,10 +3906,10 @@ function _crPintaHoja2(D,P,sel,fec,q){
         '✓ cuadra</span>'
       :'<span style="flex:none;padding:2px 9px;border-radius:7px;font-size:11px;'+
         'font-weight:800;background:#2a2314;border:1px solid #4a3c1d;color:#E8C9A0">'+
-        'faltan '+r2(alc-total)+' hh'+
-        (nSue?(' · '+nSue+' partida'+(nSue>1?'s':'')+' sin actividad'+
-               (Math.abs(hhSue-(alc-total))<0.005?'':' ('+r2(hhSue)+' hh)')):'')+
-        '</span>')+
+        'faltan '+r2(alc-total)+' hh</span>')+
+    (nSue?('<span style="flex:none;padding:2px 9px;border-radius:7px;font-size:11px;'+
+      'font-weight:800;background:#2a2314;border:1px solid #4a3c1d;color:#E8C9A0">'+
+      nSue+' partida'+(nSue>1?'s':'')+' sin actividad \u00b7 '+r2(hhSue)+' hh no cuentan</span>'):'')+
     '</div>';
   var prev=[],_hallo=0;
   orden.forEach(function(t,k){
@@ -14157,7 +14165,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260904b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260904b4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
