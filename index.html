@@ -15119,7 +15119,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260905b7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260905b8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17257,15 +17257,16 @@ async function _rxNoCumplidas(opc){
       lst.sort(ordena);
       semanas.push({n:n9,ini:iN,fin:fN,idx:lst.map(function(q){return listaP.push(q)-1})})}
     return {sem:semV,cron:cc.cron_id,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId0,nombre:baseCron?('Plan del cronograma '+baseCron.cron_id):((bkSel&&bkSel.nombre)||'')},prox:true,semanas:semanas,lista:listaP}}
-  var lista=[],cumplidas=[];
+  var lista=[],cumplidas=[],emp=[];
   cods.forEach(function(cod){
     var pg=pgDe(cod,ini2,fin2),ac=acDe(cod,ini2,fin2);
-    if(!(pg>1e-9))return;
+    /* EMP: no estaba programada en la ventana pero se avanzo */
+    if(!(pg>1e-9)){if(ac>1e-9)emp.push(fila(cod,pg,ac,semV,ini2,fin2));return}
     /* programada y con lo hecho a la par o por encima: CUMPLIDA */
     if(ac>=pg-1e-9){cumplidas.push(fila(cod,pg,ac,semV,ini2,fin2));return}
     lista.push(fila(cod,pg,ac,semV,ini2,fin2))});
-  lista.sort(ordena);cumplidas.sort(ordena);
-  return {sem:semV,cron:cc.cron_id,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId0,nombre:baseCron?('Plan del cronograma '+baseCron.cron_id):((bkSel&&bkSel.nombre)||'')},lista:lista,cumplidas:cumplidas}}
+  lista.sort(ordena);cumplidas.sort(ordena);emp.sort(ordena);
+  return {sem:semV,cron:cc.cron_id,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId0,nombre:baseCron?('Plan del cronograma '+baseCron.cron_id):((bkSel&&bkSel.nombre)||'')},lista:lista,cumplidas:cumplidas,emp:emp}}
 function _rxAnexaUna(q,sem){
   _rxSet(_rxNuevoRid(),{task_code:q.cod,actividad:q.nom||'',
     partida_id:(q.items&&q.items[0])||'',
@@ -17625,9 +17626,26 @@ function _rxNoPinta(r){
     if(r.prox){
       h+='<div style="font-size:11px;color:#E8C9A0;font-weight:800;margin-bottom:7px">PR\u00d3XIMAS 3 SEMANAS \u00b7 S'+(r.sem+1)+' a S'+(r.sem+3)+' \u00b7 a partir de la semana '+r.sem+(r.semFija?' (fijada por el admin)':' (en curso)')+' \u00b7 '+r.lista.length+' actividad(es) programada(s) \u2014 el \u2795 anexa con su semana y abre su ficha</div>'+
         ''}
-    else if(!r.lista.length)
-      h+='<div style="color:#9FE8B0;font-weight:700;padding:6px 0">\u2713 '+(r.cierre?('Al cierre de la semana '+r.sem):('Semana '+r.sem))+': sin actividades NO cumplidas</div>';
-    else h+='<div style="font-size:11px;color:#E8C9A0;font-weight:800;margin-bottom:7px">'+(r.cierre?('HASTA EL CIERRE DE LA SEMANA '+r.sem):('SEMANA '+r.sem))+(r.semFija?' (fijada por el admin)':'')+' \u00b7 '+r.lista.length+' actividad(es) NO cumplida(s) \u2014 el \u2795 anexa y abre su ficha</div>';
+    else{
+      /* la cabecera PPC: cumplidas sobre programadas (cumplidas + no
+         cumplidas), con el resumen y las EMP */
+      var nNo=r.lista.length,nOk=(r.cumplidas||[]).length,nEmp=(r.emp||[]).length,nTot=nNo+nOk;
+      var ppc=nTot?(Math.round(nOk/nTot*1000)/10):0;
+      var _rot=(r.cierre?('AL CIERRE DE LA SEMANA '+r.sem):('SEMANA '+r.sem))+(r.semFija?' (fijada por el admin)':'');
+      h+='<div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;margin:4px 0 10px">'+
+        '<div style="background:'+(ppc>=80?'#0f2a1c':(ppc>=50?'#2a2314':'#2a1418'))+';border:1px solid '+(ppc>=80?'#1E7A46':(ppc>=50?'#7A4B00':'#8A2018'))+';border-radius:12px;padding:10px 16px;min-width:150px">'+
+          '<div style="font-size:10px;font-weight:800;letter-spacing:.06em;color:#9db4d6">PPC \u00b7 '+_rot+'</div>'+
+          '<div style="font-size:26px;font-weight:900;color:#fff;line-height:1.1">'+ppc.toFixed(2).replace(/\.?0+$/,'')+'%</div>'+
+          '<div style="font-size:10.5px;color:#9db4d6">'+nOk+' cumplida(s) de '+nTot+' programada(s)</div>'+
+        '</div>'+
+        '<div style="flex:1;min-width:220px;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">'+
+          '<div style="background:#12314a;border:1px solid #2a5a8a;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#8ECBF5">\u2714 CUMPLIDAS</div><div style="font-size:20px;font-weight:900;color:#BFE3FF">'+nOk+'</div></div>'+
+          '<div style="background:#2a1418;border:1px solid #6a2a2a;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#FFB4A8">\u26d4 NO CUMPLIDAS</div><div style="font-size:20px;font-weight:900;color:#FFD9D4">'+nNo+'</div></div>'+
+          '<div style="background:#101d2e;border:1px solid #24344f;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#9db4d6">\u25a4 PROGRAMADAS</div><div style="font-size:20px;font-weight:900;color:#cfe3ff">'+nTot+'</div></div>'+
+          '<div style="background:#3a2a12;border:1px solid #7a5a1d;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#F5D08A">\u26a1 EMP</div><div style="font-size:20px;font-weight:900;color:#FFE7B3">'+nEmp+'</div><div style="font-size:9px;color:#c9a96a">avanzadas sin programar</div></div>'+
+        '</div></div>';
+      if(!nNo)h+='<div style="color:#9FE8B0;font-weight:700;padding:6px 0">\u2713 '+(r.cierre?('Al cierre de la semana '+r.sem):('Semana '+r.sem))+': sin actividades NO cumplidas</div>';
+      else h+='<div style="font-size:11px;color:#FFB4A8;font-weight:800;letter-spacing:.05em;margin:10px 0 6px;display:flex;align-items:center;gap:8px">\u26d4 NO CUMPLIDAS '+_rot+' ('+nNo+')<span style="font-weight:600;color:#7d8590">el \u2795 anexa y abre su ficha</span></div>'}
     h+=
       (function(){
       var esAdX=false;try{esAdX=((typeof esAdminReal==='function')&&esAdminReal())||((typeof esAdmin==='function')&&esAdmin())}catch(e){}
@@ -17643,8 +17661,8 @@ function _rxNoPinta(r){
             (q.semN?('Programado en la semana '+q.semN):'Programado esta semana')+': <b>'+q.prog+'%</b> \u00b7 Hecho: <b>'+q.hecho+'%</b>'+
             '<br>An\u00e9xala con el \u2795 para ponerle su restricci\u00f3n.</div>'))+
           _rxPartidasHTML(q);
-        return '<div style="border:1px solid '+(reg?'#1d3a2a':'#33415c')+';border-radius:10px;margin-bottom:7px;overflow:hidden">'+
-          '<div class="_rxNoCab" data-cod="'+esc((q.semN?('S'+q.semN+'|'):'')+q.cod)+'" style="display:flex;gap:8px;align-items:center;padding:9px 10px;cursor:pointer;background:#0f1726;flex-wrap:wrap">'+
+        return '<div style="border:1px solid '+(reg?'#1d3a2a':(r.prox?'#33415c':'#6a2a2a'))+';border-radius:10px;margin-bottom:7px;overflow:hidden">'+
+          '<div class="_rxNoCab" data-cod="'+esc((q.semN?('S'+q.semN+'|'):'')+q.cod)+'" style="display:flex;gap:8px;align-items:center;padding:9px 10px;cursor:pointer;background:'+(r.prox?'#0f1726':'#2a1418')+';flex-wrap:wrap">'+
             '<b style="color:#8ECBF5;font-size:12px">'+esc(q.cod)+'</b>'+
             (reg?((esAdX&&regs.length===1)?'<button class="_rxNoDel" data-rid="'+esc(reg.rid)+'" title="Borrar su registro (solo el admin)" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:7px;padding:3px 9px;font-weight:900;cursor:pointer">\u2715</button>':'')
                 :'<button class="_rxAne" data-i="'+i+'" title="Anexar y ponerle su restricci\u00f3n" style="background:#1E7A46;color:#fff;border:0;border-radius:7px;padding:3px 10px;font-weight:900;cursor:pointer">\u2795</button>')+
@@ -17705,6 +17723,30 @@ function _rxNoPinta(r){
                   '<span style="color:#7fb3d9">'+(ab?'\u25b4':'\u25be')+'</span>'+
                 '</div>'+
                 '<div class="_rxNoDet" style="display:'+(ab?'block':'none')+';background:#0b1a2b;padding:0">'+_rxPartidasHTML(q)+'</div>'+
+              '</div>'}).join('')}).join('')}
+    /* las EMP: avanzadas sin estar programadas, en ambar */
+    if(!r.prox&&r.emp&&r.emp.length){
+      var catE={};try{_crPartidas().forEach(function(p9){catE[p9.id]=p9})}catch(e){}
+      var espE=function(q){var cnt={},top='(sin especialidad)',mx=0;
+        (q.items||[]).forEach(function(pid){var e9=(catE[pid]&&catE[pid].esp)||'';if(!e9)return;
+          cnt[e9]=(cnt[e9]||0)+1;if(cnt[e9]>mx){mx=cnt[e9];top=e9}});
+        return top};
+      var grE={},goE=[];
+      r.emp.forEach(function(q){var e9=espE(q);if(!grE[e9]){grE[e9]=[];goE.push(e9)}grE[e9].push(q)});
+      h+='<div style="font-size:11px;color:#F5D08A;font-weight:800;letter-spacing:.05em;margin:16px 0 6px;display:flex;align-items:center;gap:8px">\u26a1 EMP \u00b7 AVANZADAS SIN ESTAR PROGRAMADAS '+(r.cierre?('AL CIERRE DE LA SEMANA '+r.sem):('EN LA SEMANA '+r.sem))+' ('+r.emp.length+')<span style="font-weight:600;color:#7d8590">no estaban en el programa y aun as\u00ed avanzaron</span></div>'+
+        goE.map(function(e9){
+          return '<div style="background:#3a2a12;border:1px solid #7a5a1d;border-left:3px solid #E0A44B;color:#FFE7B3;border-radius:8px;padding:6px 10px;font-weight:800;font-size:11px;letter-spacing:.05em;margin:10px 0 6px;display:flex;align-items:center;gap:8px">'+
+            esc(String(e9).toUpperCase())+'<span style="margin-left:auto;background:rgba(255,255,255,.08);border-radius:20px;padding:1px 9px;font-size:10.5px">'+grE[e9].length+'</span></div>'+
+            grE[e9].map(function(q){var kk='EMP|'+q.cod,ab=!!window._rxNoAbre[kk];
+              return '<div style="border:1px solid #7a5a1d;border-radius:10px;margin-bottom:7px;overflow:hidden">'+
+                '<div class="_rxNoCab" data-cod="'+esc(kk)+'" style="display:flex;gap:8px;align-items:center;padding:9px 10px;cursor:pointer;background:#2e2110;flex-wrap:wrap">'+
+                  '<b style="color:#F5D08A;font-size:12px">'+esc(q.cod)+'</b>'+
+                  '<span style="font-size:10px;font-weight:800;color:#FFE7B3;background:#4a3a14;border:1px solid #7a5a1d;border-radius:7px;padding:2px 7px">\u26a1 EMP</span>'+
+                  '<span style="flex:1;min-width:150px;font-size:12px;color:#FFF1D6;overflow-wrap:anywhere">'+esc(q.nom)+'</span>'+
+                  '<span style="font-size:10.5px;color:#F5D08A;font-weight:800;white-space:nowrap">prog 0% \u00b7 hecho '+q.hecho+'%</span>'+
+                  '<span style="color:#c9a96a">'+(ab?'\u25b4':'\u25be')+'</span>'+
+                '</div>'+
+                '<div class="_rxNoDet" style="display:'+(ab?'block':'none')+';background:#1d1609;padding:0">'+_rxPartidasHTML(q)+'</div>'+
               '</div>'}).join('')}).join('')}
     if(fut.length)
       h+='<div style="font-size:11px;color:#C7A3E8;font-weight:800;letter-spacing:.05em;margin:12px 0 6px">🔮 RESTRICCIONES FUTURAS ('+fut.length+') — también se anexan</div>'+
