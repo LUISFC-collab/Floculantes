@@ -15119,7 +15119,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260905a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260905a7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17108,7 +17108,9 @@ async function _rxNoCumplidas(opc){
   var cc=null;L.forEach(function(z){if(String(z.tipo||'')==='ACTUAL')cc=z});
   if(!cc)cc=L[L.length-1];
   /* la base puede ser el plan de OTRO cronograma cargado ('cron:<id>') */
-  var baseId0='';try{baseId0=String(_ajGet('rx_base_comparar','')||'')}catch(_e0){}
+  /* cada vineta tiene su base: NO cumplidas (rx_base_comparar) y Proximas 3
+     semanas (rx_base_prox); la semana de cierre si es compartida */
+  var baseId0='';try{baseId0=String(_ajGet(_prox?'rx_base_prox':'rx_base_comparar','')||'')}catch(_e0){}
   var baseCron=null;
   if(baseId0.indexOf('cron:')===0){baseCron=L.filter(function(z){return String(z.cron_id)===baseId0.slice(5)})[0]||null;if(baseCron)cc=baseCron}
   if(!cc)return {sem:semA,base:{id:'',nombre:''},lista:[]};
@@ -17542,7 +17544,8 @@ function _rxNoPinta(r){
        todos rige la misma; el supervisor ve cual es */
     (function(){
       var esAdR=false;try{esAdR=((typeof esAdminReal==='function')&&esAdminReal())||((typeof esAdmin==='function')&&esAdmin())}catch(e){}
-      var baseSel='';try{baseSel=String(_ajGet('rx_base_comparar','')||'')}catch(e){}
+      var _kB=(r&&r.prox)?'rx_base_prox':'rx_base_comparar';
+      var baseSel='';try{baseSel=String(_ajGet(_kB,'')||'')}catch(e){}
       var nomBase='Plan del cronograma vigente';
       var ops='<option value=""'+(baseSel===''?' selected':'')+'>Plan del cronograma vigente</option>';
       /* lo que de verdad esta en el calendario de Programar (entero o por
@@ -17561,7 +17564,7 @@ function _rxNoPinta(r){
         ops+='<option value="'+esc(bk.id)+'"'+(String(bk.id)===baseSel?' selected':'')+'>'+
           esc(bk.nombre||bk.id)+(bk.fecha?(' \u00b7 '+esc(bk.fecha)):'')+'</option>'});
       h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#101d2e;border:1px solid #24344f;border-radius:9px;padding:7px 10px;margin-bottom:8px">'+
-        '<span style="font-size:10px;font-weight:800;color:#8ECBF5;letter-spacing:.05em">COMPARAR LO REALIZADO CONTRA</span>'+
+        '<span style="font-size:10px;font-weight:800;color:#8ECBF5;letter-spacing:.05em">'+((r&&r.prox)?'PRÓXIMAS 3 SEMANAS · PROGRAMADO SEGÚN':'COMPARAR LO REALIZADO CONTRA')+'</span>'+
         (esAdR?('<select id="_rxBaseSel" style="flex:1;min-width:180px;background:#0b1220;color:#cfe3ff;border:1px solid #24344f;border-radius:7px;padding:6px 8px;font-size:12px;font-family:inherit">'+ops+'</select>')
               :('<b style="font-size:11.5px;color:#cfe3ff">'+esc(nomBase)+'</b><span style="font-size:10px;color:#7d8590">(lo fija el admin)</span>'))+
         '</div>';
@@ -17735,7 +17738,8 @@ function _rxNoPinta(r){
     var bs=document.getElementById('_rxBaseSel');
     if(bs)bs.onchange=function(){
       var v9=bs.value;
-      Promise.resolve((typeof _ajSet==='function')?_ajSet('rx_base_comparar',v9,'base de comparacion de las NO cumplidas'):null)
+      var _kB9=(window._rxNoR&&window._rxNoR.prox)?'rx_base_prox':'rx_base_comparar';
+      Promise.resolve((typeof _ajSet==='function')?_ajSet(_kB9,v9,_kB9==='rx_base_prox'?'base de las proximas 3 semanas':'base de comparacion de las NO cumplidas'):null)
         .then(function(){window._rxNoR=null;window._rxNoHuella=null;
           toast('Base de comparaci\u00f3n guardada \u2014 rige para todos');_rxUI()})
         .catch(function(){toast('No se pudo guardar la base')})};
