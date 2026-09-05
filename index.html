@@ -6914,6 +6914,16 @@ function _crAvanceDe(items,corte,ctx){
     var trozo=ctx?(h/_crVeces(ctx.rp,id)):h;
     var gan=ctx?_crGanadas(ctx.rp,id,ctx.cod,h,Math.min(100,pc)/100)
                :(trozo*Math.min(100,pc)/100);
+    /* si la actividad programa una PARTE (apartado del APU) de la partida,
+       su avance es el de esa parte y su peso el de la parte */
+    try{if(ctx&&ctx.cod&&ctx.rp&&ctx.rp._cron){var fid=_cpFaseDe(ctx.rp._cron,id,ctx.cod);
+      if(fid){var fzr=_fzDe(id),fx=null,wT=0;
+        ((fzr&&fzr.fases)||[]).forEach(function(x){wT+=Number(x.peso)||0;if(x.id===fid)fx=x});
+        if(fx){var mapa9=_fzFechasDe(id),a9=Number(_fzAvanceAt(fx,corte,mapa9))||0,c9=_fzCantDe(fx);
+          try{var qR9=Math.max(0,Math.min(Number(fx._ret)||0,c9-a9>0?c9-a9:0));a9+=qR9}catch(_eq9){}
+          pc=c9>0?Math.max(0,Math.min(100,a9/c9*100)):(a9>0?100:0);
+          var w9=wT>0?((Number(fx.peso)||0)/wT):(1/Math.max(1,(fzr.fases||[]).length));
+          trozo=h*w9;gan=trozo*pc/100}}}}catch(_ef9){}
     if(h>0){hh+=trozo;pts+=100*gan}
     else{hh+=1;pts+=Math.min(100,pc)}
     if(h>0?(gan<trozo-1e-9):(pc<100))hayFin=false;
@@ -15109,7 +15119,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260905a5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260905a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -16986,10 +16996,11 @@ function _rxSemRige(){var n=0;try{n=Number(_ajGet('rx_sem_cierre',''))||0}catch(
   return (typeof _wkQueToca==='function')?_wkQueToca():0}
 /* los apartados del APU que SI se programan en las partidas de la
    actividad: "(MONTAJE · PRUEBAS)" delante del nombre */
-function _rxApartados(items){try{var out=[];
-  (items||[]).forEach(function(pid){var r=(typeof _apuDe==='function')?_apuDe(pid):null;if(!r)return;
-    ((typeof _apuGrupos==='function'?_apuGrupos(r):(r.grupos||[]))||[]).forEach(function(g){
-      if(!g||g.off)return;var n=String(g.nombre||'').trim().toUpperCase();if(n&&out.indexOf(n)<0)out.push(n)})});
+function _rxApartados(items,cron,cod){try{var out=[];
+  if(!cron||!cod)return '';
+  (items||[]).forEach(function(pid){var fid=_cpFaseDe(cron,pid,cod);if(!fid)return;
+    var fz=_fzDe(pid);var fx=((fz&&fz.fases)||[]).filter(function(x){return x.id===fid})[0];
+    var n=String((fx&&fx.nombre)||'').trim().toUpperCase();if(n&&out.indexOf(n)<0)out.push(n)});
   return out.length?('('+out.join(' \u00b7 ')+') '):''}catch(e){return ''}}
 /* fotos de una restriccion: rutas en el bucket obra-fotos */
 function _rxFotos(x){try{var L=JSON.parse(String((x&&x.fotos)||'')||'[]');return Array.isArray(L)?L:[]}catch(e){return []}}
@@ -17096,6 +17107,10 @@ async function _rxNoCumplidas(opc){
   var L=(await _crPull()).filter(function(c){return !c.eliminado});
   var cc=null;L.forEach(function(z){if(String(z.tipo||'')==='ACTUAL')cc=z});
   if(!cc)cc=L[L.length-1];
+  /* la base puede ser el plan de OTRO cronograma cargado ('cron:<id>') */
+  var baseId0='';try{baseId0=String(_ajGet('rx_base_comparar','')||'')}catch(_e0){}
+  var baseCron=null;
+  if(baseId0.indexOf('cron:')===0){baseCron=L.filter(function(z){return String(z.cron_id)===baseId0.slice(5)})[0]||null;if(baseCron)cc=baseCron}
   if(!cc)return {sem:semA,base:{id:'',nombre:''},lista:[]};
   var hoy=(typeof todayISO==='function')?todayISO():'';
   var R=await _crPlanRecupera(cc.cron_id,hoy,semA);
@@ -17104,16 +17119,26 @@ async function _rxNoCumplidas(opc){
   var alc=null;try{alc=await _crAlc(cc.cron_id)}catch(_ea){}
   /* la BASE de comparacion que fija el admin: un respaldo guardado o el
      plan del cronograma vigente */
-  var baseId='';try{baseId=String(_ajGet('rx_base_comparar','')||'')}catch(_eb){}
+  var baseCal=(baseId0==='cal');   /* lo que esta en el calendario de Programar */
+  var baseId=(baseCron||baseCal)?'':baseId0;
+  if(baseId.indexOf('cron:')===0)baseId='';
   if(baseId&&!((state.backcron||[]).length)){
     try{await new Promise(function(res9){_bkcPull(res9)})}catch(_e0){}}
   var bkSel=null;
   if(baseId)(state.backcron||[]).forEach(function(b9){if(b9&&String(b9.id)===baseId)bkSel=b9});
-  var bkSnap=null;
+  var bkSnap=null,segs={};
+  /* cada entrada programada: la partida entera (pid) o una PARTE del APU
+     (pid::fase); se guardan por partida con su fase, arranque y dias */
+  var segMete=function(id9,start,dias){if(!id9||!start)return;
+    var pid=_pgBaseId(id9),fid=_pgFidDe(id9);
+    (segs[pid]=segs[pid]||[]).push({fid:fid,start:start,dias:dias||1,oc:[]});
+    bkSnap[pid]=bkSnap[pid]||{start:start,dias:dias||1}};
   if(bkSel){bkSnap={};Object.keys(bkSel.snap||{}).forEach(function(d9){
-    (bkSel.snap[d9]||[]).forEach(function(e9){
-      var id9=e9._id||e9.partida_id;
-      if(id9&&e9.start)bkSnap[id9]={start:e9.start,dias:e9.dias||1}})})}
+    (bkSel.snap[d9]||[]).forEach(function(e9){segMete(e9._id||e9.partida_id,e9.start,e9.dias)})})}
+  else if(baseCal){bkSnap={};var P0=(typeof _pgProg==='function')?_pgProg():((typeof state!=='undefined'&&state.prog)||{});
+    Object.keys(P0||{}).forEach(function(k9){var e9=P0[k9];if(e9&&e9.start)segMete(k9,e9.start,e9.dias)})}
+  Object.keys(segs).forEach(function(pid){segs[pid].forEach(function(sg){
+    try{sg.oc=(typeof occupiedDays==='function')?(occupiedDays(sg.start,sg.dias||1)||[]):[sg.start]}catch(_eo){sg.oc=[sg.start]}})});
   var u9=null,rp9=null;
   if(bkSnap){try{u9=_crUniverso(cc.cron_id,alc);rp9=_crReparto(tar)}catch(_e1){bkSnap=null}}
   /* la VENTANA que manda: con respaldo, desde la semana de su primer dia
@@ -17141,25 +17166,44 @@ async function _rxNoCumplidas(opc){
   tar.forEach(function(t){nom[t.task_code]=String(t.nombre||'');itemsDe[t.task_code]=(t.items||[]);
     fIni[t.task_code]=String(t.ini||'');fFin[t.task_code]=String(t.fin||'')});
   /* lo programado y lo hecho de una actividad entre dos fechas */
+  /* los segmentos que cuentan para una actividad en una partida: si esta
+     enlazada a una parte, solo esa; si hay partes programadas, mandan las
+     partes (no la partida entera) */
+  var segsDe=function(cod,i9){var sg=(segs[i9]||[]).slice();
+    var fB='';try{fB=_cpFaseDe(cc.cron_id,i9,cod)}catch(_e){}
+    if(fB)sg=sg.filter(function(z){return z.fid===fB});
+    var partes=sg.filter(function(z){return z.fid});
+    return partes.length?partes:sg};
+  var pesoDe=function(i9,fid){if(!fid)return 1;var fz=_fzDe(i9),wT=0,fx=null;
+    ((fz&&fz.fases)||[]).forEach(function(x){wT+=Number(x.peso)||0;if(x.id===fid)fx=x});
+    if(!fx)return 0;return wT>0?((Number(fx.peso)||0)/wT):(1/Math.max(1,((fz&&fz.fases)||[]).length))};
   var pgDe=function(cod,i1,f1){var pg=0,d;
     if(bkSnap){
-      /* el programado sale del RESPALDO elegido: los dias de cada partida
-         (start/dias) ponderados por sus HH del alcance */
+      /* lo programado sale del RESPALDO o del CALENDARIO: los dias de cada
+         partida o de cada parte (con su peso), ponderados por las HH */
       var hh9=0,pg9=0;
       (itemsDe[cod]||[]).forEach(function(i9){
         if(!u9||u9.items[i9]==null)return;
         var hi9=(Number(u9.items[i9])||0)/_crVeces(rp9,i9);
         if(!(hi9>0))return;hh9+=hi9;
-        var b2=bkSnap[i9];if(!b2)return;
-        var oc9=b2.oc||[];
-        if(!oc9.length)return;
-        var nW9=0;oc9.forEach(function(d8){if((!i1||d8>=i1)&&d8<=f1)nW9++});
-        pg9+=hi9*(nW9/oc9.length)});
+        segsDe(cod,i9).forEach(function(sg){var oc9=sg.oc||[];if(!oc9.length)return;
+          var w9=pesoDe(i9,sg.fid);if(!(w9>0))return;
+          var nW9=0;oc9.forEach(function(d8){if((!i1||d8>=i1)&&d8<=f1)nW9++});
+          pg9+=hi9*w9*(nW9/oc9.length)})});
       pg=hh9>0?(pg9/hh9):0}
     else for(d in (R.plan[cod]||{}))if((!i1||d>=i1)&&d<=f1)pg+=R.plan[cod][d];
     return pg};
+  /* que APARTADOS estan programados en la ventana: nombres de las partes */
+  var apartDe=function(cod,i1,f1){var out=[];
+    (itemsDe[cod]||[]).forEach(function(i9){var fz=null;
+      var sg=bkSnap?segsDe(cod,i9):[];
+      var fids={};sg.forEach(function(z){if(!z.fid)return;var nW=0;(z.oc||[]).forEach(function(d8){if((!i1||d8>=i1)&&d8<=f1)nW++});if(nW)fids[z.fid]=1});
+      if(!bkSnap){var fB='';try{fB=_cpFaseDe(cc.cron_id,i9,cod)}catch(_e){}if(fB)fids[fB]=1}
+      if(!Object.keys(fids).length)return;fz=_fzDe(i9);
+      ((fz&&fz.fases)||[]).forEach(function(x){if(fids[x.id]){var n=String(x.nombre||'').trim().toUpperCase();if(n&&out.indexOf(n)<0)out.push(n)}})});
+    return out.length?('('+out.join(' \u00b7 ')+') '):''};
   var acDe=function(cod,i1,f1){var ac=0,d;for(d in (R.actual[cod]||{}))if((!i1||d>=i1)&&d<=f1)ac+=R.actual[cod][d];return ac};
-  var fila=function(cod,pg,ac,semN){return {cod:cod,nom:nom[cod]||'',items:(itemsDe[cod]||[]).slice(),
+  var fila=function(cod,pg,ac,semN,i1,f1){return {cod:cod,cron:cc.cron_id,nom:nom[cod]||'',items:(itemsDe[cod]||[]).slice(),apart:apartDe(cod,i1,f1),
       prog:Math.round(pg*1000)/10,hecho:Math.round(ac*1000)/10,semN:semN||0,
       fechas:(function(){var m={};(itemsDe[cod]||[]).forEach(function(i9){
         var a9=alc&&alc[i9];
@@ -17173,17 +17217,17 @@ async function _rxNoCumplidas(opc){
        cada una segun la misma base; cada semana con su propia lista */
     var semanas=[],listaP=[];
     for(var k9=1;k9<=3;k9++){var n9=semV+k9,sN=_wkSem(n9),iN=_wkISO(sN.ini),fN=_wkISO(sN.fin),lst=[];
-      cods.forEach(function(cod){var pg=pgDe(cod,iN,fN);if(!(pg>1e-9))return;lst.push(fila(cod,pg,acDe(cod,iN,fN),n9))});
+      cods.forEach(function(cod){var pg=pgDe(cod,iN,fN);if(!(pg>1e-9))return;lst.push(fila(cod,pg,acDe(cod,iN,fN),n9,iN,fN))});
       lst.sort(ordena);
       semanas.push({n:n9,ini:iN,fin:fN,idx:lst.map(function(q){return listaP.push(q)-1})})}
-    return {sem:semV,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId,nombre:(bkSel&&bkSel.nombre)||''},prox:true,semanas:semanas,lista:listaP}}
+    return {sem:semV,cron:cc.cron_id,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId0,nombre:baseCron?('Plan del cronograma '+baseCron.cron_id):((bkSel&&bkSel.nombre)||'')},prox:true,semanas:semanas,lista:listaP}}
   var lista=[];
   cods.forEach(function(cod){
     var pg=pgDe(cod,ini2,fin2),ac=acDe(cod,ini2,fin2);
     if(!(pg>1e-9)||ac>=pg-1e-9)return;
-    lista.push(fila(cod,pg,ac,semV))});
+    lista.push(fila(cod,pg,ac,semV,ini2,fin2))});
   lista.sort(ordena);
-  return {sem:semV,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId,nombre:(bkSel&&bkSel.nombre)||''},lista:lista}}
+  return {sem:semV,cron:cc.cron_id,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId0,nombre:baseCron?('Plan del cronograma '+baseCron.cron_id):((bkSel&&bkSel.nombre)||'')},lista:lista}}
 function _rxAnexaUna(q,sem){
   _rxSet(_rxNuevoRid(),{task_code:q.cod,actividad:q.nom||'',
     partida_id:(q.items&&q.items[0])||'',
@@ -17220,7 +17264,7 @@ function _rxElegirUI(q,semN,alTerminar){
     '</div>'}).join('');
   ov.innerHTML='<div style="background:#101a2b;border:1px solid #1d2a3d;border-radius:14px;width:100%;max-width:720px;max-height:88vh;overflow:auto;padding:14px;color:#cfe3ff;box-shadow:0 18px 50px rgba(0,0,0,.6)">'+
     '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'+
-      '<b style="font-size:14px;color:#fff">'+esc(q.cod||'')+'</b><span style="font-size:12px;color:#9db4d6;flex:1;min-width:160px">'+esc(_rxApartados(q.items)+(q.nom||''))+'</span>'+
+      '<b style="font-size:14px;color:#fff">'+esc(q.cod||'')+'</b><span style="font-size:12px;color:#9db4d6;flex:1;min-width:160px">'+esc((q.apart||_rxApartados(q.items,q.cron,q.cod))+(q.nom||''))+'</span>'+
       '<span style="font-size:11px;font-weight:800;color:#E8C9A0">SEMANA '+semN+'</span>'+
       '<button id="_rxElX" style="background:#2b3444;color:#cfe3ff;border:0;border-radius:9px;padding:7px 11px;font-weight:800;cursor:pointer">\u2715</button>'+
     '</div>'+
@@ -17469,6 +17513,15 @@ function _rxPartidasHTML(q){
         '<span style="flex:1;min-width:110px;font-size:11px;color:#cfe3ff;overflow-wrap:anywhere">'+esc((p&&p.nombre)||(cat[pid]&&cat[pid].nom)||'')+'</span>'+
         '<b style="color:#9FE8B0;font-size:11px;white-space:nowrap">'+(pc!=null?((Math.round(pc*10)/10)+'%'):'\u2014')+'</b>'+
         (fases?'<span style="font-size:10.5px;color:#E8C9A0;white-space:nowrap">'+fases+'</span>':'')+
+        (function(){/* que PARTE (apartado del APU) programa esta actividad */
+          try{var ps=(typeof _pgPartesDe==='function')?_pgPartesDe(pid):[];if(!ps.length||!q.cron||!q.cod)return '';
+            var act=_cpFaseDe(q.cron,pid,q.cod);
+            if(!esAd){var fx=ps.filter(function(x){return x.id===act})[0];
+              return '<span style="font-size:10px;font-weight:800;color:#C7A3E8;background:#2a1f3d;border:1px solid #5b3a8a;border-radius:7px;padding:1px 7px;white-space:nowrap">'+(fx?esc(String(fx.nombre||'')):'toda la partida')+'</span>'}
+            return '<select class="_rxFaseSel" data-pid="'+esc(pid)+'" title="Qu\u00e9 apartado del APU programa esta actividad: su avance y su peso salen de esa parte" style="background:#2a1f3d;color:#E6D6FF;border:1px solid #5b3a8a;border-radius:7px;padding:2px 6px;font-size:10.5px;font-family:inherit;max-width:180px">'+
+              '<option value=""'+(act?'':' selected')+'>toda la partida</option>'+
+              ps.map(function(x){return '<option value="'+esc(String(x.id))+'"'+(x.id===act?' selected':'')+'>'+esc(String(x.nombre||''))+(x.peso?(' \u00b7 '+(Math.round(Number(x.peso)*100)/100)+'%'):'')+'</option>'}).join('')+
+              '</select>'}catch(e){return ''}})()+
         ((f.ini||f.fin)?'<span style="font-size:10.5px;color:#9db4d6;white-space:nowrap">'+esc(fdma(f.ini))+' \u2192 '+esc(fdma(f.fin))+'</span>':'')+
         (atr?'<span style="font-size:10px;font-weight:800;color:#FFB4A8;background:#2a1c1c;border:1px solid #4a2a2a;border-radius:7px;padding:1px 7px;white-space:nowrap">'+atr+'</span>':'')+
         '<button class="_rxIr" data-pid="'+esc(pid)+'" title="Ir a la partida (parpadea al llegar)" style="background:#1c2440;color:#A9C0FF;border:1px solid #33447a;border-radius:7px;padding:2px 8px;font-weight:800;font-size:10.5px;cursor:pointer">\u21a6</button>'+
@@ -17492,6 +17545,15 @@ function _rxNoPinta(r){
       var baseSel='';try{baseSel=String(_ajGet('rx_base_comparar','')||'')}catch(e){}
       var nomBase='Plan del cronograma vigente';
       var ops='<option value=""'+(baseSel===''?' selected':'')+'>Plan del cronograma vigente</option>';
+      /* lo que de verdad esta en el calendario de Programar (entero o por
+         apartados del APU) */
+      if(baseSel==='cal')nomBase='Calendario de programaci\u00f3n (lo que est\u00e1 en Programar)';
+      ops+='<option value="cal"'+(baseSel==='cal'?' selected':'')+'>Calendario de programaci\u00f3n \u00b7 lo que est\u00e1 en Programar, entero o por apartados</option>';
+      /* el plan de cualquier cronograma cargado */
+      try{((typeof _crLista==='function')?_crLista():[]).filter(function(c9){return c9&&!c9.eliminado}).forEach(function(c9){
+        var v9='cron:'+c9.cron_id,nm9='Plan del cronograma '+String(c9.cron_id)+(c9.tipo?(' \u00b7 '+String(c9.tipo)):'')+(c9.nombre&&c9.nombre!==c9.cron_id?(' \u00b7 '+String(c9.nombre)):'');
+        if(v9===baseSel)nomBase=nm9;
+        ops+='<option value="'+esc(v9)+'"'+(v9===baseSel?' selected':'')+'>'+esc(nm9)+'</option>'})}catch(e){}
       (state.backcron||[]).slice().sort(function(a,b){return (b.ts||0)-(a.ts||0)}).forEach(function(bk){
         var tot=0;Object.keys(bk.snap||{}).forEach(function(d9){tot+=(bk.snap[d9]||[]).length});
         if(!tot)return;
@@ -17541,7 +17603,7 @@ function _rxNoPinta(r){
             '<b style="color:#8ECBF5;font-size:12px">'+esc(q.cod)+'</b>'+
             (reg?((esAdX&&regs.length===1)?'<button class="_rxNoDel" data-rid="'+esc(reg.rid)+'" title="Borrar su registro (solo el admin)" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:7px;padding:3px 9px;font-weight:900;cursor:pointer">\u2715</button>':'')
                 :'<button class="_rxAne" data-i="'+i+'" title="Anexar y ponerle su restricci\u00f3n" style="background:#1E7A46;color:#fff;border:0;border-radius:7px;padding:3px 10px;font-weight:900;cursor:pointer">\u2795</button>')+
-            '<span style="flex:1;min-width:150px;font-size:12px;overflow-wrap:anywhere">'+(function(){var ap=_rxApartados(q.items);return ap?('<span style="color:#C7A3E8;font-weight:800">'+esc(ap)+'</span>'):''})()+esc(q.nom)+'</span>'+
+            '<span style="flex:1;min-width:150px;font-size:12px;overflow-wrap:anywhere">'+(function(){var ap=q.apart||_rxApartados(q.items,q.cron,q.cod);return ap?('<span style="color:#C7A3E8;font-weight:800">'+esc(ap)+'</span>'):''})()+esc(q.nom)+'</span>'+
             '<span style="font-size:10.5px;color:#E8C9A0;font-weight:800;white-space:nowrap">prog '+q.prog+'% \u00b7 hecho '+q.hecho+'%</span>'+
             (reg?'<span style="font-size:10px;font-weight:800;color:#9FE8B0;background:#14261d;border:1px solid #1d3a2a;border-radius:7px;padding:2px 7px">\u2713 '+(regs.length>1?(regs.length+' restricciones'):'anexada')+'</span>':'')+
             '<span style="color:#7d8590">'+(abierto?'\u25b4':'\u25be')+'</span>'+
@@ -17600,6 +17662,19 @@ function _rxNoPinta(r){
           '</div>'}).join('');
     cont.innerHTML=h;
     _rxCardBind(cont);
+    /* la parte del APU que programa la actividad: se guarda en el reparto
+       del cronograma (Supabase, realtime) */
+    cont.querySelectorAll('._rxFaseSel').forEach(function(sl){sl.onchange=function(ev){ev.stopPropagation();
+      var cab=sl.closest('._rxNoDet');var cod=(cab&&cab.previousElementSibling&&cab.previousElementSibling.getAttribute('data-cod'))||'';
+      cod=cod.replace(/^S\d+\|/,'');
+      var pid=sl.getAttribute('data-pid'),cron=(window._rxNoR&&window._rxNoR.cron)||'';
+      if(!cod||!cron)return;
+      var cfg=_cpDe(cron,pid)||{modo:'orden',primero:'',fases:{}};var fz=Object.assign({},cfg.fases||{});
+      if(sl.value)fz[cod]=sl.value;else delete fz[cod];
+      _cpSet(cron,pid,cfg.modo,cfg.primero,fz);
+      toast(sl.value?('\ud83e\udde9 '+cod+' programa la parte "'+sl.options[sl.selectedIndex].text+'" de '+pid):(cod+' vuelve a toda la partida '+pid));
+      window._rxNoR=null;window._rxNoHuella=null;_rxNoLlena()}});
+    cont.querySelectorAll('._rxFaseSel').forEach(function(sl){sl.onclick=function(ev){ev.stopPropagation()}});
     /* otra restriccion mas para la misma actividad y semana */
     cont.querySelectorAll('._rxOtra').forEach(function(b){
       b.onclick=function(ev){ev.stopPropagation();
@@ -19886,10 +19961,15 @@ function _cpAll(){if(!state.cronrep){try{state.cronrep=JSON.parse(localStorage.g
 function _cpSaveLocal(){try{localStorage.setItem('obf4_cronrep',JSON.stringify(_cpAll()))}catch(e){}}
 function _cpKey(cron,item){return String(cron)+'|'+String(item)}
 /* como se reparte el avance de una partida: {modo:'dividir'|'orden',primero} */
-function _cpDe(cron,item){var x=_cpAll()[_cpKey(cron,item)];if(!x||x.eliminado)return null;return {modo:String(x.modo||'orden'),primero:String(x.primero||'')}}
-function _cpSet(cron,item,modo,primero){
+function _cpDe(cron,item){var x=_cpAll()[_cpKey(cron,item)];if(!x||x.eliminado)return null;return {modo:String(x.modo||'orden'),primero:String(x.primero||''),fases:(x.fases&&typeof x.fases==='object')?x.fases:{}}}
+/* la PARTE (apartado del APU) de la partida que programa una actividad */
+function _cpFaseDe(cron,item,cod){var c=_cpDe(cron,item);return (c&&c.fases&&c.fases[cod])?String(c.fases[cod]):''}
+function _cpSet(cron,item,modo,primero,fases){
   var all=_cpAll(),k=_cpKey(cron,item),t=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'';
-  all[k]={cron_id:String(cron),item:String(item),modo:String(modo||'orden'),primero:String(primero||''),quien:yo,ts:t,cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0};
+  var prev=all[k]||{};
+  all[k]={cron_id:String(cron),item:String(item),modo:String(modo||'orden'),primero:String(primero||''),
+    fases:(fases&&typeof fases==='object')?fases:((prev.fases&&typeof prev.fases==='object')?prev.fases:{}),
+    quien:yo,ts:t,cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0};
   _cpSaveLocal();
   try{if(typeof syncNow==='function')syncNow(true)}catch(e){}
   try{_cpPush()}catch(e){}}
@@ -19897,6 +19977,7 @@ async function _cpPush(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
   var all=_cpAll(),out=[];
   Object.keys(all).forEach(function(k){var x=all[k]||{};if(!x.ts||!x.cron_id||!x.item)return;
     out.push({proyecto:DATA.proyecto,cron_id:String(x.cron_id),item:String(x.item),modo:String(x.modo||'orden'),primero:String(x.primero||''),
+      fases:(x.fases&&typeof x.fases==='object')?x.fases:{},
       quien:String(x.quien||''),ts:Number(x.ts)||0,cell_at:Number(x.cell_at)||0,
       eliminado:!!x.eliminado,elim_por:String(x.elim_por||''),elim_ts:Number(x.elim_ts)||0})});
   if(!out.length)return;
@@ -19909,9 +19990,12 @@ async function _cpPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
     var loc=all[k]||{},lts=Number(loc.ts)||0,sts=Number(r.ts)||0;
     if(lts>sts)return;if(lts&&lts===sts)return;
     cambio=true;
-    all[k]={cron_id:String(r.cron_id),item:String(r.item),modo:String(r.modo||'orden'),primero:String(r.primero||''),quien:String(r.quien||''),
+    var fz9={};try{fz9=(typeof r.fases==='string')?(JSON.parse(r.fases||'{}')||{}):((r.fases&&typeof r.fases==='object')?r.fases:{})}catch(_ej){fz9={}}
+    all[k]={cron_id:String(r.cron_id),item:String(r.item),modo:String(r.modo||'orden'),primero:String(r.primero||''),fases:fz9,quien:String(r.quien||''),
       ts:sts,cell_at:Number(r.cell_at)||0,eliminado:!!r.eliminado,elim_por:String(r.elim_por||''),elim_ts:Number(r.elim_ts)||0}});
-  if(cambio){_cpSaveLocal();try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(e){}}
+  if(cambio){_cpSaveLocal();try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(e){}
+    /* el analisis de restricciones mide por la parte enlazada */
+    try{if(document.getElementById('_rxNoLista')&&typeof _rxNoLlena==='function'){window._rxNoR=null;window._rxNoHuella=null;_rxNoLlena()}}catch(e){}}
   return cambio}
 try{var _cnPushBase=syncPush;syncPush=async function(){try{await _cnPush()}catch(e){}try{await _cpPush()}catch(e){}return await _cnPushBase.apply(this,arguments)};
 var _cnPullBase=syncPull;syncPull=async function(){var r=await _cnPullBase.apply(this,arguments);try{await _cnPull()}catch(e){}try{await _cpPull()}catch(e){}return r};}catch(_cnw){}
