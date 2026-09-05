@@ -8435,6 +8435,11 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
     var k=(f&&f.clave)||'';
     if(_rxMemo[k])return _rxMemo[k];
     var reg=(typeof _rxDeActSem==='function')?_rxDeActSem(f&&f.cod,(f&&f.items)||[],semN):((typeof _rxDeAct==='function')?_rxDeAct(f&&f.cod,(f&&f.items)||[]):null);
+    /* varias restricciones en la semana: se juntan, separadas por " | " */
+    try{var regs=(typeof _rxDeActSemTodas==='function')?_rxDeActSemTodas(f&&f.cod,(f&&f.items)||[],semN):[];
+      if(regs.length>1){var o9={};['descripcion','accion','razon','area','comentario'].forEach(function(k9){var vs=[];
+          regs.forEach(function(r9){var v9=String(r9[k9]||'').trim();if(v9&&vs.indexOf(v9)<0)vs.push(v9)});o9[k9]=vs.join(' | ')});
+        reg=o9}}catch(_er9){}
     /* en el PPC (opc.quien) solo vale el analisis de la semana: la
        restriccion de mina de la partida no rellena sus columnas */
     var mina=(opc&&opc.quien)?'':_minaDe(f);
@@ -15104,7 +15109,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260905a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260905a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -16947,7 +16952,7 @@ var RX_RAZONES=['CLIENTE - MATERIALES','CLIENTE - INGENIERÍA','CLIENTE - PRIORI
   'DOCUMENTACION TECNICA','ACTIVIDADES PREVIAS','TORMENTAS ELECTRICAS / LLUVIAS INTENSAS',
   'EXTERNO','SUBCONTRATAS','ERRORES DE INGENIERÍA','CONTROL DE CALIDAD'];
 var _RX_CAMPOS=['partida_id','task_code','actividad','descripcion','accion','f_ident',
-  'f_req','f_prev','f_nueva','area','personal','importancia','f_prog','estado','razon','comentario','sem_res'];
+  'f_req','f_prev','f_nueva','area','personal','importancia','f_prog','estado','razon','comentario','sem_res','sem_incl','fotos'];
 function _rxAll(){if(!state.restrx){try{state.restrx=JSON.parse(localStorage.getItem('obf4_restrx')||'{}')||{}}catch(e){state.restrx={}}}if(!state.restrx)state.restrx={};return state.restrx}
 function _rxSaveLocal(){try{localStorage.setItem('obf4_restrx',JSON.stringify(_rxAll()))}catch(e){}}
 function _rxVivas(){var all=_rxAll(),out=[];Object.keys(all).forEach(function(k){var x=all[k];if(x&&!x.eliminado)out.push(x)});
@@ -16955,12 +16960,67 @@ function _rxVivas(){var all=_rxAll(),out=[];Object.keys(all).forEach(function(k)
 /* el registro vivo de una actividad, por su codigo o por sus partidas */
 /* el registro del analisis que corresponde a una SEMANA: el de esa semana
    (sin registro de esa semana, nada) */
-function _rxDeActSem(cod,items,semN){
+/* una restriccion INCLUIDA en otra semana (sem_incl, CSV): sigue siendo de
+   su semana, pero tambien cuenta en esa */
+function _rxInclTiene(x,n){return (','+String((x&&x.sem_incl)||'')+',').indexOf(','+n+',')>=0}
+function _rxInclToggle(rid,n){var x=_rxAll()[rid];if(!x)return;
+  var L=String(x.sem_incl||'').split(',').map(function(z){return Number(z)||0}).filter(Boolean);
+  var k=L.indexOf(Number(n));if(k>=0)L.splice(k,1);else L.push(Number(n));
+  L.sort(function(a,b){return a-b});_rxSet(rid,{sem_incl:L.join(',')});return k<0}
+/* TODAS las restricciones de una actividad en una semana: las de esa
+   semana y las incluidas en ella */
+function _rxDeActSemTodas(cod,items,semN){
   var mios=_rxVivas().filter(function(x){return (cod&&x.task_code===cod)||(items&&items.length&&x.partida_id&&items.indexOf(x.partida_id)>=0)});
-  if(!mios.length)return null;if(!semN)return mios[0];
-  var deSem=mios.filter(function(x){return _rxSemDe(x)===semN});
+  if(!semN)return mios;
+  return mios.filter(function(x){return _rxSemDe(x)===semN||_rxInclTiene(x,semN)})
+    .sort(function(a,b){return (Number(a.creado)||0)-(Number(b.creado)||0)})}
+function _rxDeActSem(cod,items,semN){
+  var T=_rxDeActSemTodas(cod,items,semN);
+  if(!T.length)return null;if(!semN)return T[0];
   /* solo lo cargado para ESA semana: sin registro, en blanco */
-  return deSem.length?deSem[deSem.length-1]:null}
+  return T[T.length-1]}
+/* la semana que rige el analisis: la que fija el admin o la en curso */
+function _rxSemRige(){var n=0;try{n=Number(_ajGet('rx_sem_cierre',''))||0}catch(e){}
+  if(n>=27&&n<=60)return n;
+  try{return 27+Math.floor((_crASerial(todayISO())-46199)/7)}catch(e){}
+  return (typeof _wkQueToca==='function')?_wkQueToca():0}
+/* los apartados del APU que SI se programan en las partidas de la
+   actividad: "(MONTAJE · PRUEBAS)" delante del nombre */
+function _rxApartados(items){try{var out=[];
+  (items||[]).forEach(function(pid){var r=(typeof _apuDe==='function')?_apuDe(pid):null;if(!r)return;
+    ((typeof _apuGrupos==='function'?_apuGrupos(r):(r.grupos||[]))||[]).forEach(function(g){
+      if(!g||g.off)return;var n=String(g.nombre||'').trim().toUpperCase();if(n&&out.indexOf(n)<0)out.push(n)})});
+  return out.length?('('+out.join(' \u00b7 ')+') '):''}catch(e){return ''}}
+/* fotos de una restriccion: rutas en el bucket obra-fotos */
+function _rxFotos(x){try{var L=JSON.parse(String((x&&x.fotos)||'')||'[]');return Array.isArray(L)?L:[]}catch(e){return []}}
+async function _rxFotoSubir(rid,files){
+  var x=_rxAll()[rid];if(!x)return;var L=_rxFotos(x),n=0;
+  for(var i=0;i<files.length;i++){var f=files[i];if(!f)continue;
+    try{var du;try{du=await resize(f)}catch(e1){du=await new Promise(function(res,rej){var fr=new FileReader();fr.onload=function(){res(fr.result)};fr.onerror=function(){rej(fr.error)};fr.readAsDataURL(f)})}
+      var path='restricciones/'+rid+'/'+Date.now()+'_'+i+'.jpg';
+      var r=await uploadFoto(path,du);
+      if(r&&r.ok){L.push(path);n++}else toast('\u2716 No se pudo subir '+(f.name||'la foto'))}
+    catch(e){toast('\u2716 '+((e&&e.message)||e))}}
+  if(n){_rxSet(rid,{fotos:JSON.stringify(L)});toast('\ud83d\udcf7 '+n+' foto(s) guardada(s)')}}
+function _rxFotoQuitar(rid,path){var x=_rxAll()[rid];if(!x)return;
+  var L=_rxFotos(x).filter(function(z){return z!==path});_rxSet(rid,{fotos:JSON.stringify(L)});
+  try{if(typeof sbReady==='function'&&sbReady()&&navigator.onLine)fetch(sbBase()+'/storage/v1/object/'+FOTO_BUCKET+'/'+fotoEncPath(path),{method:'DELETE',headers:sbHead()}).catch(function(){})}catch(e){}}
+/* lo que la ficha necesita despues de pintarse: cajetines que crecen con
+   lo escrito, incluir en otra semana, fotos */
+function _rxCardBind(root){try{
+  var crece=function(t){try{t.style.height='auto';t.style.height=Math.max(44,t.scrollHeight+2)+'px'}catch(e){}};
+  root.querySelectorAll('textarea._rxCam').forEach(function(t){crece(t);t.oninput=function(){crece(t)}});
+  root.querySelectorAll('._rxIncl').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();
+    var on=_rxInclToggle(b.getAttribute('data-rid'),Number(b.getAttribute('data-sem')));
+    toast(on?('\u2795 Incluida tambi\u00e9n en la semana '+b.getAttribute('data-sem')+' \u2014 sigue en Pendientes'):('Quitada de la semana '+b.getAttribute('data-sem')));
+    _rxUI()}});
+  root.querySelectorAll('._rxFotoIn').forEach(function(inp){inp.onchange=async function(){var fs=inp.files;if(!fs||!fs.length)return;
+    var rid=inp.getAttribute('data-rid');inp.disabled=true;toast('Subiendo foto(s)\u2026');
+    try{await _rxFotoSubir(rid,Array.prototype.slice.call(fs))}finally{try{inp.value=''}catch(e){}inp.disabled=false;_rxUI()}}});
+  root.querySelectorAll('._rxFotoDel').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();
+    if(!confirm('\u00bfQuitar esta foto de la restricci\u00f3n?'))return;
+    _rxFotoQuitar(b.getAttribute('data-rid'),b.getAttribute('data-p'));_rxUI()}});
+}catch(e){}}
 function _rxDeAct(cod,items){var out=null;_rxVivas().forEach(function(x){if(out)return;
   if(cod&&x.task_code===cod)out=x;
   else if(items&&items.length&&x.partida_id&&items.indexOf(x.partida_id)>=0)out=x});
@@ -17105,7 +17165,7 @@ async function _rxNoCumplidas(opc){
         var a9=alc&&alc[i9];
         m[i9]={ini:String((a9&&a9.ini)||fIni[cod]||''),fin:String((a9&&a9.fin)||fFin[cod]||'')}});
         return m})(),
-      reg:semN?!!_rxDeActSem(cod,itemsDe[cod],semN):!!_rxDeAct(cod,itemsDe[cod])}};
+      reg:semN?(_rxDeActSemTodas(cod,itemsDe[cod],semN).length>0):!!_rxDeAct(cod,itemsDe[cod])}};
   var ordena=function(a,b){return a.cod<b.cod?-1:a.cod>b.cod?1:0};
   var cods=Object.keys(R.plan||{});
   if(_prox){
@@ -17121,7 +17181,7 @@ async function _rxNoCumplidas(opc){
   cods.forEach(function(cod){
     var pg=pgDe(cod,ini2,fin2),ac=acDe(cod,ini2,fin2);
     if(!(pg>1e-9)||ac>=pg-1e-9)return;
-    lista.push(fila(cod,pg,ac,0))});
+    lista.push(fila(cod,pg,ac,semV))});
   lista.sort(ordena);
   return {sem:semV,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId,nombre:(bkSel&&bkSel.nombre)||''},lista:lista}}
 function _rxAnexaUna(q,sem){
@@ -17130,6 +17190,56 @@ function _rxAnexaUna(q,sem){
     descripcion:'',accion:'',f_ident:(typeof todayISO==='function')?todayISO():'',
     f_req:'',f_prev:'',f_nueva:'',area:'',personal:'',importancia:'',f_prog:'',
     estado:'PENDIENTE',razon:'',comentario:'',semana:sem||0})}
+/* el + de una actividad: elegir una PENDIENTE de esa actividad para
+   incluirla en la semana (sigue en Pendientes), o abrir una nueva */
+function _rxElegirUI(q,semN,alTerminar){
+  var ya=document.getElementById('_rxElOv');if(ya)ya.remove();
+  var pend=_rxVivas().filter(function(x){
+    if(x.estado==='LIBERADA')return false;
+    var mia=(q.cod&&x.task_code===q.cod)||(q.items&&q.items.length&&x.partida_id&&q.items.indexOf(x.partida_id)>=0);
+    if(!mia)return false;
+    return _rxSemDe(x)!==semN&&!_rxInclTiene(x,semN)})
+    .sort(function(a,b){return (Number(b.creado)||0)-(Number(a.creado)||0)});
+  var at=function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')};
+  var ov=document.createElement('div');ov.id='_rxElOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:135;background:rgba(5,10,20,.72);display:flex;align-items:center;justify-content:center;padding:14px';
+  var tarj=pend.map(function(x){
+    var fotos=_rxFotos(x).length;
+    return '<div style="background:#0f1726;border:1px solid #33415c;border-radius:11px;padding:10px;display:flex;flex-direction:column;gap:5px">'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+        '<b style="color:#8ECBF5;font-size:12px">'+esc(x.task_code||q.cod||'')+'</b>'+
+        '<span style="font-size:10px;font-weight:800;color:#E8C9A0;background:#2a2314;border:1px solid #4a3c1d;border-radius:7px;padding:2px 7px">PENDIENTE \u00b7 de la semana '+_rxSemDe(x)+'</span>'+
+        (x.razon?('<span style="font-size:10px;color:#9db4d6">'+esc(x.razon)+'</span>'):'')+
+        (x.area?('<span style="font-size:10px;color:#9db4d6">'+esc(x.area)+'</span>'):'')+
+        (fotos?('<span style="font-size:10px;color:#9db4d6">\ud83d\udcf7 '+fotos+'</span>'):'')+
+        '<button class="_rxElInc" data-rid="'+at(x.rid)+'" style="margin-left:auto;background:#1E7A46;color:#fff;border:0;border-radius:8px;padding:6px 11px;font-weight:800;font-size:11.5px;cursor:pointer">\u2795 Incluir en la semana '+semN+'</button>'+
+      '</div>'+
+      '<div style="font-size:11.5px;color:#cfe3ff;overflow-wrap:anywhere"><span style="color:#7d8590;font-weight:800;font-size:9.5px;letter-spacing:.05em">RESTRICCI\u00d3N</span> '+esc(x.descripcion||'\u2014')+'</div>'+
+      (x.accion?('<div style="font-size:11.5px;color:#9db4d6;overflow-wrap:anywhere"><span style="color:#7d8590;font-weight:800;font-size:9.5px;letter-spacing:.05em">SOLUCI\u00d3N</span> '+esc(x.accion)+'</div>'):'')+
+      (x.comentario?('<div style="font-size:11px;color:#9db4d6;overflow-wrap:anywhere"><span style="color:#7d8590;font-weight:800;font-size:9.5px;letter-spacing:.05em">COMENTARIO</span> '+esc(x.comentario)+'</div>'):'')+
+    '</div>'}).join('');
+  ov.innerHTML='<div style="background:#101a2b;border:1px solid #1d2a3d;border-radius:14px;width:100%;max-width:720px;max-height:88vh;overflow:auto;padding:14px;color:#cfe3ff;box-shadow:0 18px 50px rgba(0,0,0,.6)">'+
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'+
+      '<b style="font-size:14px;color:#fff">'+esc(q.cod||'')+'</b><span style="font-size:12px;color:#9db4d6;flex:1;min-width:160px">'+esc(_rxApartados(q.items)+(q.nom||''))+'</span>'+
+      '<span style="font-size:11px;font-weight:800;color:#E8C9A0">SEMANA '+semN+'</span>'+
+      '<button id="_rxElX" style="background:#2b3444;color:#cfe3ff;border:0;border-radius:9px;padding:7px 11px;font-weight:800;cursor:pointer">\u2715</button>'+
+    '</div>'+
+    '<div style="font-size:11.5px;color:#9db4d6;margin-bottom:8px">'+(pend.length
+      ?('Esta actividad tiene <b>'+pend.length+'</b> restricci\u00f3n(es) pendiente(s) de otras semanas. Incluye una en esta semana (sigue en Pendientes) o abre una nueva.')
+      :'Esta actividad no tiene restricciones pendientes de otras semanas.')+'</div>'+
+    '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">'+tarj+'</div>'+
+    '<button id="_rxElNueva" style="width:100%;background:#1B5E8A;color:#fff;border:0;border-radius:10px;padding:10px;font-weight:800;cursor:pointer">\u2795 Nueva restricci\u00f3n para esta actividad en la semana '+semN+'</button>'+
+  '</div>';
+  document.body.appendChild(ov);
+  ov.onclick=function(e){if(e.target===ov)ov.remove()};
+  document.getElementById('_rxElX').onclick=function(){ov.remove()};
+  document.getElementById('_rxElNueva').onclick=function(){ov.remove();
+    _rxAnexaUna(q,semN);toast('\u2795 '+q.cod+' anexada \u2014 ponle su restricci\u00f3n aqu\u00ed mismo');
+    if(alTerminar)alTerminar()};
+  ov.querySelectorAll('._rxElInc').forEach(function(b){b.onclick=function(){
+    var rid=b.getAttribute('data-rid');if(!_rxInclTiene(_rxAll()[rid]||{},semN))_rxInclToggle(rid,semN);
+    ov.remove();toast('\u2795 Incluida en la semana '+semN+' \u2014 sigue en Pendientes');
+    if(alTerminar)alTerminar()}})}
 /* las RESTRICCIONES FUTURAS del aplicativo (las de fecha limite, mina o
    internas, aun no levantadas): tambien se anexan desde aqui */
 function _rxFuturas(){
@@ -17165,15 +17275,38 @@ async function _rxAnexaNo(prox){
 var _RX_STI='background:#0b1220;color:#cfe3ff;border:1px solid #24344f;border-radius:7px;padding:6px 8px;font-size:12px;font-family:inherit';
 function _rxCard(x){
   var rid=x.rid,stI=_RX_STI;
+  /* quien puede que: el admin todo; el supervisor llena la ficha de la
+     semana que rige y, en una semana ya pasada o en Pendientes/Resueltas,
+     solo la marca resuelta y comenta */
+  var esAd=false;try{esAd=((typeof esAdminReal==='function')&&esAdminReal())||((typeof esAdmin==='function')&&esAdmin())}catch(e){}
+  var vista=window._rxVista||'no',semX=_rxSemDe(x),semR=_rxSemRige();
+  var soloCierre=!esAd&&(vista==='res'||vista==='lib'||(semX>0&&semX<semR));
+  var dis=function(campo){return (soloCierre&&campo!=='estado'&&campo!=='comentario')?' disabled style="opacity:.55;cursor:not-allowed"':''};
   /* esc() del aplicativo solo escapa <: en un value="..." una comilla parte
      el atributo y el texto se recorta (pernos de 1/2" x 5"...). Aqui los
      atributos van con su escapador completo. */
   var at=function(v){return String(v==null?'':v)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')};
-  var sel=function(campo,ops,val){return '<select class="_rxCam" data-rid="'+at(rid)+'" data-campo="'+campo+'" style="'+stI+'"><option value=""></option>'+
+  var sel=function(campo,ops,val){return '<select class="_rxCam" data-rid="'+at(rid)+'" data-campo="'+campo+'"'+dis(campo)+' style="'+stI+'"><option value=""></option>'+
     ops.map(function(o){return '<option'+(o===val?' selected':'')+'>'+at(o)+'</option>'}).join('')+'</select>'};
-  var inp=function(campo,val,tipo,ancho){return '<input type="'+(tipo||'text')+'" class="_rxCam" data-rid="'+at(rid)+'" data-campo="'+campo+'" value="'+at(val)+'" style="'+stI+(ancho?(';width:'+ancho):';flex:1;min-width:130px')+'">'};
-  var ta=function(campo,val,ph){return '<textarea class="_rxCam" data-rid="'+at(rid)+'" data-campo="'+campo+'" placeholder="'+at(ph)+'" style="'+stI+';width:100%;min-height:44px;resize:vertical;box-sizing:border-box">'+at(val)+'</textarea>'};
+  var inp=function(campo,val,tipo,ancho){return '<input type="'+(tipo||'text')+'" class="_rxCam" data-rid="'+at(rid)+'" data-campo="'+campo+'" value="'+at(val)+'"'+dis(campo)+' style="'+stI+(ancho?(';width:'+ancho):';flex:1;min-width:130px')+';max-width:100%;box-sizing:border-box">'};
+  /* el cajetin crece con lo escrito (_rxCardBind) y no se sale del recuadro */
+  var ta=function(campo,val,ph){return '<textarea class="_rxCam" data-rid="'+at(rid)+'" data-campo="'+campo+'" placeholder="'+at(ph)+'"'+dis(campo)+' rows="2" style="'+stI+';width:100%;min-height:44px;resize:none;overflow:hidden;box-sizing:border-box;line-height:1.35;overflow-wrap:anywhere">'+at(val)+'</textarea>'};
+  /* incluir una pendiente en la semanal o en las proximas 3, sin sacarla
+     de Pendientes */
+  var incl='';
+  if(vista==='res'){var ch=[];for(var n9=semR;n9<=semR+3;n9++){if(n9===semX)continue;var on=_rxInclTiene(x,n9);
+      ch.push('<button class="_rxIncl" data-rid="'+at(rid)+'" data-sem="'+n9+'" title="'+(on?'Quitarla de la semana '+n9:'Incluirla tambi\u00e9n en la semana '+n9)+'" style="background:'+(on?'#1E7A46':'#1c2440')+';color:'+(on?'#fff':'#9db4d6')+';border:1px solid '+(on?'#2ECC71':'#33415c')+';border-radius:7px;padding:3px 9px;font-size:10.5px;font-weight:800;cursor:pointer">'+(on?'\u2713 ':'')+'S'+n9+(n9===semR?' (semanal)':'')+'</button>')}
+    if(ch.length)incl='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:7px"><span style="font-size:9.5px;font-weight:800;color:#7d8590;letter-spacing:.05em">INCLUIR TAMBI\u00c9N EN</span>'+ch.join('')+'<span style="font-size:10px;color:#7d8590">sigue en Pendientes</span></div>'}
+  /* las fotos de la restriccion */
+  var FT=_rxFotos(x);
+  var fotos='<div style="margin-top:7px"><span style="font-size:9.5px;font-weight:800;color:#7d8590;letter-spacing:.05em">FOTOS'+(FT.length?(' ('+FT.length+')'):'')+'</span>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px">'+
+    FT.map(function(pth){var u=(typeof fotoPublicUrl==='function')?fotoPublicUrl(pth):'';
+      return '<span style="position:relative;display:inline-block"><a href="'+at(u)+'" target="_blank" rel="noopener"><img src="'+at(u)+'" alt="foto" loading="lazy" style="width:74px;height:74px;object-fit:cover;border-radius:8px;border:1px solid #33415c;display:block"></a>'+
+        (esAd?('<button class="_rxFotoDel" data-rid="'+at(rid)+'" data-p="'+at(pth)+'" title="Quitar foto" style="position:absolute;top:-6px;right:-6px;background:#8A2018;color:#fff;border:0;border-radius:50%;width:20px;height:20px;font-size:11px;font-weight:900;cursor:pointer;line-height:20px;padding:0">\u2715</button>'):'')+'</span>'}).join('')+
+    '<label style="display:inline-flex;align-items:center;gap:5px;background:#1c2440;color:#9db4d6;border:1px solid #33415c;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer">\ud83d\udcf7 Agregar foto<input type="file" class="_rxFotoIn" data-rid="'+at(rid)+'" accept="image/*" multiple style="display:none"></label>'+
+    '</div></div>';
   var lab=function(t){return '<span style="font-size:9.5px;font-weight:800;color:#7d8590;letter-spacing:.05em">'+t+'</span>'};
   return '<div style="background:#0f1726;border:1px solid '+(x.estado==='LIBERADA'?'#1d3a2a':'#33415c')+';border-radius:12px;padding:10px;margin-bottom:10px">'+
     '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:7px">'+
@@ -17182,8 +17315,8 @@ function _rxCard(x){
       inp('partida_id',x.partida_id,'text','100px')+
       inp('actividad',x.actividad)+
       sel('estado',RX_EST,x.estado||'PENDIENTE')+
-      '<button class="_rxDel" data-rid="'+esc(rid)+'" title="Eliminar" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:7px;padding:6px 10px;font-weight:900;cursor:pointer">\u2715</button>'+
-    '</div>'+
+      (esAd?('<button class="_rxDel" data-rid="'+esc(rid)+'" title="Eliminar (solo el admin)" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:7px;padding:6px 10px;font-weight:900;cursor:pointer">\u2715</button>'):'')+
+    '</div>'+incl+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:7px">'+
       '<div>'+lab('DESCRIPCI\u00d3N DE LA RESTRICCI\u00d3N')+ta('descripcion',x.descripcion,'qu\u00e9 est\u00e1 frenando la actividad')+'</div>'+
       '<div>'+lab('ACCI\u00d3N NECESARIA / SOLUCI\u00d3N PROPUESTA')+ta('accion',x.accion,'qu\u00e9 hay que hacer para liberarla')+'</div>'+
@@ -17201,7 +17334,8 @@ function _rxCard(x){
       '<div>'+lab('NUEVA FECHA')+'<br>'+inp('f_nueva',x.f_nueva,'date','138px')+'</div>'+
       '<div>'+lab('LIBERACI\u00d3N PROGRAMADA')+'<br>'+inp('f_prog',x.f_prog,'date','138px')+'</div>'+
     '</div>'+
-    '<div style="margin-top:7px">'+lab('COMENTARIO')+ta('comentario',x.comentario,'')+'</div>'+
+    '<div style="margin-top:7px">'+lab('COMENTARIO')+ta('comentario',x.comentario,soloCierre?'Se realiz\u00f3 la soluci\u00f3n\u2026':'')+'</div>'+
+    fotos+
   '</div>'}
 /* el panel, con dos vi\u00f1etas: al entrar salen las NO CUMPLIDAS de la
    semana, cada una con su desglosable, su + junto al nombre y su ficha
@@ -17278,6 +17412,7 @@ function _rxUI(vista){
   ov.querySelectorAll('._rxTab').forEach(function(b){
     b.onclick=function(){_rxUI(b.getAttribute('data-v'))}});
   if(vista==='res'||vista==='lib'){
+    _rxCardBind(ov);
     ov.querySelectorAll('._rxCam').forEach(function(el){
       el.onchange=function(){var o={};o[el.getAttribute('data-campo')]=el.value;
         _rxSet(el.getAttribute('data-rid'),o)}});
@@ -17301,7 +17436,6 @@ function _rxPartidasHTML(q){
     var porEsp={},orden=[];
     (q.items||[]).forEach(function(pid){
       var esp=(cat[pid]&&cat[pid].esp)||(vivos[pid]&&vivos[pid].esp)||'(sin especialidad)';
-      if(!esAd&&miDisc&&esp!==miDisc)return;
       if(!porEsp[esp]){porEsp[esp]=[];orden.push(esp)}
       porEsp[esp].push(pid)});
     if(!orden.length)return '';
@@ -17389,11 +17523,15 @@ function _rxNoPinta(r){
       '<div style="margin-bottom:9px"><button id="_rxTodas" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:8px 11px;font-weight:800;cursor:pointer">\u26a1 Anexar todas las que faltan</button></div>';
     h+=
       (function(){
+      var esAdX=false;try{esAdX=((typeof esAdminReal==='function')&&esAdminReal())||((typeof esAdmin==='function')&&esAdmin())}catch(e){}
       var _item=function(q,i){
-        /* en las proximas semanas, el registro es el de ESA semana */
-        var reg=q.semN?_rxDeActSem(q.cod,q.items,q.semN):_rxDeAct(q.cod,q.items);
+        /* TODAS las restricciones de la actividad en ESA semana (las suyas y
+           las incluidas); puede tener varias */
+        var regs=_rxDeActSemTodas(q.cod,q.items,q.semN||r.sem);
+        var reg=regs.length?regs[regs.length-1]:null;
         var abierto=!!window._rxNoAbre[(q.semN?('S'+q.semN+'|'):'')+q.cod];
-        var det=(reg?_rxCard(reg)
+        var det=(regs.length?(regs.map(_rxCard).join('')+
+            '<div style="padding:2px 0 6px"><button class="_rxOtra" data-i="'+i+'" title="Agregar otra restricci\u00f3n a esta misma actividad" style="background:#1c2440;color:#9db4d6;border:1px solid #33415c;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer">\u2795 Otra restricci\u00f3n</button></div>')
           :('<div style="padding:8px 12px;font-size:11.5px;color:#9db4d6">'+
             (q.semN?('Programado en la semana '+q.semN):'Programado esta semana')+': <b>'+q.prog+'%</b> \u00b7 Hecho: <b>'+q.hecho+'%</b>'+
             '<br>An\u00e9xala con el \u2795 para ponerle su restricci\u00f3n.</div>'))+
@@ -17401,11 +17539,11 @@ function _rxNoPinta(r){
         return '<div style="border:1px solid '+(reg?'#1d3a2a':'#33415c')+';border-radius:10px;margin-bottom:7px;overflow:hidden">'+
           '<div class="_rxNoCab" data-cod="'+esc((q.semN?('S'+q.semN+'|'):'')+q.cod)+'" style="display:flex;gap:8px;align-items:center;padding:9px 10px;cursor:pointer;background:#0f1726;flex-wrap:wrap">'+
             '<b style="color:#8ECBF5;font-size:12px">'+esc(q.cod)+'</b>'+
-            (reg?'<button class="_rxNoDel" data-rid="'+esc(reg.rid)+'" title="Borrar su registro" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:7px;padding:3px 9px;font-weight:900;cursor:pointer">\u2715</button>'
+            (reg?((esAdX&&regs.length===1)?'<button class="_rxNoDel" data-rid="'+esc(reg.rid)+'" title="Borrar su registro (solo el admin)" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:7px;padding:3px 9px;font-weight:900;cursor:pointer">\u2715</button>':'')
                 :'<button class="_rxAne" data-i="'+i+'" title="Anexar y ponerle su restricci\u00f3n" style="background:#1E7A46;color:#fff;border:0;border-radius:7px;padding:3px 10px;font-weight:900;cursor:pointer">\u2795</button>')+
-            '<span style="flex:1;min-width:150px;font-size:12px;overflow-wrap:anywhere">'+esc(q.nom)+'</span>'+
+            '<span style="flex:1;min-width:150px;font-size:12px;overflow-wrap:anywhere">'+(function(){var ap=_rxApartados(q.items);return ap?('<span style="color:#C7A3E8;font-weight:800">'+esc(ap)+'</span>'):''})()+esc(q.nom)+'</span>'+
             '<span style="font-size:10.5px;color:#E8C9A0;font-weight:800;white-space:nowrap">prog '+q.prog+'% \u00b7 hecho '+q.hecho+'%</span>'+
-            (reg?'<span style="font-size:10px;font-weight:800;color:#9FE8B0;background:#14261d;border:1px solid #1d3a2a;border-radius:7px;padding:2px 7px">\u2713 anexada</span>':'')+
+            (reg?'<span style="font-size:10px;font-weight:800;color:#9FE8B0;background:#14261d;border:1px solid #1d3a2a;border-radius:7px;padding:2px 7px">\u2713 '+(regs.length>1?(regs.length+' restricciones'):'anexada')+'</span>':'')+
             '<span style="color:#7d8590">'+(abierto?'\u25b4':'\u25be')+'</span>'+
           '</div>'+
           '<div class="_rxNoDet" style="display:'+(abierto?'block':'none')+';background:#0b1220;padding:'+(reg?'8px':'0')+'">'+det+'</div>'+
@@ -17422,9 +17560,9 @@ function _rxNoPinta(r){
           cnt[e9]=(cnt[e9]||0)+1;if(cnt[e9]>mx){mx=cnt[e9];top=e9}});
         return top};
       /* los grupos WBS de un conjunto de actividades (indices en r.lista) */
+      /* compartido: las tres especialidades ven y editan todo */
       var grupos=function(idxs){var gr={},go=[];
       idxs.forEach(function(i){var q=r.lista[i],e9=espDe(q);
-        if(!esAd9&&mi9&&e9!==mi9&&e9!=='(sin especialidad)')return;
         if(!gr[e9]){gr[e9]=[];go.push(e9)}gr[e9].push([q,i])});
       return go.map(function(e9){
         return '<div style="background:#1B2B45;border:1px solid #33447a;border-left:3px solid #4A6EA8;color:#A9C0FF;border-radius:8px;padding:6px 10px;font-weight:800;font-size:11px;letter-spacing:.05em;margin:10px 0 6px;display:flex;align-items:center;gap:8px">'+
@@ -17461,6 +17599,15 @@ function _rxNoPinta(r){
             '<div class="_rxNoDet" style="display:'+(abF?'block':'none')+';background:#0b1220;padding:'+(regF?'8px':'0')+'">'+detF+'</div>'+
           '</div>'}).join('');
     cont.innerHTML=h;
+    _rxCardBind(cont);
+    /* otra restriccion mas para la misma actividad y semana */
+    cont.querySelectorAll('._rxOtra').forEach(function(b){
+      b.onclick=function(ev){ev.stopPropagation();
+        var q=window._rxNoR.lista[+b.getAttribute('data-i')];
+        _rxAnexaUna(q,q.semN||window._rxNoR.sem);
+        window._rxNoAbre[(q.semN?('S'+q.semN+'|'):'')+q.cod]=true;
+        toast('\u2795 otra restricci\u00f3n para '+q.cod);
+        _rxNoLlena()}});
     cont.querySelectorAll('._rxAneF').forEach(function(b){
       b.onclick=function(ev){ev.stopPropagation();
         var q=window._rxFutR[+b.getAttribute('data-j')];
@@ -17481,10 +17628,11 @@ function _rxNoPinta(r){
     cont.querySelectorAll('._rxAne').forEach(function(b){
       b.onclick=function(ev){ev.stopPropagation();
         var q=window._rxNoR.lista[+b.getAttribute('data-i')];
-        _rxAnexaUna(q,q.semN||window._rxNoR.sem);
-        window._rxNoAbre[(q.semN?('S'+q.semN+'|'):'')+q.cod]=true;
-        toast('\u2795 '+q.cod+' anexada \u2014 ponle su restricci\u00f3n aqu\u00ed mismo');
-        _rxNoLlena()}});
+        var sN=q.semN||window._rxNoR.sem;
+        /* elegir una pendiente de la actividad para esta semana, o nueva */
+        _rxElegirUI(q,sN,function(){
+          window._rxNoAbre[(q.semN?('S'+q.semN+'|'):'')+q.cod]=true;
+          _rxNoLlena()})}});
     cont.querySelectorAll('._rxNoDel').forEach(function(b){
       b.onclick=function(ev){ev.stopPropagation();
         if(!confirm('\u00bfBorrar el registro de esta actividad? Queda registrado como eliminado.'))return;
