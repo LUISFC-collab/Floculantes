@@ -15119,7 +15119,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260905a8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260905a9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17013,8 +17013,21 @@ async function _rxFotoSubir(rid,files){
       if(r&&r.ok){L.push(path);n++}else toast('\u2716 No se pudo subir '+(f.name||'la foto'))}
     catch(e){toast('\u2716 '+((e&&e.message)||e))}}
   if(n){_rxSet(rid,{fotos:JSON.stringify(L)});toast('\ud83d\udcf7 '+n+' foto(s) guardada(s)')}}
+/* lo que devuelve el selector universal: archivos de la camara o la
+   galeria, o fotos ya subidas (URL o dataURL) */
+async function _rxFotoAgregar(rid,res){
+  var x=_rxAll()[rid];if(!x||!res)return;
+  if(res.files&&res.files.length){await _rxFotoSubir(rid,Array.prototype.slice.call(res.files));return}
+  var L=_rxFotos(x),n=0;
+  for(var i=0;i<((res.urls&&res.urls.length)||0);i++){var u=String(res.urls[i]||'');if(!u)continue;
+    if(u.indexOf('data:')===0){
+      try{var path='restricciones/'+rid+'/'+Date.now()+'_'+i+'.jpg';var r=await uploadFoto(path,u);
+        if(r&&r.ok){L.push(path);n++}else toast('\u2716 No se pudo subir una foto')}catch(e){toast('\u2716 '+((e&&e.message)||e))}}
+    else if(L.indexOf(u)<0){L.push(u);n++}}
+  if(n){_rxSet(rid,{fotos:JSON.stringify(L)});toast('\ud83d\udcf7 '+n+' foto(s) guardada(s)')}}
 function _rxFotoQuitar(rid,path){var x=_rxAll()[rid];if(!x)return;
   var L=_rxFotos(x).filter(function(z){return z!==path});_rxSet(rid,{fotos:JSON.stringify(L)});
+  if(/^https?:/i.test(String(path)))return;   /* una foto ya subida en otro sitio: solo se desengancha */
   try{if(typeof sbReady==='function'&&sbReady()&&navigator.onLine)fetch(sbBase()+'/storage/v1/object/'+FOTO_BUCKET+'/'+fotoEncPath(path),{method:'DELETE',headers:sbHead()}).catch(function(){})}catch(e){}}
 /* lo que la ficha necesita despues de pintarse: cajetines que crecen con
    lo escrito, incluir en otra semana, fotos */
@@ -17025,9 +17038,14 @@ function _rxCardBind(root){try{
     var on=_rxInclToggle(b.getAttribute('data-rid'),Number(b.getAttribute('data-sem')));
     toast(on?('\u2795 Incluida tambi\u00e9n en la semana '+b.getAttribute('data-sem')+' \u2014 sigue en Pendientes'):('Quitada de la semana '+b.getAttribute('data-sem')));
     _rxUI()}});
-  root.querySelectorAll('._rxFotoIn').forEach(function(inp){inp.onchange=async function(){var fs=inp.files;if(!fs||!fs.length)return;
-    var rid=inp.getAttribute('data-rid');inp.disabled=true;toast('Subiendo foto(s)\u2026');
-    try{await _rxFotoSubir(rid,Array.prototype.slice.call(fs))}finally{try{inp.value=''}catch(e){}inp.disabled=false;_rxUI()}}});
+  root.querySelectorAll('._rxFotoBtn').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();
+    var rid=b.getAttribute('data-rid');
+    var abrir=function(res){b.disabled=true;toast('Subiendo foto(s)\u2026');
+      Promise.resolve(_rxFotoAgregar(rid,res)).catch(function(e){toast('\u2716 '+((e&&e.message)||e))}).then(function(){b.disabled=false;_rxUI()})};
+    if(typeof _fotoPick==='function')_fotoPick({fecha:(typeof todayISO==='function')?todayISO():'',disc:(state.user&&state.user.disc)||''},abrir);
+    else{/* sin selector: el del sistema, que decide camara o galeria */
+      var inp=document.createElement('input');inp.type='file';inp.accept='image/*,.heic,.heif';inp.multiple=true;
+      inp.onchange=function(){if(inp.files&&inp.files.length)abrir({files:inp.files})};inp.click()}}});
   root.querySelectorAll('._rxFotoDel').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();
     if(!confirm('\u00bfQuitar esta foto de la restricci\u00f3n?'))return;
     _rxFotoQuitar(b.getAttribute('data-rid'),b.getAttribute('data-p'));_rxUI()}});
@@ -17348,10 +17366,10 @@ function _rxCard(x){
   var FT=_rxFotos(x);
   var fotos='<div style="margin-top:7px"><span style="font-size:9.5px;font-weight:800;color:#7d8590;letter-spacing:.05em">FOTOS'+(FT.length?(' ('+FT.length+')'):'')+'</span>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px">'+
-    FT.map(function(pth){var u=(typeof fotoPublicUrl==='function')?fotoPublicUrl(pth):'';
+    FT.map(function(pth){var u=/^https?:/i.test(String(pth))?String(pth):((typeof fotoPublicUrl==='function')?fotoPublicUrl(pth):'');
       return '<span style="position:relative;display:inline-block"><a href="'+at(u)+'" target="_blank" rel="noopener"><img src="'+at(u)+'" alt="foto" loading="lazy" style="width:74px;height:74px;object-fit:cover;border-radius:8px;border:1px solid #33415c;display:block"></a>'+
         (esAd?('<button class="_rxFotoDel" data-rid="'+at(rid)+'" data-p="'+at(pth)+'" title="Quitar foto" style="position:absolute;top:-6px;right:-6px;background:#8A2018;color:#fff;border:0;border-radius:50%;width:20px;height:20px;font-size:11px;font-weight:900;cursor:pointer;line-height:20px;padding:0">\u2715</button>'):'')+'</span>'}).join('')+
-    '<label style="display:inline-flex;align-items:center;gap:5px;background:#1c2440;color:#9db4d6;border:1px solid #33415c;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer">\ud83d\udcf7 Agregar foto<input type="file" class="_rxFotoIn" data-rid="'+at(rid)+'" accept="image/*" multiple style="display:none"></label>'+
+    '<button class="_rxFotoBtn" data-rid="'+at(rid)+'" title="Tomar foto, elegir de la galer\u00eda del tel\u00e9fono o del proyecto" style="display:inline-flex;align-items:center;gap:5px;background:#1c2440;color:#9db4d6;border:1px solid #33415c;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer">\ud83d\udcf7 Agregar foto</button>'+
     '</div></div>';
   var lab=function(t){return '<span style="font-size:9.5px;font-weight:800;color:#7d8590;letter-spacing:.05em">'+t+'</span>'};
   return '<div style="background:#0f1726;border:1px solid '+(x.estado==='LIBERADA'?'#1d3a2a':'#33415c')+';border-radius:12px;padding:10px;margin-bottom:10px">'+
