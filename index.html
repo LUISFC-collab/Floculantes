@@ -15119,7 +15119,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260905b5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260905b6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17129,9 +17129,10 @@ async function _rxNoCumplidas(opc){
   /* cada vineta tiene su base: NO cumplidas (rx_base_comparar) y Proximas 3
      semanas (rx_base_prox); la semana de cierre si es compartida */
   var baseId0='';try{baseId0=String(_ajGet(_prox?'rx_base_prox':'rx_base_comparar','')||'')}catch(_e0){}
-  /* en las proximas semanas, sin eleccion del admin manda el CALENDARIO de
-     Programar: lo que de verdad esta programado, entero o por apartados */
-  if(_prox&&!baseId0)baseId0='cal';
+  /* sin eleccion del admin manda el CALENDARIO de Programar: lo que de
+     verdad esta programado, entero o por apartados; 'vig' es el plan del
+     cronograma vigente (.xer) */
+  if(!baseId0)baseId0='cal';
   var baseCron=null;
   if(baseId0.indexOf('cron:')===0){baseCron=L.filter(function(z){return String(z.cron_id)===baseId0.slice(5)})[0]||null;if(baseCron)cc=baseCron}
   if(!cc)return {sem:semA,base:{id:'',nombre:''},lista:[]};
@@ -17143,7 +17144,8 @@ async function _rxNoCumplidas(opc){
   /* la BASE de comparacion que fija el admin: un respaldo guardado o el
      plan del cronograma vigente */
   var baseCal=(baseId0==='cal');   /* lo que esta en el calendario de Programar */
-  var baseId=(baseCron||baseCal)?'':baseId0;
+  var baseVig=(baseId0==='vig');   /* el plan del cronograma vigente (.xer) */
+  var baseId=(baseCron||baseCal||baseVig)?'':baseId0;
   if(baseId.indexOf('cron:')===0)baseId='';
   if(baseId&&!((state.backcron||[]).length)){
     try{await new Promise(function(res9){_bkcPull(res9)})}catch(_e0){}}
@@ -17231,7 +17233,13 @@ async function _rxNoCumplidas(opc){
       ((fz&&fz.fases)||[]).forEach(function(x){if(fids[x.id]){var n=String(x.nombre||'').trim().toUpperCase();if(n&&out.indexOf(n)<0)out.push(n)}})});
     return out.length?('('+out.join(' \u00b7 ')+') '):''};
   var acDe=function(cod,i1,f1){var ac=0,d;for(d in (R.actual[cod]||{}))if((!i1||d>=i1)&&d<=f1)ac+=R.actual[cod][d];return ac};
-  var fila=function(cod,pg,ac,semN,i1,f1){return {cod:cod,cron:cc.cron_id,nom:nom[cod]||'',items:(itemsDe[cod]||[]).slice(),apart:apartDe(cod,i1,f1),
+  /* las partes programadas en la ventana, por partida: {pid:[faseId,...]} */
+  var partesDe=function(cod,i1,f1){var out={};if(!bkSnap)return out;
+    (itemsDe[cod]||[]).forEach(function(i9){var ids=[];
+      segsDe(cod,i9).forEach(function(z){if(!z.fid)return;var nW=0;(z.oc||[]).forEach(function(d8){if((!i1||d8>=i1)&&d8<=f1)nW++});if(nW&&ids.indexOf(z.fid)<0)ids.push(z.fid)});
+      if(ids.length)out[i9]=ids});
+    return out};
+  var fila=function(cod,pg,ac,semN,i1,f1){return {cod:cod,cron:cc.cron_id,nom:nom[cod]||'',items:(itemsDe[cod]||[]).slice(),apart:apartDe(cod,i1,f1),partes:partesDe(cod,i1,f1),
       prog:Math.round(pg*1000)/10,hecho:Math.round(ac*1000)/10,semN:semN||0,
       fechas:(function(){var m={};(itemsDe[cod]||[]).forEach(function(i9){
         var a9=alc&&alc[i9];
@@ -17545,6 +17553,9 @@ function _rxPartidasHTML(q){
             cambia solo el admin en MODO ADMIN; los demas lo ven si existe */
           try{var ps=(typeof _pgPartesDe==='function')?_pgPartesDe(pid):[];if(!ps.length||!q.cron||!q.cod)return '';
             var act=_cpFaseDe(q.cron,pid,q.cod);
+            /* sin eleccion del admin, la parte que esta programada en el
+               calendario o respaldo (MEGADO, EJECUCION...) */
+            if(!act&&q.partes&&q.partes[pid]&&q.partes[pid].length)act=String(q.partes[pid][0]);
             var modoAd=false;try{modoAd=(typeof esAdmin==='function')&&esAdmin()}catch(e){}
             if(!modoAd){var fx=ps.filter(function(x){return x.id===act})[0];
               return fx?('<span style="font-size:10px;font-weight:800;color:#C7A3E8;background:#2a1f3d;border:1px solid #5b3a8a;border-radius:7px;padding:1px 7px;white-space:nowrap">'+esc(String(fx.nombre||''))+'</span>'):''}
@@ -17575,15 +17586,13 @@ function _rxNoPinta(r){
       var _kB=(r&&r.prox)?'rx_base_prox':'rx_base_comparar';
       var baseSel='';try{baseSel=String(_ajGet(_kB,'')||'')}catch(e){}
       var nomBase='Plan del cronograma vigente';
-      var _esP=!!(r&&r.prox);
-      /* en las proximas semanas el valor vacio ES el calendario de Programar */
-      if(_esP&&(baseSel===''||baseSel==='cal'))nomBase='Calendario de programaci\u00f3n (lo que est\u00e1 en Programar)';
-      var ops=_esP?('<option value=""'+((baseSel===''||baseSel==='cal')?' selected':'')+'>Calendario de programaci\u00f3n \u00b7 lo que est\u00e1 en Programar, entero o por apartados</option>')
-                  :('<option value=""'+(baseSel===''?' selected':'')+'>Plan del cronograma vigente</option>');
-      /* lo que de verdad esta en el calendario de Programar (entero o por
-         apartados del APU) */
-      if(!_esP){if(baseSel==='cal')nomBase='Calendario de programaci\u00f3n (lo que est\u00e1 en Programar)';
-      ops+='<option value="cal"'+(baseSel==='cal'?' selected':'')+'>Calendario de programaci\u00f3n \u00b7 lo que est\u00e1 en Programar, entero o por apartados</option>'}
+      /* el valor vacio ES el calendario de Programar, en las dos vinetas; el
+         plan del cronograma vigente (.xer) se elige aparte */
+      var _esCal=(baseSel===''||baseSel==='cal');
+      if(_esCal)nomBase='Calendario de programaci\u00f3n (lo que est\u00e1 en Programar)';
+      if(baseSel==='vig')nomBase='Plan del cronograma vigente';
+      var ops='<option value=""'+(_esCal?' selected':'')+'>Calendario de programaci\u00f3n \u00b7 lo que est\u00e1 en Programar, entero o por apartados</option>'+
+              '<option value="vig"'+(baseSel==='vig'?' selected':'')+'>Plan del cronograma vigente (.xer)</option>';
       /* el plan de cualquier cronograma cargado */
       try{((typeof _crLista==='function')?_crLista():[]).filter(function(c9){return c9&&!c9.eliminado}).forEach(function(c9){
         var v9='cron:'+c9.cron_id,nm9='Plan del cronograma '+String(c9.cron_id)+(c9.tipo?(' \u00b7 '+String(c9.tipo)):'')+(c9.nombre&&c9.nombre!==c9.cron_id?(' \u00b7 '+String(c9.nombre)):'');
