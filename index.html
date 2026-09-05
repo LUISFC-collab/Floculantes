@@ -7970,6 +7970,32 @@ function _wkEstiloEn(xml,ref){return _wkEstiloDe(xml,ref)}
    primera visible del cuerpo), puede ir oculta, y lo que viene debajo
    (leyenda, validaciones, formatos condicionales, autofiltro) se corre lo
    que el cuerpo crezca o encoja. filas: [{celdas:{B:{t|v},...},oculta,alto}] */
+/* Las RAZONES del PPC ANALISIS: las 14 de la plantilla y, detras, las del
+   aplicativo (lista RX_RAZONES y lo registrado en la semana) que no esten.
+   Tambien los RESPONSABLES (QUIEN): los tres del aplicativo y cualquier otro
+   que aparezca en la semana. */
+var _WK_RAZ_PLANTILLA=[['CLI-MAT','CLIENTE - MATERIALES'],['CLI-ING','CLIENTE - INGENIER\u00cdA'],['CLI-PRI','CLIENTE - PRIORIDADES'],['CLI-CAM','CLIENTE - CAMBIO'],
+  ['MAT','MATERIALES'],['REC','RECURSOS'],['EP','ERROR PLANIFICACION'],['DOC','DOCUMENTACION TECNICA'],['ACT-PREV','ACTIVIDADES PREVIAS'],
+  ['CLIMA','TORMENTAS ELECTRICAS / LLUVIAS INTENSAS'],['EXT','EXTERNO'],['SC','SUBCONTRATAS'],['EJEC','ERRORES DE INGENIER\u00cdA'],['QA/QC','CONTROL DE CALIDAD']];
+function _wkNrmTxt(t){try{return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase()}catch(e){return String(t||'').trim().toUpperCase()}}
+function _wkRegsSemana(semN){var out=[];try{_rxVivas().forEach(function(x){
+    var n=(typeof _rxSemDe==='function')?_rxSemDe(x):(Number(x.semana)||0);
+    if(n===semN||((typeof _rxInclTiene==='function')&&_rxInclTiene(x,semN)))out.push(x)})}catch(e){}return out}
+function _wkRazonesLista(semN){
+  var L=_WK_RAZ_PLANTILLA.map(function(p){return {sigla:p[0],nombre:p[1]}}),vis={};
+  L.forEach(function(r){vis[_wkNrmTxt(r.nombre)]=1});
+  var extra=[];
+  var mete=function(nom){var k=_wkNrmTxt(nom);if(!k||vis[k])return;vis[k]=1;
+    var sig=k.split(/[^A-Z0-9]+/).filter(Boolean).map(function(w){return w.slice(0,3)}).join('-').slice(0,10)||('R'+(L.length+extra.length+1));
+    extra.push({sigla:sig,nombre:String(nom).trim()})};
+  try{(typeof RX_RAZONES!=='undefined'?RX_RAZONES:[]).forEach(mete)}catch(e){}
+  _wkRegsSemana(semN).forEach(function(x){if(x.razon)mete(x.razon)});
+  return L.concat(extra)}
+function _wkResponsablesLista(semN){
+  var L=['CPQ-Columbito','MY','MY/CPQ-Columbito'],vis={};L.forEach(function(a){vis[_wkNrmTxt(a)]=1});
+  try{(typeof RX_AREAS!=='undefined'?RX_AREAS:[]).forEach(function(a){var k=_wkNrmTxt(a);if(k&&!vis[k]){vis[k]=1;L.push(String(a).trim())}})}catch(e){}
+  _wkRegsSemana(semN).forEach(function(x){var k=_wkNrmTxt(x.area);if(k&&!vis[k]){vis[k]=1;L.push(String(x.area).trim())}});
+  return L}
 function _wkCuerpoFilas(xml,fIni,fFin,filas){
   try{
     var reRow=function(n){return new RegExp('<row r="'+n+'"[^>]*>[\\s\\S]*?</row>')};
@@ -7991,6 +8017,7 @@ function _wkCuerpoFilas(xml,fIni,fFin,filas){
         if(f.fondo&&typeof _wkBordeFondo==='function'&&!(q&&q.s!=null))st=_wkBordeFondo(st,f.fondo,f.borde||'');
         var c0='<c r="'+ce.c+r+'"'+(st?(' s="'+st+'"'):'');
         if(q&&q.t!=null&&q.t!=='')cuerpo+=c0+' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(String(q.t))+'</t></is></c>';
+        else if(q&&q.f)cuerpo+=c0+'><f>'+_wkEsc(String(q.f))+'</f></c>';
         else if(q&&q.v!=null&&q.v!=='')cuerpo+=c0+'><v>'+(Math.round(Number(q.v)*1e8)/1e8)+'</v></c>';
         else cuerpo+=c0+'/>'});
       nuevas+=a+cuerpo+'</row>'});
@@ -8842,7 +8869,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
       ?('<dataValidations count="2">'+
         '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" '+
         'sqref="N'+r0+':N'+(n-1)+'"><formula1>'+
-        "'PPC ANALISIS'!$C$40:$C$53"+'</formula1></dataValidation>'+
+        "'PPC ANALISIS'!$C$40:$C$"+(39+((typeof _wkRazonesLista==='function')?_wkRazonesLista(semN).length:14))+'</formula1></dataValidation>'+
         '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" '+
         'sqref="O'+r0+':O'+(n-1)+'"><formula1>&quot;MY,CPQ-Columbito,MY/CPQ-Columbito&quot;</formula1></dataValidation>'+
         '</dataValidations>')
@@ -10869,6 +10896,30 @@ async function _wkLibroApp(semN,corte,ids){
           x=_wkPonEn(x,'D31',{v:_pm.nOk+_pm.nNo});
           x=_wkPonEn(x,'D32',{v:_pm.nOk});
           x=_wkPonEn(x,'D34',{v:_pm.nEmp})}}catch(_e8){}
+        /* RAZONES (desde la fila 40) y RESPONSABLES (desde la 56): las filas
+           que hagan falta, con el formato de la plantilla y sus formulas por
+           semana (columnas D..U = semanas 27..44, V = total) */
+        try{
+          var _CAR="'Car\u00e1tula (P)'!$C$17";
+          var _colsSem=[];for(var _c9=3;_c9<=20;_c9++)_colsSem.push(_wkColL(_c9));   /* D..U */
+          var _fRaz=function(r){var c9={B:{t:r.sigla},C:{t:r.nombre}};
+            _colsSem.forEach(function(cl){c9[cl]={f:'IF('+cl+'$39='+_CAR+',COUNTIF(PPC!$N$'+_f0+':$N$'+_f1+',$C{R}),0)'}});
+            c9.V={f:'SUM(D{R}:U{R})'};return {celdas:c9}};
+          var _RZ=_wkRazonesLista(semN).map(_fRaz);
+          var _d1=_RZ.length-14;
+          x=_wkCuerpoFilas(x,40,53,_RZ);
+          var _fResp=function(nom,i){var c9={B:{v:i+1},C:{t:nom}};
+            _colsSem.forEach(function(cl){c9[cl]={f:'IF('+cl+'$39='+_CAR+',COUNTIFS('+_L9+',"NO",PPC!$O$'+_f0+':$O$'+_f1+',$C{R}),0)'}});
+            c9.V={f:'SUM(D{R}:U{R})'};return {celdas:c9}};
+          var _RS=_wkResponsablesLista(semN).map(_fResp);
+          var _r56=56+_d1;
+          x=_wkCuerpoFilas(x,_r56,_r56+1,_RS);
+          /* la fila de RESPONSABLE DE RESTRICCION suma todas las filas */
+          var _r55=55+_d1,_rFin=_r56+_RS.length-1;
+          _colsSem.concat(['V']).forEach(function(cl){x=_wkPonEn(x,cl+_r55,{f:'SUM('+cl+_r56+':'+cl+_rFin+')'})});
+          /* {R}: la fila propia de cada celda */
+          x=x.replace(/<c r="([A-Z]+)(\d+)"([^>]*)><f>([^<]*\{R\}[^<]*)<\/f>/g,function(_t,c,r,at,f){return '<c r="'+c+r+'"'+at+'><f>'+f.split('{R}').join(r)+'</f>'});
+        }catch(_e9r){}
         for(var _r9=10;_r9<=27;_r9++){
           var _s9=_r9+17;
           if(_s9<semN)x=_wkPonEn(x,'C'+_r9,
@@ -13533,7 +13584,8 @@ function _wkExcel(){
       var jue=_wkISO(_wkSem(semN).fin);
       var pre=jue.slice(2,4)+jue.slice(5,7)+jue.slice(8,10);
       var RAIZ='REPOSICIÓN DEL SISTEMA DE DOSIFICACIÓN DE FLOCULANTE_CPQ Columbito';
-      var AZUL={'Carátula':1,'PARA 3WLA':1,'PPC':1,'3WLA':1,'3WLookahead_PPC':1,'3WLookahead_Razones':1,'PPC ANALISIS':1,'Analisis de Restricciones':1};
+      /* PARA 3WLA viaja oculta: es la hoja de calculo de las demas */
+      var AZUL={'Carátula':1,'PPC':1,'3WLA':1,'3WLookahead_PPC':1,'3WLookahead_Razones':1,'PPC ANALISIS':1,'Analisis de Restricciones':1};
       var VERDE={'Carátula (P)':1,'REPORTE SEMANAL':1,'PANEL CONTROL':1,'PROGRAMACION':1,
         'METRADO':1,'PHYSICAL % PROGRESS':1,'COSTO':1,'STAFFING TABULATION CHART':1,
         'CONSTRUCTION EQUIPMENT SCHE':1,'RFI':1,'FCR':1,'Registro Fot SEM':1};
@@ -15216,7 +15268,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260905c6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260905c7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
