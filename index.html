@@ -7965,6 +7965,62 @@ function _wkEstiloEn(xml,ref){return _wkEstiloDe(xml,ref)}
 /* Escribe en una celda que YA existe -o la crea en su sitio- conservando el
    estilo salvo que se le de otro. `q` es {t:texto} | {f:formula} | {v:numero}
    | {} para dejarla vacia. */
+/* Reconstruye el CUERPO de una hoja plantilla (filas fIni..fFin) con las
+   filas que se pidan: cada fila clona el formato de la fila modelo (la
+   primera visible del cuerpo), puede ir oculta, y lo que viene debajo
+   (leyenda, validaciones, formatos condicionales, autofiltro) se corre lo
+   que el cuerpo crezca o encoja. filas: [{celdas:{B:{t|v},...},oculta,alto}] */
+function _wkCuerpoFilas(xml,fIni,fFin,filas){
+  try{
+    var reRow=function(n){return new RegExp('<row r="'+n+'"[^>]*>[\\s\\S]*?</row>')};
+    var modelo=null;
+    for(var k=fIni;k<=fFin&&!modelo;k++){var m0=xml.match(reRow(k));if(m0&&!/ hidden="1"/.test(m0[0].slice(0,m0[0].indexOf('>'))))modelo=m0[0]}
+    if(!modelo){var m1=xml.match(reRow(fIni));if(!m1)return xml;modelo=m1[0]}
+    var cab=modelo.slice(0,modelo.indexOf('>')+1);
+    var cels=[];modelo.replace(/<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>[\s\S]*?<\/c>)/g,function(_t,c,at){
+      var st=(at.match(/ s="(\d+)"/)||[])[1]||'';cels.push({c:c,s:st});return _t});
+    var N=Math.max(1,filas.length),delta=N-(fFin-fIni+1);
+    var nuevas='';
+    filas.forEach(function(f,i){var r=fIni+i;
+      var a=cab.replace(/ r="\d+"/,' r="'+r+'"').replace(/ hidden="1"/,'');
+      if(f.alto){a=a.replace(/ ht="[^"]*"/,'').replace(/ customHeight="1"/,'');a=a.replace(/>$/,' ht="'+f.alto+'" customHeight="1">')}
+      if(f.oculta)a=a.replace(/>$/,' hidden="1">');
+      var cuerpo='';
+      cels.forEach(function(ce){var q=f.celdas&&f.celdas[ce.c];var st=(q&&q.s!=null)?q.s:ce.s;
+        var c0='<c r="'+ce.c+r+'"'+(st?(' s="'+st+'"'):'');
+        if(q&&q.t!=null&&q.t!=='')cuerpo+=c0+' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(String(q.t))+'</t></is></c>';
+        else if(q&&q.v!=null&&q.v!=='')cuerpo+=c0+'><v>'+(Math.round(Number(q.v)*1e8)/1e8)+'</v></c>';
+        else cuerpo+=c0+'/>'});
+      nuevas+=a+cuerpo+'</row>'});
+    /* las filas de abajo, corridas */
+    var i0=xml.indexOf('<sheetData'),i1=xml.indexOf('</sheetData>');
+    if(i0<0||i1<0)return xml;
+    var sd=xml.slice(xml.indexOf('>',i0)+1,i1);
+    var antes='',despues='';
+    sd.replace(/<row r="(\d+)"[^>]*>[\s\S]*?<\/row>|<row r="(\d+)"[^>]*\/>/g,function(t,r1,r2){
+      var r=+(r1||r2);
+      if(r<fIni)antes+=t;
+      else if(r>fFin){var nr=r+delta;
+        t=t.replace(/^<row r="\d+"/,'<row r="'+nr+'"').replace(/<c r="([A-Z]+)\d+"/g,function(_z,c){return '<c r="'+c+nr+'"'});
+        despues+=t}
+      return t});
+    var out=xml.slice(0,xml.indexOf('>',i0)+1)+antes+nuevas+despues+xml.slice(i1);
+    /* referencias de abajo: dimension, autofiltro, formatos condicionales,
+       validaciones, rangos protegidos */
+    var corre=function(ref){return ref.replace(/([A-Z]+)(\d+)/g,function(_z,c,n){n=+n;
+      if(n>fFin)n=Math.min(1048576,n+delta);else if(n===fFin&&delta<0)n=fFin+delta;return c+n})};
+    var fin=fIni+N-1;
+    var cola=out.slice(out.indexOf('</sheetData>'));
+    cola=cola.replace(/(sqref|ref)="([^"]+)"/g,function(_z,k,v){
+      var v2=v.split(' ').map(function(rg){
+        /* un rango que acaba justo en el cuerpo se estira con el */
+        var m=rg.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+        if(m&&+m[4]===fFin&&+m[2]<=fFin)return m[1]+m[2]+':'+m[3]+fin;
+        return corre(rg)}).join(' ');
+      return k+'="'+v2+'"'});
+    out=out.slice(0,out.indexOf('</sheetData>'))+cola;
+    out=out.replace(/<dimension ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/,function(_z,a,b,c,d){return '<dimension ref="'+a+b+':'+c+(Math.max(+d+delta,fin))+'"/>'});
+    return out}catch(e){return xml}}
 function _wkPonEn(xml,ref,q,estilo){
   var col=ref.replace(/\d+$/,''), fil=+ref.replace(/^[A-Z]+/,'');
   var st=(estilo!=null&&estilo!=='')?String(estilo):_wkEstiloDe(xml,ref);
@@ -10822,39 +10878,45 @@ async function _wkLibroApp(semN,corte,ids){
         var _vv=_rxVivas();
         var _pen=_vv.filter(function(z9){return z9.estado!=='LIBERADA'});
         var _lib=_vv.filter(function(z9){return z9.estado==='LIBERADA'});
-        for(var _q9=9;_q9<=27;_q9++)
-          'BCDEFGHIJKLMNOPQ'.split('').forEach(function(cq){
-            x=_wkPonEn(x,cq+_q9,{})});
-        var _fq=9,_nq=0;
         var _fserial=function(v9){try{
           var t9=String(v9||'').slice(0,10);
           return /^\d{4}-\d{2}-\d{2}$/.test(t9)?_crASerial(t9):''}catch(e){return ''}};
-        var _pon=function(reg){
-          if(_fq>27)return;
-          _nq++;
-          x=_wkPonEn(x,'B'+_fq,{v:_nq});
-          x=_wkPonEn(x,'C'+_fq,{t:String(reg.task_code||'')});
-          x=_wkPonEn(x,'D'+_fq,{t:String(reg.partida_id||'')});
-          x=_wkPonEn(x,'E'+_fq,{t:String(reg.actividad||'')});
-          x=_wkPonEn(x,'F'+_fq,{t:String(reg.descripcion||'')});
-          x=_wkPonEn(x,'G'+_fq,{t:String(reg.accion||'')});
-          var _sv=_fserial(reg.f_ident);if(_sv!=='')x=_wkPonEn(x,'H'+_fq,{v:_sv});
-          _sv=_fserial(reg.f_req);if(_sv!=='')x=_wkPonEn(x,'I'+_fq,{v:_sv});
-          _sv=_fserial(reg.f_prev);if(_sv!=='')x=_wkPonEn(x,'J'+_fq,{v:_sv});
-          _sv=_fserial(reg.f_nueva);if(_sv!=='')x=_wkPonEn(x,'K'+_fq,{v:_sv});
-          x=_wkPonEn(x,'L'+_fq,{t:String(reg.area||'')});
-          x=_wkPonEn(x,'M'+_fq,{t:String(reg.personal||'')});
-          x=_wkPonEn(x,'N'+_fq,{t:String(reg.importancia||'')});
-          _sv=_fserial(reg.f_prog);if(_sv!=='')x=_wkPonEn(x,'O'+_fq,{v:_sv});
-          x=_wkPonEn(x,'P'+_fq,{t:String(reg.estado||'PENDIENTE')});
-          x=_wkPonEn(x,'Q'+_fq,{t:String(reg.comentario||'')});
-          _fq++};
-        if(_pen.length&&_fq<=27){
-          x=_wkPonEn(x,'E'+_fq,{t:'RESTRICCIONES PENDIENTES'});_fq++;
-          _pen.forEach(_pon)}
-        if(_lib.length&&_fq<=27){
-          x=_wkPonEn(x,'E'+_fq,{t:'RESTRICCIONES RESUELTAS (LIBERADAS)'});_fq++;
-          _lib.forEach(_pon)}}
+        var _semDe9=function(z9){return (typeof _rxSemDe==='function')?_rxSemDe(z9):(Number(z9.semana)||0)};
+        var _enSem9=function(z9,n9){return _semDe9(z9)===n9||((typeof _rxInclTiene==='function')&&_rxInclTiene(z9,n9))};
+        var _ordC=function(a,b){var ca=String(a.task_code||''),cb=String(b.task_code||'');return ca<cb?-1:ca>cb?1:((Number(a.creado)||0)-(Number(b.creado)||0))};
+        var FIL=[],_nq=0;
+        var _fila=function(reg,oculta){_nq++;var c9={B:{v:_nq},
+            C:{t:String(reg.task_code||'')},D:{t:String(reg.partida_id||'')},E:{t:String(reg.actividad||'')},
+            F:{t:String(reg.descripcion||'')},G:{t:String(reg.accion||'')},
+            L:{t:String(reg.area||'')},M:{t:String(reg.personal||'')},N:{t:String(reg.importancia||'')},
+            P:{t:String(reg.estado||'PENDIENTE')},Q:{t:String(reg.comentario||'')}};
+          var _sv=_fserial(reg.f_ident);if(_sv!=='')c9.H={v:_sv};
+          _sv=_fserial(reg.f_req);if(_sv!=='')c9.I={v:_sv};
+          _sv=_fserial(reg.f_prev);if(_sv!=='')c9.J={v:_sv};
+          _sv=_fserial(reg.f_nueva);if(_sv!=='')c9.K={v:_sv};
+          _sv=_fserial(reg.f_prog);if(_sv!=='')c9.O={v:_sv};
+          FIL.push({celdas:c9,oculta:!!oculta})};
+        var _titulo=function(txt,oculta){FIL.push({celdas:{E:{t:txt}},oculta:!!oculta,alto:21})};
+        /* 1) las TRES semanas siguientes a la del reporte, con su titulo */
+        for(var _k9=1;_k9<=3;_k9++){var _n9=semN+_k9;
+          var _de9=_vv.filter(function(z9){return _enSem9(z9,_n9)}).sort(_ordC);
+          _titulo('SEMANA '+_n9+' \u00b7 '+(function(){try{return _wkLbl(_n9)}catch(e){return ''}})());
+          if(_de9.length)_de9.forEach(function(z9){_fila(z9,false)});
+          else _titulo('No hay restricciones identificadas para la semana '+_n9)}
+        /* 2) las PENDIENTES por semana, ocultas */
+        if(_pen.length){
+          _titulo('RESTRICCIONES PENDIENTES',true);
+          var _porS={},_ordS=[];
+          _pen.forEach(function(z9){var n9=_semDe9(z9)||0;if(!_porS[n9]){_porS[n9]=[];_ordS.push(n9)}_porS[n9].push(z9)});
+          _ordS.sort(function(a,b){return b-a}).forEach(function(n9){
+            _titulo(n9?('PENDIENTES \u00b7 DE LA SEMANA '+n9):'PENDIENTES \u00b7 SIN SEMANA',true);
+            _porS[n9].sort(_ordC).forEach(function(z9){_fila(z9,true)})})}
+        /* 3) las RESUELTAS (liberadas), ocultas */
+        if(_lib.length){
+          _titulo('RESTRICCIONES RESUELTAS (LIBERADAS)',true);
+          _lib.slice().sort(function(a,b){return (Number(b.sem_res)||_semDe9(b))-(Number(a.sem_res)||_semDe9(a))||_ordC(a,b)})
+            .forEach(function(z9){_fila(z9,true)})}
+        x=_wkCuerpoFilas(x,9,27,FIL)}
       var a=ana.activos[nH]||null;
       hojas.push([nm,_wkPonTab(x,_WK_AZUL),a?{relsHoja:a.rels,partes:a.partes}:null])});
   }catch(_ea9){}
@@ -15141,7 +15203,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260905c1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260905c2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
