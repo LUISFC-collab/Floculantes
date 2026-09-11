@@ -1488,7 +1488,11 @@ function renderList(){
   const pcts=list.filter(function(p){return !esNA(p)&&_visMetricas(p)}).map(pctDia);$('sAv').textContent=(pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):0)+'%';
   $('sTot').textContent=list.length;$('sNm').textContent=list.filter(p=>!metaOf(p.id)).length;
   /* SOLO ADMIN: las actividades eliminadas siguen visibles en su lugar, en rojo tenue (los promedios de arriba NO las cuentan) */
-  if(typeof esAdminReal==='function'&&esAdminReal()&&!window._impRol){/* con "Actuar como" activo la vista es EXACTAMENTE la de ese rol: sin tarjetas rojas */try{var _elimL=DATA.partidas.concat(state.nuevas||[]).map(applyEdit).filter(function(p){return p.esp===state.user.disc&&(typeof tombHas==='function'&&tombHas('partida',p.id))&&!tombHas('permdel',p.id)});/* incluye NUEVAS eliminadas: mismo procedimiento que las del catálogo (rojo + zona) */_elimL.forEach(function(p){p._elim=true});if(_elimL.length)list=list.concat(_elimL)}catch(_ee){}}
+  if(typeof esAdminReal==='function'&&esAdminReal()&&!window._impRol){/* con "Actuar como" activo la vista es EXACTAMENTE la de ese rol: sin tarjetas rojas */try{var _elimL=DATA.partidas.concat(state.nuevas||[]).map(applyEdit).filter(function(p){return p.esp===state.user.disc&&(typeof tombHas==='function'&&tombHas('partida',p.id))&&!tombHas('permdel',p.id)});/* incluye NUEVAS eliminadas: mismo procedimiento que las del catálogo (rojo + zona) */_elimL.forEach(function(p){p._elim=true});if(_elimL.length)list=list.concat(_elimL)}catch(_ee){}
+    /* las RETIRADAS DEL ALCANCE por el contrato: misma tarjeta roja, con su rotulo */
+    try{var _enL={};(DATA.partidas||[]).forEach(function(q){_enL[q.id]=1});
+      var _retL=(DATA._retiradas||[]).filter(function(p){return p&&p.esp===state.user.disc&&!_enL[p.id]}).map(function(p){var q=applyEdit(p);q._elim=true;q._ret=true;return q});
+      if(_retL.length)list=list.concat(_retL)}catch(_er){}}
   if(q)list=list.filter(function(p){return (typeof _busqMatch==='function')?_busqMatch(p,q):(p.id.toLowerCase().includes(q)||p.nombre.toLowerCase().includes(q))});
   /* filtros G3: checks que se SUMAN (unión) + filtro por nº de sistema */
   var _fc=window._fchk||{};var _fon=[];for(var _fk in _fc)if(_fc[_fk])_fon.push(_fk);
@@ -1579,7 +1583,7 @@ function leaf(p,num){
   var _lc=el.querySelector('._lfCal');if(_lc)_lc.onclick=function(e){e.stopPropagation();openActMenu(p,true)};
   var _lpb=el.querySelector('._lfProgBtn');if(_lpb)_lpb.onclick=function(e){e.stopPropagation();_lfProgramar(p)};
   var _lic=el.querySelector('._lfIrCal');if(_lic)_lic.onclick=function(e){e.stopPropagation();_lfIrCal(p)};
-  if(p._elim){try{var _eb=document.createElement('div');_eb.style.cssText='margin-top:7px;background:rgba(180,35,24,.1);border:1px solid rgba(180,35,24,.45);border-radius:9px;padding:6px 9px;display:flex;align-items:center;gap:8px;color:#B42318;font-weight:800;font-size:11.5px';_eb.innerHTML='<span style="flex:1">🗑 Eliminada — visible solo para admin</span><button class="_lfElim" style="background:#8A4B00;color:#fff;border:0;border-radius:7px;padding:5px 9px;font-weight:800;font-size:11px;cursor:pointer">Gestionar</button>';el.appendChild(_eb);var _be=_eb.querySelector('._lfElim');if(_be)_be.onclick=function(e){e.stopPropagation();if(typeof _showActEliminadas==='function')_showActEliminadas()};}catch(_ex){}}
+  if(p._elim){try{var _eb=document.createElement('div');_eb.style.cssText='margin-top:7px;background:rgba(180,35,24,.1);border:1px solid rgba(180,35,24,.45);border-radius:9px;padding:6px 9px;display:flex;align-items:center;gap:8px;color:#B42318;font-weight:800;font-size:11.5px';_eb.innerHTML='<span style="flex:1">'+(p._ret?'\ud83d\udcc4 Retirada del alcance por el contrato \u2014 visible solo para admin':'🗑 Eliminada — visible solo para admin')+'</span><button class="_lfElim" style="background:#8A4B00;color:#fff;border:0;border-radius:7px;padding:5px 9px;font-weight:800;font-size:11px;cursor:pointer">Gestionar</button>';el.appendChild(_eb);var _be=_eb.querySelector('._lfElim');if(_be)_be.onclick=function(e){e.stopPropagation();if(typeof _showActEliminadas==='function')_showActEliminadas()};}catch(_ex){}}
   return el}
 function _gotoElim(id){try{var p=DATA._byId&&DATA._byId[id];if(!p)return;var pe=(typeof applyEdit==='function')?applyEdit(p):p;
  var f=(typeof activeDate!=='undefined'&&activeDate)?activeDate:((typeof todayISO==='function')?todayISO():'');
@@ -15275,7 +15279,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260911a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260911a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -20465,10 +20469,24 @@ try{if(!window._actGearWired){window._actGearWired=1;setInterval(_actGearItem,70
 
 try{var _hhRlBase=renderList;renderList=function(){var r=_hhRlBase.apply(this,arguments);try{window._hhCache=null;_hhInject();_actInject()}catch(e){}return r}}catch(_hw){}
 
-var KCAT='obf4_catalogo';
+var KCAT='obf4_catalogo',KCATR='obf4_catalogo_ret';
+/* las RETIRADAS DEL ALCANCE (eliminado=true en el catalogo): aparte de la
+   lista, solo para que el admin las vea en rojo; se registran en _byId para
+   que la tarjeta resuelva nombre y metrado, pero no estan en DATA.partidas */
+function _catRetRegistra(){try{(DATA._retiradas||[]).forEach(function(p){if(p&&p.id&&!DATA._byId[p.id])DATA._byId[p.id]=p})}catch(e){}}
+function _catRetAplica(rows){
+  DATA._retiradas=_catMapea(rows||[]).map(function(p){p._ret=true;return p});
+  _catRetRegistra();
+  try{localStorage.setItem(KCATR,JSON.stringify(DATA._retiradas))}catch(e){}}
 function _catAplica(rows){
   if(!rows||!rows.length)return false;
-  DATA.partidas=rows.map(function(r){
+  DATA.partidas=_catMapea(rows);
+  DATA._byId={};DATA.partidas.forEach(function(p){DATA._byId[p.id]=p});
+  _catRetRegistra();
+  return true;
+}
+function _catMapea(rows){
+  return (rows||[]).map(function(r){
     var cant=(r.cantidad==null?0:Number(r.cantidad));
     return {id:r.partida_id,nombre:r.descripcion||'',esp:r.especialidad||'',
       cuadrilla:'',sistema:r.sistema||'(sin sistema)',
@@ -20481,15 +20499,18 @@ function _catAplica(rows){
       hh:(r.hh_t==null?null:Number(r.hh_t)),pu:(r.precio_unitario==null?null:Number(r.precio_unitario)),
       total:(r.oferta_total==null?null:Number(r.oferta_total)),alcance:r.estado_alcance||''};
   });
-  DATA._byId={};DATA.partidas.forEach(function(p){DATA._byId[p.id]=p});
-  return true;
 }
 try{var _cat0=JSON.parse(localStorage.getItem(KCAT)||'null');
 if(_cat0&&_cat0.length){DATA.partidas=_cat0;DATA._byId={};DATA.partidas.forEach(function(p){DATA._byId[p.id]=p})}}catch(_ec){}
+try{var _catR0=JSON.parse(localStorage.getItem(KCATR)||'null');
+if(_catR0&&_catR0.length){DATA._retiradas=_catR0.map(function(p){p._ret=true;return p});_catRetRegistra()}}catch(_ecr){}
 async function _catPull(){
   if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
   var R=await sbSelect('actividades_create_110826','select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&es_titulo=is.false&eliminado=is.false&order=orden.asc&limit=2000');
   if(!R)return;
+  /* y las retiradas del alcance, para la vista del admin */
+  try{var R2=await sbSelect('actividades_create_110826','select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&es_titulo=is.false&eliminado=is.true&order=orden.asc&limit=2000');
+    if(R2)_catRetAplica(R2)}catch(_er2){}
   var antes=(DATA.partidas||[]).length;
   if(!_catAplica(R))return;
   try{localStorage.setItem(KCAT,JSON.stringify(DATA.partidas))}catch(e){}
