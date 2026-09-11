@@ -8382,11 +8382,16 @@ async function _crPlanRecupera(cronId,corte,semN){
        no es una reparticion inventada, es lo que se ha programado hacer */
     var conProg=false,puesto=0;
     if(typeof state!=='undefined'&&state.prog){
+      var entT=[],hhX=0;
       (t.items||[]).forEach(function(i){
-        /* quitada de sumar HH = fuera del universo del cronograma: no podria
-           programarse, y si quedo en el calendario no se pinta */
-        if(u.items[i]==null)return;
-        var hi=(Number(u.items[i])||0)/_crVeces(rp,i);
+        var hi=0,excl=false;
+        if(u.items[i]!=null)hi=(Number(u.items[i])||0)/_crVeces(rp,i);
+        else{
+          /* desmarcada en este cronograma pero puesta en el calendario: se
+             pinta igual, con sus HH del contrato (como en la curva) */
+          var pX=porId[i]||(DATA._byId&&DATA._byId[i])||null;if(!pX)return;
+          try{hi=(Number(_hhDe(pX))||0)/_crVeces(rp,i)}catch(_eh){hi=0}
+          excl=true}
         if(!(hi>0))return;
         /* TODAS las filas del calendario de esta partida: la entera (i), sus
            PARTES por apartado (i::fase) o sus TRAMOS por metrado (i~n), cada
@@ -8409,20 +8414,25 @@ async function _crPlanRecupera(cronId,corte,semN){
             var inf=(typeof _pgParteInfo==='function')?_pgParteInfo(k):null;if(!inf)return;
             var pcp=0;try{pcp=Number(_fzPctParte(inf.fase))||0}catch(_e){}
             fr=(Math.max(0,Math.min(100,Number(inf.fase.peso)||0))/100)*(1-Math.max(0,Math.min(100,pcp))/100)}
-          if(fr>1e-9)ent.push({pr:pr,fr:fr})});
-        ent.forEach(function(e){var pr=e.pr;
-          var oc=[];
-          try{oc=(typeof occupiedDays==='function')?occupiedDays(pr.start,pr.dias||1):[pr.start]}
-          catch(_eo){oc=[pr.start]}
-          /* solo lo que queda por hacer y despues del corte, pero sobre la
-             rejilla entera: si se programo mas alla de las 3 semanas, se ve */
-          var fut=oc.filter(function(d){return d>corte&&d>=gIni&&d<=gFin});
-          if(!fut.length)return;
-          var queda=e.fr*hi/hh;
-          if(!(queda>1e-9))return;
-          conProg=true;puesto+=queda;
-          var pdd=queda/fut.length;
-          fut.forEach(function(d){fore[cod][d]=(fore[cod][d]||0)+pdd})})})}
+          if(fr>1e-9)ent.push({pr:pr,fr:fr,hi:hi})});
+        if(ent.length&&excl)hhX+=hi;
+        ent.forEach(function(e){entT.push(e)})});
+      /* el total de la actividad: sus HH en el cronograma mas las de las
+         desmarcadas que aun asi se programaron */
+      var hhF=hh+hhX;
+      if(hhF>0)entT.forEach(function(e){var pr=e.pr;
+        var oc=[];
+        try{oc=(typeof occupiedDays==='function')?occupiedDays(pr.start,pr.dias||1):[pr.start]}
+        catch(_eo){oc=[pr.start]}
+        /* solo lo que queda por hacer y despues del corte, pero sobre la
+           rejilla entera: si se programo mas alla de las 3 semanas, se ve */
+        var fut=oc.filter(function(d){return d>corte&&d>=gIni&&d<=gFin});
+        if(!fut.length)return;
+        var queda=e.fr*e.hi/hhF;
+        if(!(queda>1e-9))return;
+        conProg=true;puesto+=queda;
+        var pdd=queda/fut.length;
+        fut.forEach(function(d){fore[cod][d]=(fore[cod][d]||0)+pdd})})}
     /* lo que el LB1 deja para DESPUES de la ventana: el plan no acaba al
        recuperar, sigue con el cronograma hasta el final de la obra */
     /* Lo que sigue sin colocar, repartido una sola vez: primero lo que toca
@@ -15386,7 +15396,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260911b8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260911b9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
