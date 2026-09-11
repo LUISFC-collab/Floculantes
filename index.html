@@ -4974,15 +4974,32 @@ function _crProyeccion(u,semanas,real){
     Object.keys(P||{}).forEach(function(id){
       var pr=P[id];if(!pr||!pr.start)return;
       if(state.progDel&&state.progDel[id])return;
-      var w=u.items[id];if(!(w>0))return;          /* fuera del alcance: no pesa */
-      var p=vivas[id];if(!p)return;
-      var pc=0;try{
-        /* el mismo % que usa el reporte: fases primero, contrato despues */
-        var pf=(typeof _fzPctAt==='function')?_fzPctAt(id,hoy):null;
-        pc=(pf!=null)?(Number(pf)||0):(Number(pctOfAt(p,hoy))||0)
-      }catch(e){}
-      pc=Math.max(0,Math.min(100,pc));
-      var falta=w*(1-pc/100);if(!(falta>0))return;
+      /* la partida detras de la fila: entera (pid), una PARTE del APU
+         (pid::fase) o un TRAMO por metrado (pid~n) */
+      var bid=(typeof _pgBaseId==='function')?_pgBaseId(id):id;
+      var w=u.items[bid];if(!(w>0))return;          /* fuera del alcance: no pesa */
+      var p=vivas[bid];if(!p)return;
+      var falta=0;
+      var inf=null;try{inf=(typeof _pgParteInfo==='function')?_pgParteInfo(id):null}catch(e){}
+      if(inf){
+        /* una parte: el peso de su apartado, menos lo hecho de esa parte */
+        var pcp=0;try{pcp=Number(_fzPctParte(inf.fase))||0}catch(e){}
+        falta=w*(Math.max(0,Math.min(100,Number(inf.fase.peso)||0))/100)*(1-Math.max(0,Math.min(100,pcp))/100)}
+      else if(typeof _pgEsTramo==='function'&&_pgEsTramo(id)){
+        /* un tramo: su cantidad sobre el metrado vigente */
+        var mT=metaOf(bid),tT=Number(mT&&mT.total)||0,cT=Number(pr.cant)||0;
+        falta=(tT>0&&cT>0)?w*Math.min(1,cT/tT):0}
+      else{
+        /* la envoltura de una partida por partes no aporta: aportan sus partes */
+        if(typeof _pgTieneParte==='function'&&_pgTieneParte(id))return;
+        var pc=0;try{
+          /* el mismo % que usa el reporte: fases primero, contrato despues */
+          var pf=(typeof _fzPctAt==='function')?_fzPctAt(bid,hoy):null;
+          pc=(pf!=null)?(Number(pf)||0):(Number(pctOfAt(p,hoy))||0)
+        }catch(e){}
+        pc=Math.max(0,Math.min(100,pc));
+        falta=w*(1-pc/100)}
+      if(!(falta>0))return;
       var ds=(typeof occupiedDays==='function')?(occupiedDays(pr.start,pr.dias||1)||[]):[];
       /* SOLO los dias que quedan: el saldo entero se reparte en lo futuro,
          igual que la linea PROG. SEM. SIG. del reporte. Antes la parte
@@ -5126,7 +5143,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
   /* cuantas personas harian falta, a 9 h por dia */
   function gente(hd){return Math.ceil(hd/9)}
   var ov=document.createElement('div');ov.id='_crCurOv';
-  ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box'+(window._crCurOculta?';visibility:hidden':'');
   var W=Math.max(320,Math.min(900,(window.innerWidth||360)-40)),H=310;
   var mx=44,my=30,gw=W-mx-14,gh=H-my-42;
   var maxSem=0;cur.porSem.forEach(function(v){if(v>maxSem)maxSem=v});
@@ -5722,6 +5739,38 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     ov.remove();_crCurvaUI(c,nivel,conWbs,b.getAttribute('data-esp'))}});
   var ck=document.getElementById('_crCurWbs');
   if(ck)ck.onchange=function(){ov.remove();_crCurvaUI(c,nivel,ck.checked,esp)};
+  try{_crEtqMovibles(ov,String(c.cron_id||''))}catch(_em){}
+}
+/* Las cifras del dibujo (acumulados, proyeccion, HOY, % por semana) se
+   pueden arrastrar para que no se monten unas sobre otras. Donde se dejan
+   se recuerda por cronograma y por etiqueta, asi que sobreviven al
+   repintado. Un doble toque devuelve la etiqueta a su sitio. */
+function _crEtqMovibles(ov,cron){
+  var svg=ov.querySelector('#_crGraf svg');if(!svg)return;
+  var K='obf4_curetq',all={};try{all=JSON.parse(localStorage.getItem(K)||'{}')||{}}catch(e){all={}}
+  var mem=all[cron]||{};
+  var textos=Array.prototype.filter.call(svg.querySelectorAll('text'),function(t){
+    var s=String(t.textContent||'');return /%$/.test(s)&&!/^(0|25|50|75|100)%$/.test(s)});
+  var vistos={};
+  textos.forEach(function(t){
+    var s=String(t.textContent||'');vistos[s]=(vistos[s]||0)+1;
+    var k=s+'#'+vistos[s];t.setAttribute('data-etq',k);
+    t.style.cursor='move';t.style.userSelect='none';t.style.touchAction='none';
+    var d=mem[k];if(d&&(d.dx||d.dy))t.setAttribute('transform',(t.getAttribute('transform')||'')+' translate('+(+d.dx||0)+' '+(+d.dy||0)+')');
+    t.setAttribute('data-dx',d?(+d.dx||0):0);t.setAttribute('data-dy',d?(+d.dy||0):0);
+    var base=(t.getAttribute('transform')||'').replace(/\s*translate\([^)]*\)\s*$/,'');
+    var ptr=function(ev){var pt=svg.createSVGPoint();pt.x=ev.clientX;pt.y=ev.clientY;var m=svg.getScreenCTM();return m?pt.matrixTransform(m.inverse()):pt};
+    var x0=0,y0=0,dx0=0,dy0=0,on=false;
+    t.addEventListener('pointerdown',function(ev){ev.preventDefault();ev.stopPropagation();var q=ptr(ev);x0=q.x;y0=q.y;dx0=+t.getAttribute('data-dx')||0;dy0=+t.getAttribute('data-dy')||0;on=true;try{t.setPointerCapture(ev.pointerId)}catch(e){}});
+    t.addEventListener('pointermove',function(ev){if(!on)return;var q=ptr(ev);var dx=Math.round((dx0+q.x-x0)*10)/10,dy=Math.round((dy0+q.y-y0)*10)/10;
+      t.setAttribute('data-dx',dx);t.setAttribute('data-dy',dy);t.setAttribute('transform',(base?(base+' '):'')+'translate('+dx+' '+dy+')')});
+    var suelta=function(ev){if(!on)return;on=false;try{t.releasePointerCapture(ev.pointerId)}catch(e){}
+      var dx=+t.getAttribute('data-dx')||0,dy=+t.getAttribute('data-dy')||0;
+      try{all=JSON.parse(localStorage.getItem(K)||'{}')||{}}catch(e){all={}}
+      all[cron]=all[cron]||{};if(dx||dy)all[cron][k]={dx:dx,dy:dy};else delete all[cron][k];
+      try{localStorage.setItem(K,JSON.stringify(all))}catch(e){}};
+    t.addEventListener('pointerup',suelta);t.addEventListener('pointercancel',suelta);
+    t.addEventListener('dblclick',function(ev){ev.preventDefault();t.setAttribute('data-dx',0);t.setAttribute('data-dy',0);t.setAttribute('transform',base);suelta(ev)})});
 }
 
 /* --------- FECHAS por partida dentro de cada cronograma ---------------------
@@ -15335,7 +15384,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260911b4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260911b5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -21725,7 +21774,10 @@ async function _pgCurvaFlotante(_sil){try{
   var c=L.filter(function(x){return String(x.cron_id)===_sel})[0]
       ||L.filter(function(x){return String(x.tipo||'').toUpperCase()==='ACTUAL'})[0]||L[0];
   if(!_sil&&typeof toast==='function')toast('Abriendo la curva de '+(c.cron_id||'')+'…');
-  await _crCurvaUI(c);
+  /* se dibuja escondida: el panel a pantalla completa no debe verse ni un
+     instante antes de volverse ventana */
+  window._crCurOculta=1;
+  try{await _crCurvaUI(c)}finally{window._crCurOculta=0}
   var ov=document.getElementById('_crCurOv');if(!ov)return;
   ov.setAttribute('data-flot','1');ov.setAttribute('data-sel',_sel);
   /* de pantalla completa a ventana. Se puede agarrar de la esquina de abajo a
@@ -21822,9 +21874,12 @@ function _pgCurvaRefresca(){try{
       var pw=(window._crPipWin&&!window._crPipWin.closed)?window._crPipWin:null;
       if(!flot&&!pw)return;
       var geo=null;
+      /* la vieja se queda a la vista mientras se construye la nueva; se
+         cambian de golpe y la pantalla no parpadea */
+      var vieja=null;
       if(flot){geo={left:v.style.left,top:v.style.top,right:v.style.right,
-               width:v.style.width,height:v.style.height};v.remove()}
-      await _pgCurvaFlotante(true);
+               width:v.style.width,height:v.style.height};vieja=v;v.id='_crCurOvVieja'}
+      try{await _pgCurvaFlotante(true)}finally{if(vieja){try{vieja.remove()}catch(_ev){}}}
       var n=document.getElementById('_crCurOv');
       if(!n)return;
       /* la copia sacada del navegador recibe el dibujo fresco */
