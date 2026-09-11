@@ -155,7 +155,7 @@ input[type=checkbox],input[type=radio]{width:auto;min-width:0;height:auto;flex:n
   .leaf .lr{display:flex;align-items:flex-start;gap:8px;min-width:0;max-width:100%}
   .lnum{font-size:11px;font-weight:700;color:var(--brand2);font-variant-numeric:tabular-nums;min-width:26px}
   .cid{font-size:10px;font-weight:600;color:#AEB6C2;background:transparent;border-radius:5px;padding:2px 3px;white-space:nowrap}
-  .cname{font-size:13.5px;font-weight:600;line-height:1.3;flex:1 1 0;min-width:0;max-width:100%;overflow-wrap:anywhere;word-break:break-word;hyphens:auto}.cname.lg{font-size:12.5px;line-height:1.32}.cname.xl{font-size:11.8px;line-height:1.35}
+  .cname{font-size:13.5px;font-weight:600;line-height:1.3;flex:1 1 0;min-width:0;max-width:100%;overflow-wrap:anywhere;word-break:break-word;hyphens:auto;white-space:pre-line}.cname.lg{font-size:12.5px;line-height:1.32}.cname.xl{font-size:11.8px;line-height:1.35}
   /* El parpadeo de la tarjeta a la que se llega desde «RELACIONADA». Va como
      animacion y no como estilo suelto a proposito: una animacion pesa mas que
      el estilo en linea de la tarjeta, asi que se ve tambien en las que llevan
@@ -2671,7 +2671,7 @@ function _crInvalida(cronId){try{if(window._crTar)delete window._crTar[cronId];i
 async function _crCatPull(){
   try{
     var cat=await sbSelect('actividades_create_110826',
-      'select=item,descripcion,especialidad,unidad,cantidad,precio_unitario,oferta_total,hh_t,estado_alcance,es_titulo,eliminado,orden,sistema'+
+      'select=item,descripcion,tag,especialidad,unidad,cantidad,precio_unitario,oferta_total,hh_t,estado_alcance,es_titulo,eliminado,orden,sistema'+
       '&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&order=orden.asc&limit=3000')||[];
     var vis={},out=[];
     cat.forEach(function(r){
@@ -2679,7 +2679,7 @@ async function _crCatPull(){
       var id=String(r.item||'').trim();if(!id||vis[id])return;vis[id]=1;
       var ret=(r.eliminado===true)||String(r.estado_alcance||'')==='Retirada del alcance';
       var off=false;try{off=(typeof _hhOff==='function')&&!!_hhOff(id)}catch(e){}
-      out.push({id:id,nom:String(r.descripcion||id),hh:Math.round((Number(r.hh_t)||0)*100)/100,
+      out.push({id:id,nom:String(_catNomTag(r.descripcion,r.tag)||id),hh:Math.round((Number(r.hh_t)||0)*100)/100,
         off:off,esp:String(r.especialidad||''),ret:ret,viva:!ret,
         und:String(r.unidad||''),cant:(r.cantidad==null?'':Number(r.cantidad)),
         pu:(r.precio_unitario==null?'':Number(r.precio_unitario)),
@@ -15285,7 +15285,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260911a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260911a7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -20586,10 +20586,20 @@ function _catAplica(rows){
   _catRetRegistra();
   return true;
 }
+/* El nombre original del presupuesto lleva el TAG del equipo en una linea
+   aparte; el catalogo lo guarda en su columna. Se vuelve a juntar para que
+   dos partidas con la misma descripcion (los variadores, los reactores) no
+   se confundan. Si la descripcion ya trae ese TAG, se deja como esta. */
+function _catNomTag(desc,tag){
+  desc=String(desc||'');tag=String(tag||'').trim();
+  if(!tag)return desc;
+  var nucleo=tag.replace(/\s*-\s*Suministro Contratista\s*$/i,'').replace(/\.+$/,'').trim();
+  if(nucleo&&desc.indexOf(nucleo)>=0)return desc;
+  return desc+'\nTAG: '+tag}
 function _catMapea(rows){
   return (rows||[]).map(function(r){
     var cant=(r.cantidad==null?0:Number(r.cantidad));
-    return {id:r.partida_id,nombre:r.descripcion||'',esp:r.especialidad||'',
+    return {id:r.partida_id,nombre:_catNomTag(r.descripcion,r.tag),esp:r.especialidad||'',
       cuadrilla:'',sistema:r.sistema||'(sin sistema)',
       area:(typeof AREAS!=='undefined'&&AREAS[0])?AREAS[0]:'',
       inicio:'',fin:'',plan:0,ini:0,
