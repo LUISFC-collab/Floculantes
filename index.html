@@ -2710,8 +2710,11 @@ function _crPartidas(){
   var todas=(DATA.partidas||[]).concat(state.nuevas||[]),vis={},out=[];
   todas.forEach(function(p){
     if(!p||!p.id||vis[p.id])return;vis[p.id]=1;
-    var hh=0;try{hh=Number(_hhDe(p))||0}catch(e){}
     var off=false;try{off=(typeof _hhOff==='function')&&!!_hhOff(p.id)}catch(e){}
+    /* HH CRUDAS del contrato, como las trae el catalogo del servidor: el
+       universo y el alcance restan ellos lo que no se realiza (apartados
+       apagados y saldos retirados), y asi no se resta dos veces */
+    var hh=0;try{hh=off?0:(Number(p.hh)||0)}catch(e){}
     var nom='';try{nom=(typeof _nomAct==='function'?_nomAct(p):p.nombre)||p.id}catch(e){nom=p.id}
     out.push({id:p.id,nom:String(nom),hh:Math.round(hh*100)/100,off:off,esp:p.esp||'',
       ret:false,viva:true,und:p.unidad||'',cant:'',pu:'',tot:'',nva:!!p.nueva})});
@@ -15280,7 +15283,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260911a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260911a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -20296,6 +20299,16 @@ function _retFrac(id){try{var r=(typeof _fzDe==='function')?_fzDe(id):null;if(!r
 function _noHaceFrac(id){try{var a=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;var b=_retFrac(id);return Math.max(0,Math.min(1,a+b))}catch(e){return 0}}
 function _retRefresca(){try{window._hhCache=null;window._crCat=null}catch(e){}
   try{if(typeof renderList==='function')renderList()}catch(e){}
+  /* todo lo que muestra HH se repinta: cronogramas, alcance, Ficha, base del
+     peso, panel del admin y cabecera del diario */
+  try{if(document.getElementById('_crBody')&&typeof _crPinta==='function')_crPinta()}catch(e){}
+  try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(e){}
+  try{if(typeof window._hhSwRepinta==='function')window._hhSwRepinta()}catch(e){}
+  try{if(document.getElementById('_actOv')&&window._actIdAbierta&&typeof _actDetalle==='function')_actDetalle(window._actIdAbierta)}catch(e){}
+  try{if(document.getElementById('_retFOv')&&window._actIdAbierta&&typeof _retFichaUI==='function')_retFichaUI(window._actIdAbierta)}catch(e){}
+  try{if(typeof updAdminBox==='function')updAdminBox()}catch(e){}
+  try{if(typeof renderDiario==='function'&&document.getElementById('scrDiario')&&!document.getElementById('scrDiario').classList.contains('hidden'))renderDiario()}catch(e){}
+  try{if(typeof _pesoInject==='function')_pesoInject()}catch(e){}
   try{var e9=window._crCurEstado;if(e9&&document.getElementById('_crCurOv')){document.getElementById('_crCurOv').remove();_crCurvaUI(e9.c,e9.nivel,e9.conWbs,e9.esp)}}catch(e){}
   try{if(typeof _pgCurvaRefresca==='function')_pgCurvaRefresca()}catch(e){}}
 /* alta o cambio de un retiro; devolver = tumba */
@@ -20466,7 +20479,7 @@ function _nMon(n){n=Number(n);if(!isFinite(n))return '—';
   var s=Math.abs(n).toFixed(2).split('.');
   return (n<0?'-':'')+s[0].replace(/\B(?=(\d{3})+(?!\d))/g,',')+'.'+s[1]}
 function _nNum(n,d){n=Number(n);if(!isFinite(n))return '—';return (d?n.toFixed(d):String(n))}
-function _actDetalle(id){
+function _actDetalle(id){window._actIdAbierta=id;
   var p=(DATA._byId&&DATA._byId[id]);if(!p){if(typeof toast==='function')toast('No encuentro esa actividad');return}
   var off=_hhOff(id);
   var hh=Number(p.hh),pu=Number(p.pu),cant=Number(p.metrado);
@@ -24152,7 +24165,7 @@ function _hhSwPanel(ov){try{
     if(tt)tt.innerHTML='Decide contra qué se mide el "Al 100% vale X%". Por especialidad, cada disciplina reparte su propio 100%; por proyecto, las tres reparten un solo 100% y se ve cuánto pesa cada actividad en la obra completa.'+
       '<div style="margin-top:6px;color:#7fd7a5">Proyecto: '+Math.round(tp)+' hh · '+esc(d)+': '+Math.round(te)+' hh</div>';
     b.textContent=proy?'🌐 Sobre TODO el proyecto — tocar para volver a especialidad':'🔧 Por especialidad — tocar para usar todo el proyecto';
-    b.style.cssText='width:100%;border:0;border-radius:9px;padding:11px;font-weight:800;cursor:pointer;color:#fff;background:'+(proy?'#1F3864':'#1E7A46')};
+    b.style.cssText='width:100%;border:0;border-radius:9px;padding:11px;font-weight:800;cursor:pointer;color:#fff;background:'+(proy?'#1F3864':'#1E7A46');window._hhSwRepinta=pinta};
   pinta();
   b.onclick=async function(){await _hhSetBase(_hhBase()==='proy'?'esp':'proy');pinta()};
   box.appendChild(b);cuerpo.insertBefore(box,cuerpo.firstChild)}catch(e){}}
