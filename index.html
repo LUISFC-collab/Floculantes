@@ -2710,6 +2710,8 @@ function _crPartidas(){
   var todas=(DATA.partidas||[]).concat(state.nuevas||[]),vis={},out=[];
   todas.forEach(function(p){
     if(!p||!p.id||vis[p.id])return;vis[p.id]=1;
+    /* las borradas (lapida) no entran, igual que en el catalogo del servidor */
+    try{if(typeof tombHas==='function'&&tombHas('partida',p.id))return}catch(e){}
     var off=false;try{off=(typeof _hhOff==='function')&&!!_hhOff(p.id)}catch(e){}
     /* HH CRUDAS del contrato, como las trae el catalogo del servidor: el
        universo y el alcance restan ellos lo que no se realiza (apartados
@@ -15283,7 +15285,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260911a5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260911a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -20301,8 +20303,10 @@ function _retRefresca(){try{window._hhCache=null;window._crCat=null}catch(e){}
   try{if(typeof renderList==='function')renderList()}catch(e){}
   /* todo lo que muestra HH se repinta: cronogramas, alcance, Ficha, base del
      peso, panel del admin y cabecera del diario */
-  try{if(document.getElementById('_crBody')&&typeof _crPinta==='function')_crPinta()}catch(e){}
-  try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(e){}
+  /* los cronogramas y el alcance se repintan con el catalogo del SERVIDOR
+     recien bajado (el de respaldo no tiene las mismas partidas) */
+  try{var _rp9=function(){try{if(document.getElementById('_crBody')&&typeof _crPinta==='function')_crPinta()}catch(e){}try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(e){}};
+    if(typeof _crCatPull==='function'&&typeof sbReady==='function'&&sbReady()&&navigator.onLine)Promise.resolve(_crCatPull()).then(_rp9,_rp9);else _rp9()}catch(e){}
   try{if(typeof window._hhSwRepinta==='function')window._hhSwRepinta()}catch(e){}
   try{if(document.getElementById('_actOv')&&window._actIdAbierta&&typeof _actDetalle==='function')_actDetalle(window._actIdAbierta)}catch(e){}
   try{if(document.getElementById('_retFOv')&&window._actIdAbierta&&typeof _retFichaUI==='function')_retFichaUI(window._actIdAbierta)}catch(e){}
