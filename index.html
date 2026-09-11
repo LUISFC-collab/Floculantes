@@ -4977,8 +4977,13 @@ function _crProyeccion(u,semanas,real){
       /* la partida detras de la fila: entera (pid), una PARTE del APU
          (pid::fase) o un TRAMO por metrado (pid~n) */
       var bid=(typeof _pgBaseId==='function')?_pgBaseId(id):id;
-      var w=u.items[bid];if(!(w>0))return;          /* fuera del alcance: no pesa */
       var p=vivas[bid];if(!p)return;
+      var w=u.items[bid];
+      /* fuera del universo de este cronograma (no mapeada o desmarcada):
+         pesa con sus HH del contrato sobre las HH del cronograma, para que
+         lo puesto en el calendario se vea igual */
+      if(!(w>0)){try{w=(typeof _hhDe==='function')?(Number(_hhDe(p))||0):0}catch(e){w=0}}
+      if(!(w>0))return;
       var falta=0;
       var inf=null;try{inf=(typeof _pgParteInfo==='function')?_pgParteInfo(id):null}catch(e){}
       if(inf){
@@ -5747,6 +5752,9 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
    repintado. Un doble toque devuelve la etiqueta a su sitio. */
 function _crEtqMovibles(ov,cron){
   var svg=ov.querySelector('#_crGraf svg');if(!svg)return;
+  /* las rayas, barras, lineas y puntos no atrapan el mouse: la cifra que
+     cae debajo de una raya de semana tiene que poder agarrarse */
+  try{Array.prototype.forEach.call(svg.querySelectorAll('line,rect,path,circle'),function(el){el.style.pointerEvents='none'})}catch(e){}
   var K='obf4_curetq',all={};try{all=JSON.parse(localStorage.getItem(K)||'{}')||{}}catch(e){all={}}
   var mem=all[cron]||{};
   var textos=Array.prototype.filter.call(svg.querySelectorAll('text'),function(t){
@@ -15384,7 +15392,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260911b5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260911b6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
