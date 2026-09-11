@@ -849,7 +849,23 @@ function _fzCerr(id){try{
   return fisico<99.995&&(fisico+no*100)>=99.995}catch(e){return false}}
 function barCol(s){return s==='done'?'var(--done)':s==='prog'?'var(--prog)':'var(--todo)'}
 function pcCol(v){return barCol(v>=100?'done':v>0?'prog':'todo')}
-function sysOrder(d){const s=[];acts(d).forEach(p=>{if(!s.includes(p.sistema))s.push(p.sistema)});return s}
+/* El menor orden de catalogo (QPS) de cada sistema de la especialidad,
+   contando las partidas vivas, las retiradas del alcance y las borradas */
+function _sysMinOrden(d){var mo={};try{
+  (DATA.partidas||[]).concat(state.nuevas||[]).concat(DATA._retiradas||[]).forEach(function(p0){
+    if(!p0)return;var p=applyEdit(p0);if(p.esp!==d||!p.sistema)return;
+    var o=Number(p0.orden);if(!isFinite(o)||o<=0)return;
+    if(mo[p.sistema]==null||o<mo[p.sistema])mo[p.sistema]=o})}catch(e){}
+  return mo}
+/* Ordena una lista de sistemas como el QPS: por su menor orden; los que no
+   tienen orden (creados en la app) van despues, como estaban */
+function _sysOrdena(lista,d){var mo=_sysMinOrden(d),idx={};lista.forEach(function(x,i){idx[x]=i});
+  lista.sort(function(a,b){var oa=mo[a],ob=mo[b];
+    if(oa!=null&&ob!=null&&oa!==ob)return oa-ob;
+    if(oa!=null&&ob==null)return -1;if(oa==null&&ob!=null)return 1;
+    return idx[a]-idx[b]});
+  return lista}
+function sysOrder(d){const s=[];acts(d).forEach(p=>{if(!s.includes(p.sistema))s.push(p.sistema)});return _sysOrdena(s,d)}
 function bytesUsed(){try{return JSON.stringify(state.partes).length}catch(e){return 0}}
 // referencia al día anterior
 function ystISO(){const d=new Date(todayISO()+'T00:00:00');d.setDate(d.getDate()-1);return d.toISOString().slice(0,10)}
@@ -1530,6 +1546,7 @@ function renderList(){
   var _hayWbs=false;try{_hayWbs=((state.areasExtra||[]).length>0)||((state.sysExtra||[]).length>0)||((state.wbsX||[]).some(function(r9){return !r9.eliminado&&r9.disciplina===state.user.disc}))}catch(_e9){}if(!list.length&&!_hayWbs){wrap.innerHTML='<div class="empty">Sin actividades.</div>';return}
   const order=sysOrder(state.user.disc).filter(s=>list.some(p=>p.sistema===s));
   list.forEach(function(p){if(p._elim&&p.sistema&&order.indexOf(p.sistema)<0)order.push(p.sistema)});
+  try{_sysOrdena(order,state.user.disc)}catch(_eso){}
   /* mismo NOMBRE de sistema en áreas distintas = WBS independientes: se agrupa por (área de cada actividad, sistema) */
   var sysByArea={},_sysAreas={};order.forEach(function(sys){list.filter(function(p){return p.sistema===sys}).forEach(function(p){var ar=areaOf(p)||AREAS[0];(sysByArea[ar]=sysByArea[ar]||[]);if(sysByArea[ar].indexOf(sys)<0)sysByArea[ar].push(sys);(_sysAreas[sys]=_sysAreas[sys]||{})[ar]=1})});
   (state.sysExtra||[]).forEach(function(x){if(x.disc&&x.disc!==state.user.disc)return;(sysByArea[x.area]=sysByArea[x.area]||[]);if(sysByArea[x.area].indexOf(x.sistema)<0)sysByArea[x.area].push(x.sistema);(_sysAreas[x.sistema]=_sysAreas[x.sistema]||{})[x.area]=1;});
@@ -15318,7 +15335,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260911b2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260911b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -20664,7 +20681,7 @@ function _catMapea(rows){
       metrado:(isFinite(cant)?cant:0),unidad:r.unidad||'',
       rend:(r.rendimiento_dia==null?0:Number(r.rendimiento_dia)),
       item:r.item||'',articulo:r.articulo_pago||'',tag:r.tag||'',
-      subsistema:r.subsistema||'',dias:(r.duracion_dias==null?null:Number(r.duracion_dias)),
+      subsistema:r.subsistema||'',orden:(r.orden==null?null:Number(r.orden)),dias:(r.duracion_dias==null?null:Number(r.duracion_dias)),
       hh:(r.hh_t==null?null:Number(r.hh_t)),pu:(r.precio_unitario==null?null:Number(r.precio_unitario)),
       total:(r.oferta_total==null?null:Number(r.oferta_total)),alcance:r.estado_alcance||''};
   });
