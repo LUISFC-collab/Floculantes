@@ -2683,7 +2683,8 @@ async function _crCatPull(){
         off:off,esp:String(r.especialidad||''),ret:ret,viva:!ret,
         und:String(r.unidad||''),cant:(r.cantidad==null?'':Number(r.cantidad)),
         pu:(r.precio_unitario==null?'':Number(r.precio_unitario)),
-        tot:(r.oferta_total==null?'':Number(r.oferta_total)),
+        /* el costo, sin la fraccion de saldos retirados (ya no se hace) */
+        tot:(r.oferta_total==null?'':(function(){var t=Number(r.oferta_total)||0,f=0;try{f=(typeof _retFrac==='function')?_retFrac(id):0}catch(e){}return Math.round(t*(1-f)*100)/100})()),
         sis:String(r.sistema||''),orden:Number(r.orden)||0,nva:false});
       });
     /* las adicionales creadas en la app que aun no estan en el catalogo */
@@ -15279,7 +15280,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260911a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260911a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -20293,7 +20294,7 @@ function _retFrac(id){try{var r=(typeof _fzDe==='function')?_fzDe(id):null;if(!r
 /* TODO lo que no se realiza (para las HH y el universo): apartados apagados
    + saldos retirados */
 function _noHaceFrac(id){try{var a=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;var b=_retFrac(id);return Math.max(0,Math.min(1,a+b))}catch(e){return 0}}
-function _retRefresca(){try{window._hhCache=null}catch(e){}
+function _retRefresca(){try{window._hhCache=null;window._crCat=null}catch(e){}
   try{if(typeof renderList==='function')renderList()}catch(e){}
   try{var e9=window._crCurEstado;if(e9&&document.getElementById('_crCurOv')){document.getElementById('_crCurOv').remove();_crCurvaUI(e9.c,e9.nivel,e9.conWbs,e9.esp)}}catch(e){}
   try{if(typeof _pgCurvaRefresca==='function')_pgCurvaRefresca()}catch(e){}}
@@ -20342,10 +20343,9 @@ async function _retPonerParte(id,nombre){
   var c=Number(x.cantidad)||0,a=Number(x.avance)||0;var saldo=Math.max(0,Math.round((c-a)*100)/100);
   var eAct=_retParte(id,x.nombre),act=eAct?(Number(eAct.cant)||0):0;
   if(!(saldo>0)&&!act){toast('Esa parte no tiene saldo: ya est\u00e1 al 100%');return false}
-  /* una sola pregunta: la cantidad manda y 0 devuelve el saldo */
-  var v=prompt('\u00bfQu\u00e9 cantidad de "'+x.nombre+'" ya NO se realiza?\n'+
-    'Saldo: '+_apuCant(saldo)+' '+(x.unidad||'')+' de '+_apuCant(c)+(act?('\nRetirado ahora: '+_apuCant(act)+' '+(x.unidad||'')):'')+
-    '\n(0 = devolver todo el saldo retirado)',_apuCant(act||saldo));
+  /* el cuadro: todo el saldo, una cantidad que ya no se hara, o el metrado
+     final al que se llegara; 0 devuelve el saldo */
+  var v=await _retDialogo(x,c,a,saldo,act);
   if(v==null)return false;v=Number(String(v).replace(',','.'));
   if(!isFinite(v)||v<0||v>saldo+1e-9){toast('Cantidad inv\u00e1lida: entre 0 y '+_apuCant(saldo)+' '+(x.unidad||''));return false}
   if(v<=0){
@@ -20357,6 +20357,85 @@ async function _retPonerParte(id,nombre){
   try{logCambio('RETIRO_SALDO',id,'Retirado el saldo de '+x.nombre+': '+v+' '+(x.unidad||'')+' ya no se realizan')}catch(e){}
   toast('\u23f8 '+_apuCant(v)+' '+(x.unidad||'')+' de "'+x.nombre+'" ya no se realizan');
   _retRefresca();return true}
+/* El cuadro de retiro de un apartado. Devuelve la cantidad que ya NO se
+   realiza (0 = devolver) o null si se cancela. */
+function _retDialogo(x,c,a,saldo,act){
+  return new Promise(function(res){
+    var u=x.unidad||'',nom=String(x.nombre||'');
+    var old=document.getElementById('_retDlg');if(old)old.remove();
+    var ov=document.createElement('div');ov.id='_retDlg';
+    ov.style.cssText='position:fixed;inset:0;z-index:2147483450;background:rgba(15,25,45,.6);display:flex;align-items:center;justify-content:center;padding:14px';
+    var H='<div style="background:#fff;width:100%;max-width:460px;border-radius:16px;padding:16px 15px 14px;box-sizing:border-box;max-height:90vh;overflow:auto">';
+    H+='<div style="font-weight:900;font-size:15px;color:#1F3864">\u23f8 Retirar saldo \u00b7 '+esc(nom)+'</div>';
+    H+='<div style="font-size:12px;color:#5C6779;margin:4px 0 12px;line-height:1.5">Contemplado <b>'+_apuCant(c)+' '+esc(u)+'</b> \u00b7 hecho <b>'+_apuCant(a)+'</b> \u00b7 saldo <b>'+_apuCant(saldo)+'</b>'+(act?(' \u00b7 retirado ahora <b style="color:#8A4B00">'+_apuCant(act)+'</b>'):'')+'</div>';
+    H+='<button id="_rdTodo" style="width:100%;background:#8A4B00;color:#fff;border:0;border-radius:11px;padding:12px;font-weight:800;margin-bottom:10px;cursor:pointer">\u23f8 Retirar TODO el saldo ('+_apuCant(saldo)+' '+esc(u)+')</button>';
+    H+='<div style="background:#FCEFD9;border:1px solid #EFC98A;border-radius:11px;padding:10px 12px;margin-bottom:10px">'+
+       '<div style="font-size:11px;font-weight:800;color:#7A4B00;letter-spacing:.03em">CANTIDAD QUE YA NO SE HAR\u00c1</div>'+
+       '<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><input id="_rdCant" type="number" min="0" max="'+saldo+'" step="any" value="'+_apuCant(act||saldo)+'" style="flex:1;border:1px solid #C7D2E0;border-radius:8px;padding:9px;font-size:14px"><span style="font-size:12px;color:#5C6779">'+esc(u)+'</span>'+
+       '<button id="_rdCantOk" style="background:#7A4B00;color:#fff;border:0;border-radius:9px;padding:9px 12px;font-weight:800;cursor:pointer">Retirar</button></div>'+
+       '<div id="_rdCantTx" style="font-size:11px;color:#5C6779;margin-top:5px"></div></div>';
+    H+='<div style="background:#EAF1FB;border:1px solid #BFD3EE;border-radius:11px;padding:10px 12px;margin-bottom:10px">'+
+       '<div style="font-size:11px;font-weight:800;color:#26456F;letter-spacing:.03em">METRADO FINAL AL QUE SE LLEGAR\u00c1</div>'+
+       '<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><input id="_rdFin" type="number" min="'+a+'" max="'+c+'" step="any" value="'+_apuCant(Math.max(a,c-(act||saldo)))+'" style="flex:1;border:1px solid #C7D2E0;border-radius:8px;padding:9px;font-size:14px"><span style="font-size:12px;color:#5C6779">'+esc(u)+'</span>'+
+       '<button id="_rdFinOk" style="background:#26456F;color:#fff;border:0;border-radius:9px;padding:9px 12px;font-weight:800;cursor:pointer">Fijar</button></div>'+
+       '<div id="_rdFinTx" style="font-size:11px;color:#5C6779;margin-top:5px"></div></div>';
+    H+='<div style="display:flex;gap:8px">'+(act?'<button id="_rdDev" style="flex:1;background:#1E7A46;color:#fff;border:0;border-radius:10px;padding:11px;font-weight:800;cursor:pointer">\u25b6 Devolver el saldo</button>':'')+
+       '<button id="_rdX" style="flex:1;background:#eef2f7;border:0;border-radius:10px;padding:11px;font-weight:700;cursor:pointer">Cancelar</button></div>';
+    H+='<div style="margin-top:10px;font-size:10.5px;color:#8A94A6;line-height:1.45">Lo retirado cuenta como hecho por decisi\u00f3n y sale de las HH y del costo en proporci\u00f3n al peso del apartado. Los dem\u00e1s apartados no se tocan. Se puede devolver cuando quieras.</div>';
+    H+='</div>';ov.innerHTML=H;document.body.appendChild(ov);
+    var fin=function(v){try{ov.remove()}catch(e){}res(v)};
+    ov.onclick=function(e){if(e.target===ov)fin(null)};
+    var iC=document.getElementById('_rdCant'),iF=document.getElementById('_rdFin'),tC=document.getElementById('_rdCantTx'),tF=document.getElementById('_rdFinTx');
+    var lee=function(el){var v=Number(String(el.value||'').replace(',','.'));return isFinite(v)?v:NaN};
+    var pinta=function(){var vc=lee(iC),vf=lee(iF);
+      tC.textContent=isFinite(vc)?('Se llegar\u00e1 a '+_apuCant(Math.max(0,c-vc))+' '+u+' de '+_apuCant(c)+'; quedan por hacer '+_apuCant(Math.max(0,saldo-vc))+' '+u):'';
+      tF.textContent=isFinite(vf)?('Ya no se har\u00e1n '+_apuCant(Math.max(0,c-vf))+' '+u+'; quedan por hacer '+_apuCant(Math.max(0,vf-a))+' '+u):''};
+    iC.oninput=pinta;iF.oninput=pinta;pinta();
+    document.getElementById('_rdX').onclick=function(){fin(null)};
+    document.getElementById('_rdTodo').onclick=function(){fin(saldo)};
+    document.getElementById('_rdCantOk').onclick=function(){var v=lee(iC);if(!isFinite(v)||v<0||v>saldo+1e-9){toast('Entre 0 y '+_apuCant(saldo)+' '+u);return}fin(Math.round(v*100)/100)};
+    document.getElementById('_rdFinOk').onclick=function(){var v=lee(iF);if(!isFinite(v)||v<a-1e-9||v>c+1e-9){toast('Entre '+_apuCant(a)+' y '+_apuCant(c)+' '+u);return}fin(Math.round((c-v)*100)/100)};
+    var bd=document.getElementById('_rdDev');if(bd)bd.onclick=function(){fin(0)};
+  })}
+/* La ficha de retiros de una actividad: cada apartado con su saldo y su
+   retiro, para retirar o devolver desde la Ficha (solo admin) */
+function _retFichaUI(id){
+  if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return}
+  var old=document.getElementById('_retFOv');if(old)old.remove();
+  var r=(typeof _fzDe==='function')?_fzDe(id):null;
+  var p=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0])||{};
+  var nom='';try{nom=(typeof _nomAct==='function'?_nomAct(p):p.nombre)||id}catch(e){nom=id}
+  var ov=document.createElement('div');ov.id='_retFOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483440;background:rgba(15,25,45,.6);display:flex;align-items:flex-end;justify-content:center';
+  var H='<div style="background:#fff;width:100%;max-width:520px;max-height:88vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px 15px 18px;box-sizing:border-box">';
+  H+='<div style="font-weight:900;font-size:15px;color:#1F3864">\u23f8 Retirar saldo por apartado</div>';
+  H+='<div style="font-size:11.5px;color:#5C6779;margin:2px 0 12px">'+esc(id)+' \u00b7 '+esc(nom)+'</div>';
+  var fs=(r&&r.fases)||[];
+  if(!fs.length){
+    H+='<div style="background:#FCEFD9;border:1px solid #EFC98A;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#7A4B00">Esta actividad no tiene apartados como partes todav\u00eda. Abre su APU y usa <b>"Usar estos apartados como los pesos"</b>; despu\u00e9s podr\u00e1s retirar el saldo de cada uno.</div>'}
+  else fs.forEach(function(x,i){
+    var c=Number(x.cantidad)||0,a=Number(x.avance)||0,saldo=Math.max(0,Math.round((c-a)*100)/100);
+    var e=_retParte(id,x.nombre),act=e?(Number(e.cant)||0):0,u=x.unidad||'';
+    var pc=c>0?Math.round(Math.min(100,(a+act)/c*100)*10)/10:0;
+    H+='<div style="border:1px solid '+(act?'#EFC98A':'#E1E7F0')+';background:'+(act?'#FFF9E3':'#fff')+';border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="color:#1B2433;font-size:13px;flex:1;min-width:120px">'+esc(String(x.nombre||''))+'</b>'+
+      '<span style="font-size:10.5px;font-weight:800;color:#26456F;background:#E3EAF6;border-radius:6px;padding:2px 7px">peso '+(Math.round((Number(x.peso)||0)*10)/10)+'%</span>'+
+      (act?'<span style="font-size:10.5px;font-weight:800;color:#7A4B00;background:#FCEFD9;border:1px solid #EFC98A;border-radius:6px;padding:2px 7px">\u23f8 retirado '+_apuCant(act)+' '+esc(u)+'</span>':'')+'</div>'+
+      '<div style="font-size:12px;color:#5C6779;margin:5px 0 8px">Contemplado <b>'+_apuCant(c)+' '+esc(u)+'</b> \u00b7 hecho <b>'+_apuCant(a)+'</b> \u00b7 saldo <b>'+_apuCant(saldo)+'</b>'+(act?(' \u00b7 queda por hacer <b>'+_apuCant(Math.max(0,saldo-act))+'</b>'):'')+' \u00b7 '+pc+'% con lo retirado</div>'+
+      '<div style="display:flex;gap:8px">'+
+      ((saldo>0||act)?('<button class="_rfRet" data-n="'+i+'" style="flex:1;background:#8A4B00;color:#fff;border:0;border-radius:9px;padding:9px;font-weight:800;font-size:12px;cursor:pointer">\u23f8 Retirar\u2026</button>'):'<span style="flex:1;font-size:11.5px;color:#0C5132;font-weight:800;padding:9px 0">\u2713 al 100%</span>')+
+      (act?'<button class="_rfDev" data-n="'+i+'" style="flex:1;background:#1E7A46;color:#fff;border:0;border-radius:9px;padding:9px;font-weight:800;font-size:12px;cursor:pointer">\u25b6 Devolver</button>':'')+
+      '</div></div>'});
+  H+='<button id="_rfX" style="width:100%;margin-top:6px;background:#eef2f7;border:0;border-radius:10px;padding:12px;font-weight:700;cursor:pointer">Cerrar</button>';
+  H+='<div style="margin-top:8px;font-size:10.5px;color:#8A94A6;line-height:1.45">Lo retirado cuenta como hecho por decisi\u00f3n y sale de las HH y del costo en proporci\u00f3n al peso del apartado; se refleja en los pesos, las curvas, el alcance de los cronogramas y el libro.</div>';
+  H+='</div>';ov.innerHTML=H;document.body.appendChild(ov);
+  ov.onclick=function(e){if(e.target===ov)ov.remove()};
+  document.getElementById('_rfX').onclick=function(){ov.remove()};
+  ov.querySelectorAll('._rfRet').forEach(function(b){b.onclick=async function(){var x=fs[+b.getAttribute('data-n')];b.disabled=true;
+    try{await _retPonerParte(id,x.nombre)}catch(e){}_retFichaUI(id)}});
+  ov.querySelectorAll('._rfDev').forEach(function(b){b.onclick=async function(){var x=fs[+b.getAttribute('data-n')];b.disabled=true;
+    try{await _retDevolverParte(id,x.nombre)}catch(e){}_retFichaUI(id)}});
+}
 async function _retDevolverParte(id,nombre,silencioso){
   if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return false}
   var e=_retParte(id,nombre);if(!e)return false;
@@ -20432,6 +20511,9 @@ function _actDetalle(id){
   }
   H+='<button id="_actHH" style="width:100%;margin-top:10px;border:0;border-radius:10px;padding:12px;font-weight:800;font-size:13px;cursor:pointer;color:#fff;background:'+(off?'#1E7A46':'#8A4B00')+'">'+
      (off?'▶ Volver a contar sus HH para los pesos':'⏸ No usar sus HH para los pesos')+'</button>';
+  /* retirar el saldo de cada apartado (lo que ya no se hara), desde aqui */
+  (function(){var rt=null;try{rt=(typeof _retDe==='function')?_retDe(id):null}catch(e){}
+    H+='<button id="_actRet" style="width:100%;margin-top:8px;border:0;border-radius:10px;padding:12px;font-weight:800;font-size:13px;cursor:pointer;color:#7A4B00;background:#FCEFD9;border:1.5px solid #EFC98A">\u23f8 Retirar saldo por apartado'+(rt?(' \u00b7 '+rt.length+' con retiro'):'')+'</button>'})();
   H+='</div>';
   if(p.alcance)H+='<div style="margin-top:12px;font-size:11.5px;color:#5C6779">Estado en el contrato: <b>'+esc(p.alcance)+'</b></div>';
   H+='<div style="margin-top:10px;font-size:10.5px;color:#8A94A6">Los datos vienen del Excel de contrato cargado en el catálogo. Apagar las HH no borra nada: la actividad sigue ahí y se puede volver a encender cuando quieras.</div>';
@@ -20441,6 +20523,8 @@ function _actDetalle(id){
   document.getElementById('_actX').onclick=function(){ov.remove()};
   var bt=document.getElementById('_actHH');
   if(bt)bt.onclick=async function(){bt.disabled=true;bt.textContent='Guardando…';await _hhToggle(id);ov.remove();_actDetalle(id)};
+  var br=document.getElementById('_actRet');
+  if(br)br.onclick=function(){if(typeof _retFichaUI==='function')_retFichaUI(id)};
 }
 /* La ficha de costos del admin vive en el menu del engranaje: el nombre ya no
    la abre, porque tocar cualquier parte de la tarjeta abre las Partes. */
