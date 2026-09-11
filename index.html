@@ -9666,8 +9666,12 @@ function _wkCostoApp(P){
           fq=(kr===1)?(cc+ra):('IFERROR('+cc+ra+'-'+colC(kr-1)+ra+',"")')}
         else if(m.modo==='gg')
           fq='IFERROR('+_wkPhyHoja()+'!'+_wkgCol('O',kr)+'$'+prAc+'*'+TOTGG+',"")';
+        else if(m.modo==='ut')
+          /* la utilidad: 10% del costo directo acumulado de su linea */
+          fq='IFERROR('+cc+(m.res+D+(m.cual==='plan'?0:1))+'*0.1,"")';
         else
-          fq='IFERROR('+cc+(m.res+D+(m.cual==='plan'?0:1))+'+'+cc+(m.res+D+(m.cual==='plan'?4:5))+',"")';
+          /* total = directo acumulado + gasto general + utilidad */
+          fq='IFERROR('+cc+(m.res+D+(m.cual==='plan'?0:1))+'+'+cc+(m.res+D+(m.cual==='plan'?4:5))+'+'+cc+(m.res+D+(m.cual==='plan'?6:7))+',"")';
         c+=cel(cc,fq,te(cc))}
       r.push('<row r="'+n+'"'+ePlan.at+'>'+c+'</row>');return}
     if(m.tipo==='wbs'||m.tipo==='cuadro'||m.tipo==='total'){
@@ -10007,7 +10011,7 @@ function _wkProgApp(P){
     /* debajo del total, el resumen del cuadro: acumulado y del periodo,
        del plan y del avance */
     pos.push({ini:ini,pri:E.lista.length?E.lista[0].r:ini,fin:n0-1,tot:n0,res:n0+1});
-    n0+=9});
+    n0+=11});
   var ultFila=n0-1;
   var cab=[];
   P0.filas.forEach(function(f){
@@ -10125,12 +10129,15 @@ function _wkProgApp(P){
              ['per','real','DEL PERIODO ACTUAL ('+_nv9+')','Actual'],
              ['gg','plan','GASTO GENERAL PLAN ('+_nv9+')','Prog. '+_nv9],
              ['gg','real','GASTO GENERAL ACTUAL ('+_nv9+')','Actual'],
-             ['tgg','plan','TOTAL PLAN + GG ('+_nv9+')','Prog. '+_nv9],
-             ['tgg','real','TOTAL ACTUAL + GG ('+_nv9+')','Actual']];
+             /* la UTILIDAD: 10% del costo directo acumulado, plan y actual */
+             ['ut','plan','UTILIDAD PLAN 10% ('+_nv9+')','Prog. '+_nv9],
+             ['ut','real','UTILIDAD ACTUAL 10% ('+_nv9+')','Actual'],
+             ['tgg','plan','TOTAL PLAN + GG + UTILIDAD ('+_nv9+')','Prog. '+_nv9],
+             ['tgg','real','TOTAL ACTUAL + GG + UTILIDAD ('+_nv9+')','Actual']];
     RES.forEach(function(z,iz){
       n=pb.res+iz;
       var cr='';
-      var suya=!(z[0]==='gg'||z[0]==='tgg');
+      var suya=!(z[0]==='gg'||z[0]==='tgg'||z[0]==='ut');
       COLS.forEach(function(cx){
         cr+=(cx==='D'&&suya)?cel('D',z[2],col(cx,1),true):val(cx,'',col(cx,1))});
       cr+=val(colS(0),'',ePlan.e[colS(0)]);
@@ -10159,9 +10166,9 @@ function _wkProgApp(P){
         etiqueta:z[2],marca:z[3],ini:pb.ini,fin:pb.fin,tot:pb.tot,res:pb.res,
         /* el gasto general solo existe en COSTO: en las demas hojas la fila se
            queda entera en blanco, ni siquiera con rotulo */
-        soloCosto:(z[0]==='gg'||z[0]==='tgg')});
+        soloCosto:(z[0]==='gg'||z[0]==='tgg'||z[0]==='ut')});
       r.push('<row r="'+n+'"'+ePlan.at+'>'+cr+'</row>')});
-    n=pb.res+8});
+    n=pb.res+10});
   var ultCol=_wkgCol('N',nS);
   var enc=base.slice(0,base.indexOf('<sheetData>'));
   enc=enc.replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:'+ultCol+ultFila+'"/>');
@@ -15268,7 +15275,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260909a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260911a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
