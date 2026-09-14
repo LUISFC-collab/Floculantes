@@ -4997,9 +4997,12 @@ function _crProyeccion(u,semanas,real){
       var falta=0;
       var inf=null;try{inf=(typeof _pgParteInfo==='function')?_pgParteInfo(id):null}catch(e){}
       if(inf){
-        /* una parte: el peso de su apartado, menos lo hecho de esa parte */
-        var pcp=0;try{pcp=Number(_fzPctParte(inf.fase))||0}catch(e){}
-        falta=w*(Math.max(0,Math.min(100,Number(inf.fase.peso)||0))/100)*(1-Math.max(0,Math.min(100,pcp))/100)}
+        /* una parte: el peso de su apartado, menos lo hecho de esa parte;
+           un tramo de la parte: su cantidad sobre la de la parte */
+        var wP=w*(Math.max(0,Math.min(100,Number(inf.fase.peso)||0))/100);
+        if(typeof _pgEsTramo==='function'&&_pgEsTramo(id)){var cP=Number(_fzCantDe(inf.fase))||0,cT=Number(pr.cant)||0;falta=(cP>0&&cT>0)?wP*Math.min(1,cT/cP):0}
+        else{var pcp=0;try{pcp=Number(_fzPctParte(inf.fase))||0}catch(e){}
+          falta=wP*(1-Math.max(0,Math.min(100,pcp))/100)}}
       else if(typeof _pgEsTramo==='function'&&_pgEsTramo(id)){
         /* un tramo: su cantidad sobre el metrado vigente */
         var mT=metaOf(bid),tT=Number(mT&&mT.total)||0,cT=Number(pr.cant)||0;
@@ -8429,8 +8432,10 @@ async function _crPlanRecupera(cronId,corte,semN){
             fr=(t9>0&&c9>0)?Math.min(1,c9/t9):0}
           else{
             var inf=(typeof _pgParteInfo==='function')?_pgParteInfo(k):null;if(!inf)return;
-            var pcp=0;try{pcp=Number(_fzPctParte(inf.fase))||0}catch(_e){}
-            fr=(Math.max(0,Math.min(100,Number(inf.fase.peso)||0))/100)*(1-Math.max(0,Math.min(100,pcp))/100)}
+            var wP=Math.max(0,Math.min(100,Number(inf.fase.peso)||0))/100;
+            if(typeof _pgEsTramo==='function'&&_pgEsTramo(k)){var cP=Number(_fzCantDe(inf.fase))||0,cT=Number(pr.cant)||0;fr=(cP>0&&cT>0)?wP*Math.min(1,cT/cP):0}
+            else{var pcp=0;try{pcp=Number(_fzPctParte(inf.fase))||0}catch(_e){}
+              fr=wP*(1-Math.max(0,Math.min(100,pcp))/100)}}
           /* y en metrado: el tramo su cantidad; la entera lo que le falta
              de metrado; la parte su peso sobre el metrado */
           var mQ=null;
@@ -15435,7 +15440,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260913a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260913a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -18439,6 +18444,8 @@ el.querySelectorAll('._pgSeg').forEach(function(sg){
   sg.onclick=function(ev){ev.stopPropagation();
     var sid=sg.getAttribute('data-id'),info=_pgParteInfo(sid);if(!info)return;
     if(_pgProg()[sid]){toast('Esa parte ya est\u00e1 en el calendario \u2014 t\u00f3cala all\u00e1 para devolverla');return}
+    if(_pgTramosParte(info.pid,info.fase.id).length){var rq9=_pgParteResta(info.pid,info.fase);
+      if(rq9!=null&&!(rq9>0)){toast('Esa parte ya est\u00e1 toda en el calendario por tramos \u2014 t\u00f3calos all\u00e1 para devolverlos');return}}
     var pc=0;try{pc=_fzPctParte(info.fase)}catch(e){}
     if(pc>=100){toast('Esa parte ya est\u00e1 hecha');return}
     if(_pgDiasParte(info.pid,info.fase)==null){toast('Define metrado y rendimiento primero');return}
@@ -18469,8 +18476,19 @@ function _pgBaseId(id){var t=String(id||'').replace(/~\d+$/,''),k=t.indexOf('::'
    apartados del APU (esas se programan por apartado). */
 function _pgEsTramo(id){return /~\d+$/.test(String(id||''))}
 function _pgTramoN(id){var m=String(id||'').match(/~(\d+)$/);return m?Number(m[1]):0}
+/* los tramos de UNA PARTE (pid::fase~n) y lo que le queda a la parte por
+   programar: su cantidad menos lo hecho (y lo retirado) menos sus tramos */
+function _pgTramosParte(pid,fid){var P=(typeof _pgProg==='function')?_pgProg():(state.prog||{}),out=[];
+  Object.keys(P).forEach(function(k){var e=P[k];if(!e||!e.start||!_pgEsTramo(k)||!_pgEsParte(k))return;
+    if(_pgBaseId(k)!==pid||_pgFidDe(k)!==fid)return;
+    var dT=Number(state.progDel&&state.progDel[k])||0;if(dT&&!(Number(e.ts)>dT))return;out.push(e)});
+  out.sort(function(a,b){return _pgTramoN(a.partida_id)-_pgTramoN(b.partida_id)});return out}
+function _pgParteResta(pid,fase){try{var c=Number(_fzCantDe(fase))||0;if(!(c>0))return null;
+  var pc=0;try{pc=Number(_fzPctParte(fase))||0}catch(e){}
+  var t=0;_pgTramosParte(pid,fase.id).forEach(function(e){t+=Number(e.cant)||0});
+  return Math.max(0,Math.round((c*(1-Math.max(0,Math.min(100,pc))/100)-t)*100)/100)}catch(e){return null}}
 function _pgTramosDe(pid){var P=(typeof _pgProg==='function')?_pgProg():(state.prog||{}),out=[];
-  Object.keys(P).forEach(function(k){var e=P[k];if(!_pgEsTramo(k)||_pgBaseId(k)!==pid||!e||!e.start)return;
+  Object.keys(P).forEach(function(k){var e=P[k];if(!_pgEsTramo(k)||_pgEsParte(k)||_pgBaseId(k)!==pid||!e||!e.start)return;
     var dT=Number(state.progDel&&state.progDel[k])||0;if(dT&&!(Number(e.ts)>dT))return;out.push(e)});
   out.sort(function(a,b){return _pgTramoN(a.partida_id)-_pgTramoN(b.partida_id)});return out}
 function _pgTramoSig(pid){var n=0;_pgTramosDe(pid).forEach(function(e){n=Math.max(n,_pgTramoN(e.partida_id))});return n+1}
@@ -18510,6 +18528,29 @@ function _pgTramoDialogo(p,resta,u,n,rend){
     document.getElementById('_tdX').onclick=function(){fin(null)};
     document.getElementById('_tdTodo').onclick=function(){fin(resta)};
     document.getElementById('_tdOk').onclick=function(){var v=lee();if(!isFinite(v)||v<=0||v>resta+1e-9){toast('Entre 0.01 y '+qty(resta)+' '+u);return}fin(Math.round(v*100)/100)}})}
+/* al soltar una PARTE del APU medida en cantidad: pregunta cuanto de la
+   parte va en este tramo; si es todo lo que queda y no hay tramos, va la
+   parte entera como siempre */
+function _pgTramoParte(pB,id,ds,inf,dP){(async function(){try{
+  var fase=inf.fase,u=String(fase.unidad||'');
+  var resta=_pgParteResta(inf.pid,fase);
+  if(!(resta>0)){toast('No queda metrado por programar de '+String(fase.nombre||'')+': ya est\u00e1 hecho o puesto en sus tramos');return}
+  var hay=_pgTramosParte(inf.pid,fase.id),n=0;hay.forEach(function(e){n=Math.max(n,_pgTramoN(e.partida_id))});n++;
+  var rend=resta/Math.max(1,dP);
+  var cant=await _pgTramoDialogo({id:pB.id,codigo:codeOf(pB),nombre:String(fase.nombre||'')+' \u00b7 '+String(pB.nombre||'').split('\n')[0]},resta,u,hay.length?n:1,rend);
+  if(cant==null)return;
+  if(cant>=resta-1e-9&&!hay.length){window._pgTramoOk=true;try{placeActivity(id,ds)}finally{window._pgTramoOk=false}return}
+  var d=Math.max(1,Math.ceil(dP*cant/resta));
+  var k=id+'~'+n;
+  state.prog[k]={partida_id:k,codigo:codeOf(pB)+' \u00b7 '+String(fase.nombre||'')+' ('+n+')',nombre:(pB.nombre||'')+' \u00b7 '+fase.nombre+' '+(Math.round((Number(fase.peso)||0)*10)/10)+'%',disc:progDisc,start:ds,dias:d,cant:cant,cell_at:Date.now(),_lo:1,ts:(typeof nowSrv==='function'?nowSrv():Date.now())};
+  if(typeof progUntomb==='function')progUntomb(k);
+  try{_pgEnvuelve(inf.pid)}catch(_ee){}
+  if(typeof logCambio==='function')logCambio('PROGRAMACION',k,'Programado el tramo ('+n+') de '+fase.nombre+': '+qty(cant)+' '+u+' \u00b7 '+d+' d\u00eda(s) desde '+ds);
+  progSave();progPicked=null;progPickedDias=null;
+  var _pp=$('progPanel');if(_pp)_pp.classList.remove('hidden');
+  var _h=$('ppHint');if(_h){var q9=_pgParteResta(inf.pid,fase);_h.textContent='Tramo ('+n+') de '+fase.nombre+' programado \u2713.'+(q9>0?(' Quedan '+qty(q9)+' '+u+' como tramo ('+(n+1)+').'):' Ya no queda metrado de esa parte.');_h.classList.remove('hl')}
+  renderProgSelect();renderCal();
+  toast(codeOf(pB)+' \u00b7 '+fase.nombre+' ('+n+'): '+qty(cant)+' '+u+' \u00b7 '+d+' d\u00eda'+(d>1?'s':'')+' desde '+ds.slice(5));syncNow(true)}catch(e){}})()}
 /* al soltar una partida por tramos: pregunta y, si es una parte, la pone
    como tramo propio; si es todo lo que queda y no hay tramos, va entera */
 function _pgTramoPregunta(p,id,ds){(async function(){try{
@@ -18533,7 +18574,7 @@ function _pgTramoPregunta(p,id,ds){(async function(){try{
   var _h=$('ppHint');if(_h){var q9=_pgRestaTramo(id);_h.textContent='Tramo ('+n+') programado \u2713.'+(q9>0?(' Quedan '+qty(q9)+' '+u+' como tramo ('+(n+1)+').'):' Ya no queda metrado por programar.');_h.classList.remove('hl')}
   renderProgSelect();renderCal();
   toast(codeOf(p)+' ('+n+'): '+qty(cant)+' '+u+' \u00b7 '+d+' d\u00eda'+(d>1?'s':'')+' desde '+ds.slice(5));syncNow(true)}catch(e){}})()}
-function _pgFidDe(id){var t=String(id||''),k=t.indexOf('::');return k>0?t.slice(k+2):''}
+function _pgFidDe(id){var t=String(id||'').replace(/~\d+$/,''),k=t.indexOf('::');return k>0?t.slice(k+2):''}
 function _pgNomBase(n){return String(n||'').replace(/\s\u00b7\s[^\u00b7]*\d+(\.\d+)?%$/,'')}
 function _pgPartesDe(pid){try{var f=(typeof _fzDe==='function')?_fzDe(pid):null;
   var fs=(f&&f.fases)?f.fases.filter(function(x){return x&&x.id}):[];
@@ -18557,6 +18598,8 @@ function _pgPartesPend(pid){
   var P=(typeof _pgProg==='function')?_pgProg():(state.prog||{});
   return _pgPartesDe(pid).filter(function(f){
     if(P[pid+'::'+f.id])return false;
+    /* con tramos por metrado: pendiente mientras le quede cantidad */
+    if(_pgTramosParte(pid,f.id).length){var rq=_pgParteResta(pid,f);if(rq!=null)return rq>0}
     var pc=0;try{pc=(typeof _fzPctParte==='function')?_fzPctParte(f):0}catch(e){}
     return pc<100})}
 /* los dias de una parte: su peso sobre los dias de la partida, menos lo que
@@ -18606,7 +18649,10 @@ function _pgSegHTML(p){try{
       var pe=Math.max(0,Number(f.peso)||0),pr=P0[p.id+'::'+f.id],pc=0;
       try{pc=(typeof _fzPctParte==='function')?_fzPctParte(f):0}catch(e){}
       var done=pc>=100,col=_PG_PARTE_COL[ix%_PG_PARTE_COL.length];
-      var st=pr?('\u2713 '+String(pr.start).slice(5)+' \u00b7 '+(pr.dias||1)+' d'):(done?'hecha':((_pgDiasParte(p.id,f)||'?')+' d'));
+      var trs=_pgTramosParte(p.id,f.id),rq=trs.length?_pgParteResta(p.id,f):null;
+      if(trs.length&&rq!=null&&!(rq>0))pr=pr||trs[trs.length-1];   /* toda en tramos: se ve programada */
+      var st=pr?('\u2713 '+String(pr.start).slice(5)+' \u00b7 '+(pr.dias||1)+' d'+(trs.length?(' \u00b7 '+trs.length+' tramo'+(trs.length>1?'s':'')):'')):
+        (trs.length?(trs.length+' tramo'+(trs.length>1?'s':'')+' \u00b7 resta '+qty(rq)+' '+String(f.unidad||'')):(done?'hecha':((_pgDiasParte(p.id,f)||'?')+' d')));
       return '<div class="_pgSeg" data-id="'+esc(p.id+'::'+f.id)+'" title="'+esc(String(f.nombre||'')+' '+pe+'%')+'" style="flex:'+Math.max(pe,8)+' 1 0;min-width:0;background:'+(pr?'rgba(255,255,255,.92)':(done?'rgba(255,255,255,.35)':col))+';color:'+(pr?col:'#fff')+';padding:4px 5px;font-size:9.5px;font-weight:800;line-height:1.2;cursor:'+(done?'default':'pointer')+';'+(pr?('box-shadow:inset 0 0 0 1.5px '+col):'')+'">'+
         '<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(String(f.nombre||''))+' '+(Math.round(pe*10)/10)+'%</div>'+
         '<div style="opacity:.85;font-weight:700">'+esc(st)+'</div></div>'}).join('')+
@@ -21662,7 +21708,8 @@ function _ccFill(hex){try{var h=String(hex||'').replace('#','');if(h.length===3)
 function _ccPartCard(pr,color){var _m=metaOf(_pgBaseId(pr.partida_id));var _met=_m?(qty(_m.total)+' '+(_m.unidad||'')+(_m.rend?(' · rend '+_m.rend):'')):'sin metrado';var _dd=occupiedDays(pr.start,pr.dias||1);var _r=_dd.length?(_dd[0].slice(5)+(_dd.length>1?(' → '+_dd[_dd.length-1].slice(5)):'')):'';return '<div class="_ccPart" data-pid="'+esc(pr.partida_id)+'" style="border:1px solid '+(color||'var(--line)')+';border-radius:8px;padding:7px 9px;margin-bottom:6px;cursor:pointer;background:#fff"><b>'+esc(pr.codigo||pr.partida_id)+'</b> · '+esc(pr.nombre||'')+'<div style="font-size:11px;color:var(--muted)">'+esc(_met)+' · '+(pr.dias||1)+' día'+((pr.dias||1)>1?'s':'')+' · '+esc(_r)+'</div></div>';}
 function _areaAbrev(a){a=String(a||'');if(/carachugo/i.test(a)&&/1-9/.test(a))return 'CH9';if(/carachugo/i.test(a)&&/10-14/.test(a))return 'CH14';if(/quinua/i.test(a)&&/1-7/.test(a))return 'LQ7';if(/quinua/i.test(a)&&/wox/i.test(a))return 'LQW';var m=a.replace(/^Área des*/i,'').trim();return m?m.slice(0,6):''}
 function _sisDe(id){try{var e=state.edits&&state.edits[id];if(e&&e.sistema)return e.sistema;var b=DATA._byId&&DATA._byId[id];if(b){var pe=(typeof applyEdit==='function')?applyEdit(b):b;if(pe&&pe.sistema)return pe.sistema}var n=(state.nuevas||[]).filter(function(x){return x.id===id})[0];if(n&&n.sistema)return n.sistema}catch(e){}return ''}
-function _ccChipHtml(t,idx){var _bid=_pgBaseId(t.partida_id),_inf=_pgParteInfo(t.partida_id);var _m=metaOf(_bid);var _rst=(typeof hasActiveRestr==='function')&&hasActiveRestr(_bid);var _fd=(diasDe(_bid)==null);var _bg=_rst?'#B42318':(_fd?'#7FA8E0':'');var _pd='';try{if(!_inf&&_m&&_m.unidad!=='glb'&&_m.total>0){var _rem=Math.max(0,_m.total-((typeof acumCant==='function')?acumCant(_bid):0));if(_pgEsTramo(t.partida_id)&&Number(t.cant)>0)_rem=Number(t.cant);_pd=qty(_rem/(t.dias||1))+' '+(_m.unidad||'')+'/día'}}catch(_e){}
+function _ccChipHtml(t,idx){var _bid=_pgBaseId(t.partida_id),_inf=_pgParteInfo(t.partida_id);var _m=metaOf(_bid);var _rst=(typeof hasActiveRestr==='function')&&hasActiveRestr(_bid);var _fd=(diasDe(_bid)==null);var _bg=_rst?'#B42318':(_fd?'#7FA8E0':'');var _pd='';try{if(_inf&&_pgEsTramo(t.partida_id)&&Number(t.cant)>0)_pd=qty(Number(t.cant)/(t.dias||1))+' '+esc(String(_inf.fase.unidad||''))+'/día'}catch(_e0){}
+ try{if(!_inf&&_m&&_m.unidad!=='glb'&&_m.total>0){var _rem=Math.max(0,_m.total-((typeof acumCant==='function')?acumCant(_bid):0));if(_pgEsTramo(t.partida_id)&&Number(t.cant)>0)_rem=Number(t.cant);_pd=qty(_rem/(t.dias||1))+' '+(_m.unidad||'')+'/día'}}catch(_e){}
  /* y lo que aporta al avance cada dia, con la misma vara del panel */
  try{var _ad=(typeof _pgAporteDia==='function')?_pgAporteDia(t):0;
    if(_ad>0)_pd=(_pd?(_pd+' · '):'')+(Math.round(_ad*100)/100).toFixed(2)+'%/día'}catch(_e2){}
@@ -21675,7 +21722,7 @@ function _ccChipHtml(t,idx){var _bid=_pgBaseId(t.partida_id),_inf=_pgParteInfo(t
  var _pb='';
  /* el TRAMO por metrado: su codigo con el numero y cuanto lleva */
  if(_pgEsTramo(t.partida_id)){_pb='<b style="display:block;font-size:8.5px;line-height:1.6;background:#1F3864;color:#fff;border-radius:4px;padding:0 4px;margin:1px 0 2px">'+esc(t.codigo||'')+(Number(t.cant)>0?(' \u00b7 '+qty(t.cant)+' '+esc((_m&&_m.unidad)||'')):'')+'</b>'}
- if(_inf){var _pcol=_PG_PARTE_COL[_inf.idx%_PG_PARTE_COL.length];_pb='<b style="display:block;font-size:8.5px;line-height:1.6;background:'+_pcol+';color:#fff;border-radius:4px;padding:0 4px;margin:1px 0 2px">'+(_inf.idx+1)+'/'+_inf.n+' '+esc(String(_inf.fase.nombre||'').toUpperCase())+' '+(Math.round((Number(_inf.fase.peso)||0)*10)/10)+'%</b>'}
+ if(_inf){var _pcol=_PG_PARTE_COL[_inf.idx%_PG_PARTE_COL.length];_pb='<b style="display:block;font-size:8.5px;line-height:1.6;background:'+_pcol+';color:#fff;border-radius:4px;padding:0 4px;margin:1px 0 2px">'+(_inf.idx+1)+'/'+_inf.n+' '+esc(String(_inf.fase.nombre||'').toUpperCase())+' '+(Math.round((Number(_inf.fase.peso)||0)*10)/10)+'%'+(_pgEsTramo(t.partida_id)?(' ('+_pgTramoN(t.partida_id)+') \u00b7 '+qty(t.cant)+' '+esc(String(_inf.fase.unidad||''))):'')+'</b>'}
  return '<span class="cdtask" data-id="'+esc(t.partida_id)+'" data-cg="'+esc(_cg)+'" title="'+esc((t.codigo||_bid)+' · '+_nom+(_inf?(' · '+_inf.fase.nombre):''))+'" style="border-left:5px solid '+_pgDayColor((window._pgAM&&window._pgAM[_bid]!=null)?window._pgAM[_bid]:idx)+';'+(_bg?('background:'+_bg+';color:#fff'):'')+'">'+(_ctx?('<b style="font-weight:700;font-size:8.5px;line-height:1.2;display:block;opacity:.82">'+esc(_ctx)+'</b>'):'')+_pb+'<span style="font-weight:800;font-size:10px;line-height:1.2;display:block">'+esc(_nom)+'</span>'+(_pd?('<small style="display:block;font-weight:700;font-size:9px;opacity:.9">'+_pd+'</small>'):'')+'</span>';}
 /* La partida viva detras de una fila de programacion */
 function _pgPart(id){try{
@@ -21696,6 +21743,9 @@ function _pgAporteDia(pr){try{
   if(inf){
     /* un tramo aporta el peso de su parte, menos lo hecho de esa parte */
     var wp=w*(Math.max(0,Math.min(100,Number(inf.fase.peso)||0))/100);
+    /* un tramo por metrado de la parte: su cantidad sobre la de la parte */
+    if(_pgEsTramo(pr.partida_id)){var cP=Number(_fzCantDe(inf.fase))||0,cT=Number(pr.cant)||0;
+      if(!(cP>0&&cT>0))return 0;return wp*Math.min(1,cT/cP)/Math.max(1,Number(pr.dias)||1)}
     var pcp=0;try{pcp=Number(_fzPctParte(inf.fase))||0}catch(e){}
     return wp*(1-Math.max(0,Math.min(100,pcp))/100)/Math.max(1,Number(pr.dias)||1)}
   /* la envoltura de una partida por partes no aporta: aportan sus tramos */
@@ -22091,6 +22141,9 @@ if(_inf){
   if(ds<todayISO()&&!esAdmin()){toast('Solo el administrador puede programar en fechas pasadas; t\u00fa, de hoy en adelante');return}
   var pB=acts(progDisc).find(function(x){return x.id===_inf.pid});if(!pB){toast('Esa partida no est\u00e1 en '+progDisc);return}
   var dP=_pgDiasParte(_inf.pid,_inf.fase);if(!dP){toast('Define metrado y rendimiento primero');return}
+  /* la parte medida en cantidad: se pregunta cuanto va en este tramo */
+  if(!window._pgTramoOk&&!_pgEsTramo(id)){var cP0=0;try{cP0=Number(_fzCantDe(_inf.fase))||0}catch(_e0){}
+    if(cP0>0){_pgTramoParte(pB,id,ds,_inf,dP);return}}
   state.prog[id]={partida_id:id,codigo:codeOf(pB),nombre:(pB.nombre||'')+' \u00b7 '+_inf.fase.nombre+' '+(Math.round((Number(_inf.fase.peso)||0)*10)/10)+'%',disc:progDisc,start:ds,dias:dP,cell_at:Date.now(),_lo:1,ts:(typeof nowSrv==='function'?nowSrv():Date.now())};
   if(typeof progUntomb==='function')progUntomb(id);
   try{_pgEnvuelve(_inf.pid)}catch(_ee){}
