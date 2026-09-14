@@ -8427,7 +8427,7 @@ async function _crPlanRecupera(cronId,corte,semN){
             var hecho=0;
             try{var a2=_crAvanceDe([i],corte,{cod:cod,rp:rp});hecho=Math.max(0,Math.min(100,a2.pct||0))/100}catch(_ea){}
             fr=Math.max(0,1-hecho)}
-          else if(typeof _pgEsTramo==='function'&&_pgEsTramo(k)){
+          else if(typeof _pgEsTramo==='function'&&_pgEsTramo(k)&&!_pgEsParte(k)){
             var m9=metaOf(i),t9=Number(m9&&m9.total)||0,c9=Number(pr.cant)||0;
             fr=(t9>0&&c9>0)?Math.min(1,c9/t9):0}
           else{
@@ -8441,7 +8441,7 @@ async function _crPlanRecupera(cronId,corte,semN){
           var mQ=null;
           if(okQ){try{var q0=porId[i],tot0=Number(q0&&q0.cant)||0,v0=_crVeces(rp,i);
             if(tot0>0){
-              if(typeof _pgEsTramo==='function'&&_pgEsTramo(k))mQ=Math.min(tot0,Number(pr.cant)||0)/v0;
+              if(typeof _pgEsTramo==='function'&&_pgEsTramo(k)&&!_pgEsParte(k))mQ=Math.min(tot0,Number(pr.cant)||0)/v0;
               else if(k===i){var ac0=0;try{ac0=Number(acumCantAt(i,corte))||0}catch(_e1){}mQ=Math.max(0,tot0-ac0)/v0}
               else mQ=fr*tot0/v0}}catch(_e2){mQ=null}}
           if(fr>1e-9||(mQ!=null&&mQ>1e-9))ent.push({pr:pr,fr:fr,hi:hi,mQ:mQ})});
@@ -15440,7 +15440,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260913a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260913a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -21737,8 +21737,9 @@ function _pgAporteDia(pr){try{
   var p=_pgPart(inf?inf.pid:_pgBaseId(pr.partida_id));if(!p)return 0;
   var w=Number(_pgPeso(p))||0;
   if(!(w>0))return 0;
-  /* un tramo por metrado aporta su cantidad sobre el metrado vigente */
-  if(_pgEsTramo(pr.partida_id)){var mT=metaOf(p.id),tT=Number(mT&&mT.total)||0,cT=Number(pr.cant)||0;
+  /* un tramo por metrado (de la partida entera) aporta su cantidad sobre
+     el metrado vigente; el de una parte se resuelve abajo, con su peso */
+  if(!inf&&_pgEsTramo(pr.partida_id)){var mT=metaOf(p.id),tT=Number(mT&&mT.total)||0,cT=Number(pr.cant)||0;
     if(!(tT>0&&cT>0))return 0;return w*Math.min(1,cT/tT)/Math.max(1,Number(pr.dias)||1)}
   if(inf){
     /* un tramo aporta el peso de su parte, menos lo hecho de esa parte */
