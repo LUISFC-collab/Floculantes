@@ -2734,7 +2734,10 @@ async function _crCatPull(){
         und:String(r.unidad||''),cant:(r.cantidad==null?'':Number(r.cantidad)),
         pu:(r.precio_unitario==null?'':Number(r.precio_unitario)),
         /* el costo, sin la fraccion de saldos retirados (ya no se hace) */
-        tot:(r.oferta_total==null?'':(function(){var t=Number(r.oferta_total)||0,f=0;try{f=(typeof _retFrac==='function')?_retFrac(id):0}catch(e){}return Math.round(t*(1-f)*100)/100})()),
+        tot:(r.oferta_total==null?'':Number(r.oferta_total)),
+        /* y el costo con los saldos retirados fuera: lo usan las lineas que
+           no son base (forecast, actual); la base conserva el contrato */
+        totRet:(r.oferta_total==null?'':(function(){var t=Number(r.oferta_total)||0,f=0;try{f=(typeof _retFrac==='function')?_retFrac(id):0}catch(e){}return Math.round(t*(1-f)*100)/100})()),
         sis:String(r.sistema||''),orden:Number(r.orden)||0,nva:false});
       });
     /* las adicionales creadas en la app que aun no estan en el catalogo */
@@ -2750,11 +2753,17 @@ async function _crCatPull(){
         esp:p.esp||'',ret:false,viva:true,
         und:String((m&&m.unidad)||p.unidad||''),cant:(m&&m.total!=null?Number(m.total):''),
         pu:(p.pu!=null?Number(p.pu):''),tot:(p.total_oferta!=null?Number(p.total_oferta):''),
+        totRet:(p.total_oferta!=null?(function(){var t=Number(p.total_oferta)||0,f=0;try{f=(typeof _retFrac==='function')?_retFrac(p.id):0}catch(e){}return Math.round(t*(1-f)*100)/100})():''),
         sis:String(p.sistema||''),nva:true})});
     out.sort(function(a,b){return a.id<b.id?-1:a.id>b.id?1:0});
     window._crCat=out;
   }catch(e){}
   return window._crCat||null}
+/* el costo de una partida segun la linea: contractual en una linea base
+   (LB), con los saldos retirados fuera en las demas */
+function _crCostoDe(pp,tipo){if(!pp)return 0;var t=Number(pp.tot)||0;
+  if(String(tipo||'').toUpperCase()==='LB')return t;
+  return (pp.totRet!=null&&pp.totRet!=='')?(Number(pp.totRet)||0):t}
 function _crPartidas(){
   if(window._crCat&&window._crCat.length)return window._crCat;
   var todas=(DATA.partidas||[]).concat(state.nuevas||[]),vis={},out=[];
@@ -7137,7 +7146,7 @@ async function _crXerCompleta(lineas,c,corte,rpX,soloPres){
       if(u.items[i]==null)return;
       var v=_crVeces(rp,i);
       hh+=(Number(u.items[i])||0)/v;
-      var pp=porId[i];if(pp)cost+=(Number(pp.tot)||0)/v});
+      var pp=porId[i];if(pp)cost+=_crCostoDe(pp,c.tipo)/v});
     if(hh>0||cost>0)datos[t.task_code]={t:t,hh:hh,cost:cost}});
   /* el avance de cada una, con el mismo criterio que el resto del exportador */
   var pctDe=function(t){
@@ -10732,7 +10741,8 @@ function _wkBloquesDe(C,esp,sem,corte,porId,pctA){
       (t.items||[]).forEach(function(i){
         if(!(cc.incl&&cc.incl[i]))return;
         var pp=porId[i];if(!pp)return;
-        costo+=(Number(pp.tot)||0)/_crVeces(cc.rp,i)});
+        /* la base lleva el contrato; forecast y actual, sin lo retirado */
+        costo+=_crCostoDe(pp,cc.tipo)/_crVeces(cc.rp,i)});
       var cant='',und='',qps='';
       if(ms.length===1&&porId[ms[0]]){cant=porId[ms[0]].cant;und=porId[ms[0]].und||'';qps=ms[0]}
       else if(ms.length>1)qps='('+ms.length+')';
@@ -10778,7 +10788,7 @@ async function _wkDatosLibro(semN,corte,ids){
     var u=_crUniverso(c.cron_id,alc);
     var wbs=[];try{wbs=await _crWbsDe(c.cron_id)}catch(e){}
     var nom={};wbs.forEach(function(w){if(w.nombre)nom[w.ruta]=w.nombre});
-    C.push({id:c.cron_id,nombre:c.nombre||'',ini:c.inicio||'',fin:c.fin||'',
+    C.push({id:c.cron_id,nombre:c.nombre||'',ini:c.inicio||'',fin:c.fin||'',tipo:c.tipo||'LB',
       tar:tar,alc:alc,u:u,nomWbs:nom,
       incl:_crIncluidas(c.cron_id,alc),
       porItem:_wkPlanPorItem(tar,u.items,sem,alc),
@@ -15425,7 +15435,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260913a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260913a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
