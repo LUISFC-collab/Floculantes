@@ -15482,7 +15482,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260915a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260915a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -18016,6 +18016,25 @@ function _rxPartidasHTML(q){
         return '<div style="font-size:10px;font-weight:800;color:#8ECBF5;letter-spacing:.06em;background:#101d2e;border:1px solid #24344f;border-radius:6px;padding:2px 8px;margin:6px 0 2px">'+esc(String(esp).toUpperCase())+'</div>'+
           porEsp[esp].map(fila).join('')}).join('')+
     '</div>'}catch(e){return ''}}
+/* Las lineas de METRADO de una tarjeta del Analisis: por partida y por
+   apartado, solo las que tienen algo programado o hecho en la ventana; el
+   codigo va punteado (un toque abre su tarjeta en la lista) con el nombre
+   que lleva en el aplicativo. */
+function _rxDetHTML(q){try{
+  var det=(q&&q.det||[]).filter(function(d){return (Number(d.prog)||0)>1e-9||(Number(d.hecho)||0)>1e-9});
+  if(!det.length)return '';
+  var nomDe=function(pid){try{var p=(DATA._byId&&DATA._byId[pid])||((state.nuevas||[]).filter(function(n){return n&&n.id===pid})[0]);
+    var n=p?String((typeof _nomAct==='function'?_nomAct(p):p.nombre)||''):'';return n.split('\n')[0]}catch(e){return ''}};
+  return '<div style="flex-basis:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 12px;margin-top:3px">'+
+    det.map(function(d){
+      var nm=nomDe(d.pid);
+      return '<span style="display:block;min-width:0;font-size:10.5px;color:#9db4d6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(d.pid+' \u00b7 '+nm)+'">'+
+        '<b class="_rxIrAct" data-pid="'+esc(d.pid)+'" title="Ir a su tarjeta en la lista" style="color:#8ECBF5;text-decoration:underline;text-decoration-style:dotted;cursor:pointer">'+esc(d.pid)+'</b> '+
+        (d.parte?('<b style="color:#C7A3E8">('+esc(String(d.parte).toUpperCase())+')</b> '):'')+
+        'prog <b style="color:#E8C9A0">'+qty(d.prog)+'</b> \u00b7 hecho <b style="color:'+((Number(d.hecho)||0)>=(Number(d.prog)||0)-1e-9&&(Number(d.prog)||0)>0?'#9FE8B0':'#FFB4A8')+'">'+qty(d.hecho)+'</b> <span style="color:#7d8590">de '+qty(d.tot)+' '+esc(d.und)+'</span>'+
+        (nm?(' <span style="color:#7d8590">\u00b7 '+esc(nm)+'</span>'):'')+
+      '</span>'}).join('')+
+    '</div>'}catch(e){return ''}}
 function _rxNoPinta(r){
   var cont=document.getElementById('_rxNoLista');if(!cont)return;
   try{
@@ -18121,13 +18140,7 @@ function _rxNoPinta(r){
 
             (reg?'<span style="font-size:10px;font-weight:800;color:#9FE8B0;background:#14261d;border:1px solid #1d3a2a;border-radius:7px;padding:2px 7px">\u2713 '+(regs.length>1?(regs.length+' restricciones'):'anexada')+'</span>':'')+
             '<span class="_rxFlecha" style="color:#7d8590">'+(abierto?'\u25b4':'\u25be')+'</span>'+
-            /* el metrado: programado y hecho en la ventana, por partida y por
-               apartado, debajo de los porcentajes */
-            ((q.det&&q.det.length)?('<div style="flex-basis:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:4px 12px;margin-top:2px">'+
-              q.det.map(function(d){var lab=(q.items&&q.items.length>1?('<b style="color:#8ECBF5">'+esc(d.pid)+'</b> '):'')+(d.parte?('<b style="color:#C7A3E8">('+esc(String(d.parte).toUpperCase())+')</b> '):'');
-                return '<span style="display:block;min-width:0;font-size:10.5px;color:#9db4d6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lab+
-                  'prog <b style="color:#E8C9A0">'+qty(d.prog)+'</b> \u00b7 hecho <b style="color:'+(d.hecho>=d.prog-1e-9&&d.prog>0?'#9FE8B0':'#FFB4A8')+'">'+qty(d.hecho)+'</b> <span style="color:#7d8590">de '+qty(d.tot)+' '+esc(d.und)+'</span></span>'}).join('')+
-              '</div>'):'')+
+            _rxDetHTML(q)+
           '</div>'+
           '<div class="_rxNoDet" style="display:'+(abierto?'block':'none')+';background:#0b1220;padding:'+(reg?'8px':'0')+'">'+det+'</div>'+
         '</div>'};
@@ -18178,7 +18191,7 @@ function _rxNoPinta(r){
                   '<span style="font-size:10px;font-weight:800;color:#BFE3FF;background:#164a73;border:1px solid #2a5a8a;border-radius:7px;padding:2px 7px">\u2714 cumplida</span>'+
                   '<span style="flex:1;min-width:150px;font-size:12px;color:#DCEBFF;overflow-wrap:anywhere">'+(q.apart?('<span style="color:#9fd0ff;font-weight:800">'+esc(q.apart)+'</span>'):'')+esc(q.nom)+'</span>'+
                   '<span style="font-size:10.5px;color:#BFE3FF;font-weight:800;white-space:nowrap">prog '+q.prog+'% \u00b7 hecho '+q.hecho+'%</span>'+
-                  '<span style="color:#7fb3d9">'+(ab?'\u25b4':'\u25be')+'</span>'+
+                  '<span class="_rxFlecha" style="color:#7fb3d9">'+(ab?'\u25b4':'\u25be')+'</span>'+_rxDetHTML(q)+
                 '</div>'+
                 '<div class="_rxNoDet" style="display:'+(ab?'block':'none')+';background:#0b1a2b;padding:0">'+_rxPartidasHTML(q)+'</div>'+
               '</div>'}).join('')}).join('')}
@@ -18202,7 +18215,7 @@ function _rxNoPinta(r){
                   '<span style="font-size:10px;font-weight:800;color:#FFE7B3;background:#4a3a14;border:1px solid #7a5a1d;border-radius:7px;padding:2px 7px">\u26a1 EMP</span>'+
                   '<span style="flex:1;min-width:150px;font-size:12px;color:#FFF1D6;overflow-wrap:anywhere">'+esc(q.nom)+'</span>'+
                   '<span style="font-size:10.5px;color:#F5D08A;font-weight:800;white-space:nowrap">prog 0% \u00b7 hecho '+q.hecho+'%</span>'+
-                  '<span style="color:#c9a96a">'+(ab?'\u25b4':'\u25be')+'</span>'+
+                  '<span class="_rxFlecha" style="color:#c9a96a">'+(ab?'\u25b4':'\u25be')+'</span>'+_rxDetHTML(q)+
                 '</div>'+
                 '<div class="_rxNoDet" style="display:'+(ab?'block':'none')+';background:#1d1609;padding:0">'+_rxPartidasHTML(q)+'</div>'+
               '</div>'}).join('')}).join('')}
@@ -18259,6 +18272,10 @@ function _rxNoPinta(r){
         window._rxNoAbre['F'+q.pid]=true;
         toast('➕ futura anexada — ponle su restricción aquí mismo');
         _rxNoLlena()}});
+    cont.querySelectorAll('._rxIrAct').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();ev.preventDefault();
+      var pid=b.getAttribute('data-pid');if(!pid)return;
+      try{var ov9=document.getElementById('_rxOv');if(ov9)ov9.remove()}catch(e){}
+      try{_irYParpadear(pid,(typeof todayISO==='function')?todayISO():'')}catch(e){}}});
     cont.querySelectorAll('._rxVisL').forEach(function(l){l.onclick=function(ev){ev.stopPropagation()}});
     cont.querySelectorAll('._rxVis').forEach(function(cb){cb.onclick=function(ev){ev.stopPropagation()};cb.onchange=function(ev){ev.stopPropagation();
       if(!((typeof esAdmin==='function')&&esAdmin())){toast('Solo el administrador, en modo admin');return}
