@@ -15523,7 +15523,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260917a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260917a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -19454,15 +19454,21 @@ async function _fzGuardar(id,fases,borrar,origen){
 async function _fzPull(){
   if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
   try{
-    var R=await sbSelect('ajustes_create_110826','select=clave,valor,eliminado,ts&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&clave=like.fase:*&limit=2000');
+    /* incremental: solo lo cambiado desde la ultima bajada (updated_at del servidor) */
+    var _mx='';try{_mx=String(localStorage.getItem('obf4_fases_upd')||'')}catch(e){}
     var H=_fzAll(),cambio=false;
+    if(_mx&&!Object.keys(H).length)_mx='';
+    var R=await sbSelect('ajustes_create_110826','select=clave,valor,eliminado,ts,updated_at&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&clave=like.fase:*'+(_mx?('&updated_at=gt.'+encodeURIComponent(_mx)):'')+'&limit=2000');
+    var _nmx=_mx;
     (R||[]).forEach(function(r){
+      if(r&&r.updated_at&&String(r.updated_at)>_nmx)_nmx=String(r.updated_at);
       var v=(r&&r.valor)||{};var id=v.partida_id||String(r.clave||'').slice(5);if(!id)return;
       var loc=H[id];
       if(loc&&(Number(loc.ts)||0)>(Number(r.ts)||0))return;
       v.eliminado=!!r.eliminado;v.ts=Number(r.ts)||0;
-      if(JSON.stringify(loc)!==JSON.stringify(v)){H[id]=v;cambio=true}});
-    state.fases=H;_fzSave();
+      if(!loc||(Number(loc.ts)||0)!==v.ts||!!loc.eliminado!==v.eliminado||(!_mx&&JSON.stringify(loc)!==JSON.stringify(v))){H[id]=v;cambio=true}});
+    state.fases=H;if(cambio||!_mx)_fzSave();
+    try{if(_nmx&&_nmx!==_mx)localStorage.setItem('obf4_fases_upd',_nmx)}catch(e){}
     if(cambio){try{if(typeof renderList==='function')renderList()}catch(e){}}
   }catch(e){}}
 try{var _fzPullBase=syncPull;syncPull=async function(){var q=null;try{q=_fzPull()}catch(e){}var r=await _fzPullBase.apply(this,arguments);try{await q}catch(e){}return r}}catch(_fzw){}
@@ -20125,15 +20131,21 @@ async function _apuGuardar(id,r,borrar){
 async function _apuPull(){
   if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
   try{
-    var R=await sbSelect('ajustes_create_110826','select=clave,valor,eliminado,ts&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&clave=like.apu:*&limit=2000');
+    /* incremental: solo lo cambiado desde la ultima bajada (updated_at del servidor) */
+    var _mx='';try{_mx=String(localStorage.getItem('obf4_apus_upd')||'')}catch(e){}
     var H=_apuAll(),cambio=false;
+    if(_mx&&!Object.keys(H).length)_mx='';   /* cache vacio: bajada completa */
+    var R=await sbSelect('ajustes_create_110826','select=clave,valor,eliminado,ts,updated_at&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&clave=like.apu:*'+(_mx?('&updated_at=gt.'+encodeURIComponent(_mx)):'')+'&limit=2000');
+    var _nmx=_mx;
     (R||[]).forEach(function(r){
+      if(r&&r.updated_at&&String(r.updated_at)>_nmx)_nmx=String(r.updated_at);
       var v=(r&&r.valor)||{};var id=v.partida_id||String(r.clave||'').slice(4);if(!id)return;
       var loc=H[id];
       if(loc&&(_apuNum(loc.ts))>(_apuNum(r.ts)))return;
       v.eliminado=!!r.eliminado;v.ts=_apuNum(r.ts);
-      if(JSON.stringify(loc)!==JSON.stringify(v)){H[id]=v;cambio=true}});
-    state.apus=H;_apuSaveLocal();
+      if(!loc||_apuNum(loc.ts)!==v.ts||!!loc.eliminado!==v.eliminado||(!_mx&&JSON.stringify(loc)!==JSON.stringify(v))){H[id]=v;cambio=true}});
+    state.apus=H;if(cambio||!_mx)_apuSaveLocal();
+    try{if(_nmx&&_nmx!==_mx)localStorage.setItem('obf4_apus_upd',_nmx)}catch(e){}
     if(cambio){try{window._hhCache=null}catch(_eh){}
       try{if(typeof renderList==='function'&&document.getElementById('list'))renderList()}catch(_er){}
       try{if(document.getElementById('_apuOv')&&!document.getElementById('_apuEdOv')&&!document.getElementById('_apuCabOv'))_apuUI(window._apuP)}catch(e){}}
