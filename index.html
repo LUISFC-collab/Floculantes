@@ -15507,7 +15507,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916c6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916c7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17734,7 +17734,7 @@ async function _rxNoCumplidas(opc){
           pend+=Math.max(0,cal-Math.max(0,Math.min(1,done)))*wS})});
       mas=pend/uW.hh;_pendRel=hhA>0?pend/hhA:0}catch(_e6){}}
     var r4=function(x){return Math.round(x*10000)/100};
-    return {peso:r4(peso),ya:r4(ya),mas:r4(mas),llega:r4(ya+mas),acum:r4(peso*acT),pendRel:_pendRel,hh:Math.round(hhA*100)/100,hhT:uW.hh}}catch(e){return null}};
+    return {peso:r4(peso),ya:r4(ya),mas:r4(mas),llega:r4(ya+mas),acum:r4(peso*acT),pendRel:_pendRel,acP:(hhA>0?yaHH/hhA:null),hh:Math.round(hhA*100)/100,hhT:uW.hh}}catch(e){return null}};
   /* las partes programadas en la ventana, por partida: {pid:[faseId,...]} */
   var partesDe=function(cod,i1,f1){var out={};if(!bkSnap)return out;
     (itemsDe[cod]||[]).forEach(function(i9){var ids=[];
@@ -17797,12 +17797,15 @@ async function _rxNoCumplidas(opc){
   cods.forEach(function(cod){
     var pg=pgDe(cod,ini2,fin2),ac=acDe(cod,ini2,fin2);
     /* EMP: no estaba programada y aun asi avanzo DENTRO de la semana */
-    if(!(pg>1e-9)){var acS=acDe(cod,_wkISO(_wkSem(semV).ini),fin2);if(acS>1e-9)emp.push(fila(cod,pg,acS,semV,_wkISO(_wkSem(semV).ini),fin2));return}
+    if(!(pg>1e-9)){var acS=acDe(cod,_wkISO(_wkSem(semV).ini),fin2);if(acS>1e-9){var fE=fila(cod,pg,acS,semV,_wkISO(_wkSem(semV).ini),fin2);if(fE.ap&&fE.ap.acP!=null)fE.hecho=Math.round(Math.max(0,Math.min(1,fE.ap.acP))*1000)/10;emp.push(fE)}return}
     /* programada y con lo hecho a la par o por encima: CUMPLIDA */
     var f9=fila(cod,pg,ac,semV,ini2,fin2);
+    /* el hecho de la tarjeta con la MISMA medida que el verde (por partida
+       o parte, al cierre): asi verde = peso x hecho */
+    var acX=ac;if(f9.ap&&f9.ap.acP!=null){acX=Math.max(0,Math.min(1,f9.ap.acP));f9.hecho=Math.round(acX*1000)/10}
     /* CUMPLIDA: a la par o por encima Y sin restante en ninguna de sus
        partidas / partes al cierre (si algo le falta, no cumplio) */
-    if(ac>=pg-1e-9&&!(f9.ap&&f9.ap.pendRel>0.005)){cumplidas.push(f9);return}
+    if(acX>=pg-1e-9&&!(f9.ap&&f9.ap.pendRel>0.005)){cumplidas.push(f9);return}
     lista.push(f9)});
   lista.sort(ordena);cumplidas.sort(ordena);emp.sort(ordena);
   /* las que el admin oculto a los supervisores: fuera de la lista y del PPC */
