@@ -15502,7 +15502,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916a8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916a9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -26257,19 +26257,24 @@ $('projName').textContent=DATA.proyecto;buildDisc();
 (function(){try{
 var LK='obf4_tablock';var myId=String(Date.now())+Math.random().toString(36).slice(2,8);var pausada=false;
 function lee(){try{return JSON.parse(localStorage.getItem(LK)||'null')}catch(e){return null}}
-function toma(){try{localStorage.setItem(LK,JSON.stringify({id:myId,t:Date.now()}))}catch(e){}}
-function reanudar(){toma();try{location.reload()}catch(e){}}
+function toma(){try{localStorage.setItem(LK,JSON.stringify({id:myId,t:Date.now(),vis:!document.hidden,foco:document.hasFocus()}))}catch(e){}}
+/* reanudar SIN recargar: se quita el aviso, se libera y se baja lo nuevo */
+function reanudar(){toma();pausada=false;window._tabBloqueada=false;try{var b0=document.getElementById('_tabPause');if(b0)b0.remove()}catch(e){}try{if(typeof syncNow==='function')syncNow(true)}catch(e){}}
+/* quien manda: la ventana con foco; una visible manda sobre una oculta;
+   dos ocultas no se pelean (se queda quien tenia el candado) */
+function decide(){var l2=lee();var otro=!!(l2&&l2.id!==myId&&(Date.now()-(l2.t||0))<9000);
+  if(pausada){if(!otro||(!document.hidden&&(l2.vis===false||document.hasFocus())))reanudar();return}
+  if(!otro){toma();return}
+  if(document.hidden){if(l2.vis!==false)pausar();return}
+  if(document.hasFocus()||l2.vis===false){toma();return}
+  pausar()}
 function pausar(){if(window.__BACKUP)return;if(pausada)return;pausada=true;window._tabBloqueada=true;
  var b=document.getElementById('_tabPause');if(b)b.remove();b=document.createElement('div');b.id='_tabPause';
  b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#B45309;color:#fff;font:700 13px system-ui;padding:9px 12px;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)';
  b.textContent='\u23f8 En pausa: la app se est\u00e1 usando en otra ventana de este equipo \u2014 TOCA AQU\u00cd para seguir en esta';
  b.onclick=reanudar;document.body.appendChild(b);}
-var l=lee();
-if(l&&l.id!==myId&&(Date.now()-(l.t||0))<9000){if(document.hasFocus()){toma()}else{pausar()}}else{toma()}
-setInterval(function(){var l2=lee();
- if(pausada){if(!l2||(Date.now()-(l2.t||0))>9000){reanudar()}return}
- if(l2&&l2.id!==myId&&(Date.now()-(l2.t||0))<9000){if(document.hasFocus()){toma()}else{pausar()}return}
- toma()},3000);
+decide();
+setInterval(decide,3000);
 function alFoco(){if(!pausada)return;var l2=lee();if(!l2||l2.id===myId||document.hasFocus()){reanudar()}}
 window.addEventListener('focus',alFoco);
 document.addEventListener('visibilitychange',function(){if(!document.hidden)alFoco()});
