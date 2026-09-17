@@ -15543,7 +15543,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260917a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260917a7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -18983,10 +18983,13 @@ function _pgParteInfo(id){
   var pid=_pgBaseId(id),fid=_pgFidDe(id),fs=_pgPartesDe(pid);
   for(var i=0;i<fs.length;i++)if(fs[i].id===fid)return {pid:pid,fase:fs[i],idx:i,n:fs.length};
   return null}
+/* indice partida -> partes programadas, recordado 150 ms: un repintado del
+   calendario lo pedia ~1 100 veces recorriendo todo el mapa cada vez */
+var _pgPPC={t:0,P:null,m:null};
 function _pgPartesProg(pid){
-  var P=(typeof _pgProg==='function')?_pgProg():(state.prog||{}),out=[];
-  Object.keys(P).forEach(function(k){if(_pgEsParte(k)&&_pgBaseId(k)===pid&&P[k]&&P[k].start)out.push(P[k])});
-  return out}
+  var P=(typeof _pgProg==='function')?_pgProg():(state.prog||{});var now=Date.now();
+  if(!(_pgPPC.m&&_pgPPC.P===P&&(now-_pgPPC.t)<150)){var m={};Object.keys(P).forEach(function(k){if(_pgEsParte(k)&&P[k]&&P[k].start){var b=_pgBaseId(k);(m[b]||(m[b]=[])).push(P[k])}});_pgPPC={t:now,P:P,m:m}}
+  return (_pgPPC.m[pid]||[]).slice()}
 function _pgTieneParte(pid){return _pgPartesProg(pid).length>0}
 /* las partes que aun no estan en el calendario ni hechas */
 function _pgPartesPend(pid){
