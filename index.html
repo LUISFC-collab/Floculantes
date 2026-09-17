@@ -5006,6 +5006,12 @@ function _crProyeccion(u,semanas,real){
     var filaDe={},hayFila=false;
     var hoy=(typeof todayISO==='function')?todayISO():'';
     var P=(typeof _pgProg==='function')?_pgProg():(state.prog||{});
+    var iHoy=-1;
+    for(var i=0;i<semanas.length;i++){
+      if(String(semanas[i].fin||'')>=hoy){iHoy=i;break}}
+    if(iHoy<0)return null;
+    /* el cierre anterior a la semana en curso: lo hecho desde ahi es lo hecho EN la semana */
+    var antD='';try{antD=_crDeSerial(_crASerial(String(semanas[iHoy].ini||''))-1)}catch(e){antD=''}
     Object.keys(P||{}).forEach(function(id){
       var pr=P[id];if(!pr||!pr.start)return;
       if(state.progDel&&state.progDel[id])return;
@@ -5022,10 +5028,11 @@ function _crProyeccion(u,semanas,real){
       /* la fila se acumula por PARTIDA (o por PARTE): cada dia del calendario
          lleva su cuota (un tramo, su fraccion repartida en sus dias); lo
          pendiente al cierre = max(0, cuota acumulada - hecho) x peso */
-      var key,wRow,doneF,share=1;
+      var key,wRow,doneF,doneA=0,share=1;
       if(inf){
         wRow=w*(Math.max(0,Math.min(100,Number(inf.fase.peso)||0))/100);key=bid+'|'+String(inf.fase.id||'');
         var pcp=0;try{pcp=Number(_fzPctParte(inf.fase))||0}catch(e){}doneF=Math.max(0,Math.min(1,pcp/100));
+        try{doneA=antD?Math.max(0,Math.min(1,(Number(_fzPctParteAt(bid,inf.fase,antD))||0)/100)):0}catch(e){doneA=0}
         if(esTr){var cP=Number(_fzCantDe(inf.fase))||0,cT=Number(pr.cant)||0;share=(cP>0&&cT>0)?Math.min(1,cT/cP):0}}
       else{
         /* la envoltura de una partida por partes no aporta: aportan sus partes */
@@ -5033,31 +5040,30 @@ function _crProyeccion(u,semanas,real){
         wRow=w;key=bid;
         var pc=0;try{var pf=(typeof _fzPctAt==='function')?_fzPctAt(bid,hoy):null;pc=(pf!=null)?(Number(pf)||0):(Number(pctOfAt(p,hoy))||0)}catch(e){}
         doneF=Math.max(0,Math.min(1,pc/100));
+        try{if(antD){var pfA=(typeof _fzPctAt==='function')?_fzPctAt(bid,antD):null;doneA=Math.max(0,Math.min(1,((pfA!=null)?(Number(pfA)||0):(Number(pctOfAt(p,antD))||0))/100))}}catch(e){doneA=0}
         if(esTr){var mT=metaOf(bid),tT=Number(mT&&mT.total)||0,cT2=Number(pr.cant)||0;share=(tT>0&&cT2>0)?Math.min(1,cT2/tT):0}}
       if(!(wRow>0)||!(share>0))return;
       var ds=(typeof occupiedDays==='function')?(occupiedDays(pr.start,pr.dias||1)||[]):[];
       if(!ds.length)return;
-      var f=filaDe[key]||(filaDe[key]={w:wRow,done:doneF,days:{}});
+      var f=filaDe[key]||(filaDe[key]={w:wRow,done:doneF,doneAnt:doneA,days:{},used:0});
       ds.forEach(function(d){f.days[d]=(f.days[d]||0)+share/ds.length});hayFila=true});
     if(!hayFila)return null;
     var filas=Object.keys(filaDe).map(function(k){return filaDe[k]});
     /* se acumula por semana, arrancando de lo realmente hecho */
     /* ini y fin de cada semana YA son fechas, no seriales: pasarlas por
        _crDeSerial daba basura y no se encontraba nunca la semana de hoy. */
-    var iHoy=-1;
-    for(var i=0;i<semanas.length;i++){
-      if(String(semanas[i].fin||'')>=hoy){iHoy=i;break}}
-    if(iHoy<0)return null;
     var base=(real&&real.acum&&real.acum[iHoy]!=null)?real.acum[iHoy]:0;
-    var calCum=function(f,d){var t=0;for(var k in f.days)if(k<=d)t+=f.days[k];return Math.min(1,t)};
-    var pendAl=function(f,d){return Math.max(0,calCum(f,d)-f.done)*f.w};
+    var cuotaEn=function(f,ini,fin){var t=0;for(var k in f.days)if(k>=ini&&k<=fin)t+=f.days[k];return t};
     var out=[],hay=[],t=base,ultima=iHoy;
     for(var j=0;j<semanas.length;j++){
       if(j<iHoy){out.push(null);hay.push(false);continue}
-      var fin=String(semanas[j].fin||''),finPrev=(j>iHoy)?String(semanas[j-1].fin||''):'',suma=0;
-      /* lo que se suma en la semana = pendiente al cierre de esta menos el
-         pendiente al cierre de la anterior (la de hoy arranca del real) */
-      filas.forEach(function(f){var a=pendAl(f,fin),b=finPrev?pendAl(f,finPrev):0;if(a>b)suma+=a-b});
+      var ini=String(semanas[j].ini||''),fin=String(semanas[j].fin||''),suma=0;
+      /* cada semana suma su cuota del calendario; la semana en curso, su
+         cuota menos lo hecho EN ella; nunca mas de lo que le queda a la fila */
+      filas.forEach(function(f){var c=cuotaEn(f,ini,fin);
+        if(j===iHoy)c=Math.max(0,c-Math.max(0,f.done-(f.doneAnt||0)));
+        var rem=Math.max(0,(1-f.done)*f.w-(f.used||0));var add=Math.min(c*f.w,rem);
+        if(add>0){suma+=add;f.used=(f.used||0)+add}});
       if(suma>0){t+=suma/hhT;ultima=j}
       out.push(Math.min(1.2,t));hay.push(suma>0)}
     /* La linea muere donde muere la programacion: prolongarla plana hasta el
@@ -15506,7 +15512,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916d9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916e1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17638,7 +17644,9 @@ async function _rxNoCumplidas(opc){
     var sHoy=semA;
     try{sHoy=27+Math.floor((_crASerial(hoy)-46199)/7)}catch(_eh){}
     if(sFij)sHoy=sFij;
-    semV=sHoy;ini2='';fin2=_wkISO(_wkSem(sHoy).fin)}
+    /* la SEMANA elegida: del cierre anterior a este cierre (programado y
+       hecho DENTRO de la semana; lo anterior ya paso) */
+    semV=sHoy;ini2=_wkISO(_wkSem(sHoy).ini);fin2=_wkISO(_wkSem(sHoy).fin)}
   var nom={},itemsDe={},fIni={},fFin={};
   tar.forEach(function(t){nom[t.task_code]=String(t.nombre||'');itemsDe[t.task_code]=(t.items||[]);
     fIni[t.task_code]=String(t.ini||'');fFin[t.task_code]=String(t.fin||'')});
@@ -17737,15 +17745,15 @@ async function _rxNoCumplidas(opc){
            cierre suma los segmentos (un tramo aporta su fraccion), y se le
            resta lo HECHO del apartado; un tramo ya no cuenta con hecho 0 */
         var cuo={};
-        segsDe(cod,i9).forEach(function(sg){var oc=sg.oc||[];if(!oc.length)return;var n=0;oc.forEach(function(d8){if(d8<=f1)n++});var cal=n/oc.length;
+        segsDe(cod,i9).forEach(function(sg){var oc=sg.oc||[];if(!oc.length)return;var n=0;oc.forEach(function(d8){if((!i1||d8>=i1)&&d8<=f1)n++});var cal=n/oc.length;
           var fr=(sg.frac!=null)?Math.max(0,Math.min(1,sg.frac)):1;var kG=sg.fid||'';
           cuo[kG]=(cuo[kG]||0)+fr*cal});
         Object.keys(cuo).forEach(function(fid){var wS=wI*pesoDe(i9,fid);if(!(wS>0))return;var cal=Math.min(1,cuo[fid]);
-          var done=0;
-          if(fid){var x9=fases9.filter(function(z){return z.id===fid})[0];try{done=x9?(Number(_fzPctParteAt(i9,x9,f1))||0)/100:0}catch(_e){done=0}}
-          else{try{var pf9=(typeof _fzPctAt==='function')?_fzPctAt(i9,f1):null;done=((pf9!=null)?(Number(pf9)||0):(p9?(Number(pctOfAt(p9,f1))||0):0))/100}catch(_e){done=0}}
-          done=Math.max(0,Math.min(1,done));
-          var pS=Math.max(0,cal-done)*wS;pend+=pS;
+          /* hecho EN la ventana (al cierre menos al cierre anterior), y lo
+             que falta topado a lo que le queda al apartado */
+          var dF=doneDe(i9,fid,f1),dA=i0?doneDe(i9,fid,i0):0;
+          var done=Math.max(0,dF-dA);
+          var pS=Math.min(Math.max(0,cal-done),Math.max(0,1-dF))*wS;pend+=pS;
           var kG=i9+'|'+fid;var g=grp[kG]||(grp[kG]={w:0,cal:0,done:0,pend:0});
           g.w+=wS;g.cal+=wS*cal;g.pend+=pS;g.done=done})});
       mas=pend/uW.hh;_pendRel=hhA>0?pend/hhA:0}catch(_e6){}}
@@ -26372,6 +26380,14 @@ setInterval(function(){try{if(state.user&&navigator.onLine&&sbReady()&&!document
 setInterval(function(){try{if(state.user&&navigator.onLine&&sbReady()&&!syncing&&!_editing()&&((state&&state.dirty)||(typeof pendingCount==='function'&&pendingCount()>0)))syncNow(true)}catch(e){}},3000);
 try{var _ss=document.getElementById('sumSync');if(_ss)_ss.onclick=function(){if(typeof _showFlow==='function')_showFlow();else if(typeof syncNow==='function')syncNow()};var _ss2=document.getElementById('dSumSync');if(_ss2)_ss2.onclick=function(){if(typeof _showFlow==='function')_showFlow();else if(typeof syncNow==='function')syncNow()};}catch(e){}
 setInterval(function(){try{_updSumSync()}catch(e){}},2500);
+/* medidor: la pestana VISIBLE guarda sus bloqueos largos (long tasks) y el
+   tiempo de las funciones pesadas en obf4_perf, para leerlo desde otra */
+try{(function(){var LT=[],ST={};
+  try{new PerformanceObserver(function(l){l.getEntries().forEach(function(e){LT.push([Math.round(performance.now()/1000),Math.round(e.duration)]);if(LT.length>80)LT.shift()})}).observe({entryTypes:['longtask']})}catch(e){}
+  ['renderList','renderDiario','renderCal','renderPend','_rxUI','_rxNoCumplidas','_rxNoLlena','_crCurvaUI','_pgCurvaFlotante','syncPull','syncPush','syncNow','_presRender','_presTick','updPresencia','updAdminBox','_hhInject','_pdRefrescar','_pdPull','_ajPull','_apuPull','_crCatPull','_crPlanRecupera','_alcPull','_fzPull','showDiario','openDay','_wbsXDeriva','renderInterfBars','_rtRefrescarWbsX','_pgCalRender','renderProgSelect','_busqStick','_actInject','_mpBar','_topIcon','_updSumSync','decide','_bitaBeat','_scrSave'].forEach(function(n){var f=window[n];if(typeof f!=='function')return;
+    window[n]=function(){var t=performance.now();try{return f.apply(this,arguments)}finally{var d=performance.now()-t;var s9=ST[n]||(ST[n]={n:0,ms:0,max:0});s9.n++;s9.ms+=d;if(d>s9.max)s9.max=d}}});
+  setInterval(function(){try{if(document.hidden)return;var top=Object.keys(ST).map(function(k){var x=ST[k];return [k,x.n,Math.round(x.ms),Math.round(x.max)]}).sort(function(a,b){return b[2]-a[2]}).slice(0,25);
+    localStorage.setItem('obf4_perf',JSON.stringify({t:Date.now(),ver:(typeof APP_VER!=='undefined'?APP_VER:''),dev:(typeof deviceId==='function'?deviceId():''),up:Math.round(performance.now()/1000),lt:LT,st:top}))}catch(e){}},20000)})()}catch(_epf){}
 setInterval(function(){try{if(!document.hidden)_srvPing()}catch(e){}},15000);
 try{setTimeout(function(){_srvPing();_updSumSync()},1500)}catch(e){}
 try{if(sessionStorage.getItem('_diagAfter')){sessionStorage.removeItem('_diagAfter');setTimeout(function(){if(typeof _diag==='function')_diag('Reinicio completado — comprobaciones')},2600);}}catch(e){}
