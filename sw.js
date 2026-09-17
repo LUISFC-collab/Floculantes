@@ -1,7 +1,7 @@
 /* Service worker — Parte de obra (Water Transition II)
-   Guarda la app en el telefono y la abre SIN conexion, pero SIEMPRE trae la version
-   mas nueva cuando hay internet. Cambia CACHE en cada despliegue para no servir data vieja. */
-const CACHE = 'floculantes-v20260917a2';
+   Guarda la app en el telefono y la abre con la copia (rapido y sin conexion);
+   la copia se renueva por detras y la version nueva llega por _forceUpdate. Cambia CACHE en cada despliegue para no servir data vieja. */
+const CACHE = 'floculantes-v20260917a3';
 const SHELL = ['./', './index.html', './config.js', './manifest.json', './icon-192.png', './icon-512.png', './heic2any.min.js'];
 
 self.addEventListener('install', function (e) {
@@ -26,13 +26,20 @@ self.addEventListener('fetch', function (e) {
   try { url = new URL(req.url); } catch (_) { return; }
   if (url.origin !== self.location.origin) return;
   if (url.pathname.indexOf('version.txt') > -1) return;
+  /* COPIA PRIMERO: la app abre al instante con lo guardado (y sin red), y
+     la copia se renueva por detras. Al salir una version nueva, la pagina
+     da de baja este SW y borra los caches propios antes de recargar, asi
+     que la recarga trae la version nueva de la red. */
   e.respondWith(
-    fetch(req, { cache: 'reload' })
-      .then(function (res) {
-        var copy = res.clone();
-        caches.open(CACHE).then(function (c) { c.put(req, copy); }).catch(function () {});
-        return res;
-      })
-      .catch(function () { return caches.match(req).then(function (r) { return r || caches.match('./index.html'); }); })
+    caches.match(req, { ignoreSearch: true }).then(function (cached) {
+      var red = fetch(req, { cache: 'reload' })
+        .then(function (res) {
+          if (res && res.ok) { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }).catch(function () {}); }
+          return res;
+        })
+        .catch(function () { return null; });
+      if (cached) { try { e.waitUntil(red); } catch (_) {} return cached; }
+      return red.then(function (r) { return r || caches.match('./index.html'); });
+    })
   );
 });
