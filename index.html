@@ -15507,7 +15507,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916c4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916c5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17707,6 +17707,7 @@ async function _rxNoCumplidas(opc){
        o tramo, pendiente = max(0, programado acumulado por el calendario
        hasta el cierre - hecho) x su peso; sin compensar una partida
        adelantada con otra atrasada */
+    var _pendRel=0;   /* lo que le falta al cierre sobre las HH de la actividad */
     if(bkSnap){try{var pend=0;
       (itemsDe[cod]||[]).forEach(function(i9){if(uW.items[i9]==null)return;var wI=(Number(uW.items[i9])||0)/_crVeces(rpW,i9);if(!(wI>0))return;
         var fz9=(typeof _fzDe==='function')?_fzDe(i9):null,fases9=(fz9&&fz9.fases)||[];
@@ -17715,12 +17716,12 @@ async function _rxNoCumplidas(opc){
           var wS=wI*pesoDe(i9,sg.fid)*(sg.frac!=null?Math.max(0,Math.min(1,sg.frac)):1);if(!(wS>0))return;
           var done=0;
           if(sg.frac!=null)done=0;   /* un tramo no lleva avance propio */
-          else if(sg.fid){var x9=fases9.filter(function(z){return z.id===sg.fid})[0];try{done=x9?(Number(_fzPctParte(x9))||0)/100:0}catch(_e){done=0}}
+          else if(sg.fid){var x9=fases9.filter(function(z){return z.id===sg.fid})[0];try{done=x9?(Number(_fzPctParteAt(i9,x9,f1))||0)/100:0}catch(_e){done=0}}
           else{try{var pf9=(typeof _fzPctAt==='function')?_fzPctAt(i9,f1):null;done=((pf9!=null)?(Number(pf9)||0):(p9?(Number(pctOfAt(p9,f1))||0):0))/100}catch(_e){done=0}}
           pend+=Math.max(0,cal-Math.max(0,Math.min(1,done)))*wS})});
-      mas=pend/uW.hh}catch(_e6){}}
+      mas=pend/uW.hh;_pendRel=hhA>0?pend/hhA:0}catch(_e6){}}
     var r4=function(x){return Math.round(x*10000)/100};
-    return {peso:r4(peso),ya:r4(ya),mas:r4(mas),llega:r4(ya+mas),acum:r4(peso*acT),hh:Math.round(hhA*100)/100,hhT:uW.hh}}catch(e){return null}};
+    return {peso:r4(peso),ya:r4(ya),mas:r4(mas),llega:r4(ya+mas),acum:r4(peso*acT),pendRel:_pendRel,hh:Math.round(hhA*100)/100,hhT:uW.hh}}catch(e){return null}};
   /* las partes programadas en la ventana, por partida: {pid:[faseId,...]} */
   var partesDe=function(cod,i1,f1){var out={};if(!bkSnap)return out;
     (itemsDe[cod]||[]).forEach(function(i9){var ids=[];
@@ -17785,8 +17786,11 @@ async function _rxNoCumplidas(opc){
     /* EMP: no estaba programada y aun asi avanzo DENTRO de la semana */
     if(!(pg>1e-9)){var acS=acDe(cod,_wkISO(_wkSem(semV).ini),fin2);if(acS>1e-9)emp.push(fila(cod,pg,acS,semV,ini2,fin2));return}
     /* programada y con lo hecho a la par o por encima: CUMPLIDA */
-    if(ac>=pg-1e-9){cumplidas.push(fila(cod,pg,ac,semV,ini2,fin2));return}
-    lista.push(fila(cod,pg,ac,semV,ini2,fin2))});
+    var f9=fila(cod,pg,ac,semV,ini2,fin2);
+    /* CUMPLIDA: a la par o por encima Y sin restante en ninguna de sus
+       partidas / partes al cierre (si algo le falta, no cumplio) */
+    if(ac>=pg-1e-9&&!(f9.ap&&f9.ap.pendRel>0.005)){cumplidas.push(f9);return}
+    lista.push(f9)});
   lista.sort(ordena);cumplidas.sort(ordena);emp.sort(ordena);
   /* las que el admin oculto a los supervisores: fuera de la lista y del PPC */
   var ocultas=[];lista=lista.filter(function(q){if(_pvVisible(semV,q.cod))return true;ocultas.push(q);return false});
@@ -18294,7 +18298,7 @@ function _rxNoPinta(r){
         return top};
       var grK={},goK=[];
       r.cumplidas.forEach(function(q){var e9=espK(q);if(!grK[e9]){grK[e9]=[];goK.push(e9)}grK[e9].push(q)});
-      h+='<div style="font-size:11px;color:#8ECBF5;font-weight:800;letter-spacing:.05em;margin:16px 0 6px;display:flex;align-items:center;gap:8px">\u2714 CUMPLIDAS '+(r.cierre?('AL CIERRE DE LA SEMANA '+r.sem):('DE LA SEMANA '+r.sem))+' ('+r.cumplidas.length+')<span style="font-weight:600;color:#7d8590">programadas y con lo hecho a la par o por encima</span></div>'+
+      h+='<div style="font-size:11px;color:#8ECBF5;font-weight:800;letter-spacing:.05em;margin:16px 0 6px;display:flex;align-items:center;gap:8px">\u2714 CUMPLIDAS '+(r.cierre?('AL CIERRE DE LA SEMANA '+r.sem):('DE LA SEMANA '+r.sem))+' ('+r.cumplidas.length+')<span style="font-weight:600;color:#7d8590">programadas y con lo hecho a la par o por encima, sin restante en ninguna de sus partidas</span></div>'+
         goK.map(function(e9){
           return '<div style="background:#12314a;border:1px solid #2a5a8a;border-left:3px solid #4FA3E0;color:#BFE3FF;border-radius:8px;padding:6px 10px;font-weight:800;font-size:11px;letter-spacing:.05em;margin:10px 0 6px;display:flex;align-items:center;gap:8px">'+
             esc(String(e9).toUpperCase())+'<span style="margin-left:auto;background:rgba(255,255,255,.08);border-radius:20px;padding:1px 9px;font-size:10.5px">'+grK[e9].length+'</span></div>'+
@@ -19313,6 +19317,15 @@ function _fzNuevoId(){return 'F'+Date.now().toString(36)+Math.floor(Math.random(
    su porcentaje real. Lo que no se realiza (apartados apagados) se suma
    aparte, en el total de la actividad, como hecho por decision. */
 function _fzCantDe(x){return Number(x&&x.cantidad)||0}
+/* el % de UNA parte a una fecha: sus movimientos hasta esa fecha (mas lo
+   retirado, topado a lo que le falta) sobre su cantidad */
+function _fzPctParteAt(id,x,iso){try{
+  if(!iso)return _fzPctParte(x);
+  var mapa=_fzFechasDe(id);var c=_fzCantDe(x),a=0;
+  (x.movs||[]).forEach(function(m){if(String(_fzFechaMov(m,mapa))<=String(iso))a+=Number(m.c)||0});
+  try{var qR=Math.max(0,Math.min(Number(x._ret)||0,c-a>0?c-a:0));a+=qR}catch(_eq){}
+  if(c>0)return Math.max(0,Math.min(100,a/c*100));
+  return a>0?100:0}catch(e){return _fzPctParte(x)}}
 function _fzPctParte(x){
   var c=_fzCantDe(x),a=Number(x.avance)||0;
   /* lo retirado de la parte cuenta como hecho */
