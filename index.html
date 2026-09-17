@@ -4996,22 +4996,16 @@ function _crTramos(nivel,tar,alc,u,grupoDe){
    especialidades. Parte del acumulado real de cada semana y va sumando lo que
    falta de cada actividad, repartido entre los dias que tiene puestos.
    Devuelve un acumulado por semana, o null si no hay nada programado. */
-function _crProyeccion(u,semanas,real){
-  try{
+/* las filas programadas de un universo: por partida (o parte), con su peso,
+   su hecho (hoy y al cierre anterior) y sus dias con cuota. Las usan la
+   proyeccion de la curva y el % del dia del calendario, para que digan lo mismo. */
+function _crProyFilas(u,hoy,antD){try{
     var vivas={};
     (DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id)vivas[p.id]=p});
     var hhT=0;for(var k in u.items)hhT+=u.items[k];
     if(!(hhT>0))return null;
-    /* cada fila programada: sus dias del calendario, su peso y su fraccion hecha */
     var filaDe={},hayFila=false;
-    var hoy=(typeof todayISO==='function')?todayISO():'';
     var P=(typeof _pgProg==='function')?_pgProg():(state.prog||{});
-    var iHoy=-1;
-    for(var i=0;i<semanas.length;i++){
-      if(String(semanas[i].fin||'')>=hoy){iHoy=i;break}}
-    if(iHoy<0)return null;
-    /* el cierre anterior a la semana en curso: lo hecho desde ahi es lo hecho EN la semana */
-    var antD='';try{antD=_crDeSerial(_crASerial(String(semanas[iHoy].ini||''))-1)}catch(e){antD=''}
     Object.keys(P||{}).forEach(function(id){
       var pr=P[id];if(!pr||!pr.start)return;
       if(state.progDel&&state.progDel[id])return;
@@ -5045,12 +5039,23 @@ function _crProyeccion(u,semanas,real){
       if(!(wRow>0)||!(share>0))return;
       var ds=(typeof occupiedDays==='function')?(occupiedDays(pr.start,pr.dias||1)||[]):[];
       if(!ds.length)return;
-      var f=filaDe[key]||(filaDe[key]={w:wRow,done:doneF,doneAnt:doneA,days:{},daysT:{},used:0});
+      var f=filaDe[key]||(filaDe[key]={w:wRow,done:doneF,doneAnt:doneA,days:{},daysT:{},used:0,disc:String(pr.disc||(p&&p.esp)||'')});
       /* la entera reparte su SALDO en sus dias (se escala al sumar); el tramo, su cantidad */
       if(esTr)ds.forEach(function(d){f.daysT[d]=(f.daysT[d]||0)+share/ds.length});
       else ds.forEach(function(d){f.days[d]=(f.days[d]||0)+1/ds.length});
       hayFila=true});
-    if(!hayFila)return null;
+    return {filaDe:filaDe,hayFila:hayFila,hhT:hhT}}catch(e){return null}}
+function _crProyeccion(u,semanas,real){
+  try{
+    var hoy=(typeof todayISO==='function')?todayISO():'';
+    var iHoy=-1;
+    for(var i=0;i<semanas.length;i++){
+      if(String(semanas[i].fin||'')>=hoy){iHoy=i;break}}
+    if(iHoy<0)return null;
+    /* el cierre anterior a la semana en curso: lo hecho desde ahi es lo hecho EN la semana */
+    var antD='';try{antD=_crDeSerial(_crASerial(String(semanas[iHoy].ini||''))-1)}catch(e){antD=''}
+    var R9=_crProyFilas(u,hoy,antD);if(!R9||!R9.hayFila)return null;
+    var filaDe=R9.filaDe,hhT=R9.hhT;
     var filas=Object.keys(filaDe).map(function(k){return filaDe[k]});
     /* se acumula por semana, arrancando de lo realmente hecho */
     /* ini y fin de cada semana YA son fechas, no seriales: pasarlas por
@@ -15518,7 +15523,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916e3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916e4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -22153,9 +22158,40 @@ function _pgAvanceEsp(){try{
   return t}catch(e){return 0}}
 /* Se calcula una vez por pintada: por dia lo que suma, y el acumulado desde el
    primero programado partiendo de lo que ya lleva la especialidad. */
+/* el universo del cronograma para el calendario (el de la curva flotante o
+   el ACTUAL), con el catalogo del servidor: se carga aparte y se repinta */
+async function _pgUnivListo(){try{
+  var cid=String((typeof _ajGet==='function'?_ajGet('curva_cron',''):'')||'');
+  var L=((await _crPull())||[]).filter(function(c){return !c.eliminado});
+  if(!cid||!L.filter(function(z){return z.cron_id===cid}).length){var cc=null;L.forEach(function(z){if(String(z.tipo||'')==='ACTUAL')cc=z});cid=cc?cc.cron_id:(L.length?L[L.length-1].cron_id:'')}
+  if(!cid)return null;
+  await _crCatOk();await _crTareas(cid);var alc=await _crAlc(cid);
+  var u=_crUniverso(cid,alc);if(!u||!(u.hh>0))return null;
+  window._pgUniv={cid:cid,u:u,t:Date.now()};return window._pgUniv}catch(e){return null}}
 function _pgCalcPct(){try{
   var dia={},porD={};
   var P=_pgProg();
+  /* con el universo del cronograma: base = real al cierre anterior, y desde
+     el inicio de la semana en curso cada dia suma su cuota programada (el
+     saldo del cierre anterior repartido en sus dias; un tramo su cantidad) */
+  var UV=(window._pgUniv&&(Date.now()-window._pgUniv.t)<300000)?window._pgUniv.u:null;
+  if(!UV){if(!window._pgUnivPend){window._pgUnivPend=1;_pgUnivListo().then(function(x){window._pgUnivPend=0;try{if(x&&typeof renderCal==='function'&&$('scrProg')&&!$('scrProg').classList.contains('hidden'))renderCal()}catch(e){}},function(){window._pgUnivPend=0})}}
+  else{try{
+    var hoy=todayISO();var nS=27+Math.floor((_crASerial(hoy)-46199)/7);var semIni=_wkISO(_wkSem(nS).ini),semFin=_wkISO(_wkSem(nS).fin);
+    var antD=_crDeSerial(_crASerial(semIni)-1);
+    var R9=_crProyFilas(UV,hoy,antD);
+    var vivas={};(DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id)vivas[p.id]=p});
+    var base=0;Object.keys(UV.items).forEach(function(i9){var p=vivas[i9];if(!p)return;var d=0;try{var pf=(typeof _fzPctAt==='function')?_fzPctAt(i9,antD):null;d=(pf!=null)?(Number(pf)||0):(Number(pctOfAt(p,antD))||0)}catch(e){d=0}base+=UV.items[i9]*Math.max(0,Math.min(1,d/100))});base=base/UV.hh*100;
+    var acum={},t=base;
+    if(R9&&R9.hayFila){var filas=Object.keys(R9.filaDe).map(function(k){return R9.filaDe[k]});
+      var dias={};filas.forEach(function(f){for(var k in f.days)if(k>=semIni)dias[k]=1;for(var k2 in (f.daysT||{}))if(k2>=semIni)dias[k2]=1});
+      Object.keys(dias).sort().forEach(function(d){var suma=0;porD[d]=porD[d]||{};
+        filas.forEach(function(f){var fac=(d<=semFin)?(1-(f.doneAnt||0)):(1-f.done);var c=((f.days[d]||0)*Math.max(0,fac)+((f.daysT||{})[d]||0))*f.w;
+          var tope=Math.max(0,(1-(f.doneAnt||0))*f.w-(f.usedCal||0));if(c>tope)c=tope;if(!(c>0))return;f.usedCal=(f.usedCal||0)+c;suma+=c;
+          var dd=f.disc||'\u2014';porD[d][dd]=(porD[d][dd]||0)+c/UV.hh*100});
+        var v=suma/UV.hh*100;dia[d]=v;t+=v;acum[d]=t});
+      filas.forEach(function(f){f.usedCal=0})}
+    window._pgPctDisc=porD;window._pgPctDia=dia;window._pgPctAcum=acum;window._pgPctBase=base;return}catch(_eu){}}
   /* Con la vara en las tres se cuentan las tres: sus pesos salen del mismo
      total y por eso se pueden sumar. Con la vara en una sola especialidad no
      se pueden mezclar -cada una reparte su propio 100%- y solo cuenta la que
@@ -22197,8 +22233,7 @@ function _pgPctDiaHTML(ds){try{
   var _tit='';
   if(_R){_tit=_R.lineas.map(function(x){return x.txt}).join(' · ')+
     ' = '+n2(_R.total)+'% programado ese día\n'+
-    'Con lo anterior se llega a '+n2(_R.acum)+'%, partiendo del '+n2(_R.base)+'% ya hecho'+
-    (_R.todas?' entre las tres especialidades':' en '+progDisc)}
+    'Con lo anterior se llega a '+n2(_R.acum)+'%, partiendo del '+n2(_R.base)+'% '+((window._pgUniv&&(Date.now()-window._pgUniv.t)<300000)?'real al cierre de la semana anterior (cronograma '+String(window._pgUniv.cid)+')':('ya hecho'+(_R.todas?' entre las tres especialidades':' en '+progDisc)))}
   return '<span class="cdpct" title="'+esc(_tit)+'" '+
     'style="font-size:8.5px;font-weight:800;color:#0C5132;background:#EAF3EC;border:1px solid #BFD8C6;'+
     'border-radius:5px;padding:0 4px;margin-right:auto;line-height:1.5;white-space:nowrap">'+
