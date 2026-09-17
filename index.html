@@ -5045,15 +5045,18 @@ function _crProyeccion(u,semanas,real){
       if(!(wRow>0)||!(share>0))return;
       var ds=(typeof occupiedDays==='function')?(occupiedDays(pr.start,pr.dias||1)||[]):[];
       if(!ds.length)return;
-      var f=filaDe[key]||(filaDe[key]={w:wRow,done:doneF,doneAnt:doneA,days:{},used:0});
-      ds.forEach(function(d){f.days[d]=(f.days[d]||0)+share/ds.length});hayFila=true});
+      var f=filaDe[key]||(filaDe[key]={w:wRow,done:doneF,doneAnt:doneA,days:{},daysT:{},used:0});
+      /* la entera reparte su SALDO en sus dias (se escala al sumar); el tramo, su cantidad */
+      if(esTr)ds.forEach(function(d){f.daysT[d]=(f.daysT[d]||0)+share/ds.length});
+      else ds.forEach(function(d){f.days[d]=(f.days[d]||0)+1/ds.length});
+      hayFila=true});
     if(!hayFila)return null;
     var filas=Object.keys(filaDe).map(function(k){return filaDe[k]});
     /* se acumula por semana, arrancando de lo realmente hecho */
     /* ini y fin de cada semana YA son fechas, no seriales: pasarlas por
        _crDeSerial daba basura y no se encontraba nunca la semana de hoy. */
     var base=(real&&real.acum&&real.acum[iHoy]!=null)?real.acum[iHoy]:0;
-    var cuotaEn=function(f,ini,fin){var t=0;for(var k in f.days)if(k>=ini&&k<=fin)t+=f.days[k];return t};
+    var cuotaEn=function(f,ini,fin){var t=0;for(var k in f.days)if(k>=ini&&k<=fin)t+=f.days[k];t=Math.min(1,t)*Math.max(0,1-f.done);for(var k2 in (f.daysT||{}))if(k2>=ini&&k2<=fin)t+=f.daysT[k2];return t};
     var out=[],hay=[],t=base,ultima=iHoy;
     for(var j=0;j<semanas.length;j++){
       if(j<iHoy){out.push(null);hay.push(false);continue}
@@ -15512,7 +15515,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916e1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916e2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17745,9 +17748,11 @@ async function _rxNoCumplidas(opc){
            cierre suma los segmentos (un tramo aporta su fraccion), y se le
            resta lo HECHO del apartado; un tramo ya no cuenta con hecho 0 */
         var cuo={};
-        segsDe(cod,i9).forEach(function(sg){var oc=sg.oc||[];if(!oc.length)return;var n=0;oc.forEach(function(d8){if((!i1||d8>=i1)&&d8<=f1)n++});var cal=n/oc.length;
-          var fr=(sg.frac!=null)?Math.max(0,Math.min(1,sg.frac)):1;var kG=sg.fid||'';
-          cuo[kG]=(cuo[kG]||0)+fr*cal});
+        segsDe(cod,i9).forEach(function(sg){var oc=sg.oc||[];if(!oc.length)return;var n=0;oc.forEach(function(d8){if((!i1||d8>=i1)&&d8<=f1)n++});var cal=n/oc.length;var kG=sg.fid||'';
+          /* un tramo programa su cantidad; la partida (o parte) entera programa
+             su SALDO repartido en sus dias, como lo muestra el calendario */
+          var cu;if(sg.frac!=null)cu=Math.max(0,Math.min(1,sg.frac))*cal;else cu=cal*Math.max(0,1-doneDe(i9,kG,f1));
+          cuo[kG]=(cuo[kG]||0)+cu});
         Object.keys(cuo).forEach(function(fid){var wS=wI*pesoDe(i9,fid);if(!(wS>0))return;var cal=Math.min(1,cuo[fid]);
           /* hecho EN la ventana (al cierre menos al cierre anterior), y lo
              que falta topado a lo que le queda al apartado */
@@ -17786,7 +17791,9 @@ async function _rxNoCumplidas(opc){
         var fid=sg.fid||'',x=fid?faseDe(fid):null;
         /* un tramo lleva su cantidad (frac x metrado de la partida); la
            entera todo el metrado; la parte su cantidad */
-        var base=(sg.frac!=null)?(sg.frac*tot):(x?_fzCantDe(x):tot);
+        var base;if(sg.frac!=null)base=sg.frac*tot;
+        else if(x){var hx=0;try{(x.movs||[]).forEach(function(mv){if(String(_fzFechaMov(mv,mapa))<=f1)hx+=Number(mv.c)||0});hx+=(typeof _retCantDe==='function')?(Number(_retCantDe(x))||0):0}catch(_e){}base=Math.max(0,(Number(_fzCantDe(x))||0)-hx)}
+        else{var hE=0;try{if(fases.length){hE=tot*(Number(_fzPctAt(i9,f1))||0)/100}else{hE=Number(acumCantAt(i9,f1))||0}}catch(_e){}base=Math.max(0,tot-hE)}
         pg[fid]=(pg[fid]||0)+base*nW/oc.length;hay[fid]=1});
       var grupos=Object.keys(hay);
       if(!grupos.length){
