@@ -15507,7 +15507,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916c3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916c4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17795,12 +17795,13 @@ async function _rxNoCumplidas(opc){
      con el avance real de la semana (con las EMP) */
   /* Programado = Hecho + Restante: la suma de lo que ya aporto cada tarjeta
      mas la suma de sus "+x%" (lo que falta de lo programado), tal cual se ven */
-  var cv={prog:0,hecho:0,resta:0,noc:0,cum:0,emp:0};try{
+  var cv={prog:0,hecho:0,resta:0,noc:0,cum:0,emp:0,nocYa:0,nocMas:0,cumYa:0,cumMas:0};try{
     var r2=function(x){return Math.round(x*100)/100};
-    lista.forEach(function(q){if(!q.ap)return;cv.hecho+=q.ap.ya;cv.resta+=q.ap.mas;cv.noc+=q.ap.ya+q.ap.mas});
-    cumplidas.forEach(function(q){if(!q.ap)return;cv.hecho+=q.ap.ya;cv.resta+=q.ap.mas;cv.cum+=q.ap.ya+q.ap.mas});
+    lista.forEach(function(q){if(!q.ap)return;cv.nocYa+=q.ap.ya;cv.nocMas+=q.ap.mas});
+    cumplidas.forEach(function(q){if(!q.ap)return;cv.cumYa+=q.ap.ya;cv.cumMas+=q.ap.mas});
     emp.forEach(function(q){if(q.ap)cv.emp+=q.ap.ya});   /* avanzaron sin estar programadas: aparte */
-    cv.hecho=r2(cv.hecho);cv.resta=r2(cv.resta);cv.noc=r2(cv.noc);cv.cum=r2(cv.cum);cv.emp=r2(cv.emp);cv.prog=r2(cv.hecho+cv.resta);
+    cv.nocYa=r2(cv.nocYa);cv.nocMas=r2(cv.nocMas);cv.cumYa=r2(cv.cumYa);cv.cumMas=r2(cv.cumMas);cv.emp=r2(cv.emp);
+    cv.noc=r2(cv.nocYa+cv.nocMas);cv.cum=r2(cv.cumYa+cv.cumMas);cv.hecho=r2(cv.nocYa+cv.cumYa);cv.resta=r2(cv.nocMas+cv.cumMas);cv.prog=r2(cv.hecho+cv.resta);
     /* una partida fuera del alcance del cronograma no cuenta en nada */
 }catch(_ec){}
   return {sem:semV,cron:cc.cron_id,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId0,nombre:baseCron?('Plan del cronograma '+baseCron.cron_id):((bkSel&&bkSel.nombre)||'')},lista:lista,ocultas:ocultas,cumplidas:cumplidas,emp:emp,curva:cv}}
@@ -18213,7 +18214,8 @@ function _rxNoPinta(r){
           '<div style="font-size:26px;font-weight:900;color:#fff;line-height:1.1">'+ppc.toFixed(2)+'%</div>'+
           '<div style="font-size:10.5px;color:#9db4d6">'+nOk+' cumplida(s) de '+nTot+' programada(s)</div>'+
           (r.curva?('<div style="font-size:10.5px;font-weight:800;color:#9db4d6;margin-top:4px" title="Puntos de la curva general en la semana, solo de las actividades programadas (no cumplidas + cumplidas): Programado = Hecho + Restante \u00b7 Hecho es la suma de lo que ya aport\u00f3 cada tarjeta (avance real de la semana) \u00b7 Restante es la suma de los +x% (lo que falta de lo programado). Las EMP avanzaron sin estar programadas y van aparte">Programado <b style="color:#cfe3ff">'+(Number(r.curva.prog)||0).toFixed(2)+'%</b> = Hecho <b style="color:#9FE8B0">'+(Number(r.curva.hecho)||0).toFixed(2)+'%</b> + Restante <b style="color:#E8C9A0">'+(Number(r.curva.resta)||0).toFixed(2)+'%</b>'+
-          '<br><span style="font-weight:700;color:#7d8590" title="El mismo Programado repartido por grupo de tarjetas: la suma de los \u2192 de las no cumplidas m\u00e1s la suma de los \u2192 de las cumplidas">= no cumplidas <b style="color:#cfe3ff">'+(Number(r.curva.noc)||0).toFixed(2)+'%</b> + cumplidas <b style="color:#cfe3ff">'+(Number(r.curva.cum)||0).toFixed(2)+'%</b></span>'+
+          '<br><span style="font-weight:700;color:#7d8590" title="Suma de las tarjetas NO cumplidas: sus verdes + sus \u00e1mbar = sus \u2192">no cumplidas: <b style="color:#9FE8B0">'+(Number(r.curva.nocYa)||0).toFixed(2)+'%</b> + <b style="color:#E8C9A0">'+(Number(r.curva.nocMas)||0).toFixed(2)+'%</b> = <b style="color:#cfe3ff">'+(Number(r.curva.noc)||0).toFixed(2)+'%</b></span>'+
+          '<br><span style="font-weight:700;color:#7d8590" title="Suma de las tarjetas cumplidas: sus verdes + sus \u00e1mbar = sus \u2192 (una cumplida puede tener \u00e1mbar si una de sus partidas va atrasada aunque la actividad en conjunto vaya a la par)">cumplidas: <b style="color:#9FE8B0">'+(Number(r.curva.cumYa)||0).toFixed(2)+'%</b> + <b style="color:#E8C9A0">'+(Number(r.curva.cumMas)||0).toFixed(2)+'%</b> = <b style="color:#cfe3ff">'+(Number(r.curva.cum)||0).toFixed(2)+'%</b></span>'+
           ((Number(r.curva.emp)||0)>0?('<br><span style="font-weight:700;color:#7d8590" title="Avanzaron sin estar programadas: es hecho (verde) que no entra en Programado pero s\u00ed sube la curva">+ EMP hecho <b style="color:#9FE8B0">'+(Number(r.curva.emp)||0).toFixed(2)+'%</b> <span style="font-weight:600">(sin programar)</span></span>'):'')+'</div>'):'')+
         '</div>'+
         '<div style="flex:1;min-width:220px;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">'+
