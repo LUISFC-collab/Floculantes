@@ -15502,7 +15502,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916a7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916a8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -16938,7 +16938,7 @@ async function syncNow(silent){if(window._tabBloqueada)return;if(window._impBusy
   if(syncing){if(Date.now()-(window._syncT0||0)>45000){syncing=false;if(typeof _logAdd==='function')_logAdd('sync','candado pegado >45s — destrabado')}else return}
   syncing=true;window._syncT0=Date.now();updSync('Sincronizando…');setTopSync('pushing');
   try{if(!window._mpRestoring&&(typeof puedeEscribir!=='function'||puedeEscribir())){await syncPush();}
-    setTopSync('pulling');_pulling=true;try{await syncPull()}finally{_pulling=false}
+    setTopSync('pulling');_pulling=true;try{await syncPull()}finally{_pulling=false;window._lastFullPull=Date.now()}
     state.dirty=false;
     if(!$('scrDiario').classList.contains('hidden'))renderDiario();
     if(!$('scrList').classList.contains('hidden'))renderList();
@@ -22611,27 +22611,50 @@ function _presRender(){var el=$('admUsers');if(!el)return;var j=window._presRows
 function _presTick(){var el=$('admUsers');if(!el)return;var j=window._presRows;if(!j||!j.length)return;var now=(typeof nowSrv==='function')?nowSrv():Date.now();function uk(n){return String(n).replace(/[^a-zA-Z0-9]/g,'_')}function cls(u){try{if(u&&u.nombre===((state.user&&state.user.supervisor)||'')&&!document.hidden)return 3}catch(_e){}var seen=now-Number(u.last_seen||0);if(seen>40000)return 0;if(u.estado==='cerrado')return 0;if(u.estado==='oculto')return 1;if(u.estado==='fuera')return 1;var la=Number(u.last_active||0);if(la>0&&(now-la)<12000)return 3;return 2}var sig=j.slice().sort(function(a,b){return cls(b)-cls(a)}).map(function(u){return u.nombre+':'+cls(u)}).join('|');if(sig!==window._presSig){_presRender();return}var gt=0;j.forEach(function(u){var c=cls(u);var seen=now-Number(u.last_seen||0);var extra=(c>=2)?Math.max(0,seen):0;var act=(Number(u.activo_ms)||0)+((c===3)?extra:0);var onl=(Number(u.online_ms)||0)+((c>=2)?extra:0);gt+=onl;var k=uk(u.nombre);var a=el.querySelector('.apAct[data-k="'+k+'"]');if(a)a.textContent=fmtHMS(act);var o=el.querySelector('.apOnl[data-k="'+k+'"]');if(o)o.textContent=fmtHMS(onl);var tt=el.querySelector('.apTot[data-k="'+k+'"]');if(tt)tt.textContent=fmtHMS(onl)});var g=el.querySelector('#apGrand');if(g)g.textContent=fmtHMS(gt);}
 setInterval(function(){try{var b=$('adminBox');if(b&&!b.classList.contains('hidden')&&window._presRows)_presTick()}catch(e){}},1000);
 /* al tocar el nombre: elegir qué log ver */
+/* cada latido de cada usuario avisa por tiempo real: el panel se rehace
+   como mucho una vez cada 10 s (y la ultima llamada nunca se pierde) */
+try{(function(){var base=updPresencia,t0=0,pend=null;
+  updPresencia=function(){var now=Date.now();
+    if(now-t0>=10000){t0=now;return base.apply(this,arguments)}
+    if(!pend)pend=setTimeout(function(){pend=null;t0=Date.now();try{base()}catch(e){}},10000-(now-t0));
+    return Promise.resolve()}})()}catch(_eup){}
 function _presPick(nombre){var old=document.getElementById('_ppOv');if(old)old.remove();var ov=document.createElement('div');ov.id='_ppOv';ov.style.cssText='position:fixed;inset:0;z-index:2147483646;background:rgba(15,25,45,.55);display:flex;align-items:flex-end;justify-content:center';ov.innerHTML='<div style="background:#fff;width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px;box-sizing:border-box"><div style="font-weight:800;color:#1F3864;margin-bottom:10px">'+esc(nombre)+' — ¿qué log deseas ver?</div><button id="_ppA" style="width:100%;background:#1F3864;color:#fff;border:0;border-radius:12px;padding:13px;font-weight:800;margin-bottom:8px">🗂 Log de cambios (qué hizo y dónde)</button><button id="_ppB" style="width:100%;background:#0C5132;color:#fff;border:0;border-radius:12px;padding:13px;font-weight:800;margin-bottom:8px">⏱ Lapsos de tiempo (de qué hora a qué hora)</button><button id="_ppX" style="width:100%;background:#eef2f7;border:0;border-radius:12px;padding:11px;font-weight:700">Cancelar</button></div>';document.body.appendChild(ov);ov.onclick=function(e){if(e.target===ov)ov.remove()};document.getElementById('_ppX').onclick=function(){ov.remove()};document.getElementById('_ppA').onclick=function(){ov.remove();_showUserLog(nombre)};document.getElementById('_ppB').onclick=function(){ov.remove();_showLapsos(nombre)};}
 /* ⏱ vista de LAPSOS: de qué hora a qué hora, con contador EN VIVO del lapso abierto y total del día */
 async function _showLapsos(nombre){if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return}
  var old=document.getElementById('_lapsOv');if(old)old.remove();
  var ov=document.createElement('div');ov.id='_lapsOv';ov.style.cssText='position:fixed;inset:0;z-index:2147483646;background:rgba(15,25,45,.6);display:flex;align-items:flex-end;justify-content:center';
- ov.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:16px 16px 0 0;max-height:88vh;display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid #eef2f7"><b style="font-size:15px;color:#0C5132">⏱ Tiempos de '+esc(nombre)+' · hoy</b><button id="_lpX" style="margin-left:auto;background:#eef2f7;border:0;border-radius:8px;padding:8px 12px;font-weight:700">✕</button></div><div id="_lpBody" style="overflow:auto;flex:1;padding:12px 14px;font-size:12.5px;color:#1B2433">Cargando…</div></div>';
+ ov.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:16px 16px 0 0;max-height:88vh;display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid #eef2f7"><b style="font-size:15px;color:#0C5132">⏱ Tiempos de '+esc(nombre)+' · por d\u00eda</b><button id="_lpX" style="margin-left:auto;background:#eef2f7;border:0;border-radius:8px;padding:8px 12px;font-weight:700">✕</button></div><div id="_lpBody" style="overflow:auto;flex:1;padding:12px 14px;font-size:12.5px;color:#1B2433">Cargando…</div></div>';
  document.body.appendChild(ov);ov.onclick=function(e){if(e.target===ov)ov.remove()};document.getElementById('_lpX').onclick=function(){ov.remove()};
- var laps=[];
- async function fetchLaps(){try{laps=await (await fetch(sbBase()+'/rest/v1/presencia_lapsos?dia=eq.'+todayISO()+'&nombre=eq.'+encodeURIComponent(nombre)+'&order=ini_ts&select=*',{headers:sbHead()})).json();if(!Array.isArray(laps))laps=[]}catch(e){laps=[]}}
+ var laps=[],op={};
+ /* la primera vez bajan TODOS los dias; el refresco periodico solo el de hoy */
+ async function fetchLaps(todo){try{var hoy=todayISO();
+   var q=todo?('nombre=eq.'+encodeURIComponent(nombre)+'&order=dia.desc,ini_ts.asc&select=*&limit=6000'):('dia=eq.'+hoy+'&nombre=eq.'+encodeURIComponent(nombre)+'&order=ini_ts&select=*');
+   var R=await (await fetch(sbBase()+'/rest/v1/presencia_lapsos?'+q,{headers:sbHead()})).json();if(!Array.isArray(R))R=[];
+   if(todo)laps=R;else laps=laps.filter(function(l){return String(l.dia||'')!==hoy}).concat(R)}catch(e){if(todo)laps=[]}}
  function hms(ts){var d=new Date(Number(ts));return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0')}
- function render(){var B=document.getElementById('_lpBody');if(!B)return;var now=Date.now();var tot=0;var H='';
-  if(!laps.length){B.innerHTML='Sin lapsos registrados hoy todavía (se graban desde esta versión en adelante).';return}
-  var ord=['Primer','Segundo','Tercer','Cuarto','Quinto','Sexto','Séptimo','Octavo','Noveno','Décimo'];
-  laps.forEach(function(l,i){var abierto=(now-Number(l.fin_ts||0))<25000;var fin=abierto?now:Number(l.fin_ts||l.ini_ts);var dur=Math.max(0,fin-Number(l.ini_ts));tot+=dur;
-   H+='<div style="border:1px solid '+(abierto?'#1E7A46':'#E4EAF3')+';border-radius:10px;padding:8px 11px;margin-bottom:7px;background:'+(abierto?'#F0FAF4':'#fff')+'"><b style="color:#1F3864">'+(ord[i]||((i+1)+'º'))+' lapso</b>'+(abierto?' <b style="color:#1E7A46">· EN CURSO 🟢</b>':'')+'<br>'+hms(l.ini_ts)+' → '+(abierto?'ahora':hms(l.fin_ts))+' · <b style="color:#0C5132">⏱ '+fmtHMS(dur)+'</b>'+(l.device?(' · 📱'+esc(l.device)):'')+'</div>';});
-  H='<div style="background:#0C5132;color:#fff;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-weight:800">Total de hoy: ⏱ <span style="font-size:16px">'+fmtHMS(tot)+'</span> en '+laps.length+' lapso(s)</div>'+H;
-  B.innerHTML=H;}
- await fetchLaps();render();
- var iv=setInterval(function(){if(!document.getElementById('_lapsOv')){clearInterval(iv);return}render()},1000);
- var iv2=setInterval(async function(){if(!document.getElementById('_lapsOv')){clearInterval(iv2);return}await fetchLaps()},8000);
- window._lapsRefetch=function(){fetchLaps()};
+ function render(){var B=document.getElementById('_lpBody');if(!B)return;var now=Date.now();var hoy=todayISO();
+  if(!laps.length){B.innerHTML='Sin lapsos registrados todav\u00eda (se graban desde esta versi\u00f3n en adelante).';return}
+  var ord=['Primer','Segundo','Tercer','Cuarto','Quinto','Sexto','S\u00e9ptimo','Octavo','Noveno','D\u00e9cimo'];
+  /* un desplegable por dia (cerrados al abrir), del mas reciente al mas viejo */
+  var por={},dias=[];laps.forEach(function(l){var d=String(l.dia||'');if(!por[d]){por[d]=[];dias.push(d)}por[d].push(l)});
+  dias.sort(function(a,b){return a<b?1:(a>b?-1:0)});
+  var totG=0,H='';
+  dias.forEach(function(d){var L=por[d].slice().sort(function(a,b){return Number(a.ini_ts)-Number(b.ini_ts)});var tot=0,rows='',vivo=false;
+    L.forEach(function(l,i){var abierto=(d===hoy)&&(now-Number(l.fin_ts||0))<25000;if(abierto)vivo=true;var fin=abierto?now:Number(l.fin_ts||l.ini_ts);var dur=Math.max(0,fin-Number(l.ini_ts));tot+=dur;
+      rows+='<div style="border:1px solid '+(abierto?'#1E7A46':'#E4EAF3')+';border-radius:10px;padding:8px 11px;margin-bottom:7px;background:'+(abierto?'#F0FAF4':'#fff')+'"><b style="color:#1F3864">'+(ord[i]||((i+1)+'\u00ba'))+' lapso</b>'+(abierto?' <b style="color:#1E7A46">\u00b7 EN CURSO \ud83d\udfe2</b>':'')+'<br>'+hms(l.ini_ts)+' \u2192 '+(abierto?'ahora':hms(l.fin_ts))+' \u00b7 <b style="color:#0C5132">\u23f1 '+fmtHMS(dur)+'</b>'+(l.device?(' \u00b7 \ud83d\udcf1'+esc(l.device)):'')+'</div>'});
+    totG+=tot;var ab=!!op[d];var etq='';try{etq=(typeof fmtF==='function')?fmtF(d):d}catch(e){etq=d}
+    H+='<div style="border:1px solid #E4EAF3;border-radius:12px;margin-bottom:8px;overflow:hidden">'+
+      '<button class="_lpD" data-d="'+d+'" style="width:100%;text-align:left;border:0;background:'+(d===hoy?'#0C5132':'#1F3864')+';color:#fff;padding:10px 12px;font-weight:800;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px">'+
+        '<span>'+(d===hoy?'Hoy \u00b7 ':'')+esc(etq)+'</span><span style="margin-left:auto;font-weight:700;white-space:nowrap">\u23f1 '+fmtHMS(tot)+' \u00b7 '+L.length+' lapso(s)'+(vivo?' \ud83d\udfe2':'')+'</span><span>'+(ab?'\u25be':'\u25b8')+'</span></button>'+
+      (ab?('<div style="padding:8px 10px 1px">'+rows+'</div>'):'')+'</div>'});
+  H='<div style="background:#eef2f7;color:#1F3864;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-weight:800;font-size:12px">'+dias.length+' d\u00eda(s) conectado \u00b7 total \u23f1 '+fmtHMS(totG)+' \u00b7 toca un d\u00eda para ver sus lapsos</div>'+H;
+  var sc=B.scrollTop;B.innerHTML=H;B.scrollTop=sc;
+  B.querySelectorAll('._lpD').forEach(function(b){b.onclick=function(){var d=b.getAttribute('data-d');op[d]=!op[d];render()}})}
+ await fetchLaps(true);render();
+ /* el contador en vivo solo hace falta con el dia de hoy desplegado */
+ var iv=setInterval(function(){if(!document.getElementById('_lapsOv')){clearInterval(iv);return}if(op[todayISO()])render()},1000);
+ var iv2=setInterval(async function(){if(!document.getElementById('_lapsOv')){clearInterval(iv2);return}await fetchLaps(false);render()},8000);
+ window._lapsRefetch=function(){fetchLaps(false).then(render)};
 }
 /* Latido de presencia: mientras la pantalla está encendida avisa cada 25s; al bloquear/ocultar manda una última señal (keepalive). Así el admin detecta pantalla bloqueada = deja de llegar señal. */
 /* otro equipo / pestana de la MISMA persona activo hace poco: se consulta
@@ -26212,7 +26235,11 @@ window.addEventListener('offline',()=>{updSync();if(typeof setTopSync==='functio
 try{if(typeof setTopSync==='function')setTopSync(navigator.onLine?'pushing':'offline')}catch(e){}
 // === Sincronización en tiempo real (polling cada 12s) ===
 // Mientras haya sesión y señal, baja los cambios de otros dispositivos solo.
-setInterval(function(){try{if(state.user&&navigator.onLine&&sbReady()&&!document.hidden&&!syncing&&!_editing())syncNow(true)}catch(e){}},7000);
+setInterval(function(){try{if(state.user&&navigator.onLine&&sbReady()&&!document.hidden&&!syncing&&!_editing()){
+  /* con el tiempo real vivo la bajada completa (46 lecturas, ~9 s) es solo
+     respaldo: cada 60 s; sin tiempo real, cada 7 s como siempre */
+  if(window._RT&&window._RT.alive&&(Date.now()-(window._lastFullPull||0))<60000)return;
+  syncNow(true)}}catch(e){}},7000);
 /* Si hay cambios locales sin subir, intenta subir cuanto antes (prioridad equipo → base) */
 setInterval(function(){try{if(state.user&&navigator.onLine&&sbReady()&&!syncing&&!_editing()&&((state&&state.dirty)||(typeof pendingCount==='function'&&pendingCount()>0)))syncNow(true)}catch(e){}},3000);
 try{var _ss=document.getElementById('sumSync');if(_ss)_ss.onclick=function(){if(typeof _showFlow==='function')_showFlow();else if(typeof syncNow==='function')syncNow()};var _ss2=document.getElementById('dSumSync');if(_ss2)_ss2.onclick=function(){if(typeof _showFlow==='function')_showFlow();else if(typeof syncNow==='function')syncNow()};}catch(e){}
