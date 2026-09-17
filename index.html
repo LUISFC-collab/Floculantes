@@ -15502,7 +15502,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916a7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17756,7 +17756,14 @@ async function _rxNoCumplidas(opc){
   lista.sort(ordena);cumplidas.sort(ordena);emp.sort(ordena);
   /* las que el admin oculto a los supervisores: fuera de la lista y del PPC */
   var ocultas=[];lista=lista.filter(function(q){if(_pvVisible(semV,q.cod))return true;ocultas.push(q);return false});
-  return {sem:semV,cron:cc.cron_id,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId0,nombre:baseCron?('Plan del cronograma '+baseCron.cron_id):((bkSel&&bkSel.nombre)||'')},lista:lista,ocultas:ocultas,cumplidas:cumplidas,emp:emp}}
+  /* la CURVA general en la semana: puntos programados segun la base entre
+     el cierre anterior y este cierre (solo las visibles) y puntos hechos
+     con el avance real de la semana (con las EMP) */
+  var cv={prog:0,hecho:0};try{var iS=_wkISO(_wkSem(semV).ini);
+    lista.concat(cumplidas).forEach(function(q){if(!q.ap)return;var pw=Math.max(0,Math.min(1,pgDe(q.cod,iS,fin2)));cv.prog+=q.ap.peso*pw;cv.hecho+=q.ap.ya});
+    emp.forEach(function(q){if(q.ap)cv.hecho+=q.ap.ya});
+    cv.prog=Math.round(cv.prog*100)/100;cv.hecho=Math.round(cv.hecho*100)/100}catch(_ec){}
+  return {sem:semV,cron:cc.cron_id,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId0,nombre:baseCron?('Plan del cronograma '+baseCron.cron_id):((bkSel&&bkSel.nombre)||'')},lista:lista,ocultas:ocultas,cumplidas:cumplidas,emp:emp,curva:cv}}
 function _rxAnexaUna(q,sem){
   _rxSet(_rxNuevoRid(),{task_code:q.cod,actividad:q.nom||'',
     partida_id:(q.items&&q.items[0])||'',
@@ -18158,13 +18165,14 @@ function _rxNoPinta(r){
          cumplidas), con el resumen y las EMP */
       var nNo=(r._vis||r.lista).length,nOk=(r.cumplidas||[]).length,nEmp=(r.emp||[]).length,nTot=nNo+nOk;
       var nOcu=(r.ocultas||[]).length;
-      var ppc=nTot?(Math.round(nOk/nTot*1000)/10):0;
+      var ppc=nTot?(nOk/nTot*100):0;
       var _rot=(r.cierre?('AL CIERRE DE LA SEMANA '+r.sem):('SEMANA '+r.sem))+(r.semFija?' (fijada por el admin)':'');
       h+='<div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;margin:4px 0 10px">'+
         '<div style="background:'+(ppc>=80?'#0f2a1c':(ppc>=50?'#2a2314':'#2a1418'))+';border:1px solid '+(ppc>=80?'#1E7A46':(ppc>=50?'#7A4B00':'#8A2018'))+';border-radius:12px;padding:10px 16px;min-width:150px">'+
           '<div style="font-size:10px;font-weight:800;letter-spacing:.06em;color:#9db4d6">PPC \u00b7 '+_rot+'</div>'+
-          '<div style="font-size:26px;font-weight:900;color:#fff;line-height:1.1">'+ppc.toFixed(2).replace(/\.?0+$/,'')+'%</div>'+
+          '<div style="font-size:26px;font-weight:900;color:#fff;line-height:1.1">'+ppc.toFixed(2)+'%</div>'+
           '<div style="font-size:10.5px;color:#9db4d6">'+nOk+' cumplida(s) de '+nTot+' programada(s)</div>'+
+          (r.curva?('<div style="font-size:10.5px;font-weight:800;color:#9db4d6;margin-top:4px" title="Puntos de la curva general en la semana: programado seg\u00fan la base entre el cierre anterior y este cierre (actividades visibles) \u00b7 hecho con el avance real de la semana (incluidas las EMP)">Programado <b style="color:#E8C9A0">'+(Number(r.curva.prog)||0).toFixed(2)+'%</b> \u00b7 Hecho <b style="color:#9FE8B0">'+(Number(r.curva.hecho)||0).toFixed(2)+'%</b></div>'):'')+
         '</div>'+
         '<div style="flex:1;min-width:220px;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">'+
           '<div style="background:#12314a;border:1px solid #2a5a8a;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#8ECBF5">\u2714 CUMPLIDAS</div><div style="font-size:20px;font-weight:900;color:#BFE3FF">'+nOk+'</div></div>'+
