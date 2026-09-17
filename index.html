@@ -15507,7 +15507,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916c9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916d1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17724,6 +17724,7 @@ async function _rxNoCumplidas(opc){
        hasta el cierre - hecho) x su peso; sin compensar una partida
        adelantada con otra atrasada */
     var _pendRel=0;   /* lo que le falta al cierre sobre las HH de la actividad */
+    var grp={};   /* por apartado (partida entera o parte): w, cal, done, pend */
     if(bkSnap){try{var pend=0;
       (itemsDe[cod]||[]).forEach(function(i9){if(uW.items[i9]==null)return;var wI=(Number(uW.items[i9])||0)/_crVeces(rpW,i9);if(!(wI>0))return;
         var fz9=(typeof _fzDe==='function')?_fzDe(i9):null,fases9=(fz9&&fz9.fases)||[];
@@ -17734,10 +17735,14 @@ async function _rxNoCumplidas(opc){
           if(sg.frac!=null)done=0;   /* un tramo no lleva avance propio */
           else if(sg.fid){var x9=fases9.filter(function(z){return z.id===sg.fid})[0];try{done=x9?(Number(_fzPctParteAt(i9,x9,f1))||0)/100:0}catch(_e){done=0}}
           else{try{var pf9=(typeof _fzPctAt==='function')?_fzPctAt(i9,f1):null;done=((pf9!=null)?(Number(pf9)||0):(p9?(Number(pctOfAt(p9,f1))||0):0))/100}catch(_e){done=0}}
-          pend+=Math.max(0,cal-Math.max(0,Math.min(1,done)))*wS})});
+          var pS=Math.max(0,cal-Math.max(0,Math.min(1,done)))*wS;pend+=pS;
+          var kG=i9+'|'+(sg.fid||'');var g=grp[kG]||(grp[kG]={w:0,cal:0,done:0,pend:0});
+          g.w+=wS;g.cal+=wS*cal;g.pend+=pS;if(sg.frac==null)g.done=Math.max(0,Math.min(1,done))})});
       mas=pend/uW.hh;_pendRel=hhA>0?pend/hhA:0}catch(_e6){}}
+    var filasAp={};try{Object.keys(grp).forEach(function(k){var g=grp[k];if(!(g.w>0))return;
+      filasAp[k]={pesa:Math.round(g.w/hhA*1000)/10,prog:Math.round(g.cal/g.w*1000)/10,hecho:Math.round(g.done*1000)/10,falta:Math.round(g.pend/g.w*1000)/10}})}catch(_e9){}
     var r4=function(x){return Math.round(x*10000)/100};
-    return {peso:r4(peso),ya:r4(ya),mas:r4(mas),llega:r4(ya+mas),acum:r4(peso*acT),pendRel:_pendRel,faltaPct:Math.round(_pendRel*1000)/10,acP:(hhA>0?yaHH/hhA:null),pesos:pesos,hh:Math.round(hhA*100)/100,hhT:uW.hh}}catch(e){return null}};
+    return {peso:r4(peso),ya:r4(ya),mas:r4(mas),llega:r4(ya+mas),acum:r4(peso*acT),pendRel:_pendRel,faltaPct:Math.round(_pendRel*1000)/10,acP:(hhA>0?yaHH/hhA:null),pesos:pesos,filas:filasAp,hh:Math.round(hhA*100)/100,hhT:uW.hh}}catch(e){return null}};
   /* las partes programadas en la ventana, por partida: {pid:[faseId,...]} */
   var partesDe=function(cod,i1,f1){var out={};if(!bkSnap)return out;
     (itemsDe[cod]||[]).forEach(function(i9){var ids=[];
@@ -18170,15 +18175,25 @@ function _rxDetHTML(q){try{
   return '<div style="flex-basis:100%;display:flex;flex-direction:column;gap:3px;margin-top:4px;border-top:1px solid rgba(255,255,255,.07);padding-top:5px">'+
     det.map(function(d){
       var nm=nomDe(d.pid);
-      return '<span style="display:block;min-width:0;font-size:10.5px;color:#9db4d6;line-height:1.4;overflow-wrap:anywhere">'+
+      var k=d.pid+'|'+(d.fid||'');var fa=(q&&q.ap&&q.ap.filas)?q.ap.filas[k]:null;
+      var pz=fa?fa.pesa:((q&&q.ap&&q.ap.pesos)?q.ap.pesos[d.pid+(d.fid?('|'+d.fid):'')]:null);
+      var tot=Number(d.tot)||0;
+      var pp=fa?fa.prog:(tot>0?Math.round((Number(d.prog)||0)/tot*1000)/10:0);
+      var hp=fa?fa.hecho:(tot>0?Math.round((Number(d.hecho)||0)/tot*1000)/10:0);
+      var fp=fa?fa.falta:(tot>0?Math.round(Math.max(0,(Number(d.prog)||0)-(Number(d.hecho)||0))/tot*1000)/10:0);
+      return '<div style="display:flex;gap:10px;align-items:flex-start;min-width:0">'+
+        '<span style="flex:1;min-width:0;font-size:10.5px;color:#9db4d6;line-height:1.4;overflow-wrap:anywhere">'+
         '<b class="_rxIrAct" data-pid="'+esc(d.pid)+'" title="Ir a su tarjeta en la lista" style="color:#8ECBF5;text-decoration:underline;text-decoration-style:dotted;cursor:pointer">'+esc(d.pid)+'</b> '+
         (d.parte?('<b style="color:#C7A3E8">('+esc(String(d.parte).toUpperCase())+')</b> '):'')+
         'prog <b style="color:#E8C9A0">'+qty(d.prog)+'</b> \u00b7 hecho <b style="color:'+((Number(d.hecho)||0)>=(Number(d.prog)||0)-1e-9&&(Number(d.prog)||0)>0?'#9FE8B0':'#FFB4A8')+'">'+qty(d.hecho)+'</b> <span style="color:#7d8590">de '+qty(d.tot)+' '+esc(d.und)+'</span>'+
-        (function(){var tot=Number(d.tot)||0;if(!(tot>0))return '';var pp=Math.round((Number(d.prog)||0)/tot*1000)/10,hp=Math.round((Number(d.hecho)||0)/tot*1000)/10,fp=Math.round(Math.max(0,(Number(d.prog)||0)-(Number(d.hecho)||0))/tot*1000)/10;
-          var pz=(q&&q.ap&&q.ap.pesos)?q.ap.pesos[d.pid+(d.fid?('|'+d.fid):'')]:null;
-          return ' <span style="color:#7d8590">\u00b7 <b style="color:#E8C9A0">'+pp+'%</b> prog \u00b7 <b style="color:#9FE8B0">'+hp+'%</b> hecho \u00b7 <b style="color:#FFB4A8">'+fp+'%</b> falta'+(pz!=null?(' \u00b7 pesa <b style="color:#B9C7DD">'+pz+'%</b> de la actividad'):'')+'</span>'})()+
         (nm?(' <span style="color:#B9C7DD">\u00b7 '+esc(nm)+'</span>'):'')+
-      '</span>'}).join('')+
+        '</span>'+
+        /* la columna de %: misma posicion y mismo orden que el titulo */
+        '<span style="flex:0 0 auto;text-align:right;white-space:nowrap;font-size:10.5px;line-height:1.35;padding-right:118px;color:#7d8590" title="Sobre el metrado de este apartado; el t\u00edtulo de la actividad es la suma de estas filas ponderada por lo que pesa cada una">'+
+          'prog <b style="color:#E8C9A0">'+pp+'%</b> \u00b7 hecho <b style="color:#9FE8B0">'+hp+'%</b> \u00b7 falta <b style="color:#FFB4A8">'+fp+'%</b>'+
+          (pz!=null?('<br>pesa <b style="color:#B9C7DD">'+pz+'%</b> de la actividad'):'')+
+        '</span>'+
+      '</div>'}).join('')+
     '</div>'}catch(e){return ''}}
 function _rxNoPinta(r){
   var cont=document.getElementById('_rxNoLista');if(!cont)return;
