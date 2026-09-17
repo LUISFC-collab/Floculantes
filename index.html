@@ -15506,7 +15506,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916d5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916d6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -21877,9 +21877,21 @@ function _irYParpadear(id,f){try{
   }catch(e){}
   try{if(f&&typeof openDay==='function'&&$('scrList')&&$('scrList').classList.contains('hidden'))openDay(f)}catch(e){}
   var pr=null;try{pr=acts(state.user.disc).filter(function(x){return x.id===id})[0]}catch(e){}
-  if(!pr){if(typeof toast==='function')toast('Esa actividad no está en tu vista actual');return}
+  if(!pr){
+    /* es de otra especialidad: se cambia a ella si el rol lo permite */
+    var esp9='';try{esp9=(typeof _discDe==='function')?_discDe(id):''}catch(e){}
+    var puede9=false;try{puede9=(typeof esAdmin==='function'&&esAdmin())||(typeof puedeCambiarEsp==='function'&&puedeCambiarEsp())}catch(e){}
+    if(esp9&&esp9!==(state.user&&state.user.disc)&&puede9){
+      try{changeDisc(esp9)}catch(e){}
+      try{if(f&&typeof openDay==='function'&&$('scrList')&&$('scrList').classList.contains('hidden'))openDay(f)}catch(e){}
+      try{pr=acts(state.user.disc).filter(function(x){return x.id===id})[0]}catch(e){}}
+    if(!pr){if(typeof toast==='function')toast(esp9&&esp9!==(state.user&&state.user.disc)?('Esa actividad es de '+esp9+' y tu rol no puede cambiar de especialidad'):'Esa actividad no est\u00e1 en tu vista actual');return}}
+  /* la busqueda filtrando la escondia */
+  try{var _bb9=document.getElementById('_busqBar');if(_bb9&&_bb9.style.display!=='none'&&typeof _busqToggle==='function')_busqToggle(false)}catch(e){}
   try{openArea[areaOf(pr)]=true}catch(e){}
   if(pr.sistema)openSys[pr.sistema]=true;
+  /* y su sub-WBS (titulo desglosable), si lo tiene */
+  try{var _sb9=String((pr&&pr.subsistema)||'').trim();if(_sb9&&pr.sistema)openSub[pr.sistema+'\u0001'+_sb9]=true}catch(e){}
   try{renderList()}catch(e){}
   setTimeout(function(){try{
     var sel='.leaf[data-id="'+((window.CSS&&CSS.escape)?CSS.escape(id):id)+'"]';
