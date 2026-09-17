@@ -2740,6 +2740,9 @@ function _crInvalida(cronId){try{if(window._crTar)delete window._crTar[cronId];i
 /* El CATALOGO COMPLETO del contrato: las vivas, las retiradas del alcance y
    las que tienen las HH apagadas. Cada cronograma decide cuales cuentan.
    Se cachea; si todavia no llego, se cae a las partidas vivas del aplicativo. */
+/* el catalogo del servidor cargado antes de calcular: sin el, _crPartidas()
+   cae a las HH locales y la base cambia (8121 hh en vez de 8266) */
+async function _crCatOk(){try{if(!(window._crCat&&window._crCat.length))await _crCatPull()}catch(e){}}
 async function _crCatPull(){
   try{
     var cat=await sbSelect('actividades_create_110826',
@@ -5103,6 +5106,7 @@ async function _crPlanLeer(cronId){
     '&cron_id=eq.'+encodeURIComponent(cronId)+'&eliminado=is.false&order=semana.asc&limit=200')||[]}
   catch(e){return []}}
 async function _crCurvaUI(c,nivel,conWbs,esp){
+  await _crCatOk();
   nivel=nivel||'tarea';
   conWbs=!!conWbs;
   esp=esp||'';
@@ -7964,6 +7968,7 @@ async function _wkCronDatos(ids,semanas){
    orden) sobre las HH de su alcance; la misma vara que la curva y que la
    hoja PROGRAMACION del semanal */
 async function _wkPctCron(cronId,corte){
+  await _crCatOk();
   var tar=await _crTareas(cronId),alc=await _crAlc(cronId);
   var u=_crUniverso(cronId,alc),rp=_crReparto(tar),vivas={};
   try{(DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id)vivas[p.id]=p})}catch(e){}
@@ -8292,6 +8297,7 @@ function _crFracFila(k,i,cant,tieneP){try{
   if(!esT)return w;
   var cP=Number(_fzCantDe(inf.fase))||0,cT=Number(cant)||0;return (cP>0&&cT>0)?w*Math.min(1,cT/cP):0}catch(e){return 0}}
 async function _crPlanRecupera(cronId,corte,semN){
+  await _crCatOk();
   var tar=await _crTareas(cronId),alc=await _crAlc(cronId);
   var u=_crUniverso(cronId,alc),rp=_crReparto(tar);
   var P=_crPartidas(),porId={};P.forEach(function(q){porId[q.id]=q});
@@ -15500,7 +15506,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916d4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916d5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17557,6 +17563,7 @@ try{var _pvPushBase=syncPush;syncPush=async function(){try{await _pvPush()}catch
 var _pvPullBase=syncPull;syncPull=async function(){var r=await _pvPullBase.apply(this,arguments);try{await _pvPull()}catch(e){}return r};}catch(_pvw){}
 try{setTimeout(function(){try{_pvPull()}catch(e){}},3600)}catch(_pvt){}
 async function _rxNoCumplidas(opc){
+  await _crCatOk();
   var _prox=!!(opc&&opc.prox);
   var semA=(typeof _wkQueToca==='function')?_wkQueToca():0;
   var L=(await _crPull()).filter(function(c){return !c.eliminado});
