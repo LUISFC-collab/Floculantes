@@ -15502,7 +15502,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916b4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17772,10 +17772,11 @@ async function _rxNoCumplidas(opc){
   /* la CURVA general en la semana: puntos programados segun la base entre
      el cierre anterior y este cierre (solo las visibles) y puntos hechos
      con el avance real de la semana (con las EMP) */
-  var cv={prog:0,hecho:0};try{var iS=_wkISO(_wkSem(semV).ini);
-    lista.concat(cumplidas).forEach(function(q){if(!q.ap)return;var pw=Math.max(0,Math.min(1,pgDe(q.cod,iS,fin2)));cv.prog+=q.ap.peso*pw;cv.hecho+=q.ap.ya});
-    emp.forEach(function(q){if(q.ap)cv.hecho+=q.ap.ya});
-    cv.prog=Math.round(cv.prog*100)/100;cv.hecho=Math.round(cv.hecho*100)/100}catch(_ec){}
+  /* Programado = Hecho + Restante: la suma de lo que ya aporto cada tarjeta
+     mas la suma de sus "+x%" (lo que falta de lo programado), tal cual se ven */
+  var cv={prog:0,hecho:0,resta:0};try{
+    lista.concat(cumplidas,emp).forEach(function(q){if(!q.ap)return;cv.hecho+=q.ap.ya;cv.resta+=q.ap.mas});
+    cv.hecho=Math.round(cv.hecho*100)/100;cv.resta=Math.round(cv.resta*100)/100;cv.prog=Math.round((cv.hecho+cv.resta)*100)/100}catch(_ec){}
   return {sem:semV,cron:cc.cron_id,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId0,nombre:baseCron?('Plan del cronograma '+baseCron.cron_id):((bkSel&&bkSel.nombre)||'')},lista:lista,ocultas:ocultas,cumplidas:cumplidas,emp:emp,curva:cv}}
 function _rxAnexaUna(q,sem){
   _rxSet(_rxNuevoRid(),{task_code:q.cod,actividad:q.nom||'',
@@ -18185,7 +18186,7 @@ function _rxNoPinta(r){
           '<div style="font-size:10px;font-weight:800;letter-spacing:.06em;color:#9db4d6">PPC \u00b7 '+_rot+'</div>'+
           '<div style="font-size:26px;font-weight:900;color:#fff;line-height:1.1">'+ppc.toFixed(2)+'%</div>'+
           '<div style="font-size:10.5px;color:#9db4d6">'+nOk+' cumplida(s) de '+nTot+' programada(s)</div>'+
-          (r.curva?('<div style="font-size:10.5px;font-weight:800;color:#9db4d6;margin-top:4px" title="Puntos de la curva general en la semana: programado seg\u00fan la base entre el cierre anterior y este cierre (actividades visibles) \u00b7 hecho con el avance real de la semana (incluidas las EMP)">Programado <b style="color:#E8C9A0">'+(Number(r.curva.prog)||0).toFixed(2)+'%</b> \u00b7 Hecho <b style="color:#9FE8B0">'+(Number(r.curva.hecho)||0).toFixed(2)+'%</b></div>'):'')+
+          (r.curva?('<div style="font-size:10.5px;font-weight:800;color:#9db4d6;margin-top:4px" title="Puntos de la curva general en la semana: Programado = Hecho + Restante \u00b7 Hecho es la suma de lo que ya aport\u00f3 cada tarjeta (avance real de la semana, con las EMP) \u00b7 Restante es la suma de los +x% de las tarjetas (lo que falta de lo programado)">Programado <b style="color:#E8C9A0">'+(Number(r.curva.prog)||0).toFixed(2)+'%</b> = Hecho <b style="color:#9FE8B0">'+(Number(r.curva.hecho)||0).toFixed(2)+'%</b> + Restante <b style="color:#F0A3A3">'+(Number(r.curva.resta)||0).toFixed(2)+'%</b></div>'):'')+
         '</div>'+
         '<div style="flex:1;min-width:220px;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">'+
           '<div style="background:#12314a;border:1px solid #2a5a8a;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#8ECBF5">\u2714 CUMPLIDAS</div><div style="font-size:20px;font-weight:900;color:#BFE3FF">'+nOk+'</div></div>'+
