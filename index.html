@@ -5006,10 +5006,8 @@ function _crProyeccion(u,semanas,real){
       var bid=(typeof _pgBaseId==='function')?_pgBaseId(id):id;
       var p=vivas[bid];if(!p)return;
       var w=u.items[bid];
-      /* fuera del universo de este cronograma (no mapeada o desmarcada):
-         pesa con sus HH del contrato sobre las HH del cronograma, para que
-         lo puesto en el calendario se vea igual */
-      if(!(w>0)){try{w=(typeof _hhDe==='function')?(Number(_hhDe(p))||0):0}catch(e){w=0}}
+      /* fuera del universo de este cronograma (no mapeada o desmarcada del
+         alcance): no cuenta */
       if(!(w>0))return;
       var falta=0;
       var inf=null;try{inf=(typeof _pgParteInfo==='function')?_pgParteInfo(id):null}catch(e){}
@@ -15509,7 +15507,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260916c1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260916c2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;var v=_visScr();if(!v)return;localStorage.setItem(_SCRKEY,JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null}))}catch(e){}}
@@ -17803,26 +17801,8 @@ async function _rxNoCumplidas(opc){
     cumplidas.forEach(function(q){if(!q.ap)return;cv.hecho+=q.ap.ya;cv.resta+=q.ap.mas;cv.cum+=q.ap.ya+q.ap.mas});
     emp.forEach(function(q){if(q.ap)cv.emp+=q.ap.ya});   /* avanzaron sin estar programadas: aparte */
     cv.hecho=r2(cv.hecho);cv.resta=r2(cv.resta);cv.noc=r2(cv.noc);cv.cum=r2(cv.cum);cv.emp=r2(cv.emp);cv.prog=r2(cv.hecho+cv.resta);
-    /* partidas del calendario que NO estan en el universo del cronograma
-       (no mapeadas o desmarcadas): la proyeccion de la curva las cuenta con
-       sus HH de contrato; aqui van aparte para que la cuenta cuadre */
-    try{var uW9=_crUniverso(cc.cron_id,alc);if(uW9&&uW9.hh>0){var enAct={};Object.keys(itemsDe).forEach(function(c9){(itemsDe[c9]||[]).forEach(function(i9){enAct[i9]=1})});
-      var vivas9={};(DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id)vivas9[p.id]=p});
-      var P9=(typeof _pgProg==='function')?_pgProg():(state.prog||{}),fuera=0,fueraDet=[];
-      Object.keys(P9||{}).forEach(function(id){var pr=P9[id];if(!pr||!pr.start)return;if(state.progDel&&state.progDel[id])return;
-        var bid=(typeof _pgBaseId==='function')?_pgBaseId(id):id;if(uW9.items[bid]!=null)return;var p=vivas9[bid];if(!p)return;   /* fuera del universo: no mapeada o desmarcada del alcance */
-        var w=0;try{w=(typeof _hhDe==='function')?(Number(_hhDe(p))||0):0}catch(e){}if(!(w>0))return;
-        if(typeof _pgTieneParte==='function'&&_pgTieneParte(id))return;
-        var ds=(typeof occupiedDays==='function')?(occupiedDays(pr.start,pr.dias||1)||[]):[];if(!ds.length)return;
-        var n=0;ds.forEach(function(d){if(d<=fin2)n++});var cal=n/ds.length;
-        var wS=w,done=0,inf=null;try{inf=(typeof _pgParteInfo==='function')?_pgParteInfo(id):null}catch(e){}
-        if(inf){wS=w*(Math.max(0,Math.min(100,Number(inf.fase.peso)||0))/100);if(typeof _pgEsTramo==='function'&&_pgEsTramo(id)){var cP=Number(_fzCantDe(inf.fase))||0,cT=Number(pr.cant)||0;wS=(cP>0&&cT>0)?wS*Math.min(1,cT/cP):0}else{try{done=(Number(_fzPctParte(inf.fase))||0)/100}catch(e){done=0}}}
-        else if(typeof _pgEsTramo==='function'&&_pgEsTramo(id)){var mT=metaOf(bid),tT=Number(mT&&mT.total)||0,cT2=Number(pr.cant)||0;wS=(tT>0&&cT2>0)?w*Math.min(1,cT2/tT):0}
-        else{try{var pf=(typeof _fzPctAt==='function')?_fzPctAt(bid,fin2):null;done=((pf!=null)?(Number(pf)||0):(Number(pctOfAt(p,fin2))||0))/100}catch(e){done=0}}
-        if(!(wS>0))return;var pend9=Math.max(0,cal-Math.max(0,Math.min(1,done)))*wS;fuera+=pend9;
-        if(pend9>0){var tag9='';try{tag9=inf?String((inf.fase&&inf.fase.nombre)||''):''}catch(e){}if(typeof _pgEsTramo==='function'&&_pgEsTramo(id))tag9=(tag9?tag9+' ':'')+'tramo';
-          fueraDet.push({pid:bid,id:id,tag:tag9,pct:Math.round(pend9/uW9.hh*10000)/100,cal:Math.round(cal*1000)/10,hecho:Math.round(Math.max(0,Math.min(1,done))*1000)/10,ini:String(pr.start||''),dias:Number(pr.dias)||1})}});
-      cv.fuera=Math.round(fuera/uW9.hh*10000)/100;cv.fueraDet=fueraDet.sort(function(a,b){return b.pct-a.pct})}}catch(_ef){}}catch(_ec){}
+    /* una partida fuera del alcance del cronograma no cuenta en nada */
+}catch(_ec){}
   return {sem:semV,cron:cc.cron_id,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId0,nombre:baseCron?('Plan del cronograma '+baseCron.cron_id):((bkSel&&bkSel.nombre)||'')},lista:lista,ocultas:ocultas,cumplidas:cumplidas,emp:emp,curva:cv}}
 function _rxAnexaUna(q,sem){
   _rxSet(_rxNuevoRid(),{task_code:q.cod,actividad:q.nom||'',
@@ -18234,7 +18214,7 @@ function _rxNoPinta(r){
           '<div style="font-size:10.5px;color:#9db4d6">'+nOk+' cumplida(s) de '+nTot+' programada(s)</div>'+
           (r.curva?('<div style="font-size:10.5px;font-weight:800;color:#9db4d6;margin-top:4px" title="Puntos de la curva general en la semana, solo de las actividades programadas (no cumplidas + cumplidas): Programado = Hecho + Restante \u00b7 Hecho es la suma de lo que ya aport\u00f3 cada tarjeta (avance real de la semana) \u00b7 Restante es la suma de los +x% (lo que falta de lo programado). Las EMP avanzaron sin estar programadas y van aparte">Programado <b style="color:#E8C9A0">'+(Number(r.curva.prog)||0).toFixed(2)+'%</b> = Hecho <b style="color:#9FE8B0">'+(Number(r.curva.hecho)||0).toFixed(2)+'%</b> + Restante <b style="color:#F0A3A3">'+(Number(r.curva.resta)||0).toFixed(2)+'%</b>'+
           '<br><span style="font-weight:700;color:#7d8590">no cumplidas <b style="color:#cfe3ff">'+(Number(r.curva.noc)||0).toFixed(2)+'%</b> \u00b7 cumplidas <b style="color:#cfe3ff">'+(Number(r.curva.cum)||0).toFixed(2)+'%</b></span>'+
-          ((Number(r.curva.emp)||0)>0?('<br><span style="font-weight:700;color:#7d8590" title="Avanzaron sin estar programadas: no cuentan como programado, pero s\u00ed suben la curva">+ EMP <b style="color:#F5D08A">'+(Number(r.curva.emp)||0).toFixed(2)+'%</b></span>'):'')+((Number(r.curva.fuera)||0)>0?('<br><span style="font-weight:700;color:#7d8590" title="Partidas puestas en el calendario que no est\u00e1n en el universo del cronograma (no mapeadas o desmarcadas): la proyecci\u00f3n de la curva las cuenta con sus HH de contrato">+ fuera del cronograma <b style="color:#cfe3ff">'+(Number(r.curva.fuera)||0).toFixed(2)+'%</b></span>'):'')+'</div>'):'')+
+          ((Number(r.curva.emp)||0)>0?('<br><span style="font-weight:700;color:#7d8590" title="Avanzaron sin estar programadas: no cuentan como programado, pero s\u00ed suben la curva">+ EMP <b style="color:#F5D08A">'+(Number(r.curva.emp)||0).toFixed(2)+'%</b></span>'):'')+'</div>'):'')+
         '</div>'+
         '<div style="flex:1;min-width:220px;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">'+
           '<div style="background:#12314a;border:1px solid #2a5a8a;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#8ECBF5">\u2714 CUMPLIDAS</div><div style="font-size:20px;font-weight:900;color:#BFE3FF">'+nOk+'</div></div>'+
@@ -18351,24 +18331,6 @@ function _rxNoPinta(r){
                 '</div>'+
                 '<div class="_rxNoDet" style="display:'+(ab?'block':'none')+';background:#1d1609;padding:0">'+_rxPartidasHTML(q)+'</div>'+
               '</div>'}).join('')}).join('')}
-    /* partidas del calendario FUERA del alcance del cronograma: no entran al
-       PPC (no son de ninguna actividad) pero la proyeccion de la curva las
-       cuenta con sus HH de contrato; aqui se ven una por una */
-    if(!r.prox&&r.curva&&r.curva.fueraDet&&r.curva.fueraDet.length){
-      var nomF=function(pid){try{var p=(DATA._byId&&DATA._byId[pid])||((state.nuevas||[]).filter(function(n){return n&&n.id===pid})[0]);
-        var n=p?String((typeof _nomAct==='function'?_nomAct(p):p.nombre)||''):'';return n.split('\n')[0]}catch(e){return ''}};
-      var fmtDia=function(iso){try{return (typeof fmtF==='function')?fmtF(iso):iso}catch(e){return iso}};
-      h+='<div style="font-size:11px;color:#9db4d6;font-weight:800;letter-spacing:.05em;margin:16px 0 6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">\u2298 FUERA DEL CRONOGRAMA \u00b7 EN EL CALENDARIO SIN ESTAR EN EL ALCANCE ('+r.curva.fueraDet.length+')<span style="font-weight:600;color:#7d8590">no son de ninguna actividad (desmarcadas o sin mapear), no entran al PPC; la proyecci\u00f3n de la curva s\u00ed las cuenta con sus HH de contrato</span></div>'+
-        '<div style="border:1px solid #33415c;border-radius:10px;padding:8px 11px;background:#0f1728;display:flex;flex-direction:column;gap:4px">'+
-        r.curva.fueraDet.map(function(d){var nm=nomF(d.pid);
-          return '<span style="display:block;min-width:0;font-size:10.5px;color:#9db4d6;line-height:1.4;overflow-wrap:anywhere">'+
-            '<b class="_rxIrAct" data-pid="'+esc(d.pid)+'" title="Ir a su tarjeta en la lista" style="color:#8ECBF5;text-decoration:underline;text-decoration-style:dotted;cursor:pointer">'+esc(d.pid)+'</b> '+
-            (d.tag?('<b style="color:#C7A3E8">('+esc(String(d.tag).toUpperCase())+')</b> '):'')+
-            'curva <b style="color:#E8C9A0">+'+(Number(d.pct)||0).toFixed(2)+'%</b> <span style="color:#7d8590">\u00b7 calendario '+esc(fmtDia(d.ini))+' \u00b7 '+d.dias+' d\u00eda(s) \u00b7 programado al cierre '+d.cal+'% \u00b7 hecho '+d.hecho+'%</span>'+
-            (nm?(' <span style="color:#B9C7DD">\u00b7 '+esc(nm)+'</span>'):'')+
-          '</span>'}).join('')+
-        '<div style="font-size:10.5px;color:#cfe3ff;font-weight:800;margin-top:4px;border-top:1px solid rgba(255,255,255,.07);padding-top:5px">Suman <span style="color:#E8C9A0">+'+(Number(r.curva.fuera)||0).toFixed(2)+'%</span> a la proyecci\u00f3n de la curva</div>'+
-        '</div>'}
     if(fut.length)
       h+='<div style="font-size:11px;color:#C7A3E8;font-weight:800;letter-spacing:.05em;margin:12px 0 6px">🔮 RESTRICCIONES FUTURAS ('+fut.length+') — también se anexan</div>'+
         fut.map(function(q,j){
