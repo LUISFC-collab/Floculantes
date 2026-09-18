@@ -2819,10 +2819,10 @@ function _crPartidas(){
     /* las borradas (lapida) no entran, igual que en el catalogo del servidor */
     try{if(typeof tombHas==='function'&&tombHas('partida',p.id))return}catch(e){}
     var off=false;try{off=(typeof _hhOff==='function')&&!!_hhOff(p.id)}catch(e){}
-    /* HH CRUDAS del contrato, como las trae el catalogo del servidor: el
-       universo y el alcance restan ellos lo que no se realiza (apartados
-       apagados y saldos retirados), y asi no se resta dos veces */
-    var hh=0;try{hh=off?0:(Number(p.hh)||0)}catch(e){}
+    /* HH CRUDAS del contrato, como las trae el catalogo del servidor (tambien
+       las apagadas: lo que no cuenta lo decide la configuracion de cada
+       cronograma o su alcance, igual que con el catalogo del servidor) */
+    var hh=0;try{hh=Number(p.hh)||0}catch(e){}
     var nom='';try{nom=(typeof _nomAct==='function'?_nomAct(p):p.nombre)||p.id}catch(e){nom=p.id}
     out.push({id:p.id,nom:String(nom),hh:Math.round(hh*100)/100,off:off,esp:p.esp||'',
       ret:false,viva:true,und:p.unidad||'',cant:'',pu:'',tot:'',nva:!!p.nueva})});
@@ -2836,6 +2836,11 @@ function _crPorDefecto(p,cronId){var row=null;
   try{if(typeof _ctDe==='function'){var cid=(cronId!=null&&cronId!=='')?cronId:(window._crCtx||null);row=cid?_ctDe(cid):null;if(!row)row=_ctActiva()}}catch(e){}
   if(row)return !_ctTieneEn(row,'hh_off',p.id)&&!_ctTieneEn(row,'fuera',p.id);
   return !p.off&&!p.ret}
+/* HH apagadas / fuera del alcance SEGUN el cronograma (su configuracion; si
+   no tiene, la ACTUAL; si no hay ninguna, los flags globales del catalogo) */
+function _crFilaDe(cronId){try{var cid=(cronId!=null&&cronId!=='')?cronId:(window._crCtx||null);var row=cid?_ctDe(cid):null;return row||_ctActiva()}catch(e){return null}}
+function _crOffDe(p,cronId){var row=_crFilaDe(cronId);if(row)return _ctTieneEn(row,'hh_off',p.id);return !!p.off}
+function _crRetDe(p,cronId){var row=_crFilaDe(cronId);if(row)return _ctTieneEn(row,'fuera',p.id);return !!p.ret}
 /* las HH que aplican a un cronograma segun su lista checkable */
 /* Lo que el alcance de un cronograma incluye, SIN filtrar por horas. El
    universo de HH descarta las partidas sin horas -y hace bien-, pero el costo
@@ -3241,12 +3246,14 @@ async function _crAlcanceUI(c){
     /* menos la fraccion de los apartados del APU que no se realizan */
     try{if(typeof _noHaceFrac==='function'){var fo=_noHaceFrac(p.id,c.cron_id);if(fo>0)h=h*(1-fo)}}catch(_eo){}
     return h};
+  /* apagada / retirada segun ESTE cronograma, no segun el ACTUAL */
+  var offC=function(p){try{return _crOffDe(p,c.cron_id)}catch(e){return !!p.off}},retC=function(p){try{return _crRetDe(p,c.cron_id)}catch(e){return !!p.ret}};
   function suma(){
     var hh=0,n=0,nr=0,cf=0,sinT=0,hhSinT=0;
     var dueno=window._crDueno||{};
     P.forEach(function(p){
       var h=hhDe(p);
-      if(sel[p.id]&&h>0){if(p.ret)nr++;
+      if(sel[p.id]&&h>0){if(retC(p))nr++;
         /* sin actividad no cuenta: se avisa aparte */
         if(!dueno[p.id]){sinT++;hhSinT+=h}else{hh+=h;n++}}
       if(fec[p.id]&&(fec[p.id].ini||fec[p.id].fin))cf++});
@@ -3414,8 +3421,8 @@ async function _crAlcanceUI(c){
             'style="cursor:pointer;display:inline-block;margin-left:5px;padding:1px 6px;'+
             'border-radius:6px;font-size:10px;font-weight:800;background:#2a2314;'+
             'border:1px solid #4a3c1d;color:#E8C9A0">(considerada en '+n+' actividades)</span>'})()+
-        (p.ret?'<span style="color:#F0A3A3;font-size:10.5px;font-weight:800"> · retirada del alcance</span>':'')+
-        (p.off?'<span style="color:#E8C9A0;font-size:10.5px"> · HH apagadas</span>':'')+
+        (retC(p)?'<span style="color:#F0A3A3;font-size:10.5px;font-weight:800"> · retirada del alcance</span>':'')+
+        (offC(p)?'<span style="color:#E8C9A0;font-size:10.5px"> · HH apagadas en la configuraci\u00f3n</span>':'')+
         (p.nva?'<span style="color:#8DD6ED;font-size:10.5px;font-weight:800"> · adicional</span>':'')+
         (propio?('<span style="color:#C39BD3;font-size:10.5px"> · HH de este cronograma (contrato: '+p.hh+')</span>'):'')+
         /* sus apartados, como lineas INFORMATIVAS de este cronograma: % de
@@ -3473,12 +3480,13 @@ async function _crAlcanceUI(c){
            mueve la curva, asi que anunciarla como INCLUYE a secas enganaba. */
         (function(){
           var on=sel[p.id];
-          var cuenta=on&&!p.off&&hMe>0;
+          /* lo marcado a mano manda: INCLUYE cuenta aunque este apagada en la configuracion */
+          var cuenta=on&&hMe>0;
           var txt,est,tit;
           if(!on){txt='NO INCLUYE';est='background:#2a1c1c;border:1px solid #4a2a2a;color:#FFB4A8';
             tit='Fuera del alcance de este cronograma'}
-          else if(p.off){txt='HH APAGADAS';est='background:#2a2114;border:1px solid #4a3a1e;color:#E8C9A0';
-            tit='Está en el alcance, pero sus HH están desactivadas: no aporta peso al avance. Se vuelven a encender desde la ficha de la actividad.'}
+          else if(offC(p)&&hMe>0){txt='INCLUYE \u26a0';est='background:#2a2114;border:1px solid #4a3a1e;color:#E8C9A0';
+            tit='Incluida a mano en este alcance aunque sus HH est\u00e9n apagadas en la configuraci\u00f3n del cronograma: el alcance manda y sus '+(Math.round(hMe*100)/100)+' hh cuentan aqu\u00ed. Si no debe contar, m\u00e1rcala NO INCLUYE.'}
           else if(hMe<=0){txt='SIN HH';est='background:#2a2114;border:1px solid #4a3a1e;color:#E8C9A0';
             tit='Está en el alcance y cuenta para el costo, pero no tiene horas en el contrato: no aporta peso al avance.'}
           else{txt='INCLUYE';est='background:#14261d;border:1px solid #1d3a2a;color:#9FE8B0';
@@ -15577,7 +15585,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260917b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260917b4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21030,7 +21038,10 @@ function _ctGuardar(row,sinPush){var t=(typeof nowSrv==='function'?nowSrv():Date
   _ctAll()[String(row.cron_id)]=row;_ctSaveLocal();
   if(!sinPush){try{_ctPush()}catch(e){}}
   _ctRefresca()}
-function _ctRefresca(){try{window._crCat=null}catch(e){}try{window._hhCache=null}catch(e){}try{if(typeof _actsReset==='function')_actsReset()}catch(e){}
+function _ctRefresca(){try{window._hhCache=null}catch(e){}
+  /* el catalogo del servidor se renueva por detras (sin vaciarlo: el de
+     respaldo daba otros numeros mientras llegaba) y se repinta */
+  try{if(typeof _crCatPull==='function'&&typeof sbReady==='function'&&sbReady()&&navigator.onLine)Promise.resolve(_crCatPull()).then(function(){try{if(document.getElementById('_crBody')&&typeof _crPinta==='function')_crPinta()}catch(e){}try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(e){}})}catch(e){}try{if(typeof _actsReset==='function')_actsReset()}catch(e){}
   try{var sl=$('scrList');if(sl&&!sl.classList.contains('hidden')&&typeof renderList==='function')renderList()}catch(e){}
   try{if(typeof _pesoInject==='function')_pesoInject()}catch(e){}
   try{if(typeof window._hhSwRepinta==='function')window._hhSwRepinta()}catch(e){}
