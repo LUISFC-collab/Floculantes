@@ -15809,7 +15809,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918c6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918c7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21400,6 +21400,10 @@ async function _crTablaDatos(c){
     var metM=(metF!=null)?(considera?Math.round(Math.max(metF,avRaw||0)*100)/100:0):null;
     var escM=(metF>0&&metM>metF)?(metM/metF):1;
     var hhM=Math.round(cuenta*escM*100)/100,costoM=Math.round(costoC*escM*100)/100;
+    /* actual: lo ejecutado fisicamente y las HH/costo forecast ganados en esa
+       proporcion; (MM) lo mismo sobre el mayor metrado */
+    var avF=(considera&&avRaw!=null)?avRaw:0;var metA=(metF!=null)?Math.round(Math.min(avF,metF)*100)/100:null;var rA=(metF>0)?Math.min(1,avF/metF):0;var hhA=Math.round(cuenta*rA*100)/100,costoA=Math.round(costoC*rA*100)/100;
+    var metAM=(metM!=null)?Math.round(Math.min(avF,metM)*100)/100:null;var rAM=(metM>0)?Math.min(1,avF/metM):0;var hhAM=Math.round(hhM*rAM*100)/100,costoAM=Math.round(costoM*rAM*100)/100;
     met=metK;
     /* el PU del contrato es oferta_total / cantidad del catalogo, el mismo
        numero que ensena la ficha; no el costo entre el metrado editado */
@@ -21424,17 +21428,18 @@ async function _crTablaDatos(c){
           var estK=go?'Apagado':((est!=='Activa')?est:(rq<0?'Metrado ampliado':rq>0?((rq>=saldo-1e-9)?'Todo el saldo retirado':'Saldo retirado'):((cq>0&&av>=cq-1e-9)?'Cerrado':'Activo')));
           var costoK=Math.round(costo*frac*100)/100,costoKF=considera?Math.round(Math.max(0,costo*frac-costo*_pw(w)*nh)*100)/100:0;
           var metFk=(cq>0?(considera?(go?0:Math.round(Math.max(0,cq-rq)*100)/100):0):null);var metMk=(metFk!=null)?Math.round(Math.max(metFk,(considera&&!go)?av:0)*100)/100:null;var escK=(metFk>0&&metMk>metFk)?(metMk/metFk):1;
-          partes.push({pert:x.nombre||'',metM:metMk,hhM:Math.round(hhKc*escK*100)/100,costoM:Math.round(costoKF*escK*100)/100,av:(cq>0?Math.round(av*100)/100:null),met:(cq>0?cq:null),metF:(cq>0?(considera?(go?0:Math.round(Math.max(0,cq-rq)*100)/100):0):null),und:x.unidad||und||'',pu:(cq>0?Math.round(costo*frac/cq*100)/100:null),peso:Math.round(frac*10000)/100,hhC:Math.round(hhK*100)/100,hh:Math.round(hhKc*100)/100,noHace:Math.round(nh*10000)/100,est:estK,
+          var avFk=(considera&&!go)?av:0,rAk=(metFk>0)?Math.min(1,avFk/metFk):0,rAMk=(metMk>0)?Math.min(1,avFk/metMk):0,hhMk=Math.round(hhKc*escK*100)/100,costoMk=Math.round(costoKF*escK*100)/100;
+          partes.push({pert:x.nombre||'',metM:metMk,hhM:hhMk,costoM:costoMk,metA:(metFk!=null?Math.round(Math.min(avFk,metFk)*100)/100:null),hhA:Math.round(hhKc*rAk*100)/100,costoA:Math.round(costoKF*rAk*100)/100,metAM:(metMk!=null?Math.round(Math.min(avFk,metMk)*100)/100:null),hhAM:Math.round(hhMk*rAMk*100)/100,costoAM:Math.round(costoMk*rAMk*100)/100,av:(cq>0?Math.round(av*100)/100:null),met:(cq>0?cq:null),metF:(cq>0?(considera?(go?0:Math.round(Math.max(0,cq-rq)*100)/100):0):null),und:x.unidad||und||'',pu:(cq>0?Math.round(costo*frac/cq*100)/100:null),peso:Math.round(frac*10000)/100,hhC:Math.round(hhK*100)/100,hh:Math.round(hhKc*100)/100,noHace:Math.round(nh*10000)/100,est:estK,
             ret:(rq<0?('+'+_apuCant(-rq)+' '+(x.unidad||'')+' m\u00e1s \u00b7 metrado final '+_apuCant(cq-rq)):rq>0?(_apuCant(rq)+' '+(x.unidad||'')+(rq<saldo-1e-9?(' \u00b7 metrado final '+_apuCant(Math.max(0,cq-rq))):'')):''),apOff:(go?(g.nombre||g.id):''),costo:costoK,costoC:costoKF,dCosto:Math.round((costoK-costoKF)*100)/100,pct:(cq>0?Math.round(av/(rq<0?cq-rq:cq)*10000)/100:0)})})}
       /* apartados del APU apagados en este cronograma que no son parte: su fila, con lo que se llevan */
       try{var atot=(ra&&typeof _apuTotal==='function')?_apuTotal(ra):0;if(atot>0&&r&&r.fases&&r.fases.length)gs.forEach(function(g){if(usados[g.id])return;var go=_apuGOffEf(id,g,c.cron_id);if(!go)return;var gf=_apuGrupoTot(ra,g.id)/atot;if(!(gf>0))return;
         var hhG=Math.round(hhC*gf*100)/100,cG=Math.round(costo*gf*100)/100;
-        partes.push({pert:(g.nombre||g.id)+' (apartado del APU)',av:null,met:null,metF:null,metM:null,hhM:0,costoM:0,und:und,pu:null,peso:Math.round(gf*10000)/100,hhC:hhG,hh:0,noHace:100,est:'Apagado',ret:'',apOff:(g.nombre||g.id),costo:cG,costoC:0,dCosto:cG,pct:null})})}catch(e){}}catch(e){}
-    filas.push({id:id,nom:pp.nom,esp:pp.esp,sis:pp.sis||'(sin sistema)',tareas:(tareasDe[id]||[]).join(', '),grupo:grupos[id]||'',est:est,av:av,met:met,metF:metF,und:und,pu:pu,pct:Math.round(pct*100)/100,hhC:Math.round(hhC*100)/100,hh:Math.round(cuenta*100)/100,noHace:Math.round(f*10000)/100,apOff:apOff.join(', '),ret:ret.join(' \u00b7 '),costo:costo,costoC:costoC,metM:metM,hhM:hhM,costoM:costoM,dCosto:Math.round((costo-costoC)*100)/100,nva:!!pp.nva,partes:partes})});
+        partes.push({pert:(g.nombre||g.id)+' (apartado del APU)',av:null,met:null,metF:null,metM:null,hhM:0,costoM:0,metA:null,hhA:0,costoA:0,metAM:null,hhAM:0,costoAM:0,und:und,pu:null,peso:Math.round(gf*10000)/100,hhC:hhG,hh:0,noHace:100,est:'Apagado',ret:'',apOff:(g.nombre||g.id),costo:cG,costoC:0,dCosto:cG,pct:null})})}catch(e){}}catch(e){}
+    filas.push({id:id,nom:pp.nom,esp:pp.esp,sis:pp.sis||'(sin sistema)',tareas:(tareasDe[id]||[]).join(', '),grupo:grupos[id]||'',est:est,av:av,met:met,metF:metF,und:und,pu:pu,pct:Math.round(pct*100)/100,hhC:Math.round(hhC*100)/100,hh:Math.round(cuenta*100)/100,noHace:Math.round(f*10000)/100,apOff:apOff.join(', '),ret:ret.join(' \u00b7 '),costo:costo,costoC:costoC,metM:metM,hhM:hhM,costoM:costoM,metA:metA,hhA:hhA,costoA:costoA,metAM:metAM,hhAM:hhAM,costoAM:costoAM,dCosto:Math.round((costo-costoC)*100)/100,nva:!!pp.nva,partes:partes})});
   return {filas:filas,u:u,c:c}}
 /* columnas: orden y ocultas se recuerdan en el equipo */
-var _TB_COLS=[['num','N\u00b0'],['pert','Pertenece'],['id','Item'],['nom','Partida'],['esp','Esp.'],['sis','Sistema'],['tareas','Tarea(s)'],['grupo','Agrupaci\u00f3n'],['est','Estado'],['av','Avance'],['met','Metrado contrato'],['metF','Metrado forecast'],['und','Und'],['pct','% avance'],['pu','Costo unitario'],['hhC','HH contrato'],['hh','HH forecast'],['noHace','% no se hace'],['apOff','Apartados apagados'],['ret','Saldo retirado'],['costo','Costo contrato'],['costoC','Costo forecast'],['metM','Metrado mayor'],['hhM','HH forecast mayor metrado'],['costoM','Costo forecast mayor metrado'],['dCosto','Diferencia de costo']];
-var _TB_NUM={av:1,met:1,metF:1,pct:1,pu:1,hhC:1,hh:1,noHace:1,costo:1,costoC:1,dCosto:1,metM:1,hhM:1,costoM:1};
+var _TB_COLS=[['num','N\u00b0'],['pert','Pertenece'],['id','Item'],['nom','Partida'],['esp','Esp.'],['sis','Sistema'],['tareas','Tarea(s)'],['grupo','Agrupaci\u00f3n'],['est','Estado'],['av','Avance'],['met','Metrado contrato'],['metF','Metrado forecast'],['und','Und'],['pct','% avance'],['pu','Costo unitario'],['hhC','HH contrato'],['hh','HH forecast'],['noHace','% no se hace'],['apOff','Apartados apagados'],['ret','Saldo retirado'],['costo','Costo contrato'],['costoC','Costo forecast'],['metM','Metrado mayor'],['hhM','HH forecast mayor metrado'],['costoM','Costo forecast mayor metrado'],['metA','Metrado actual'],['hhA','HH actual'],['costoA','Costo actual'],['metAM','Metrado actual (MM)'],['hhAM','HH actual forecast (MM)'],['costoAM','Costo actual forecast (MM)'],['dCosto','Diferencia de costo']];
+var _TB_NUM={av:1,met:1,metF:1,pct:1,pu:1,hhC:1,hh:1,noHace:1,costo:1,costoC:1,dCosto:1,metM:1,hhM:1,costoM:1,metA:1,hhA:1,costoA:1,metAM:1,hhAM:1,costoAM:1};
 function _tbCfg(){try{var c=JSON.parse(localStorage.getItem('obf4_tabla_cols')||'null');if(c&&c.orden){c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};return c}}catch(e){}return {orden:_TB_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{}}}
 /* paneles inmovilizados y colores de columna, aplicados sobre la tabla ya
    pintada (como Excel: filas de arriba y columnas a la izquierda quedan fijas) */
@@ -21459,7 +21464,7 @@ function _crTablaHTML(D,q,ord){
   var cols=_tbColsVis();
   /* se ordena por lo que se ve: en partidas con apartados, la suma de sus
      apartados en HH y costos, y el primer apartado en el resto */
-  var _SUM={hhC:1,hh:1,costo:1,costoC:1,dCosto:1,hhM:1,costoM:1};
+  var _SUM={hhC:1,hh:1,costo:1,costoC:1,dCosto:1,hhM:1,costoM:1,hhA:1,costoA:1,hhAM:1,costoAM:1};
   var kv=function(r){if(!(r.partes&&r.partes.length))return r[ord.k];if(_SUM[ord.k]){var t=0;r.partes.forEach(function(x){t+=Number(x[ord.k])||0});return t}return (ord.k in r.partes[0])?r.partes[0][ord.k]:r[ord.k]};
   if(ord&&ord.k&&ord.k!=='num'&&ord.k!=='pert'){F.sort(function(a,b){var x=kv(a),y=kv(b);if(_TB_NUM[ord.k]){x=Number(x)||0;y=Number(y)||0;return ord.d*(x-y)}x=String(x||'');y=String(y||'');return ord.d*(x<y?-1:x>y?1:0)})}
   var porSis={},orden=[];F.forEach(function(r){if(!porSis[r.sis]){porSis[r.sis]=[];orden.push(r.sis)}porSis[r.sis].push(r)});
@@ -21499,11 +21504,17 @@ function _crTablaHTML(D,q,ord){
       case 'metM':return td(r.metM!=null?('<b style="color:'+(r.metM>(Number(r.metF)||0)+1e-9?'#FFD37A':'#cfe3ff')+'">'+_apuCant(r.metM)+'</b>'):'',1);
       case 'hhM':return td(r.hhM!=null?('<b style="color:'+(r.hhM>(Number(r.hh)||0)+1e-9?'#FFD37A':'#9FE8B0')+'">'+r.hhM+'</b>'):'',1);
       case 'costoM':return td(r.costoM!=null?('<b style="color:'+(r.costoM>(Number(r.costoC)||0)+1e-9?'#FFD37A':'#9FE8B0')+'">'+_nMon(r.costoM)+'</b>'):'',1);
+      case 'metA':return td(r.metA!=null?_apuCant(r.metA):'',1);
+      case 'hhA':return td(r.hhA!=null?('<b style="color:#8DD6ED">'+r.hhA+'</b>'):'',1);
+      case 'costoA':return td(r.costoA!=null?('<b style="color:#8DD6ED">'+_nMon(r.costoA)+'</b>'):'',1);
+      case 'metAM':return td(r.metAM!=null?('<b style="color:'+(r.metAM>(Number(r.metA)||0)+1e-9?'#FFD37A':'#cfe3ff')+'">'+_apuCant(r.metAM)+'</b>'):'',1);
+      case 'hhAM':return td(r.hhAM!=null?('<b style="color:'+(r.hhAM>(Number(r.hhA)||0)+1e-9?'#FFD37A':'#8DD6ED')+'">'+r.hhAM+'</b>'):'',1);
+      case 'costoAM':return td(r.costoAM!=null?('<b style="color:'+(r.costoAM>(Number(r.costoA)||0)+1e-9?'#FFD37A':'#8DD6ED')+'">'+_nMon(r.costoAM)+'</b>'):'',1);
     }return td('')};
   var H='<table style="border-collapse:collapse;font-size:11.5px;min-width:100%"><thead><tr>';
   cols.forEach(function(cl){H+='<th class="_tbOrd" draggable="true" data-k="'+cl[0]+'" title="Clic: ordenar \u00b7 arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:0;background:#152436;color:#8ECBF5;border:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TB_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_tbAnchoCss(cl[0])+'">'+cl[1]+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_tbPin" data-k="'+cl[0]+'" title="Inmovilizar las columnas hasta esta (como Excel); otro clic la suelta" style="margin-left:5px;cursor:pointer;font-size:11px;opacity:'+(_fzk[cl[0]]?'1':'.4')+'">📌</span><span class="_tbClr" data-k="'+cl[0]+'" title="Color de relleno de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;opacity:'+((_cfgT.colores&&_cfgT.colores[cl[0]])?'1':'.4')+'">🎨</span><span class="_tbRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
   H+='</tr></thead><tbody>';
-  var T={n:0,hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0},N=0;
+  var T={n:0,hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0},N=0;
   /* titulos de sistema y TOTAL: una sola celda combinada por tramo (sin lineas
      de columna cruzandolos ni ajuste de texto); solo los totales de HH y costo
      conservan su celda, alineada con su columna */
@@ -21520,6 +21531,10 @@ function _crTablaHTML(D,q,ord){
       else if(k==='costoC'){flush();h+=td('<b style="color:#9FE8B0">'+_nMon(S.costoC)+'</b>',1,W)}
       else if(k==='hhM'){flush();h+=td('<b style="color:#FFD37A">'+(Math.round((S.hhM||0)*100)/100)+'</b>',1,W)}
       else if(k==='costoM'){flush();h+=td('<b style="color:#FFD37A">'+_nMon(S.costoM||0)+'</b>',1,W)}
+      else if(k==='hhA'){flush();h+=td('<b style="color:#8DD6ED">'+(Math.round((S.hhA||0)*100)/100)+'</b>',1,W)}
+      else if(k==='costoA'){flush();h+=td('<b style="color:#8DD6ED">'+_nMon(S.costoA||0)+'</b>',1,W)}
+      else if(k==='hhAM'){flush();h+=td('<b style="color:#FFD37A">'+(Math.round((S.hhAM||0)*100)/100)+'</b>',1,W)}
+      else if(k==='costoAM'){flush();h+=td('<b style="color:#FFD37A">'+_nMon(S.costoAM||0)+'</b>',1,W)}
       else if(k==='dCosto'){flush();h+=td('<b style="color:'+(S.dCosto<0?'#9FE8B0':'#FFB4A8')+'">'+(S.dCosto>0?('\u2212 '+_nMon(S.dCosto)):(S.dCosto<0?('+ '+_nMon(-S.dCosto)):_nMon(0)))+'</b>',1,W)}
       else run++});flush();
     if(!puesto)h+='<td style="'+ST+'border:1px solid #223049;padding:4px 6px;font-weight:'+fw+';color:#cfe3ff;white-space:nowrap">'+lab+'</td>';
@@ -21534,17 +21549,17 @@ function _crTablaHTML(D,q,ord){
     /* si los apartados no cubren toda la partida (p. ej. solo un apartado del
        APU apagado al 58 %), el resto va en una linea "(sin apartado)": asi las
        lineas suman la partida completa y el TOTAL es el del contrato */
-    var K=['costo','costoC','dCosto','hhC','hh','hhM','costoM'],resto={},hay=false;K.forEach(function(k){var sm=0;L.forEach(function(m){sm+=Number(m[k])||0});var d=Math.round(((Number(r[k])||0)-sm)*100)/100;resto[k]=d>0?d:0;if(d>0.05)hay=true});
-    if(hay){var m2={};for(var k3 in r)if(k3!=='partes')m2[k3]=r[k3];K.forEach(function(k){m2[k]=resto[k]});m2.pert='Resto de la partida';m2.met=null;m2.metF=null;m2.metM=null;m2.av=null;m2.pu=null;m2.pct=null;m2.ret='';m2.apOff='';m2._np=L.length+1;L.push(m2)}
+    var K=['costo','costoC','dCosto','hhC','hh','hhM','costoM','hhA','costoA','hhAM','costoAM'],resto={},hay=false;K.forEach(function(k){var sm=0;L.forEach(function(m){sm+=Number(m[k])||0});var d=Math.round(((Number(r[k])||0)-sm)*100)/100;resto[k]=d>0?d:0;if(d>0.05)hay=true});
+    if(hay){var m2={};for(var k3 in r)if(k3!=='partes')m2[k3]=r[k3];K.forEach(function(k){m2[k]=resto[k]});m2.pert='Resto de la partida';m2.met=null;m2.metF=null;m2.metM=null;m2.metA=null;m2.metAM=null;m2.av=null;m2.pu=null;m2.pct=null;m2.ret='';m2.apOff='';m2._np=L.length+1;L.push(m2)}
     return L};
-  orden.forEach(function(sis){var L=porSis[sis];var S={hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0};
-    L.forEach(function(r){vis(r).forEach(function(m){S.hhC+=r2(m.hhC);S.hh+=r2(m.hh);S.costo+=r2(m.costo);S.costoC+=r2(m.costoC);S.dCosto+=r2(m.dCosto||0);S.hhM+=r2(m.hhM||0);S.costoM+=r2(m.costoM||0)});if(r.est==='Activa')S.act++});
+  orden.forEach(function(sis){var L=porSis[sis];var S={hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0};
+    L.forEach(function(r){vis(r).forEach(function(m){S.hhC+=r2(m.hhC);S.hh+=r2(m.hh);S.costo+=r2(m.costo);S.costoC+=r2(m.costoC);S.dCosto+=r2(m.dCosto||0);S.hhM+=r2(m.hhM||0);S.costoM+=r2(m.costoM||0);S.hhA+=r2(m.hhA||0);S.costoA+=r2(m.costoA||0);S.hhAM+=r2(m.hhAM||0);S.costoAM+=r2(m.costoAM||0)});if(r.est==='Activa')S.act++});
     H+=titulo(esc(sis)+' <span style="color:#7d8590;font-weight:600">\u00b7 '+L.length+' partidas \u00b7 '+S.act+' activas</span>');
     L.forEach(function(r,i){N++;var bg=(i%2)?'#0d1522':'#0b1220';
       vis(r).forEach(function(m){var apag=(m.est!=='Activa'&&m.est!=='Activo'&&m.est!=='Metrado ampliado');
         H+='<tr style="background:'+bg+(apag?';color:#8a94a6':'')+'">';cols.forEach(function(cl){H+=celda(m,cl[0],false,m._np?(N+'.'+m._np):N)});H+='</tr>'})});
-    T.n+=L.length;T.hhC+=S.hhC;T.hh+=S.hh;T.costo+=S.costo;T.costoC+=S.costoC;T.dCosto+=S.dCosto;T.act+=S.act;T.hhM+=S.hhM;T.costoM+=S.costoM});
-  T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);
+    T.n+=L.length;T.hhC+=S.hhC;T.hh+=S.hh;T.costo+=S.costo;T.costoC+=S.costoC;T.dCosto+=S.dCosto;T.act+=S.act;T.hhM+=S.hhM;T.costoM+=S.costoM;T.hhA+=S.hhA;T.costoA+=S.costoA;T.hhAM+=S.hhAM;T.costoAM+=S.costoAM});
+  T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);
   H+='</tbody><tfoot>'+subtot('TOTAL \u00b7 '+T.n+' partidas \u00b7 '+T.act+' activas',T,'#152436',900,true)+'</tfoot></table>';
   return H}
 /* cabecera: ordenar con clic, mover arrastrando; boton Columnas para ocultar/mostrar */
