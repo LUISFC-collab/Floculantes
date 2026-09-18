@@ -3562,6 +3562,7 @@ async function _crAlcanceUI(c){
          partidas; las relaciones se manejan aqui */
       /* actividades creadas en la app: papelera (con confirmacion) y arrastre para reordenar */
       B.querySelectorAll('._crTDel').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();ev.preventDefault();try{await _crTareaBorrar(c,b.getAttribute('data-t'))}catch(e){toast('\u2716 '+((e&&e.message)||e))}}});
+      B.querySelectorAll('._crTP6').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();ev.preventDefault();try{await _crTareaP6(c,b.getAttribute('data-t'),b.getAttribute('data-d'))}catch(e){toast('\u2716 '+((e&&e.message)||e))}}});
       B.querySelectorAll('._crTDrag').forEach(function(d){d.ondragstart=function(ev){try{ev.dataTransfer.setData('text/plain','tarea:'+d.getAttribute('data-tc'));ev.dataTransfer.effectAllowed='move'}catch(e){}}});
       B.querySelectorAll('[data-tc]').forEach(function(d){
         d.ondragover=function(ev){var dt='';try{dt=ev.dataTransfer.types&&ev.dataTransfer.types.indexOf('text/plain')>=0?'x':''}catch(e){}if(!dt)return;ev.preventDefault();d.style.outline='2px solid #8ECBF5'};
@@ -4495,16 +4496,28 @@ function _crCodigoLibre(tar){
   var usados={};(tar||[]).forEach(function(t){usados[String(t.task_code||'').toUpperCase()]=1});
   var cand=max+10;if(usados[(pref+cand).toUpperCase()])cand=max+1;while(usados[(pref+cand).toUpperCase()])cand++;
   return pref+cand}
+/* la letra que usan los codigos del cronograma (A en A1000): un codigo solo con
+   numeros la recibe */
+function _crLetraCod(tar){var c={};(tar||[]).forEach(function(t){var m=String(t.task_code||'').match(/^([A-Za-z]+)\d+$/);if(m)c[m[1].toUpperCase()]=(c[m[1].toUpperCase()]||0)+1});var best='A',n=0;Object.keys(c).forEach(function(k){if(c[k]>n){n=c[k];best=k}});return best}
+/* el WBS escrito se resuelve contra los que ya existen: por ruta completa o
+   por el nombre del ultimo nivel (sin mayusculas ni tildes); si no, es nuevo */
+function _crWbsResuelve(txt,tar){txt=String(txt||'').trim();if(!txt)return '';var nk=function(z){return _crNrm(String(z||'').replace(/\s*\/\s*/g,' / '))};var q=nk(txt);
+  var rutas={};(tar||[]).forEach(function(t){if(t.wbs)rutas[t.wbs]=1});var L=Object.keys(rutas);
+  var exacta=L.filter(function(r){return nk(r)===q})[0];if(exacta)return exacta;
+  var hoja=L.filter(function(r){var segs=r.split(' / ');return nk(segs[segs.length-1])===q});if(hoja.length)return hoja[0];
+  var dentro=L.filter(function(r){return nk(r).indexOf(q)>=0});if(dentro.length===1)return dentro[0];
+  return txt.replace(/\s*\/\s*/g,' / ')}
 async function _crTareaNueva(c){
   if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return null}
   var tar=await _crTareas(c.cron_id);var usados={};tar.forEach(function(t){usados[String(t.task_code||'').trim().toUpperCase()]=1});
-  var cod=prompt('C\u00f3digo de la nueva actividad (\u00fanico en este cronograma, ej. A1001):',_crCodigoLibre(tar));if(cod==null)return null;
+  var cod=prompt('C\u00f3digo de la nueva actividad (\u00fanico en este cronograma, ej. '+_crLetraCod(tar)+'1001; si escribes solo el n\u00famero se le pone la letra):',_crCodigoLibre(tar));if(cod==null)return null;
   cod=String(cod).trim().toUpperCase().replace(/\s+/g,'');
   if(!cod){toast('Escribe un c\u00f3digo');return null}
+  if(/^\d+$/.test(cod))cod=_crLetraCod(tar)+cod;
   if(usados[cod]){toast('\u26d4 El c\u00f3digo '+cod+' ya existe en este cronograma: usa otro (ej. '+_crCodigoLibre(tar)+')');return null}
   var nom=prompt('Nombre de la actividad:','');if(nom==null)return null;nom=String(nom).trim();if(!nom){toast('Escribe un nombre');return null}
   var ult=tar.slice().sort(function(a,b){return (a.orden||0)-(b.orden||0)}).slice(-1)[0];
-  var wbs=prompt('WBS donde va (ruta separada por " / "):',(ult&&ult.wbs)||'');if(wbs==null)return null;wbs=String(wbs).trim();
+  var wbs=prompt('WBS donde va: escribe el nombre de un WBS existente (se usa su ruta) o una ruta nueva separada por " / ". Luego la ubicas con \u25c0 \u25b6 \u25b2 \u25bc.',(ult&&ult.wbs)||'');if(wbs==null)return null;wbs=_crWbsResuelve(wbs,tar);
   var t=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'';
   var maxO=0;tar.forEach(function(x){maxO=Math.max(maxO,Number(x.orden)||0)});
   await sbUpsert(T_CRT,[{proyecto:DATA.proyecto,cron_id:c.cron_id,task_code:cod,nombre:nom,wbs:wbs,ini:'',fin:'',hh:0,pct:0,estado:'',tipo:'app',orden:maxO+1,items:[],quien:yo,ts:t,cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0}],'proyecto,cron_id,task_code');
@@ -4520,6 +4533,26 @@ async function _crTareaBorrar(c,cod){
   await sbUpsert(T_CRT,[{proyecto:DATA.proyecto,cron_id:c.cron_id,task_code:cod,eliminado:true,elim_por:yo,elim_ts:t,ts:t,cell_at:Date.now()}],'proyecto,cron_id,task_code');
   try{if(typeof _logAdd==='function')_logAdd('cronograma','Actividad borrada en '+_crNomVis(c)+': '+cod)}catch(e){}
   toast('\ud83d\uddd1 '+cod+' borrada');
+  await _crTareasTocadas(c.cron_id);return true}
+/* botones estilo P6 sobre una actividad creada en la app */
+async function _crTareaP6(c,cod,dir){
+  if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return false}
+  var tar=(await _crTareas(c.cron_id)).slice().sort(function(a,b){return (a.orden||0)-(b.orden||0)});
+  var i=tar.findIndex(function(t){return t.task_code===cod});if(i<0)return false;var x=tar[i];
+  if(String(x.tipo||'')!=='app'){toast('Solo las actividades creadas en la app se mueven con estos botones');return false}
+  var t9=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'';
+  var fila=function(o){var f={proyecto:DATA.proyecto,cron_id:c.cron_id,task_code:x.task_code,quien:yo,ts:t9,cell_at:Date.now()};for(var k in o)f[k]=o[k];return f};
+  if(dir==='izq'){var segs=String(x.wbs||'').split(' / ').filter(function(z){return z});if(segs.length<=1){toast('Ya est\u00e1 en el nivel m\u00e1s alto');return false}segs.pop();
+    await sbUpsert(T_CRT,[fila({wbs:segs.join(' / ')})],'proyecto,cron_id,task_code');toast('\u25c0 '+cod+' sube a '+segs[segs.length-1])}
+  else if(dir==='der'){var prev=null;for(var k=i-1;k>=0;k--){if(tar[k].wbs&&tar[k].wbs!==x.wbs){prev=tar[k];break}}if(!prev){toast('No hay un WBS distinto arriba al que entrar');return false}
+    await sbUpsert(T_CRT,[fila({wbs:prev.wbs})],'proyecto,cron_id,task_code');toast('\u25b6 '+cod+' entra a '+String(prev.wbs).split(' / ').slice(-1)[0])}
+  else{var j=(dir==='arr')?i-1:i+1;if(j<0||j>=tar.length){toast('No hay a d\u00f3nde moverla');return false}var y=tar[j];
+    var oX=Number(x.orden)||0,oY=Number(y.orden)||0;if(oX===oY){oY=oX+(dir==='arr'?-1:1)}
+    var cambios=[{proyecto:DATA.proyecto,cron_id:c.cron_id,task_code:x.task_code,orden:oY,quien:yo,ts:t9,cell_at:Date.now()},{proyecto:DATA.proyecto,cron_id:c.cron_id,task_code:y.task_code,orden:oX,quien:yo,ts:t9,cell_at:Date.now()}];
+    await sbUpsert(T_CRT,cambios,'proyecto,cron_id,task_code');
+    /* si cruza de bloque, pasa al WBS de la vecina para quedar en ese bloque */
+    if(y.wbs&&y.wbs!==x.wbs)await sbUpsert(T_CRT,[fila({wbs:y.wbs})],'proyecto,cron_id,task_code');
+    toast((dir==='arr'?'\u25b2 ':'\u25bc ')+cod)}
   await _crTareasTocadas(c.cron_id);return true}
 async function _crTareaMover(c,desde,hasta){
   if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return false}
@@ -4914,7 +4947,13 @@ function _crPintaHoja2(D,P,sel,fec,q){
           (info?'#7d8590':(hh>0?'#9FE8B0':'#E8C9A0'))+'">'+
           (info?'informativa':(Math.round(hh*100)/100)+' hh')+'</span>'+
         (info?'':durTxt(t,k))+'</span>'):'')+
-      ((esApp&&admH2)?('<span class="_crNoTog _crTDel" data-t="'+esc(t.task_code)+'" title="Borrar esta actividad (creada en la app): pide confirmaci\u00f3n" style="flex:none;cursor:pointer;color:#FFB4A8;font-size:13px;padding:0 4px">\ud83d\uddd1</span>'):'')+
+      ((esApp&&admH2)?(function(){var bs='display:inline-block;cursor:pointer;background:#1c2440;border:1px solid #33447a;border-radius:5px;padding:0 5px;font-size:10px;font-weight:900;color:#8ECBF5;line-height:16px';
+        return '<span class="_crNoTog" style="flex:none;display:inline-flex;gap:2px;align-items:center">'+
+          '<span class="_crNoTog _crTP6" data-t="'+esc(t.task_code)+'" data-d="izq" title="Subir un nivel de WBS (como en P6)" style="'+bs+'">\u25c0</span>'+
+          '<span class="_crNoTog _crTP6" data-t="'+esc(t.task_code)+'" data-d="der" title="Entrar al WBS de la actividad de arriba (como en P6)" style="'+bs+'">\u25b6</span>'+
+          '<span class="_crNoTog _crTP6" data-t="'+esc(t.task_code)+'" data-d="arr" title="Subir una posici\u00f3n" style="'+bs+'">\u25b2</span>'+
+          '<span class="_crNoTog _crTP6" data-t="'+esc(t.task_code)+'" data-d="aba" title="Bajar una posici\u00f3n" style="'+bs+'">\u25bc</span>'+
+          '<span class="_crNoTog _crTDel" data-t="'+esc(t.task_code)+'" title="Borrar esta actividad (creada en la app): pide confirmaci\u00f3n" style="cursor:pointer;color:#FFB4A8;font-size:13px;padding:0 4px">\ud83d\uddd1</span></span>'})():'')+
       (esApp?'<span class="_crNoTog" title="Creada en la app: arr\u00e1strala para reordenarla" style="flex:none;font-size:9.5px;color:#8DD6ED;font-weight:800;padding:0 3px">\u2195 app</span>':'')+
       '<span style="flex:none;width:14px;text-align:center;color:#7d8590;font-size:11px">'+
         (abrible?(_crAbre[t.task_code]?'▾':'▸'):'')+'</span>'+(verSem?'</span>':'')+'</div>';
@@ -15696,7 +15735,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
