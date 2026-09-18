@@ -4530,10 +4530,12 @@ async function _crTareaMover(c,desde,hasta){
   /* hereda el WBS de la actividad sobre la que se suelta, para quedar en su bloque */
   var t9=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'',cambios=[];
   var wbsH=(tar[iH+1]&&tar[iH+1].task_code===hasta)?tar[iH+1].wbs:mv.wbs;
-  tar.forEach(function(x,k){var f=null;if((Number(x.orden)||0)!==k){f={proyecto:DATA.proyecto,cron_id:c.cron_id,task_code:x.task_code,orden:k,quien:yo,ts:t9,cell_at:Date.now()}}
-    if(x.task_code===desde&&String(x.tipo||'')==='app'&&wbsH&&wbsH!==x.wbs){f=f||{proyecto:DATA.proyecto,cron_id:c.cron_id,task_code:x.task_code,quien:yo,ts:t9,cell_at:Date.now()};f.wbs=wbsH}
-    if(f)cambios.push(f)});
+  /* dos envios: el orden (mismas columnas en todas las filas) y aparte el WBS de la movida; mezclar columnas distintas en un lote hace que las que no la traen vayan en null y el servidor lo rechace */
+  var wbsCambio=null;
+  tar.forEach(function(x,k){if((Number(x.orden)||0)!==k)cambios.push({proyecto:DATA.proyecto,cron_id:c.cron_id,task_code:x.task_code,orden:k,quien:yo,ts:t9,cell_at:Date.now()});
+    if(x.task_code===desde&&String(x.tipo||'')==='app'&&wbsH&&wbsH!==x.wbs)wbsCambio={proyecto:DATA.proyecto,cron_id:c.cron_id,task_code:x.task_code,wbs:wbsH,quien:yo,ts:t9,cell_at:Date.now()}});
   for(var i=0;i<cambios.length;i+=120)await sbUpsert(T_CRT,cambios.slice(i,i+120),'proyecto,cron_id,task_code');
+  if(wbsCambio)await sbUpsert(T_CRT,[wbsCambio],'proyecto,cron_id,task_code');
   toast('\u2195 '+desde+' movida delante de '+hasta);
   await _crTareasTocadas(c.cron_id);return true}
 /* Lo que la hoja 2 necesita, cargado una sola vez. */
@@ -15694,7 +15696,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
