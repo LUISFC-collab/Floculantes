@@ -3466,7 +3466,8 @@ async function _crAlcanceUI(c){
           var off=offC(p),fu=retC(p);
           return H2+'<div class="_crNoTog" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">'+
             btn('_crBFu','data-id="'+esc(p.id)+'"',fu?'\u21a9 Dentro de este cronograma':'\u26d4 Fuera de este cronograma','#fff',fu?'#1E7A46':'#5A1F1F')+
-            btn('_crBHH','data-id="'+esc(p.id)+'"',off?'\u25b6 Volver a contar sus HH':'\u23f8 No usar sus HH','#fff',off?'#1E7A46':'#8A4B00')+'</div>'}catch(e){return ''}})()+
+            btn('_crBHH','data-id="'+esc(p.id)+'"',off?'\u25b6 Volver a contar sus HH':'\u23f8 No usar sus HH','#fff',off?'#1E7A46':'#8A4B00')+
+            btn('_crBHx','data-id="'+esc(p.id)+'"',(hhx[p.id]!=null?('\u270e HH de este cronograma: '+hhx[p.id]):('\u270e Poner HH'+(!(Number(p.hh)>0)?' (contrato: 0)':''))),'#fff',(hhx[p.id]!=null?'#5A3D8A':'#1F3864'))+'</div>'}catch(e){return ''}})()+
         (function(){
           /* solo de lectura: las fechas se manejan en la hoja 2 - AGRUPADO y
              cada partida muestra las de su actividad */
@@ -3625,6 +3626,18 @@ async function _crAlcanceUI(c){
     B.style.paddingLeft='';
     B.innerHTML=H||'<div style="padding:14px;color:#7d8590;text-align:center">Sin coincidencias</div>';
     B.querySelectorAll('._crBFu').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();b.disabled=true;try{_ctFueraToggle(b.getAttribute('data-id'),c.cron_id)}catch(e){}}});
+    /* HH propias de esta partida en ESTE cronograma (hh_override del alcance): para partidas que el contrato trae sin HH o con otras */
+    B.querySelectorAll('._crBHx').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();var id=b.getAttribute('data-id');var pX=P.filter(function(z){return z.id===id})[0];if(!pX)return;
+      var v=prompt('HH de '+id+' en este cronograma (vac\u00edo = volver a las del contrato: '+(Number(pX.hh)||0)+' hh):',(hhx[id]!=null?String(hhx[id]):''));if(v==null)return;v=String(v).trim().replace(',','.');
+      var num=(v==='')?null:Number(v);if(v!==''&&!(isFinite(num)&&num>=0)){toast('Escribe un n\u00famero de HH');return}
+      b.disabled=true;try{var t=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'';
+        await sbUpsert(T_CRA,[{proyecto:DATA.proyecto,cron_id:c.cron_id,item:id,incluir:_crPorDefecto(pX,c.cron_id),hh_override:num,quien:yo,ts:t,cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0}],'proyecto,cron_id,item');
+        if(num==null){delete hhx[id];if(alc[id])alc[id].hh=null}else{hhx[id]=num;alc[id]=alc[id]||{inc:true};alc[id].hh=num}
+        try{if(window._crAl&&window._crAl[c.cron_id]){if(num==null){if(window._crAl[c.cron_id][id])window._crAl[c.cron_id][id].hh=null}else{window._crAl[c.cron_id][id]=window._crAl[c.cron_id][id]||{inc:true};window._crAl[c.cron_id][id].hh=num}}}catch(e){}
+        try{if(typeof _logAdd==='function')_logAdd('cronograma','HH propias en '+_crNomVis(c)+' para '+id+': '+(num==null?'vuelve al contrato':num+' hh'))}catch(e){}
+        toast(num==null?('\u270e '+id+' vuelve a las HH del contrato'):('\u270e '+id+': '+num+' hh en '+_crNomVis(c)));
+        try{_crInvalida(c.cron_id)}catch(e){}try{pinta();suma()}catch(e){}try{if(typeof _ctRefresca==='function')_ctRefresca()}catch(e){}
+      }catch(e){toast('\u2716 '+((e&&e.message)||e))}b.disabled=false}});
     B.querySelectorAll('._crBHH').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();b.disabled=true;try{await _hhToggle(b.getAttribute('data-id'),c.cron_id)}catch(e){}}});
     B.querySelectorAll('._crBRp').forEach(function(b){b.onclick=async function(ev){ev.stopPropagation();var id=b.getAttribute('data-id');b.disabled=true;
       var n='';try{var rF=_fzDe(id,c.cron_id);var xF=((rF&&rF.fases)||[])[+b.getAttribute('data-n')];n=xF?String(xF.nombre||''):''}catch(e9){}if(!n){b.disabled=false;return}
@@ -15735,7 +15748,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
