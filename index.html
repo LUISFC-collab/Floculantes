@@ -2864,7 +2864,7 @@ function _crUniverso(cronId,alc){
     /* los apartados del APU que no se realizan se llevan su fraccion de las
        HH: asi el universo, la curva, el forecast, 3WLA/PPC y el .xer cuentan
        solo lo que si se va a hacer */
-    try{if(typeof _noHaceFrac==='function'){var fo=_noHaceFrac(p.id);if(fo>0)hh=Math.round(hh*(1-fo)*10000)/10000}}catch(_eo){}
+    try{if(typeof _noHaceFrac==='function'){var fo=_noHaceFrac(p.id,cronId);if(fo>0)hh=Math.round(hh*(1-fo)*10000)/10000}}catch(_eo){}
     if(!(hh>0))return;
     hhT+=hh;n++;items[p.id]=hh});
   return {hh:Math.round(hhT*100)/100,n:n,items:items}}
@@ -3069,7 +3069,8 @@ function _crPinta(){
       'rango '+esc(c.inicio||'—')+' → '+esc(c.fin||'—')+
       ' · <b style="color:#9FE8B0">'+u.n+' partidas · '+u.hh+' hh</b>'+
       (function(){var r=(typeof _ctDe==='function')?_ctDe(c.cron_id):null;if(!r)return ' · <span style="color:#7d8590">sin configuraci\u00f3n propia (sigue a la ACTUAL)</span>';
-        return ' · <span style="color:#E8C9A0">propia: '+((r.hh_off||[]).length)+' con HH apagadas · '+((r.fuera||[]).length)+' fuera · base '+(r.base_hh==='proy'?'proyecto':'especialidad')+'</span>'})()+
+        var nRet=0;try{Object.keys(r.retiros||{}).forEach(function(k){if(k.charAt(0)!=='_'&&Number((r.retiros[k]||{}).cant)>0)nRet++})}catch(e){}
+        return ' · <span style="color:#E8C9A0">propia: '+((r.hh_off||[]).length)+' con HH apagadas · '+((r.fuera||[]).length)+' fuera · '+nRet+' saldo(s) retirado(s) · '+((r.apu_off||[]).length)+' apartado(s) apagado(s) · base '+(r.base_hh==='proy'?'proyecto':'especialidad')+'</span>'})()+
       (function(){var mm=(window._crAl||{})[c.cron_id]||{},cf=0;
         /* solo las fechas de partidas que de verdad cuentan en este
            cronograma: si no, salian mas fechas que partidas */
@@ -3238,7 +3239,7 @@ async function _crAlcanceUI(c){
      las suyas propias puestas desde la plantilla */
   var hhDe=function(p){var h=(hhx[p.id]!=null)?Number(hhx[p.id]):p.hh;
     /* menos la fraccion de los apartados del APU que no se realizan */
-    try{if(typeof _noHaceFrac==='function'){var fo=_noHaceFrac(p.id);if(fo>0)h=h*(1-fo)}}catch(_eo){}
+    try{if(typeof _noHaceFrac==='function'){var fo=_noHaceFrac(p.id,c.cron_id);if(fo>0)h=h*(1-fo)}}catch(_eo){}
     return h};
   function suma(){
     var hh=0,n=0,nr=0,cf=0,sinT=0,hhSinT=0;
@@ -3417,6 +3418,21 @@ async function _crAlcanceUI(c){
         (p.off?'<span style="color:#E8C9A0;font-size:10.5px"> · HH apagadas</span>':'')+
         (p.nva?'<span style="color:#8DD6ED;font-size:10.5px;font-weight:800"> · adicional</span>':'')+
         (propio?('<span style="color:#C39BD3;font-size:10.5px"> · HH de este cronograma (contrato: '+p.hh+')</span>'):'')+
+        /* sus apartados, como lineas INFORMATIVAS de este cronograma: % de
+           peso, HH, avance y el saldo retirado AQUI; y los apartados del APU
+           apagados aqui. Los avances son de todos; el retiro es de este. */
+        (function(){try{var r=(typeof _fzDe==='function')?_fzDe(p.id):null;var H2='';
+          if(r&&r.fases&&r.fases.length){var rm=_retMapa(p.id,c.cron_id),tot=0;r.fases.forEach(function(x){tot+=Number(x.peso)||0});
+            var hhB=(propio?hhx[p.id]:p.hh)||0;
+            r.fases.forEach(function(x){var w=Number(x.peso)||0,cq=Number(x.cantidad)||0,av=Number(x.avance)||0,e=rm[_retNk(x.nombre)],rq=e?Math.max(0,Math.min(Number(e.cant)||0,Math.max(0,cq-av))):0;
+              var hhP=tot>0?Math.round(hhB*w/tot*100)/100:0;
+              H2+='<div class="_crNoTog" style="font-size:10px;margin:2px 0 0 4px;color:'+(rq>0?'#E8C9A0':'#7d8590')+'">\u21b3 <b style="color:'+(rq>0?'#E8C9A0':'#9db4d6')+'">'+esc(x.nombre||'')+'</b> \u00b7 informativa \u00b7 '+(tot>0?_apuCant(w/tot*100):'0')+'% \u00b7 '+hhP+' hh'+
+                (cq>0?(' \u00b7 '+_apuCant(av)+' / '+_apuCant(cq)+' '+esc(x.unidad||'')):'')+
+                (rq>0?(' \u00b7 <b>saldo retirado en este cronograma: '+_apuCant(rq)+' '+esc(x.unidad||'')+'</b>'):'')+'</div>'})}
+          var ra=(typeof _apuDe==='function')?_apuDe(p.id):null;
+          if(ra&&ra.grupos&&ra.grupos.length){if(!ra.partida_id)ra.partida_id=p.id;ra.grupos.forEach(function(g){if(!g)return;var off=_apuGOffEf(p.id,g,c.cron_id);if(!off)return;
+            H2+='<div class="_crNoTog" style="font-size:10px;margin:2px 0 0 4px;color:#F0A3A3">\u21b3 apartado del APU <b>'+esc(g.nombre||g.id)+'</b> \u00b7 \u23f8 apagado en este cronograma</div>'})}
+          return H2}catch(e){return ''}})()+
         (function(){
           /* solo de lectura: las fechas se manejan en la hoja 2 - AGRUPADO y
              cada partida muestra las de su actividad */
@@ -15561,7 +15577,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260917b1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260917b2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -20152,16 +20168,20 @@ function _apuGrupoDe(r,x,pref){
 function _apuGrupoTot(r,gid){
   var t=0;((r&&r.insumos)||[]).forEach(function(x){if(!x.eliminado)t+=_apuParcial(x)*_apuFracDe(x,gid)});
   return Math.round(t*1e6)/1e6}
-function _apuGrupoOff(r,gid){var g=(_apuGrupos(r)||[]).filter(function(z){return z.id===gid})[0];return !!(g&&g.off)}
-function _apuOffTot(r){var t=0;(_apuGrupos(r)||[]).forEach(function(g){if(g.off)t+=_apuGrupoTot(r,g.id)});return Math.round(t*1e6)/1e6}
+/* apagado EFECTIVO de un apartado: el del cronograma (pedido o ACTUAL) si
+   tiene su foto; si no, el del APU (global) */
+function _apuGOffEf(pid,g,cronId){if(!g)return false;try{var row=(cronId!=null&&cronId!=='')?_ctDe(cronId):((typeof _ctActiva==='function')?_ctActiva():null);if(row&&_ctConFoto2(row))return _ctTieneEn(row,'apu_off',String(pid)+'|'+String(g.id))}catch(e){}return !!g.off}
+function _apuGrupoOff(r,gid){var g=(_apuGrupos(r)||[]).filter(function(z){return z.id===gid})[0];return _apuGOffEf(r&&r.partida_id,g)}
+function _apuOffTot(r,cronId){var t=0;(_apuGrupos(r)||[]).forEach(function(g){if(_apuGOffEf(r&&r.partida_id,g,cronId))t+=_apuGrupoTot(r,g.id)});return Math.round(t*1e6)/1e6}
 /* el total que SE CONSIDERA: sin los apartados apagados */
 function _apuTotalCons(r){return Math.max(0,_apuTotal(r)-_apuOffTot(r))}
 function _apuGrupoPct(r,gid){if(_apuGrupoOff(r,gid))return 0;var t=_apuTotalCons(r);return t>0?(_apuGrupoTot(r,gid)/t*100):0}
 /* la fraccion del APU que esta apagada: sale de las HH de la partida para
    los pesos del avance, como pasa con las actividades apagadas */
-function _apuOffFrac(id){try{
-  var r=_apuDe(id);if(!r||!r.grupos||!r.grupos.some(function(g){return g&&g.off}))return 0;
-  var t=_apuTotal(r);if(!(t>0))return 0;return Math.max(0,Math.min(1,_apuOffTot(r)/t))}catch(e){return 0}}
+function _apuOffFrac(id,cronId){try{
+  var r=_apuDe(id);if(!r||!r.grupos||!r.grupos.length)return 0;
+  if(!r.partida_id)r.partida_id=id;
+  var t=_apuTotal(r);if(!(t>0))return 0;return Math.max(0,Math.min(1,_apuOffTot(r,cronId)/t))}catch(e){return 0}}
 /* si todos los insumos del apartado comparten unidad, se puede hablar de una
    cantidad unida (30 und de tuberia); si mezclan unidades, no aplica */
 function _apuGrupoUnd(r,gid){
@@ -20416,7 +20436,7 @@ function _apuUI(p){
         var c=_apuGrupoCol(g),on=(window._apuGSel===g.id);
         var pg=Math.round(_apuGrupoPct(r,g.id)*10)/10;
         H+='<button class="_apuGSel" data-g="'+esc(g.id)+'" style="flex:1;min-width:44%;text-align:left;border-radius:10px;padding:8px 10px;cursor:pointer;border:2px solid '+c[0]+';background:'+(on?c[0]:c[1])+';color:'+(on?'#fff':c[0])+(g.off?';opacity:.62':'')+'">'+
-           '<div style="font-size:12px;font-weight:900;display:flex;gap:6px;align-items:center"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(g.nombre)+'</span>'+(g.off?'<span style="font-size:9px;background:#8A4B00;color:#fff;border-radius:6px;padding:1px 6px;white-space:nowrap">\u23f8 NO SE CONSIDERA</span>':('<span>'+pg+'%</span>'))+'</div>'+
+           '<div style="font-size:12px;font-weight:900;display:flex;gap:6px;align-items:center"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(g.nombre)+'</span>'+(_apuGOffEf(id,g)?'<span style="font-size:9px;background:#8A4B00;color:#fff;border-radius:6px;padding:1px 6px;white-space:nowrap">\u23f8 NO SE CONSIDERA</span>':('<span>'+pg+'%</span>'))+'</div>'+
            '<div style="font-size:10px;opacity:.9;margin-top:2px">'+
            (function(){var uu=_apuGrupoUnd(r,g.id),cc=_apuGrupoCant(r,g.id);
              return (uu&&cc>0)?(_apuCant(cc*fac())+' '+esc(uu)+(window._apuXMet?'':' /und')+' · '+_apuMon(_apuGrupoTot(r,g.id)*fac())):_apuMon(_apuGrupoTot(r,g.id)*fac())})()+
@@ -20427,7 +20447,7 @@ function _apuUI(p){
         if(gsel)H+='<div style="margin-top:8px;display:flex;gap:7px">'+
           '<button id="_apuGFin" style="flex:1;background:#eef2f7;border:0;border-radius:9px;padding:9px;font-weight:800;font-size:11.5px;cursor:pointer">Listo</button>'+
           '<button id="_apuGRen" style="flex:none;background:#EAF1FB;color:#1F3864;border:1px solid #BFD3EE;border-radius:9px;padding:9px 11px;font-weight:800;font-size:11.5px;cursor:pointer">Renombrar</button>'+
-          '<button id="_apuGOff" title="Se sigue organizando, pero no entra en los pesos ni en las HH de la partida" style="flex:none;background:'+(gsel.off?'#EAF3EC':'#FCEFD9')+';color:'+(gsel.off?'#0C5132':'#8A4B00')+';border:1px solid '+(gsel.off?'#7FB894':'#EFC98A')+';border-radius:9px;padding:9px 11px;font-weight:800;font-size:11.5px;cursor:pointer">'+(gsel.off?'\u25b6 Usar sus HH':'\u23f8 No usar sus HH')+'</button>'+
+          '<button id="_apuGOff" title="Se sigue organizando, pero no entra en los pesos ni en las HH de la partida" style="flex:none;background:'+(_apuGOffEf(id,gsel)?'#EAF3EC':'#FCEFD9')+';color:'+(_apuGOffEf(id,gsel)?'#0C5132':'#8A4B00')+';border:1px solid '+(_apuGOffEf(id,gsel)?'#7FB894':'#EFC98A')+';border-radius:9px;padding:9px 11px;font-weight:800;font-size:11.5px;cursor:pointer">'+(_apuGOffEf(id,gsel)?'\u25b6 Usar sus HH':'\u23f8 No usar sus HH')+'</button>'+
           (function(){var _rp=(typeof _retParte==='function')?_retParte(id,gsel.nombre):null;
             return '<button id="_apuGRet" title="Lo que falta de ESTA parte ya no se realiza: cuenta como hecho y sale de las HH; las dem\u00e1s partes siguen igual" style="flex:none;background:'+(_rp?'#EAF3EC':'#FCEFD9')+';color:'+(_rp?'#0C5132':'#8A4B00')+';border:1px solid '+(_rp?'#7FB894':'#EFC98A')+';border-radius:9px;padding:9px 11px;font-weight:800;font-size:11.5px;cursor:pointer">'+(_rp?('\u25b6 Cambiar / devolver saldo ('+_apuCant(_rp.cant)+' '+esc(_rp.unidad||'')+' retiradas)'):'\u23f8 Retirar saldo')+'</button>'})()+
           '<button id="_apuGDel" style="flex:none;background:#FBE7E3;color:#B42318;border:1px solid #F2A99E;border-radius:9px;padding:9px 11px;font-weight:800;font-size:11.5px;cursor:pointer">Borrar</button></div>'}
@@ -20468,7 +20488,7 @@ function _apuUI(p){
           gidsX.forEach(function(gid){
             var gg=(_apuGrupos(r)||[]).filter(function(z){return z.id===gid})[0];if(!gg)return;
             var cg=_apuGrupoCol(gg),frg=Rx[gid];
-            H+='<span style="color:'+cg[0]+';display:inline-flex;gap:5px;align-items:center'+(gg.off?';opacity:.65':'')+'">'+esc(String(gg.nombre).toUpperCase())+(gg.off?' · \u23f8 no se considera':(' · '+(tot>0?(Math.round(par*frg/100/tot*1000)/10):0)+(window._apuVistaHH?'% de las hh':'% del costo')))+
+            H+='<span style="color:'+cg[0]+';display:inline-flex;gap:5px;align-items:center'+(_apuGOffEf(id,gg)?';opacity:.65':'')+'">'+esc(String(gg.nombre).toUpperCase())+(_apuGOffEf(id,gg)?' · \u23f8 no se considera':(' · '+(tot>0?(Math.round(par*frg/100/tot*1000)/10):0)+(window._apuVistaHH?'% de las hh':'% del costo')))+
               '<button class="_apuPct" data-i="'+i+'" data-g="'+esc(gid)+'" title="Qué porcentaje de este insumo se considera en '+esc(gg.nombre)+' (0 lo saca)" style="background:#fff;color:'+cg[0]+';border:1.5px solid '+cg[0]+';border-radius:7px;padding:1px 7px;font-weight:900;font-size:10px;cursor:pointer">'+_apuCant(frg)+'% del insumo</button></span>'});
           if(usadoX<100)H+='<span style="color:#5C6779">libre '+_apuCant(Math.round((100-usadoX)*100)/100)+'%</span>';
           H+='</div>'}
@@ -20500,7 +20520,7 @@ function _apuUI(p){
           '<span style="width:9px;height:9px;border-radius:50%;background:'+c[0]+';flex:none"></span>'+
           '<span style="flex:1;font-size:11.5px;font-weight:700;color:#1B2433;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(g.nombre)+'</span>'+
           '<span style="font-size:10.5px;color:var(--muted);flex:none">'+_apuMon(_apuGrupoTot(r,g.id)*fac())+'</span>'+
-          (g.off?'<b style="font-size:10px;color:#8A4B00;flex:none;text-align:right">\u23f8 no se considera</b>':('<b style="font-size:12.5px;color:'+c[0]+';flex:none;min-width:44px;text-align:right">'+pg+'%</b>'))+'</div>'});
+          (_apuGOffEf(id,g)?'<b style="font-size:10px;color:#8A4B00;flex:none;text-align:right">\u23f8 no se considera</b>':('<b style="font-size:12.5px;color:'+c[0]+';flex:none;min-width:44px;text-align:right">'+pg+'%</b>'))+'</div>'});
       libre=Math.round(libre*10)/10;
       if(libre>0.05)resumenG+='<div style="display:flex;align-items:center;gap:8px;opacity:.7">'+
         '<span style="width:9px;height:9px;border-radius:50%;background:#98A2B3;flex:none"></span>'+
@@ -20586,7 +20606,8 @@ function _apuUI(p){
     var goff=document.getElementById('_apuGOff');
     if(goff)goff.onclick=async function(){
       var g=(_apuGrupos(r)||[]).filter(function(z){return z.id===window._apuGSel})[0];if(!g)return;
-      g.off=!g.off;pinta();
+      var _nv=!_apuGOffEf(id,g);g.off=_nv;pinta();
+      try{if(typeof _ctApuOffSet==='function')_ctApuOffSet(id,g.id,_nv)}catch(e){}
       try{await _apuGuardar(id,r,false)}catch(e){}
       try{if(_fzVieneDelApu(id))await _fzDesdeApu(id,p,true)}catch(e){}
       try{if(typeof renderList==='function')renderList()}catch(e){}
@@ -20594,7 +20615,7 @@ function _apuUI(p){
       try{var e9=window._crCurEstado;if(e9&&document.getElementById('_crCurOv')){document.getElementById('_crCurOv').remove();_crCurvaUI(e9.c,e9.nivel,e9.conWbs,e9.esp)}}catch(_e9){}
       try{if(typeof _pgCurvaRefresca==='function')_pgCurvaRefresca()}catch(_e8){}
       try{if(document.getElementById('_crOv')&&typeof _crPinta==='function')_crPinta()}catch(_e7){}
-      if(typeof toast==='function')toast(g.off?('\u23f8 "'+g.nombre+'" ya no cuenta para los pesos ni para las HH'):('\u25b6 "'+g.nombre+'" vuelve a contar'))};
+      if(typeof toast==='function')toast((_apuGOffEf(id,g)?('\u23f8 "'+g.nombre+'" ya no cuenta para los pesos ni para las HH'):('\u25b6 "'+g.nombre+'" vuelve a contar'))+((typeof _ctActiva==='function'&&_ctActiva())?(' \u00b7 en '+_ctNombre()):''))};
     var gret=document.getElementById('_apuGRet');
     if(gret)gret.onclick=async function(){
       var g=(_apuGrupos(r)||[]).filter(function(z){return z.id===window._apuGSel})[0];if(!g)return;
@@ -20991,14 +21012,19 @@ function _ctTieneEn(row,campo,id){if(!row||!id)return false;var S=window._ctSets
 function _ctFuera(id){var a=_ctActiva();if(!a)return false;return _ctTieneEn(a,'fuera',id)}
 function _ctNombre(cronId){try{var id=cronId;if(id==null){var a=_ctActiva();if(!a)return '';id=a.cron_id}var c=_crLista().filter(function(z){return z.cron_id===id})[0];return c?_crNomVis(c):String(id)}catch(e){return String(cronId||'')}}
 /* foto de la configuracion vigente (la activa si la hay; si no, los ajustes globales) */
+/* retiros de saldo y apartados apagados GLOBALES (tabla retiro_saldo y APU) */
+function _ctRetirosGlobal(){var out={_ok:1};try{var all=_retAll();Object.keys(all).forEach(function(k){var x=all[k];if(!x||x.eliminado||!(Number(x.cant)>0))return;out[String(x.partida_id)+'|'+_retNk(x.parte)]={nombre:String(x.nombre||''),cant:Number(x.cant)||0,hecho:Number(x.hecho)||0,total:Number(x.total)||0,unidad:String(x.unidad||''),fecha:String(x.fecha||''),quien:String(x.quien||'')}})}catch(e){}return out}
+function _ctApuOffGlobal(){var out=[];try{var A=_apuAll();Object.keys(A).forEach(function(id){var r=A[id];if(!r||r.eliminado)return;(r.grupos||[]).forEach(function(g){if(g&&g.off)out.push(String(id)+'|'+String(g.id))})})}catch(e){}return out}
+function _ctConFoto2(row){return !!(row&&row.retiros&&row.retiros._ok)}
 function _ctFoto(){var a=_ctActiva();
-  if(a)return {hh_off:(a.hh_off||[]).slice(),fuera:(a.fuera||[]).slice(),base_hh:(a.base_hh==='proy'?'proy':'esp')};
+  if(a)return {hh_off:(a.hh_off||[]).slice(),fuera:(a.fuera||[]).slice(),base_hh:(a.base_hh==='proy'?'proy':'esp'),
+    retiros:_ctConFoto2(a)?JSON.parse(JSON.stringify(a.retiros)):_ctRetirosGlobal(),apu_off:_ctConFoto2(a)?(a.apu_off||[]).slice():_ctApuOffGlobal()};
   var off=[];try{off=_hhApagadasGlobal().slice()}catch(e){}
   var fuera={};try{(DATA._retiradas||[]).forEach(function(q){if(q&&q.id)fuera[q.id]=1})}catch(e){}
   try{(window._crCat||[]).forEach(function(q){if(q&&q.ret)fuera[q.id]=1})}catch(e){}
   try{Object.keys(tombMap('partida')||{}).forEach(function(k){fuera[k]=1})}catch(e){}
   var b='esp';try{b=(_ajGet('hh_base','esp')==='proy')?'proy':'esp'}catch(e){}
-  return {hh_off:off,fuera:Object.keys(fuera),base_hh:b}}
+  return {hh_off:off,fuera:Object.keys(fuera),base_hh:b,retiros:_ctRetirosGlobal(),apu_off:_ctApuOffGlobal()}}
 function _ctGuardar(row,sinPush){var t=(typeof nowSrv==='function'?nowSrv():Date.now());
   row.ts=t;row.cell_at=Date.now();row.quien=(state.user&&state.user.supervisor)||'';
   _ctAll()[String(row.cron_id)]=row;_ctSaveLocal();
@@ -21008,7 +21034,18 @@ function _ctRefresca(){try{window._crCat=null}catch(e){}try{window._hhCache=null
   try{var sl=$('scrList');if(sl&&!sl.classList.contains('hidden')&&typeof renderList==='function')renderList()}catch(e){}
   try{if(typeof _pesoInject==='function')_pesoInject()}catch(e){}
   try{if(typeof window._hhSwRepinta==='function')window._hhSwRepinta()}catch(e){}
-  try{if(document.getElementById('_crOv')&&typeof _crConteos==='function')_crConteos().then(function(){try{if(typeof _crPinta==='function')_crPinta()}catch(e){}})}catch(e){}}
+  try{if(document.getElementById('_crOv')&&typeof _crConteos==='function')_crConteos().then(function(){try{if(typeof _crPinta==='function')_crPinta()}catch(e){}})}catch(e){}
+  try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(e){}
+  try{if(document.getElementById('_apuOv')&&!document.getElementById('_apuEdOv')&&!document.getElementById('_apuCabOv')&&typeof _apuUI==='function'&&window._apuP)_apuUI(window._apuP)}catch(e){}
+  try{if(document.getElementById('_actOv')&&window._actIdAbierta&&typeof _actDetalle==='function')_actDetalle(window._actIdAbierta)}catch(e){}
+  try{if(document.getElementById('_retFOv')&&window._actIdAbierta&&typeof _retFichaUI==='function')_retFichaUI(window._actIdAbierta)}catch(e){}
+  try{if(typeof _pgCurvaRefresca==='function')_pgCurvaRefresca()}catch(e){}}
+/* apartado del APU apagado/encendido en la configuracion ACTUAL */
+function _ctApuOffSet(pid,gid,off){try{var a=_ctActiva();if(!a||!_ctConFoto2(a))return false;var k=String(pid)+'|'+String(gid),L=(a.apu_off||[]).map(String),i=L.indexOf(k);if(off&&i<0)L.push(k);else if(!off&&i>=0)L.splice(i,1);else return true;a.apu_off=L;_ctGuardar(a);return true}catch(e){return false}}
+/* retiro de saldo en la configuracion ACTUAL (true = ya quedo guardado ahi) */
+function _ctRetSet(id,parte,campos,borrar){try{var a=_ctActiva();if(!a||!_ctConFoto2(a))return false;var k=String(id)+'|'+_retNk(parte);
+  if(borrar){if(a.retiros[k])delete a.retiros[k]}else{var x=a.retiros[k]||{};Object.keys(campos||{}).forEach(function(c){x[c]=campos[c]});x.quien=(state.user&&state.user.supervisor)||'';x.fecha=(typeof todayISO==='function')?todayISO():'';a.retiros[k]=x}
+  _ctGuardar(a);return true}catch(e){return false}}
 /* poner un cronograma como ACTUAL (o quitarlo si ya lo era) */
 async function _ctActivar(cronId){
   if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return}
@@ -21016,7 +21053,9 @@ async function _ctActivar(cronId){
   var yo=(state.user&&state.user.supervisor)||'';
   /* todos los cronogramas sin configuracion reciben la foto de la vigente: asi ninguno cambia despues por lo que se haga en otro */
   var nuevos=0;_crLista().forEach(function(c){if(!c||!c.cron_id)return;if(_ctDe(c.cron_id))return;
-    all[String(c.cron_id)]={cron_id:String(c.cron_id),activa:false,hh_off:foto.hh_off.slice(),fuera:foto.fuera.slice(),base_hh:foto.base_hh,quien:yo,ts:0,cell_at:0,eliminado:false,elim_por:'',elim_ts:0};nuevos++});
+    all[String(c.cron_id)]={cron_id:String(c.cron_id),activa:false,hh_off:foto.hh_off.slice(),fuera:foto.fuera.slice(),base_hh:foto.base_hh,retiros:JSON.parse(JSON.stringify(foto.retiros)),apu_off:foto.apu_off.slice(),quien:yo,ts:0,cell_at:0,eliminado:false,elim_por:'',elim_ts:0};nuevos++});
+  /* filas de antes de los retiros/apartados por cronograma: reciben esa parte de la foto */
+  for(var k0 in all){var x0=all[k0];if(!x0||x0.eliminado||_ctConFoto2(x0))continue;x0.retiros=JSON.parse(JSON.stringify(foto.retiros));x0.apu_off=foto.apu_off.slice();x0.ts=0}
   var quitar=(act&&String(act.cron_id)===String(cronId));
   for(var k in all){var x=all[k];if(!x||x.eliminado)continue;var deb=(!quitar&&String(x.cron_id)===String(cronId));
     if(!!x.activa!==deb||!x.ts){x.activa=deb;_ctGuardar(x,true)}}
@@ -21036,6 +21075,7 @@ async function _ctPush(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
   var all=_ctAll(),out=[];
   Object.keys(all).forEach(function(k){var x=all[k]||{};if(!x.ts||!x.cron_id)return;
     out.push({proyecto:DATA.proyecto,cron_id:String(x.cron_id),activa:!!x.activa,hh_off:(x.hh_off||[]).map(String),fuera:(x.fuera||[]).map(String),base_hh:(x.base_hh==='proy'?'proy':'esp'),
+      retiros:(x.retiros&&typeof x.retiros==='object')?x.retiros:{},apu_off:(x.apu_off||[]).map(String),
       quien:String(x.quien||''),ts:Number(x.ts)||0,cell_at:Number(x.cell_at)||0,
       eliminado:!!x.eliminado,elim_por:String(x.elim_por||''),elim_ts:Number(x.elim_ts)||0})});
   if(!out.length)return;
@@ -21049,6 +21089,7 @@ async function _ctPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
     if(lts>sts)return;if(lts&&lts===sts)return;
     cambio=true;
     all[k]={cron_id:k,activa:!!r.activa,hh_off:(Array.isArray(r.hh_off)?r.hh_off:[]).map(String),fuera:(Array.isArray(r.fuera)?r.fuera:[]).map(String),base_hh:(r.base_hh==='proy'?'proy':'esp'),
+      retiros:(r.retiros&&typeof r.retiros==='object'&&!Array.isArray(r.retiros))?r.retiros:{},apu_off:(Array.isArray(r.apu_off)?r.apu_off:[]).map(String),
       quien:String(r.quien||''),ts:sts,cell_at:Number(r.cell_at)||0,eliminado:!!r.eliminado,elim_por:String(r.elim_por||''),elim_ts:Number(r.elim_ts)||0}});
   if(cambio){_ctSaveLocal();_ctRefresca()}
   return cambio}
@@ -21135,19 +21176,28 @@ function _retNk(n){return String(n||'').trim().toLowerCase()}
 function _retAll(){if(!state.retsal){try{state.retsal=JSON.parse(localStorage.getItem('obf4_retsal')||'{}')||{}}catch(e){state.retsal={}}}if(!state.retsal)state.retsal={};return state.retsal}
 function _retSaveLocal(){try{localStorage.setItem('obf4_retsal',JSON.stringify(_retAll()))}catch(e){}}
 function _retKey(id,parte){return String(id)+'|'+_retNk(parte)}
-function _retMapa(id){var all=_retAll(),out={};Object.keys(all).forEach(function(k){var x=all[k];
+/* los retiros de UNA partida: los del cronograma pedido (o del ACTUAL) si
+   tiene su foto; si no, los globales de la tabla retiro_saldo */
+function _retMapa(id,cronId){
+  try{var row=(cronId!=null&&cronId!=='')?_ctDe(cronId):((typeof _ctActiva==='function')?_ctActiva():null);
+    if(row&&_ctConFoto2(row)){var o2={},pre=String(id)+'|';Object.keys(row.retiros).forEach(function(k){if(k.indexOf(pre)!==0)return;var x=row.retiros[k];if(!x||!(Number(x.cant)>0))return;var pt=k.slice(pre.length);
+      o2[pt]={partida_id:String(id),parte:pt,nombre:String(x.nombre||''),cant:Number(x.cant)||0,hecho:Number(x.hecho)||0,total:Number(x.total)||0,unidad:String(x.unidad||''),quien:String(x.quien||''),fecha:String(x.fecha||'')}});return o2}}catch(e){}
+  var all=_retAll(),out={};Object.keys(all).forEach(function(k){var x=all[k];
   if(x&&!x.eliminado&&String(x.partida_id)===String(id)&&Number(x.cant)>0)out[_retNk(x.parte)]=x});return out}
 function _retParte(id,nombre){var m=_retMapa(id);return m[_retNk(nombre)]||null}
 function _retDe(id){var m=_retMapa(id),out=[];Object.keys(m).forEach(function(k){out.push(m[k])});return out.length?out:null}
 /* lo retirado de una parte, topado a lo que le falta */
 function _retCantDe(x){var c=Number(x&&x.cantidad)||0,a=Number(x&&x.avance)||0;return Math.max(0,Math.min(Number(x&&x._ret)||0,c-a>0?c-a:0))}
 /* la fraccion de la actividad que no se realiza por saldos retirados */
-function _retFrac(id){try{var r=(typeof _fzDe==='function')?_fzDe(id):null;if(!r)return 0;
-  var tot=0,ret=0;(r.fases||[]).forEach(function(x){var w=Number(x.peso)||0;tot+=w;var c=Number(x.cantidad)||0,q=_retCantDe(x);if(c>0&&q>0)ret+=w*Math.min(1,q/c)});
+function _retFrac(id,cronId){try{var r=(typeof _fzDe==='function')?_fzDe(id):null;if(!r)return 0;
+  var rm=(cronId!=null&&cronId!=='')?_retMapa(id,cronId):null;
+  var tot=0,ret=0;(r.fases||[]).forEach(function(x){var w=Number(x.peso)||0;tot+=w;var c=Number(x.cantidad)||0;var xx=x;
+    if(rm){var e=rm[_retNk(x.nombre)];xx={cantidad:x.cantidad,avance:x.avance,_ret:(e&&Number(e.cant)>0)?Number(e.cant):0}}
+    var q=_retCantDe(xx);if(c>0&&q>0)ret+=w*Math.min(1,q/c)});
   return tot>0?Math.max(0,Math.min(1,ret/tot)):0}catch(e){return 0}}
 /* TODO lo que no se realiza (para las HH y el universo): apartados apagados
    + saldos retirados */
-function _noHaceFrac(id){try{var a=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;var b=_retFrac(id);return Math.max(0,Math.min(1,a+b))}catch(e){return 0}}
+function _noHaceFrac(id,cronId){try{var a=(typeof _apuOffFrac==='function')?_apuOffFrac(id,cronId):0;var b=_retFrac(id,cronId);return Math.max(0,Math.min(1,a+b))}catch(e){return 0}}
 function _retRefresca(){try{window._hhCache=null;window._crCat=null}catch(e){}
   try{if(typeof renderList==='function')renderList()}catch(e){}
   /* todo lo que muestra HH se repinta: cronogramas, alcance, Ficha, base del
@@ -21166,6 +21216,8 @@ function _retRefresca(){try{window._hhCache=null;window._crCat=null}catch(e){}
   try{if(typeof _pgCurvaRefresca==='function')_pgCurvaRefresca()}catch(e){}}
 /* alta o cambio de un retiro; devolver = tumba */
 function _retSet(id,parte,campos,borrar){
+  /* con un cronograma ACTUAL, el retiro es suyo y no toca a los demas */
+  try{if(typeof _ctRetSet==='function'&&_ctRetSet(id,parte,campos,borrar))return}catch(e){}
   var all=_retAll(),k=_retKey(id,parte),t=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'';
   var x=all[k]||{partida_id:String(id),parte:_retNk(parte)};
   Object.keys(campos||{}).forEach(function(c){x[c]=campos[c]});
@@ -21384,8 +21436,6 @@ function _actDetalle(id){window._actIdAbierta=id;
   /* retirar el saldo de cada apartado (lo que ya no se hara), desde aqui */
   (function(){var rt=null;try{rt=(typeof _retDe==='function')?_retDe(id):null}catch(e){}
     H+='<button id="_actRet" style="width:100%;margin-top:8px;border:0;border-radius:10px;padding:12px;font-weight:800;font-size:13px;cursor:pointer;color:#7A4B00;background:#FCEFD9;border:1.5px solid #EFC98A">\u23f8 Retirar saldo por apartado'+(rt?(' \u00b7 '+rt.length+' con retiro'):'')+'</button>'})();
-  (function(){var a=(typeof _ctActiva==='function')?_ctActiva():null;if(!a)return;var fu=_ctFuera(id);
-    H+='<button id="_actFuera" style="width:100%;margin-top:8px;border:0;border-radius:10px;padding:12px;font-weight:800;font-size:13px;cursor:pointer;color:#fff;background:'+(fu?'#1E7A46':'#7A1A1A')+'">'+(fu?('\u21a9 Devolver a '+esc(_ctNombre())):('\u26d4 Sacar de '+esc(_ctNombre())+' (no activa, sin HH)'))+'</button>'})();
   H+='</div>';
   if(p.alcance)H+='<div style="margin-top:12px;font-size:11.5px;color:#5C6779">Estado en el contrato: <b>'+esc(p.alcance)+'</b></div>';
   H+='<div style="margin-top:10px;font-size:10.5px;color:#8A94A6">Los datos vienen del Excel de contrato cargado en el catálogo. Apagar las HH no borra nada: la actividad sigue ahí y se puede volver a encender cuando quieras.</div>';
@@ -21397,8 +21447,6 @@ function _actDetalle(id){window._actIdAbierta=id;
   if(bt)bt.onclick=async function(){bt.disabled=true;bt.textContent='Guardando…';await _hhToggle(id);ov.remove();_actDetalle(id)};
   var br=document.getElementById('_actRet');
   if(br)br.onclick=function(){if(typeof _retFichaUI==='function')_retFichaUI(id)};
-  var bf=document.getElementById('_actFuera');
-  if(bf)bf.onclick=function(){bf.disabled=true;_ctFueraToggle(id);ov.remove();_actDetalle(id)};
 }
 /* La ficha de costos del admin vive en el menu del engranaje: el nombre ya no
    la abre, porque tocar cualquier parte de la tarjeta abre las Partes. */
