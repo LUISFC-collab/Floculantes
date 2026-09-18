@@ -15809,7 +15809,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918c1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918c2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -17359,8 +17359,25 @@ function _borrarNombreVer(id,ver,done){try{
  if(typeof _gateAcc==='function'&&!_gateAcc('act_nombre_borrar','Borrar versión de nombre'))return;
  var arr=(state.nomVers&&state.nomVers[id])||[];var vObj=arr.filter(function(x){return x.version===ver})[0];
  if(!confirm('🗑 ¿Seguro que quieres BORRAR esta versión del nombre?\n\n"'+((vObj&&vObj.nombre)||'')+'"  (v'+ver+')\n\nSe quita del historial para todos. No se puede deshacer.'))return;
- state.nomVers=state.nomVers||{};state.nomVers[id]=arr.filter(function(x){return x.version!==ver});
+ state.nomVers=state.nomVers||{};var resto=arr.filter(function(x){return x.version!==ver});state.nomVers[id]=resto;
  try{localStorage.setItem('obf4_nomvers',JSON.stringify(state.nomVers))}catch(e){}
+ /* si la version borrada era la que estaba EN USO, el nombre vuelve a la
+    version anterior (la mas alta que quede) o al original del catalogo; antes
+    el nombre borrado seguia puesto en la tarjeta */
+ try{var enUso=(state.edits&&state.edits[id]&&state.edits[id].nombre)||'';
+   if(vObj&&enUso&&String(enUso).trim()===String(vObj.nombre||'').trim()){
+     var prev=resto.slice().sort(function(a,b){return (b.version||0)-(a.version||0)})[0]||null;
+     var pB=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(x){return x.id===id})[0])||{id:id};
+     state.edits=state.edits||{};var cur=state.edits[id]||{};
+     cur.nombre=prev?String(prev.nombre||''):'';   /* vacio = vuelve el nombre del catalogo */
+     cur.codigo=(cur.codigo!=null?cur.codigo:(typeof codeOf==='function'?codeOf(pB):id));cur.esp=(cur.esp||pB.esp||'');cur.sistema=(cur.sistema!=null?cur.sistema:(pB.sistema||''));cur.ts=(typeof nowSrv==='function'?nowSrv():Date.now());
+     state.edits[id]=cur;store.set(KE,state.edits);
+     resto.forEach(function(v){v.activo=!!(prev&&v.version===prev.version)});try{localStorage.setItem('obf4_nomvers',JSON.stringify(state.nomVers))}catch(e){}
+     try{var iso9=new Date().toISOString(),_pf9='&proyecto=eq.'+encodeURIComponent(DATA.proyecto);
+       if(prev)fetch(sbBase()+'/rest/v1/partida_nombres?partida_id=eq.'+encodeURIComponent(id)+_pf9+'&version=eq.'+prev.version,{method:'PATCH',headers:sbHead({'Content-Type':'application/json','Prefer':'return=minimal'}),body:JSON.stringify({activo:true,updated_at:iso9})})}catch(e){}
+     try{logCambio('EDIT','nombre '+id,'nombre en uso vuelve a '+(prev?('v'+prev.version):'el catálogo original'))}catch(e){}
+     toast(prev?('Nombre en uso: v'+prev.version):'Nombre en uso: el original del catálogo');
+     try{if(typeof syncNow==='function')syncNow()}catch(e){}}}catch(e){}
  try{fetch(sbBase()+'/rest/v1/partida_nombres?partida_id=eq.'+encodeURIComponent(id)+'&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&version=eq.'+ver,{method:'DELETE',headers:sbHead({'Prefer':'return=minimal'})})}catch(e){}
  if(typeof logCambio==='function')logCambio('EDIT','nombre '+id,'versión v'+ver+' borrada');
  toast('🗑 Versión borrada');
