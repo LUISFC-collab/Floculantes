@@ -15809,7 +15809,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918b8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918b9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -19798,7 +19798,8 @@ function _fzCierre(id){
 function _fzResumen(id){
   var r=_fzDe(id);if(!r)return '';
   return (r.fases||[]).map(function(x){return x.nombre+' '+(Math.round((Number(x.peso)||0)*10)/10)+'%'}).join(' · ')}
-async function _fzGuardar(id,fases,borrar,origen){
+async function _fzGuardar(id,fases,borrar,origen){var r9=await _fzGuardar0(id,fases,borrar,origen);try{_hhMemoTira()}catch(e){}try{_retLimpiaHuerfanos(id)}catch(e){}try{_retRefresca()}catch(e){}return r9}
+async function _fzGuardar0(id,fases,borrar,origen){
   var t=(typeof nowSrv==='function'?nowSrv():Date.now());
   var yo=(state.user&&state.user.supervisor)||'';
   var ant=null;try{ant=_fzAll()[id]}catch(_e){}
@@ -21896,7 +21897,15 @@ function _hhMemoTira(){try{window._memoHH=null;window._genHH=(window._genHH||0)+
 function _retMapa(id,cronId){var M=_hhMemo(),k='rm|'+String(cronId==null?'':cronId)+'|'+String(id);
   if(M[k]!==undefined)return M[k];
   return (M[k]=_retMapaRaw(id,cronId))}
-function _retMapaRaw(id,cronId){
+/* apartados que existen hoy para la partida: sus nombres normalizados; sin
+   apartados, solo "partida completa". Un retiro con otro nombre es huerfano */
+function _retNombresVivos(id){try{var r=_fzAll()[id];var v={};if(r&&!r.eliminado&&r.fases&&r.fases.length){r.fases.forEach(function(x){v[_retNk(x.nombre)]=1})}else{v['partida completa']=1}return v}catch(e){return null}}
+function _retLimpiaHuerfanos(id){try{var v=_retNombresVivos(id);if(!v)return;var a=(typeof _ctFilaPara==='function')?_ctFilaPara():null;if(!a||!_ctConFoto2(a))return;
+  var pre=String(id)+'|',t9=(typeof nowSrv==='function'?nowSrv():Date.now()),toco=false;
+  Object.keys(a.retiros).forEach(function(k){if(k.indexOf(pre)!==0)return;var x=a.retiros[k];if(!x||x.del)return;var pt=k.slice(pre.length);if(!v[pt]){a.retiros[k]={del:1,_ts:t9};toco=true}});
+  if(toco){_ctGuardar(a);try{logCambio('RETIRO_SALDO',id,'Retiros de apartados que ya no existen: devueltos')}catch(e){}}}catch(e){}}
+function _retMapaRaw(id,cronId){var o=_retMapaRaw0(id,cronId);try{var v=_retNombresVivos(id);if(v)Object.keys(o).forEach(function(k){if(!v[k])delete o[k]})}catch(e){}return o}
+function _retMapaRaw0(id,cronId){
   try{var row=(typeof _crFilaDe==='function')?_crFilaDe(cronId):null;
     if(row&&_ctConFoto2(row)){var o2={},pre=String(id)+'|';Object.keys(row.retiros).forEach(function(k){if(k.indexOf(pre)!==0)return;var x=row.retiros[k];if(!x||x.del||!isFinite(Number(x.cant))||Number(x.cant)===0)return;var pt=k.slice(pre.length);
       o2[pt]={partida_id:String(id),parte:pt,nombre:String(x.nombre||''),cant:Number(x.cant)||0,hecho:Number(x.hecho)||0,total:Number(x.total)||0,unidad:String(x.unidad||''),quien:String(x.quien||''),fecha:String(x.fecha||'')}});return o2}}catch(e){}
