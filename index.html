@@ -15577,7 +15577,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260917b2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260917b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21083,16 +21083,29 @@ async function _ctPush(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
   await sbUpsert(T_CT,out,'proyecto,cron_id');commitSent(out)}
 async function _ctPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return false;
   var R=await sbSelect(T_CT,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto));
-  var all=_ctAll(),cambio=false;
+  var all=_ctAll(),cambio=false,reenviar=[];
   (R||[]).forEach(function(r){if(!r||!r.cron_id)return;var k=String(r.cron_id);
     var loc=all[k]||{},lts=Number(loc.ts)||0,sts=Number(r.ts)||0;
-    if(lts>sts)return;if(lts&&lts===sts)return;
+    if(lts>sts)return;
+    /* mismo ts pero el servidor perdio la parte de retiros/apartados (una
+       pestana vieja la reescribio sin esas columnas): la local manda */
+    if(lts&&lts===sts){if(_ctConFoto2(loc)&&!(r.retiros&&r.retiros._ok))reenviar.push(k);return}
     cambio=true;
     all[k]={cron_id:k,activa:!!r.activa,hh_off:(Array.isArray(r.hh_off)?r.hh_off:[]).map(String),fuera:(Array.isArray(r.fuera)?r.fuera:[]).map(String),base_hh:(r.base_hh==='proy'?'proy':'esp'),
       retiros:(r.retiros&&typeof r.retiros==='object'&&!Array.isArray(r.retiros))?r.retiros:{},apu_off:(Array.isArray(r.apu_off)?r.apu_off:[]).map(String),
       quien:String(r.quien||''),ts:sts,cell_at:Number(r.cell_at)||0,eliminado:!!r.eliminado,elim_por:String(r.elim_por||''),elim_ts:Number(r.elim_ts)||0}});
   if(cambio){_ctSaveLocal();_ctRefresca()}
+  if(reenviar.length){try{await _ctPushForzado(reenviar)}catch(e){}}
   return cambio}
+async function _ctPushForzado(keys){if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
+  var all=_ctAll(),out=[];
+  (keys||[]).forEach(function(k){var x=all[k]||{};if(!x.ts||!x.cron_id)return;
+    out.push({proyecto:DATA.proyecto,cron_id:String(x.cron_id),activa:!!x.activa,hh_off:(x.hh_off||[]).map(String),fuera:(x.fuera||[]).map(String),base_hh:(x.base_hh==='proy'?'proy':'esp'),
+      retiros:(x.retiros&&typeof x.retiros==='object')?x.retiros:{},apu_off:(x.apu_off||[]).map(String),
+      quien:String(x.quien||''),ts:Number(x.ts)||0,cell_at:Number(x.cell_at)||0,
+      eliminado:!!x.eliminado,elim_por:String(x.elim_por||''),elim_ts:Number(x.elim_ts)||0})});
+  if(!out.length)return;
+  await sbUpsert(T_CT,out,'proyecto,cron_id');try{commitSent(out)}catch(e){}}
 try{var _ctPushBase=syncPush;syncPush=async function(){try{await _ctPush()}catch(e){}return await _ctPushBase.apply(this,arguments)};
 var _ctPullBase=syncPull;syncPull=async function(){var q=(async function(){try{await _ctPull()}catch(e){}})();var r=await _ctPullBase.apply(this,arguments);try{await q}catch(e){}return r};}catch(_ctw){}
 try{setTimeout(function(){try{_ctPull()}catch(e){}},3600)}catch(_ctt){}
