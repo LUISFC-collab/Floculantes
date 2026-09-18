@@ -15761,7 +15761,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918b1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918b2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21380,7 +21380,13 @@ function _crTablaHTML(D,q,ord){
   /* filas visibles de una partida: si tiene apartados, UNA fila por apartado
      (mismo item y nombre, datos del apartado) y ninguna fila cabecera; si no,
      la partida tal cual. Asi cada linea vale por si misma y la columna suma */
-  var vis=function(r){if(!(r.partes&&r.partes.length))return [r];return r.partes.map(function(x,j){var m={};for(var k in r)if(k!=='partes')m[k]=r[k];for(var k2 in x)m[k2]=x[k2];m._np=j+1;return m})};
+  var vis=function(r){if(!(r.partes&&r.partes.length))return [r];var L=r.partes.map(function(x,j){var m={};for(var k in r)if(k!=='partes')m[k]=r[k];for(var k2 in x)m[k2]=x[k2];m._np=j+1;return m});
+    /* si los apartados no cubren toda la partida (p. ej. solo un apartado del
+       APU apagado al 58 %), el resto va en una linea "(sin apartado)": asi las
+       lineas suman la partida completa y el TOTAL es el del contrato */
+    var K=['costo','costoC','dCosto','hhC','hh'],resto={},hay=false;K.forEach(function(k){var sm=0;L.forEach(function(m){sm+=Number(m[k])||0});var d=Math.round(((Number(r[k])||0)-sm)*100)/100;resto[k]=d>0?d:0;if(d>0.005)hay=true});
+    if(hay){var m2={};for(var k3 in r)if(k3!=='partes')m2[k3]=r[k3];K.forEach(function(k){m2[k]=resto[k]});m2.pert='(sin apartado)';m2._np=L.length+1;L.push(m2)}
+    return L};
   orden.forEach(function(sis){var L=porSis[sis];var S={hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0};
     L.forEach(function(r){vis(r).forEach(function(m){S.hhC+=r2(m.hhC);S.hh+=r2(m.hh);S.costo+=r2(m.costo);S.costoC+=r2(m.costoC);S.dCosto+=r2(m.dCosto||0)});if(r.est==='Activa')S.act++});
     H+=titulo(esc(sis)+' <span style="color:#7d8590;font-weight:600">\u00b7 '+L.length+' partidas \u00b7 '+S.act+' activas</span>');
