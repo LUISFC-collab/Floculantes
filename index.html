@@ -15622,7 +15622,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260917d6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260917d7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21138,15 +21138,23 @@ async function _crTablaDatos(c){
     var pu=(met>0)?Math.round(costo/met*100)/100:null;
     /* los apartados (partes) de la tarjeta, cada uno con lo suyo */
     var partes=[];try{var r=(typeof _fzDe==='function')?_fzDe(id,c.cron_id):null;
-      if(r&&r.fases&&r.fases.length){var tot=0;r.fases.forEach(function(x){tot+=Number(x.peso)||0});var gs=(ra&&ra.grupos)?ra.grupos.filter(function(g){return !!g}):[];
+      /* la parte del APU apagada en este cronograma sale de las partes (fases) y
+         va en su propia fila; asi las filas de apartados SUMAN la partida */
+      var aOff=0;try{aOff=_apuOffFrac(id,c.cron_id)}catch(e){}
+      var gs=(ra&&ra.grupos)?ra.grupos.filter(function(g){return !!g}):[],usados={};
+      if(r&&r.fases&&r.fases.length){var tot=0;r.fases.forEach(function(x){tot+=Number(x.peso)||0});
         r.fases.forEach(function(x){var w=Number(x.peso)||0,cq=Number(x.cantidad)||0,av=Number(x.avance)||0,e=rm[_retNk(x.nombre)],saldo=Math.max(0,cq-av),rq=e?Math.max(0,Math.min(Number(e.cant)||0,saldo)):0;
-          var g=gs.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0];var go=g?_apuGOffEf(id,g,c.cron_id):false;
-          var frac=tot>0?w/tot:0,nh=go?1:((cq>0&&rq>0)?Math.min(1,rq/cq):0);
-          var hhK=hhC*frac,hhKc=(cuenta>0?hhC*frac*(1-nh):0);
+          var g=gs.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0];if(g)usados[g.id]=1;var go=g?_apuGOffEf(id,g,c.cron_id):false;
+          var frac=(tot>0?w/tot:0)*(1-aOff),nh=go?1:((cq>0&&rq>0)?Math.min(1,rq/cq):0);
+          var hhK=hhC*frac,hhKc=(cuenta>0?Math.max(0,hhK-hhC*(tot>0?w/tot:0)*nh):0);
           var estK=go?'Apagado':(rq>0?((rq>=saldo-1e-9)?'Todo el saldo retirado':'Saldo retirado'):((cq>0&&av>=cq-1e-9)?'Cerrado':'Activo'));
-          var costoK=Math.round(costo*frac*100)/100,costoKF=considera?Math.round(costo*frac*(1-nh)*100)/100:0;
+          var costoK=Math.round(costo*frac*100)/100,costoKF=considera?Math.round(Math.max(0,costo*frac-costo*(tot>0?w/tot:0)*nh)*100)/100:0;
           partes.push({pert:x.nombre||'',av:(cq>0?Math.round(av*100)/100:null),met:(cq>0?cq:null),metF:(cq>0?(considera?(go?0:Math.round(Math.max(0,cq-rq)*100)/100):0):null),und:x.unidad||'',pu:(cq>0?Math.round(costo*frac/cq*100)/100:null),peso:Math.round(frac*10000)/100,hhC:Math.round(hhK*100)/100,hh:Math.round(hhKc*100)/100,noHace:Math.round(nh*10000)/100,est:estK,
-            ret:(rq>0?(_apuCant(rq)+' '+(x.unidad||'')+(rq<saldo-1e-9?(' \u00b7 metrado final '+_apuCant(Math.max(0,cq-rq))):'')):''),apOff:(go?(g.nombre||g.id):''),costo:costoK,costoC:costoKF,dCosto:Math.round((costoK-costoKF)*100)/100,pct:(cq>0?Math.round(av/cq*10000)/100:0)})})}}catch(e){}
+            ret:(rq>0?(_apuCant(rq)+' '+(x.unidad||'')+(rq<saldo-1e-9?(' \u00b7 metrado final '+_apuCant(Math.max(0,cq-rq))):'')):''),apOff:(go?(g.nombre||g.id):''),costo:costoK,costoC:costoKF,dCosto:Math.round((costoK-costoKF)*100)/100,pct:(cq>0?Math.round(av/cq*10000)/100:0)})})}
+      /* apartados del APU apagados en este cronograma que no son parte: su fila, con lo que se llevan */
+      try{var atot=(ra&&typeof _apuTotal==='function')?_apuTotal(ra):0;if(atot>0)gs.forEach(function(g){if(usados[g.id])return;var go=_apuGOffEf(id,g,c.cron_id);if(!go)return;var gf=_apuGrupoTot(ra,g.id)/atot;if(!(gf>0))return;
+        var hhG=Math.round(hhC*gf*100)/100,cG=Math.round(costo*gf*100)/100;
+        partes.push({pert:(g.nombre||g.id)+' (apartado del APU)',av:null,met:null,metF:null,und:'',pu:null,peso:Math.round(gf*10000)/100,hhC:hhG,hh:0,noHace:100,est:'Apagado',ret:'',apOff:(g.nombre||g.id),costo:cG,costoC:0,dCosto:cG,pct:null})})}catch(e){}}catch(e){}
     filas.push({id:id,nom:pp.nom,esp:pp.esp,sis:pp.sis||'(sin sistema)',tareas:(tareasDe[id]||[]).join(', '),grupo:grupos[id]||'',est:est,av:av,met:met,metF:metF,und:und,pu:pu,pct:Math.round(pct*100)/100,hhC:Math.round(hhC*100)/100,hh:Math.round(cuenta*100)/100,noHace:Math.round(f*10000)/100,apOff:apOff.join(', '),ret:ret.join(' \u00b7 '),costo:costo,costoC:costoC,dCosto:Math.round((costo-costoC)*100)/100,nva:!!pp.nva,partes:partes})});
   return {filas:filas,u:u,c:c}}
 /* columnas: orden y ocultas se recuerdan en el equipo */
