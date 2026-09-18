@@ -15829,7 +15829,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918d2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918d3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21646,6 +21646,11 @@ function _crTablaBind(root,ordRef,rerender){
     b.ondblclick=function(e){e.stopPropagation();e.preventDefault();var k=b.getAttribute('data-k'),cfg=_tbCfg();if(cfg.fuentes)delete cfg.fuentes[k];_tbCfgSave(cfg);rerender()}});
   /* titulos WBS plegables (clic): se recuerda por usuario con el resto de la configuracion */
   root.querySelectorAll('tr._tbTit').forEach(function(tr){tr.onclick=function(){var k=tr.getAttribute('data-wk'),cfg=_tbCfg();cfg.pleg=cfg.pleg||{};if(cfg.pleg[k])delete cfg.pleg[k];else cfg.pleg[k]=1;_tbCfgSave(cfg);rerender()}});
+  /* expandir / contraer todos los desgloses: contraer pliega los sistemas (y
+     con ellos sus subtitulos); expandir lo abre todo */
+  try{var bE=doc.getElementById('_tbExp'),bC=doc.getElementById('_tbCon');
+    if(bE)bE.onclick=function(){var cfg=_tbCfg();cfg.pleg={};_tbCfgSave(cfg);rerender()};
+    if(bC)bC.onclick=function(){var cfg=_tbCfg();cfg.pleg={};root.querySelectorAll('tr._tbTit').forEach(function(tr){var k=tr.getAttribute('data-wk');if(k&&k.indexOf(' / ')<0)cfg.pleg[k]=1});_tbCfgSave(cfg);rerender()}}catch(e){}
   /* celda elegida (clic) y botones Inmovilizar / Movilizar de la barra */
   root.querySelectorAll('tbody td').forEach(function(td){td.onclick=function(){if(td.parentNode&&td.parentNode.classList&&td.parentNode.classList.contains('_tbTit'))return;try{var prev=root.querySelector('td._tbSelC');if(prev){prev.classList.remove('_tbSelC');prev.style.outline=''}}catch(_e){}td.classList.add('_tbSelC');td.style.outline='2px solid #FFD37A';td.style.outlineOffset='-2px';var tr=td.parentNode;window._tbSel={fila:Array.prototype.indexOf.call(tr.parentNode.children,tr),col:Array.prototype.indexOf.call(tr.children,td),colspan:tr.children.length}}});
   try{var bF=doc.getElementById('_tbFzCel'),bN=doc.getElementById('_tbFzNo'),res=doc.getElementById('_tbRes');
@@ -21694,6 +21699,7 @@ function _crTablaDocHTML(titulo){
     '<button id="_tbMax" title="A toda la pantalla">\ud83d\uddd6 Maximizar</button>'+
     '<button id="_tbAj" title="Con ajuste, la celda envuelve el texto y la fila crece; sin ajuste, una línea y recorte">↩ Ajustar texto</button>'+
     '<button id="_tbFzCel" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tbFzNo" title="Soltar filas y columnas inmovilizadas">▶ Movilizar</button>'+
+    '<button id="_tbExp" title="Desplegar todos los títulos WBS" style="font-size:11px;padding:4px 7px">▾ Expandir todo</button><button id="_tbCon" title="Plegar todos los títulos WBS" style="font-size:11px;padding:4px 7px">▸ Contraer todo</button>'+
     '<button id="_tbMenos" title="Alejar (tambi\u00e9n Ctrl+rueda)">A\u2212</button><button id="_tbMas" title="Acercar (tambi\u00e9n Ctrl+rueda)">A+</button><button id="_tbCopiar">\ud83d\udccb Copiar como tabla</button></div><div id="cuerpo"></div></body></html>'}
 async function _crTablaUI(c){
   if(!c)return;
@@ -21735,7 +21741,7 @@ async function _crTablaUI(c){
   var bst='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer';
   top.innerHTML='<input id="_tbBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026" style="flex:1;min-width:160px;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:8px;padding:6px 9px;font-size:12px">'+
     '<span id="_tbRes" style="font-size:11px;color:#9FE8B0;font-weight:800"></span>'+
-    '<button id="_tbCols" style="'+bst+'">⚙ Columnas</button><button id="_tbAj" style="'+bst+'">↩ Ajustar texto</button><button id="_tbFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tbFzNo" style="'+bst+'">▶ Movilizar</button><button id="_tbMenos" style="'+bst+'">A\u2212</button><button id="_tbMas" style="'+bst+'">A+</button>'+
+    '<button id="_tbCols" style="'+bst+'">⚙ Columnas</button><button id="_tbAj" style="'+bst+'">↩ Ajustar texto</button><button id="_tbFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tbFzNo" style="'+bst+'">▶ Movilizar</button><button id="_tbExp" style="'+bst+';font-size:11px;padding:4px 7px" title="Desplegar todos los títulos WBS">▾ Expandir todo</button><button id="_tbCon" style="'+bst+';font-size:11px;padding:4px 7px" title="Plegar todos los títulos WBS">▸ Contraer todo</button><button id="_tbMenos" style="'+bst+'">A\u2212</button><button id="_tbMas" style="'+bst+'">A+</button>'+
     '<button id="_tbCopiar" style="'+bst+'">\ud83d\udccb Copiar como tabla</button>';
   ov.insertBefore(top,body);
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
