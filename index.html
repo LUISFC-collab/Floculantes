@@ -1342,6 +1342,9 @@ function _rtOnCambio(tabla,_fila){
     try{if(window._crTar)window._crTar={};
         if(window._crAl)window._crAl={};window._crCacheT=0;window._pgUniv=null;window._ctAct=undefined;window._hhCache=null;window._crEnT=null;try{if(typeof _ctRefresca==='function')_ctRefresca()}catch(_er9){}   /* las fechas viven aqui */
         try{window._crHechoMemo=null}catch(_eh){}
+        /* la hoja de alcance abierta: sus mapas de actividades se rehacen con
+           lo que llego y se repinta (antes seguia con los de antes) */
+        try{var cx9=window._crCtx;if(cx9&&document.getElementById('_crAlcOv')){_crMapasDe(cx9).then(function(t9){try{if(_crH2)_crH2.tar=t9}catch(_e1){}try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(_e2){}}).catch(function(){})}}catch(_ea){}
         _crPull().then(function(){return _crAlcTodos()}).then(function(){return _crConteos()}).then(function(){
           if(document.getElementById('_crOv'))_crPinta();
           try{var e9=window._crCurEstado;
@@ -2750,12 +2753,17 @@ async function _crPull(){
 async function _crTareas(cronId){
   window._crTar=window._crTar||{};
   if(window._crTar[cronId])return window._crTar[cronId];
-  try{window._crTar[cronId]=await sbSelect(T_CRT,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(cronId)+'&eliminado=is.false&order=orden.asc&limit=5000')||[]}
+  var lst;
+  try{lst=(await sbSelect(T_CRT,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(cronId)+'&eliminado=is.false&order=orden.asc&limit=5000'))||[]}
   catch(e){
     /* un fallo de red no se cachea: si no, el cronograma quedaba "sin
        tareas" hasta recargar */
-    delete window._crTar[cronId];return []}
-  return window._crTar[cronId]}
+    try{delete (window._crTar||{})[cronId]}catch(_e){}return []}
+  /* el tiempo real reemplaza el objeto de cache mientras se espera: se
+     guarda en el vigente y se devuelve SIEMPRE la lista (antes volvia
+     undefined y el mapeo se rompia con "reading forEach") */
+  (window._crTar=window._crTar||{})[cronId]=lst;
+  return lst}
 async function _crAlc(cronId){
   window._crAl=window._crAl||{};window._crAlT=window._crAlT||{};
   /* el cache caduca a los 5 min: un alcance viejo cambiaba el universo (y
@@ -3650,6 +3658,7 @@ async function _crAlcanceUI(c){
               : ('La actividad '+T+' se queda SIN partidas y pasa a ser informativa.'))))return;
           try{
             fmsg('Quitando…');
+            _crInvalida(c.cron_id);await _crMapasDe(c.cron_id);
             var it=((window._crTarIt||{})[T]||[]).filter(function(k){return k!==z});
             await _crGuardaMapeo(c.cron_id,[{task_code:T,items:it}]);
             var tar=await _crMapasDe(c.cron_id);if(_crH2)_crH2.tar=tar;
@@ -3737,9 +3746,12 @@ async function _crAlcanceUI(c){
         }catch(e){fmsg('⚠ '+_crPorQue(e),'#FFB4A8');return}
         if(!destino)return;
         try{
-          var it=((window._crTarIt||{})[destino]||[]).slice();
-          if(it.indexOf(id)>=0){fmsg('Ya estaba en '+destino,'#9db4d6');return}
+          /* lo que tiene la actividad se lee fresco del servidor: escribir
+             sobre un mapa viejo borraba las partidas que ya tenia */
           fmsg('Agrupando…');
+          _crInvalida(c.cron_id);await _crMapasDe(c.cron_id);
+          var it=((window._crTarIt||{})[destino]||[]).slice();
+          if(it.indexOf(id)>=0){var tar0=window._crTarLista||[];if(_crH2)_crH2.tar=tar0;pinta();fmsg('Ya estaba en '+destino,'#9db4d6');return}
           it.push(id);
           await _crGuardaMapeo(c.cron_id,[{task_code:destino,items:it}]);
           var tar=await _crMapasDe(c.cron_id);if(_crH2)_crH2.tar=tar;
@@ -4066,14 +4078,18 @@ var _crAbre={}, _crRes='', _crResIt='', _crVaA='', _crVaP='';
 /* De quien es cada partida y que lleva cada actividad. Se rehace entero cada
    vez que se toca el mapeo, para que la lista no ensene lo de antes. */
 async function _crMapasDe(cronId){
-  var tar=await _crTareas(cronId);
-  window._crDueno={};window._crTarDe={};window._crTarN={};window._crTarIt={};window._crTarLista=tar;
+  var tar=(await _crTareas(cronId))||[];
+  /* se arma aparte y se cambia de golpe: si algo falla a medias, los mapas
+     de antes siguen enteros (con mapas vacios el siguiente "+" guardaba la
+     actividad solo con la partida nueva y borraba las demas) */
+  var due={},de={},n={},it={};
   tar.forEach(function(t){
-    window._crTarN[t.task_code]=(t.items||[]).length;
-    window._crTarIt[t.task_code]=(t.items||[]).slice();
+    n[t.task_code]=(t.items||[]).length;
+    it[t.task_code]=(t.items||[]).slice();
     (t.items||[]).forEach(function(i){
-      window._crDueno[i]=t.task_code;
-      (window._crTarDe[i]||(window._crTarDe[i]=[])).push(t.task_code)})});
+      due[i]=t.task_code;
+      (de[i]||(de[i]=[])).push(t.task_code)})});
+  window._crDueno=due;window._crTarDe=de;window._crTarN=n;window._crTarIt=it;window._crTarLista=tar;
   return tar}
 /* La actividad que manda para una partida: la que la agrupa con otras si la
    hay, y si no la primera que la reclame. */
@@ -15810,7 +15826,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918d0';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918d1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
