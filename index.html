@@ -15809,7 +15809,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918c3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918c4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21432,7 +21432,19 @@ async function _crTablaDatos(c){
 /* columnas: orden y ocultas se recuerdan en el equipo */
 var _TB_COLS=[['num','N\u00b0'],['pert','Pertenece'],['id','Item'],['nom','Partida'],['esp','Esp.'],['sis','Sistema'],['tareas','Tarea(s)'],['grupo','Agrupaci\u00f3n'],['est','Estado'],['av','Avance'],['met','Metrado contrato'],['metF','Metrado forecast'],['und','Und'],['pct','% avance'],['pu','Costo unitario'],['hhC','HH contrato'],['hh','HH forecast'],['noHace','% no se hace'],['apOff','Apartados apagados'],['ret','Saldo retirado'],['costo','Costo contrato'],['costoC','Costo forecast'],['metM','Metrado mayor'],['hhM','HH forecast mayor metrado'],['costoM','Costo forecast mayor metrado'],['dCosto','Diferencia de costo']];
 var _TB_NUM={av:1,met:1,metF:1,pct:1,pu:1,hhC:1,hh:1,noHace:1,costo:1,costoC:1,dCosto:1,metM:1,hhM:1,costoM:1};
-function _tbCfg(){try{var c=JSON.parse(localStorage.getItem('obf4_tabla_cols')||'null');if(c&&c.orden){c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};return c}}catch(e){}return {orden:_TB_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{}}}
+function _tbCfg(){try{var c=JSON.parse(localStorage.getItem('obf4_tabla_cols')||'null');if(c&&c.orden){c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};return c}}catch(e){}return {orden:_TB_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{}}}
+/* paneles inmovilizados y colores de columna, aplicados sobre la tabla ya
+   pintada (como Excel: filas de arriba y columnas a la izquierda quedan fijas) */
+function _tbAplicaFijas(root){try{var cfg=_tbCfg(),tb=root.querySelector('table');if(!tb)return;
+  var ths=Array.prototype.slice.call(tb.querySelectorAll('thead th'));var keys=ths.map(function(t){return t.getAttribute('data-k')});
+  var rows=Array.prototype.slice.call(tb.querySelectorAll('tr'));
+  keys.forEach(function(k,ci){var col=cfg.colores&&cfg.colores[k];if(!col)return;rows.forEach(function(tr){if(tr.parentNode&&tr.parentNode.tagName==='THEAD')return;if(tr.children.length!==keys.length)return;var td=tr.children[ci];if(td)td.style.background=col})});
+  var nFz=0;if(cfg.fija&&cfg.fija.col){var ix=keys.indexOf(cfg.fija.col);if(ix>=0)nFz=ix+1}
+  var left=0;for(var ci=0;ci<nFz;ci++){var w=ths[ci].offsetWidth;rows.forEach(function(tr){if(tr.children.length!==keys.length)return;var td=tr.children[ci];if(!td)return;var esTh=(td.tagName==='TH');td.style.position='sticky';td.style.left=left+'px';td.style.zIndex=esTh?'6':'3';if(!esTh&&!td.style.background)td.style.background=(tr.style.background||'#0b1220');td.style.boxShadow=(ci===nFz-1)?'2px 0 0 #3a5a8a':''});left+=w}
+  var nFr=(cfg.fija&&cfg.fija.fila>0)?Number(cfg.fija.fila):0;
+  if(nFr){var top=tb.tHead?tb.tHead.offsetHeight:0;var body=tb.tBodies[0];var brs=body?Array.prototype.slice.call(body.rows).slice(0,nFr):[];
+    brs.forEach(function(tr,i){var h=tr.offsetHeight;Array.prototype.forEach.call(tr.children,function(td){td.style.position='sticky';td.style.top=top+'px';td.style.zIndex=(td.style.left?'5':'4');if(!td.style.background)td.style.background=(tr.style.background||'#0b1220');if(i===brs.length-1)td.style.boxShadow=(td.style.boxShadow?td.style.boxShadow+',':'')+'0 2px 0 #3a5a8a'});top+=h})}
+}catch(e){}}
 /* ancho fijado por el usuario para una columna: la celda se recorta con puntos suspensivos */
 function _tbAjusta(){try{return _tbCfg().ajustar!==false}catch(e){return true}}
 function _tbAnchoCss(k){try{var w=(_tbCfg().anchos||{})[k];if(w>0)return 'width:'+w+'px;max-width:'+w+'px;min-width:'+w+'px;'+(_tbAjusta()?'white-space:normal;overflow-wrap:anywhere;':'overflow:hidden;text-overflow:ellipsis;')}catch(e){}return ''}
@@ -21450,6 +21462,7 @@ function _crTablaHTML(D,q,ord){
   var porSis={},orden=[];F.forEach(function(r){if(!porSis[r.sis]){porSis[r.sis]=[];orden.push(r.sis)}porSis[r.sis].push(r)});
   var colEst={'Activa':'#9FE8B0','Activo':'#9FE8B0','Fuera':'#FFB4A8','HH apagadas':'#E8C9A0','Apagado':'#E8C9A0','Sin tarea':'#F0A3A3','Sin HH':'#9db4d6','L\u00e1pida':'#7d8590','Saldo retirado':'#E8C9A0','Todo el saldo retirado':'#E8C9A0','Cerrado':'#8DD6ED','Metrado ampliado':'#B7CDE8'};
   var _aj=_tbAjusta();
+  var _cfgT=_tbCfg(),_fzk={};try{if(_cfgT.fija&&_cfgT.fija.col&&cols.some(function(c){return c[0]===_cfgT.fija.col})){for(var _i=0;_i<cols.length;_i++){_fzk[cols[_i][0]]=1;if(cols[_i][0]===_cfgT.fija.col)break}}}catch(e){}
   /* el ancho de cada columna se calcula UNA vez por repintado: _tbAnchoCss lee
      localStorage y hace JSON.parse, y se llamaba en CADA celda */
   var _ANCHO={};cols.forEach(function(cl){_ANCHO[cl[0]]=_tbAnchoCss(cl[0])});
@@ -21485,7 +21498,7 @@ function _crTablaHTML(D,q,ord){
       case 'costoM':return td(r.costoM!=null?('<b style="color:'+(r.costoM>(Number(r.costoC)||0)+1e-9?'#FFD37A':'#9FE8B0')+'">'+_nMon(r.costoM)+'</b>'):'',1);
     }return td('')};
   var H='<table style="border-collapse:collapse;font-size:11.5px;min-width:100%"><thead><tr>';
-  cols.forEach(function(cl){H+='<th class="_tbOrd" draggable="true" data-k="'+cl[0]+'" title="Clic: ordenar \u00b7 arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:0;background:#152436;color:#8ECBF5;border:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TB_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_tbAnchoCss(cl[0])+'">'+cl[1]+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_tbRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
+  cols.forEach(function(cl){H+='<th class="_tbOrd" draggable="true" data-k="'+cl[0]+'" title="Clic: ordenar \u00b7 arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:0;background:#152436;color:#8ECBF5;border:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TB_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_tbAnchoCss(cl[0])+'">'+cl[1]+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_tbPin" data-k="'+cl[0]+'" title="Inmovilizar las columnas hasta esta (como Excel); otro clic la suelta" style="margin-left:5px;cursor:pointer;font-size:11px;opacity:'+(_fzk[cl[0]]?'1':'.4')+'">📌</span><span class="_tbClr" data-k="'+cl[0]+'" title="Color de relleno de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;opacity:'+((_cfgT.colores&&_cfgT.colores[cl[0]])?'1':'.4')+'">🎨</span><span class="_tbRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
   H+='</tr></thead><tbody>';
   var T={n:0,hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0},N=0;
   /* titulos de sistema y TOTAL: una sola celda combinada por tramo (sin lineas
@@ -21534,6 +21547,20 @@ function _crTablaHTML(D,q,ord){
 /* cabecera: ordenar con clic, mover arrastrando; boton Columnas para ocultar/mostrar */
 function _crTablaBind(root,ordRef,rerender){
   var doc=root.ownerDocument||document;
+  /* pin: inmoviliza hasta esa columna (otro clic la suelta) */
+  root.querySelectorAll('._tbPin').forEach(function(b){b.onclick=function(e){e.stopPropagation();e.preventDefault();var k=b.getAttribute('data-k'),cfg=_tbCfg();cfg.fija=cfg.fija||{};cfg.fija.col=(cfg.fija.col===k)?null:k;_tbCfgSave(cfg);rerender()};b.onmousedown=function(e){e.stopPropagation()}});
+  /* color de relleno de la columna */
+  root.querySelectorAll('._tbClr').forEach(function(b){b.onmousedown=function(e){e.stopPropagation()};
+    b.onclick=function(e){e.stopPropagation();e.preventDefault();var k=b.getAttribute('data-k'),cfg=_tbCfg();var inp=doc.createElement('input');inp.type='color';inp.value=(cfg.colores&&cfg.colores[k])||'#2a3a55';inp.style.cssText='position:fixed;left:-9999px;top:0';doc.body.appendChild(inp);
+      inp.oninput=inp.onchange=function(){var c2=_tbCfg();c2.colores=c2.colores||{};c2.colores[k]=inp.value;_tbCfgSave(c2);try{_tbAplicaFijas(root)}catch(_e){}};
+      inp.onblur=function(){setTimeout(function(){try{inp.remove()}catch(_e){}rerender()},200)};inp.click()};
+    b.ondblclick=function(e){e.stopPropagation();e.preventDefault();var k=b.getAttribute('data-k'),cfg=_tbCfg();if(cfg.colores)delete cfg.colores[k];_tbCfgSave(cfg);rerender()}});
+  /* celda elegida (clic) y botones Inmovilizar / Movilizar de la barra */
+  root.querySelectorAll('tbody td').forEach(function(td){td.onclick=function(){try{var prev=root.querySelector('td._tbSelC');if(prev){prev.classList.remove('_tbSelC');prev.style.outline=''}}catch(_e){}td.classList.add('_tbSelC');td.style.outline='2px solid #FFD37A';td.style.outlineOffset='-2px';var tr=td.parentNode;window._tbSel={fila:Array.prototype.indexOf.call(tr.parentNode.children,tr),col:Array.prototype.indexOf.call(tr.children,td),colspan:tr.children.length}}});
+  try{var bF=doc.getElementById('_tbFzCel'),bN=doc.getElementById('_tbFzNo'),res=doc.getElementById('_tbRes');
+    if(bF)bF.onclick=function(){var sel=window._tbSel;if(!sel){if(res)res.textContent='Toca primero una celda: se inmovilizan las filas de arriba y las columnas a su izquierda';return}var cfg=_tbCfg();var keys=Array.prototype.map.call(root.querySelectorAll('thead th'),function(t){return t.getAttribute('data-k')});cfg.fija={col:(sel.colspan===keys.length&&sel.col>0)?keys[sel.col-1]:null,fila:sel.fila>0?sel.fila:0};_tbCfgSave(cfg);window._tbSel=null;rerender()};
+    if(bN)bN.onclick=function(){var cfg=_tbCfg();cfg.fija={};_tbCfgSave(cfg);window._tbSel=null;rerender()}}catch(e){}
+  try{_tbAplicaFijas(root)}catch(e){}
   root.querySelectorAll('._tbRs').forEach(function(h){
     h.onclick=function(e){e.stopPropagation()};
     h.ondblclick=function(e){e.stopPropagation();var cfg=_tbCfg();delete cfg.anchos[h.getAttribute('data-k')];_tbCfgSave(cfg);rerender()};
@@ -21558,7 +21585,7 @@ function _crTablaColsUI(doc,anchor,rerender){
   h+='<button id="_tbColsReset" style="grid-column:1/3;margin-top:4px;background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:5px 8px;font-weight:800;cursor:pointer">Restablecer orden y columnas</button>';
   pop.innerHTML=h;doc.body.appendChild(pop);
   pop.querySelectorAll('input[type=checkbox]').forEach(function(cb){cb.onchange=function(){var c2=_tbCfg();if(cb.checked)delete c2.ocultas[cb.getAttribute('data-k')];else c2.ocultas[cb.getAttribute('data-k')]=1;_tbCfgSave(c2);rerender()}});
-  pop.querySelector('#_tbColsReset').onclick=function(){_tbCfgSave({orden:_TB_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{}});pop.remove();rerender()}}
+  pop.querySelector('#_tbColsReset').onclick=function(){_tbCfgSave({orden:_TB_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{}});pop.remove();rerender()}}
 /* la ventana propia (fuera del navegador): un documento minimo con buscador,
    zoom, columnas, copiar y la tabla; se repinta desde la app con cada cambio */
 function _crTablaDocHTML(titulo){
@@ -21574,7 +21601,8 @@ function _crTablaDocHTML(titulo){
     '</style></head><body><div id="top"><input id="_tbBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026"><span id="_tbRes"></span>'+
     '<button id="_tbCols" title="Ocultar o mostrar columnas (arrastra las cabeceras para moverlas)">\u2699 Columnas</button>'+
     '<button id="_tbMax" title="A toda la pantalla">\ud83d\uddd6 Maximizar</button>'+
-    '<button id="_tbAj" title="Con ajuste, la celda envuelve el texto y la fila crece; sin ajuste, una l\u00ednea y recorte">\u21a9 Ajustar texto</button>'+
+    '<button id="_tbAj" title="Con ajuste, la celda envuelve el texto y la fila crece; sin ajuste, una línea y recorte">↩ Ajustar texto</button>'+
+    '<button id="_tbFzCel" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tbFzNo" title="Soltar filas y columnas inmovilizadas">▶ Movilizar</button>'+
     '<button id="_tbMenos" title="Alejar (tambi\u00e9n Ctrl+rueda)">A\u2212</button><button id="_tbMas" title="Acercar (tambi\u00e9n Ctrl+rueda)">A+</button><button id="_tbCopiar">\ud83d\udccb Copiar como tabla</button></div><div id="cuerpo"></div></body></html>'}
 async function _crTablaUI(c){
   if(!c)return;
@@ -21615,7 +21643,7 @@ async function _crTablaUI(c){
   var bst='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer';
   top.innerHTML='<input id="_tbBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026" style="flex:1;min-width:160px;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:8px;padding:6px 9px;font-size:12px">'+
     '<span id="_tbRes" style="font-size:11px;color:#9FE8B0;font-weight:800"></span>'+
-    '<button id="_tbCols" style="'+bst+'">\u2699 Columnas</button><button id="_tbAj" style="'+bst+'">\u21a9 Ajustar texto</button><button id="_tbMenos" style="'+bst+'">A\u2212</button><button id="_tbMas" style="'+bst+'">A+</button>'+
+    '<button id="_tbCols" style="'+bst+'">⚙ Columnas</button><button id="_tbAj" style="'+bst+'">↩ Ajustar texto</button><button id="_tbFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tbFzNo" style="'+bst+'">▶ Movilizar</button><button id="_tbMenos" style="'+bst+'">A\u2212</button><button id="_tbMas" style="'+bst+'">A+</button>'+
     '<button id="_tbCopiar" style="'+bst+'">\ud83d\udccb Copiar como tabla</button>';
   ov.insertBefore(top,body);
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
