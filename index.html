@@ -4181,7 +4181,7 @@ function _rlPrograma(cronId,tar,alcX){
       else if(nuevo!==null&&b.ini0)delta=Math.max(0,nuevo-_crASerial(b.ini0));
       if(b.ini0){ini=_crDeSerial(_crASerial(b.ini0)+delta);fin=b.fin0?_crDeSerial(_crASerial(b.fin0)+delta):ini}
       else if(nuevo!==null){ini=_crDeSerial(nuevo);fin=_crDeSerial(nuevo+b.dur)}}
-    out[c]={ini:ini,fin:fin,rel:tiene,movida:(ini!==b.ini0||fin!==b.fin0),preds:preds[c]||[]};
+    out[c]={ini:ini,fin:fin,rel:tiene,movida:(ini!==b.ini0||fin!==b.fin0),preds:preds[c]||[],manIgnorada:(tiene&&b.man&&b.man.ini&&(b.man.ini!==ini||(b.man.fin&&b.man.fin!==fin)))?{ini:b.man.ini,fin:b.man.fin||''}:null};
     (succs[c]||[]).forEach(function(r){grado[r.succ]--;if(grado[r.succ]<=0)cola.push(r.succ)})}
   Object.keys(porCod).forEach(function(c){if(!out[c])out[c]={ini:base[c].ini0,fin:base[c].fin0,rel:!!(preds[c]&&preds[c].length),ciclo:true,movida:false,preds:preds[c]||[]}});
   return out}
@@ -4613,6 +4613,30 @@ async function _crCargaH2(cronId){
   try{d.gs=await _agDe(cronId)}catch(_e){}
   try{(await _crWbsDe(cronId)).forEach(function(w){
     if(w.nombre)d.nom[w.ruta]=w.nombre})}catch(_e){}
+  /* el calendario REAL del .xer (feriados incluidos): la hoja 2 cuenta los
+     dias con el mismo contador que la exportacion, o el 'resta X d' que se
+     lee aqui no es el que sale en el archivo */
+  window._crCalH2=window._crCalH2||{};
+  try{
+    var _f9=await sbSelect(T_CRO,'select=crudo&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(cronId)+'&limit=1');
+    var _c9=(_f9&&_f9[0]&&_f9[0].crudo)||'';
+    if(_c9){var _l9=String(_c9).split(/\r?\n/),_t9=_crXerTablas(_l9);
+      window._crCalH2[cronId]=_crXerCalendario(_l9,(_t9.PROJECT&&_t9.PROJECT.filas.length)?_t9.PROJECT.filas[0].o.clndr_id:'')}
+  }catch(_e){window._crCalH2[cronId]=null}
+  /* la fraccion ya ejecutada que dice la TABLA (sumando las lineas de
+     apartado, que es de donde sale el .xer); sin esto la hoja 2 medía el
+     avance con pctOf y ensenaba una resta que el archivo no tiene */
+  d.frac=null;
+  try{
+    var _cc=(window._crCache||[]).filter(function(z){return z&&z.cron_id===cronId})[0]||{cron_id:cronId};
+    var _D9=await _crTablaDatos(_cc),_fr={};
+    (_D9.filas||[]).forEach(function(r){
+      var hT=0,hA=0;
+      if(r.partes&&r.partes.length)r.partes.forEach(function(q){hT+=Number(q.hh)||0;hA+=Number(q.hhA)||0});
+      else{hT=Number(r.hh)||0;hA=Number(r.hhA)||0}
+      _fr[r.id]=(hT>0)?Math.max(0,Math.min(1,hA/hT)):0});
+    d.frac=_fr}
+  catch(_e){d.frac=null}
   _crH2=d;return d}
 /* Entre que actividades se parte una partida, y cuanto se lleva cada una.
    Devuelve la actividad elegida, para poder saltar a ella. */
@@ -4789,7 +4813,9 @@ function _crPintaHoja2(D,P,sel,fec,q){
   /* Primero las cuentas: las horas de cada actividad, el subtotal de cada WBS
      de primer nivel y el total, para poder cuadrarlo contra el alcance. */
   /* lo ya avanzado, en HH: las HH que cuentan por el % del aplicativo */
-  var pctDe=function(pp){try{return Math.max(0,Math.min(100,Number(pctOf(pp))||0))}catch(e){return 0}};
+  var pctDe=function(pp){try{
+    if(D&&D.frac&&D.frac[pp.id]!=null)return Math.max(0,Math.min(100,Number(D.frac[pp.id])*100));   /* lo hecho segun la TABLA, como el .xer */
+    return Math.max(0,Math.min(100,Number(pctOf(pp))||0))}catch(e){return 0}};
   var hhs=[],subs={},total=0,gans=[],subsG={},totalG=0,ganCod={};
   orden.forEach(function(t,k){
     var h=0,g=0;(t.items||[]).forEach(function(i){
@@ -4853,8 +4879,14 @@ function _crPintaHoja2(D,P,sel,fec,q){
      rendimiento; el ⚙ pone un rendimiento propio (queda activo) */
   var durTxt=function(t,k){try{
     var o=(X9.prog||{})[t.task_code]||{},ini=o.ini||t.ini,fin=o.fin||t.fin;if(!ini||!fin)return '';
-    var dias=_crXerDias(ini,fin),hhT=hhs[k]||0,gT=gans[k]||0,resta=Math.max(0,hhT-gT);
+    var _C9=(window._crCalH2||{})[X9.cron]||null;
+    var dias=_C9?_crXerCalCuenta(_C9,ini,fin):_crXerDias(ini,fin),hhT=hhs[k]||0,gT=gans[k]||0,resta=Math.max(0,hhT-gT);
     var rC=_cnDe(X9.cron,t.task_code),rDef=dias>0?hhT/dias:0,rr=rC||rDef,rd=rr>0?resta/rr:0;
+    /* sin HH (informativas, partidas retiradas) no hay rendimiento del que
+       tirar: el .xer exporta la duracion que le falta por avance, y aqui se
+       ensena lo mismo (_crXerFechas, el 'if(!porHH)') */
+    if(!(hhT>0&&rr>0)){var _p9=Math.max(0,Math.min(100,Number(t.pct)||0));
+      rd=(String(t.estado||'')==='Complete')?0:(dias>0?dias*(1-_p9/100):0)}
     var f2=function(x){return (Math.round(x*100)/100).toFixed(2)};
     return '<span class="_crNoTog" style="flex-basis:100%;display:flex;gap:4px;align-items:center;justify-content:flex-end;flex-wrap:wrap;font-size:10px;color:#9db4d6;white-space:normal">'+
       '<span title="Duraci\u00f3n seg\u00fan sus fechas, en d\u00edas laborables">\u23f1 '+dias+' d</span><span>\u00b7</span>'+
@@ -4863,7 +4895,7 @@ function _crPintaHoja2(D,P,sel,fec,q){
       (X9.adm?('<button class="_crNoTog _h2Rend" data-cod="'+esc(t.task_code)+'" data-def="'+f2(rDef)+'" data-act="'+(rC||'')+'" title="'+(rC?('Rendimiento propio: '+f2(rC)+' hh por d\u00eda \u00b7 el remanente se exporta al .xer con \u00e9l \u00b7 clic para cambiarlo o quitarlo'):'Poner un rendimiento propio (hh por d\u00eda) para el remanente')+'" style="width:20px;height:20px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:11px;line-height:1;padding:0;margin-left:2px;'+(rC?'border:1.5px solid #FFD27A;background:#7A4B00;color:#FFD27A;animation:_rpLate 1.6s ease-in-out infinite':'border:1.5px solid #33447a;background:#151c28;color:#8ECBF5')+'">\u2699</button>'):'')+
       '</span>'+
       /* la ORIGINAL: las fechas de la tarea tal como vinieron del cronograma */
-      (function(){var oi=t.ini,of=t.fin;if(!oi||!of)return '';var dO=_crXerDias(oi,of),rO=dO>0?hhT/dO:0;
+      (function(){var oi=t.ini,of=t.fin;if(!oi||!of)return '';var dO=_C9?_crXerCalCuenta(_C9,oi,of):_crXerDias(oi,of),rO=dO>0?hhT/dO:0;
         return '<span class="_crNoTog" title="Seg\u00fan las fechas originales del cronograma ('+esc(oi)+' \u2192 '+esc(of)+')" style="flex-basis:100%;display:flex;gap:4px;align-items:center;justify-content:flex-end;flex-wrap:wrap;font-size:10px;color:#8ECBF5;white-space:normal">'+
           '<span>Original '+f2(dO)+' d</span><span>\u00b7</span><span>a '+f2(rO)+' hh/d</span></span>'})()}catch(e){return ''}};
   var celdas=function(cod){if(!verSem)return '';var sem=plan[cod]||[],gn=gan[cod]||[],G=ganCod[cod]||0,cum=0;
@@ -15783,7 +15815,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918d7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918d8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21335,8 +21367,11 @@ function _tbWbsDe(pp){var id=String(pp.id||''),out=[];try{var T=window._crCatTit
    .sort(function(a,b){return a.item.length-b.item.length})
    .forEach(function(t){if(t.nom&&out.indexOf(t.nom)<0)out.push(t.nom)});
   if(pp.sub&&out.indexOf(pp.sub)<0)out.push(pp.sub)}catch(e){}return out}
-async function _crTablaDatos(c){
+async function _crTablaDatos(c,corte){
   try{await _crCatOk()}catch(e){}
+  /* foto a una fecha de corte (exportacion semanal, .xer corrido a otra
+     fecha): el avance se mide con los partes hasta ese dia; sin corte, hoy */
+  var _at=null;try{var _hoy9=(typeof todayISO==='function')?todayISO():'';_at=(corte&&String(corte).slice(0,10)<_hoy9)?String(corte).slice(0,10):null}catch(e){_at=null}
   var tar=await _crTareas(c.cron_id),alc=await _crAlc(c.cron_id);
   var u=_crUniverso(c.cron_id,alc),rp=_crReparto(tar),dueno={},tareasDe={};
   tar.forEach(function(t){(t.items||[]).forEach(function(i){dueno[i]=1;(tareasDe[i]||(tareasDe[i]=[])).push(t.task_code)})});
@@ -21366,9 +21401,9 @@ async function _crTablaDatos(c){
        cosas: las columnas de contrato salen del catalogo */
     var met=null,und='';try{var m=(typeof metaOf==='function')?metaOf(id):null;if(m&&m.total!=null){met=Number(m.total)||0;und=m.unidad||pp.und||''}else if(pp.cant!==''&&pp.cant!=null){met=Number(pp.cant)||0;und=pp.und||''}}catch(e){}
     var metK=(pp.cant!==''&&pp.cant!=null)?(Number(pp.cant)||0):met;
-    var pct=0;try{var p0=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0]);if(p0)pct=Number(pctOf(p0))||0;
+    var pct=0;try{var p0=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0]);if(p0)pct=Number(_at?pctOfAt(p0,_at):pctOf(p0))||0;
       /* con apartados, el % de la partida es el de sus fases (como la tarjeta) */
-      var _pf=(typeof _fzPct==='function')?_fzPct(id):null;if(_pf!=null&&isFinite(Number(_pf)))pct=Number(_pf)||0}catch(e){}
+      var _pf=_at?((typeof _fzPctAt==='function')?_fzPctAt(id,_at):null):((typeof _fzPct==='function')?_fzPct(id):null);if(_pf!=null&&isFinite(Number(_pf)))pct=Number(_pf)||0}catch(e){}
     if(ret.length&&retF===0)ret.push('(sin efecto: la partida no tiene metrado)');
     var av=(metK!=null)?Math.round(metK*pct/100*100)/100:null;   /* sobre el contrato: Avance / Metrado contrato = % */
     var metF=(metK!=null)?(considera?Math.round(metK*(1-f)*100)/100:0):null;
@@ -21376,8 +21411,8 @@ async function _crTablaDatos(c){
        mayor es lo ejecutado y las HH y el costo forecast se escalan en proporcion */
     /* lo ejecutado FISICAMENTE (sin contar saldos retirados como hechos):
        cantidad cargada; sin cargas por cantidad, el % topado de la partida */
-    var avRaw=null;try{if(typeof acumCant==='function'&&typeof partesOf==='function'&&partesOf(id).length>0)avRaw=Math.round(acumCant(id)*100)/100}catch(e){avRaw=null}
-    if(avRaw==null){var pctFis=pct;try{if(p0&&typeof _pctBaseFz==='function'){var _pb=Number(_pctBaseFz(p0));if(isFinite(_pb))pctFis=_pb}}catch(e){}   /* % fisico, sin el saldo retirado como hecho */
+    var avRaw=null;try{if(typeof acumCant==='function'&&typeof partesOf==='function'&&partesOf(id).length>0)avRaw=Math.round((_at?acumCantAt(id,_at):acumCant(id))*100)/100}catch(e){avRaw=null}
+    if(avRaw==null){var pctFis=pct;try{if(!_at&&p0&&typeof _pctBaseFz==='function'){var _pb=Number(_pctBaseFz(p0));if(isFinite(_pb))pctFis=_pb}}catch(e){}   /* % fisico, sin el saldo retirado como hecho */
       avRaw=(metK!=null)?Math.round(metK*Math.min(100,Math.max(0,pctFis))/100*100)/100:null}
     var metM=(metF!=null)?(considera?Math.round(Math.max(metF,avRaw||0)*100)/100:0):null;
     var escM=(metF>0&&metM>metF)?(metM/metF):1;
@@ -21403,7 +21438,7 @@ async function _crTablaDatos(c){
           aOff+=_apuGrupoTot(ra,g.id)/_atg});
         aOff=Math.max(0,Math.min(1,aOff))}catch(e){aOff=0}
       if(r&&r.fases&&r.fases.length){var tot=0;r.fases.forEach(function(x){tot+=Number(x.peso)||0});var _pw=function(w){return tot>0?w/tot:1/r.fases.length};
-        r.fases.forEach(function(x){var w=Number(x.peso)||0,cq=Number(x.cantidad)||0,av=Number(x.avance)||0,e=rm[_retNk(x.nombre)],saldo=Math.max(0,cq-av),rq=e?((Number(e.cant)||0)<0?(Number(e.cant)||0):Math.max(0,Math.min(Number(e.cant)||0,saldo))):0;
+        r.fases.forEach(function(x){var w=Number(x.peso)||0,cq=Number(x.cantidad)||0,av=(_at?(Number(_fzAvanceAt(x,_at,_fzFechasDe(id)))||0):(Number(x.avance)||0)),e=rm[_retNk(x.nombre)],saldo=Math.max(0,cq-av),rq=e?((Number(e.cant)||0)<0?(Number(e.cant)||0):Math.max(0,Math.min(Number(e.cant)||0,saldo))):0;
           var g=gs.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0];if(g)usados[g.id]=1;var go=g?_apuGOffEf(id,g,c.cron_id):false;
           var frac=_pw(w)*(1-aOff),nh=go?1:((cq>0&&rq!==0)?Math.max(-4,Math.min(1,rq/cq)):0);
           var hhK=hhC*frac,hhKc=(cuenta>0?Math.max(0,hhK-hhC*_pw(w)*nh):0);
@@ -28052,7 +28087,7 @@ async function _crXerModelo(c,opt){
       trLab[k]=(trLab[k]||0)+(Number(x.o.act_reg_qty)||0)+(Number(x.o.act_ot_qty)||0)})})();
 
   /* ---- la TABLA: de aqui salen TODOS los numeros ---- */
-  var D=await _crTablaDatos(c);
+  var D=await _crTablaDatos(c,(opt&&opt.corte)||null);   /* la foto de la tabla al corte pedido */
   if(!D||!D.filas)throw new Error('no se pudo armar la tabla del alcance del cronograma '+cronId);
 
   /* ---- las actividades, el reparto y la programacion ---- */
@@ -28118,6 +28153,7 @@ async function _crXerModelo(c,opt){
     if(fx){mov=(!!ini&&ini!==iniX)||(!!fin&&fin!==finX)}
     else mov=true;   /* la que no esta en el archivo es, por definicion, nueva */
     if(!mov&&o.movida)mov=true;
+    if(o.manIgnorada)avisos.push(cod+': la fecha puesta a mano ('+o.manIgnorada.ini+(o.manIgnorada.fin?(' \u2192 '+o.manIgnorada.fin):'')+') no manda porque la actividad tiene predecesoras; sale con la que le imponen ('+ini+' \u2192 '+fin+')');
     /* "tal cual": el real que trae el archivo NO se toca; solo cambia el
        presupuesto y el remanente pasa a ser lo que le falta a ese real */
     var xA=0,xPct=null,xSt='',xIR='',xFR='';
@@ -28144,7 +28180,7 @@ async function _crXerModelo(c,opt){
       loe:(tipoX==='TT_LOE'||tipoX==='TT_WBS'),
       taskType:tipoX,
       movida:mov,
-      informativa:!((t.items||[]).length),
+      informativa:(!((t.items||[]).length)&&!(fx&&(((Number(fx.o.target_work_qty)||0)>0)||((Number(fx.o.act_work_qty)||0)>0)))),   /* con HH en el archivo y sin partidas: se vacia, no se respeta */
       taskId:fx?String(fx.o.task_id||''):'',
       clndrId:fx?String(fx.o.clndr_id||''):'',
       _aporte:{},
@@ -30078,6 +30114,7 @@ function _crXerFechas(lineas,modelo){
          tirar: se cae al reparto proporcional de la duracion. */
       var hpdC=(C.hpd>0)?C.hpd:10;
       var dias=_crXerCalCuenta(C,ini,fin);
+      if(!ini||!fin)out.avisos.push(cod+' ('+t.nombre+'): no tiene fechas en el aplicativo; sale con 1 dia de duracion para '+_crXer2(Number(t.hhR)||0)+' hh remanentes. Ponle inicio y fin en la hoja 2 antes de exportar');
       var hhT=Number(t.hhT)||0,gT=Number(t.hhA)||0;
       var resta=(t.hhR!=null&&isFinite(Number(t.hhR)))?Math.max(0,Number(t.hhR)):Math.max(0,hhT-gT);
       var rC=0;
@@ -30872,6 +30909,8 @@ function _crXerFaltantes(aud,modelo){
       hhT:(x.hhT!=null)?x.hhT:(x.hh!=null?x.hh:x.hhContrato),
       hhA:(x.hhA!=null)?x.hhA:0,
       costo:(x.costoT!=null)?x.costoT:((x.costo!=null)?x.costo:x.costoContrato),
+      hhContrato:(x.hhContrato!=null)?x.hhContrato:((x.hhT!=null)?x.hhT:0),
+      costoContrato:(x.costoContrato!=null)?x.costoContrato:((x.costoT!=null)?x.costoT:0),
       motivo:x.motivo||x.por||x.razon||'',
       cuenta:(x.cuenta===false)?false:true,txt:''})}
   return L}
@@ -30972,13 +31011,16 @@ function _crXerMensaje(r,modo,mm){
   else lin(verde,'✔ Ninguna partida del TOTAL de la tabla se queda fuera del archivo.');
 
   if(fueraCron.length){
-    var l2=[];
+    var l2=[],fH=0,fC=0;
     for(i=0;i<fueraCron.length;i++){
       var y=fueraCron[i];
-      l2.push('<b>'+_crXerEsc(y.id)+'</b> '+_crXerEsc(y.nombre)+' — '+_crXerHH(y.hhT)+' hh de contrato, '+
-        _crXerS(y.costo)+(y.motivo?(' · <i>'+_crXerEsc(y.motivo)+'</i>'):''))}
-    H.push('<details style="margin-top:4px"><summary style="color:'+ambar+';cursor:pointer;font-weight:800">'+
-      fueraCron.length+' partida(s) del contrato que este cronograma no cuenta (no descuadran el total)</summary></details>');
+      var yH=(y.hhContrato!=null)?y.hhContrato:y.hhT,yC=(y.costoContrato!=null)?y.costoContrato:y.costo;
+      fH+=Number(yH)||0;fC+=Number(yC)||0;
+      l2.push('<b>'+_crXerEsc(y.id)+'</b> '+_crXerEsc(y.nombre)+' — '+_crXerHH(yH)+' hh de contrato, '+
+        _crXerS(yC)+(y.motivo?(' · <i>'+_crXerEsc(y.motivo)+'</i>'):''))}
+    H.push('<div style="margin-top:4px;color:'+ambar+';font-weight:800">'+
+      fueraCron.length+' partida(s) del contrato que este cronograma no cuenta ('+_crXerHH(fH)+' hh de contrato, '+
+      _crXerS(fC)+'; no descuadran el total)</div>');
     lista(ambar,l2)}
 
   /* --- EN ROJO: todas las diferencias de la auditoria --- */
