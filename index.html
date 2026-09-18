@@ -3444,9 +3444,11 @@ async function _crAlcanceUI(c){
           if(r&&r.fases&&r.fases.length){var rm=_retMapa(p.id,c.cron_id),tot=0;r.fases.forEach(function(x){tot+=Number(x.peso)||0});
             var hhB=(propio?hhx[p.id]:p.hh)||0;
             r.fases.forEach(function(x,ix){var w=Number(x.peso)||0,cq=Number(x.cantidad)||0,av=Number(x.avance)||0,e=rm[_retNk(x.nombre)],rq=e?Math.max(0,Math.min(Number(e.cant)||0,Math.max(0,cq-av))):0;
-              var hhP=tot>0?Math.round(hhB*w/tot*100)/100:0,saldo=Math.max(0,cq-av);
+              var hhP0=tot>0?Math.round(hhB*w/tot*100)/100:0,saldo=Math.max(0,cq-av);
               var g=gs.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0];if(g)usados[g.id]=1;var go=g?_apuGOffEf(p.id,g,c.cron_id):false;
-              H2+='<div class="_crNoTog" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;font-size:10px;margin:3px 0 0 4px;color:'+((rq>0||go)?'#E8C9A0':'#7d8590')+'"><span>\u21b3 <b style="color:'+((rq>0||go)?'#E8C9A0':'#9db4d6')+'">'+esc(x.nombre||'')+'</b> \u00b7 '+(tot>0?_apuCant(w/tot*100):'0')+'% \u00b7 '+hhP+' hh'+
+              /* las HH del apartado ya descontadas: 0 si esta apagado; menos lo retirado si tiene retiro */
+              var hhP=go?0:((cq>0&&rq>0)?Math.round(hhP0*(1-Math.min(1,rq/cq))*100)/100:hhP0);
+              H2+='<div class="_crNoTog" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;font-size:10px;margin:3px 0 0 4px;color:'+((rq>0||go)?'#E8C9A0':'#7d8590')+'"><span>\u21b3 <b style="color:'+((rq>0||go)?'#E8C9A0':'#9db4d6')+'">'+esc(x.nombre||'')+'</b> \u00b7 '+(tot>0?_apuCant(w/tot*100):'0')+'% \u00b7 '+hhP+' hh'+((go||rq>0)&&hhP!==hhP0?(' <s>'+hhP0+'</s>'):'')+
                 (cq>0?(' \u00b7 '+_apuCant(av)+' / '+_apuCant(cq)+' '+esc(x.unidad||'')):'')+
                 (rq>0?(' \u00b7 <b>'+((rq>=saldo-1e-9)?('todo el saldo retirado ('+_apuCant(rq)+' '+esc(x.unidad||'')+')'):('ya no se har\u00e1n '+_apuCant(rq)+' '+esc(x.unidad||'')+' \u00b7 metrado final '+_apuCant(Math.max(0,cq-rq))+' '+esc(x.unidad||'')))+'</b>'):'')+(go?' \u00b7 <b>apagado</b>':'')+'</span>'+
                 (puede?(((saldo>0&&!(rq>0))?btn('_crBRp','data-id="'+esc(p.id)+'" data-n="'+ix+'" data-acc="poner"','\u23f8 Retirar saldo','#7A4B00','#FCEFD9',';border:1px solid #EFC98A'):'')+
@@ -3491,7 +3493,7 @@ async function _crAlcanceUI(c){
             (otras.length-8)+' más</span>';
           return h})()+
         '</span></span>'+
-        '<span style="flex:none;color:'+(propio?'#C39BD3':'#9FE8B0')+';font-size:11px;font-weight:800">'+(Math.round(Number(hMe)*100)/100)+' hh</span>'+
+        '<span style="flex:none;color:'+(on?(propio?'#C39BD3':'#9FE8B0'):'#7d8590')+';font-size:11px;font-weight:800">'+(on?((Math.round(Number(hMe)*100)/100)+' hh'):('0 hh <s style="font-weight:600">'+(Math.round(Number(hMe)*100)/100)+'</s>'))+'</span>'+
         /* De un vistazo: si entra en el alcance y si de verdad pesa.
            Son dos cosas distintas y antes se decia solo la primera: la marca
            del alcance vale para el coste, pero para el peso del avance hace
@@ -3502,10 +3504,10 @@ async function _crAlcanceUI(c){
           /* lo marcado a mano manda: INCLUYE cuenta aunque este apagada en la configuracion */
           var cuenta=on&&hMe>0;
           var txt,est,tit;
-          if(!on){txt='NO INCLUYE';est='background:#2a1c1c;border:1px solid #4a2a2a;color:#FFB4A8';
-            tit='Fuera del alcance de este cronograma'}
-          else if(offC(p)&&hMe>0){txt='INCLUYE \u26a0';est='background:#2a2114;border:1px solid #4a3a1e;color:#E8C9A0';
-            tit='Incluida a mano en este alcance aunque sus HH est\u00e9n apagadas en la configuraci\u00f3n del cronograma: el alcance manda y sus '+(Math.round(hMe*100)/100)+' hh cuentan aqu\u00ed. Si no debe contar, m\u00e1rcala NO INCLUYE.'}
+          if(!on&&retC(p)){txt='FUERA';est='background:#2a1c1c;border:1px solid #4a2a2a;color:#FFB4A8';
+            tit='Fuera de este cronograma: no cuenta ni aporta HH'}
+          else if(!on){txt='HH APAGADAS';est='background:#2a2114;border:1px solid #4a3a1e;color:#E8C9A0';
+            tit='Sus HH est\u00e1n apagadas en este cronograma: no aporta peso ni suma al universo'}
           else if(hMe<=0){txt='SIN HH';est='background:#2a2114;border:1px solid #4a3a1e;color:#E8C9A0';
             tit='Está en el alcance y cuenta para el costo, pero no tiene horas en el contrato: no aporta peso al avance.'}
           else{txt='INCLUYE';est='background:#14261d;border:1px solid #1d3a2a;color:#9FE8B0';
@@ -15606,7 +15608,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260917c2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260917c3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
