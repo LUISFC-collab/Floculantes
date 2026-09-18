@@ -15761,7 +15761,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918a7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918a8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21359,25 +21359,33 @@ function _crTablaHTML(D,q,ord){
   /* titulos de sistema y TOTAL: una sola celda combinada por tramo (sin lineas
      de columna cruzandolos ni ajuste de texto); solo los totales de HH y costo
      conservan su celda, alineada con su columna */
-  var subtot=function(lab,S,bg,fw){var h='<tr style="background:'+bg+'">';var run=0,puesto=false;
-    var flush=function(){if(!run)return;h+='<td colspan="'+run+'" style="border-top:1px solid #223049;border-bottom:1px solid #223049;border-left:0;border-right:0;padding:4px 6px;font-weight:'+fw+';color:#cfe3ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle">'+(puesto?'':lab)+'</td>';puesto=true;run=0};
-    cols.forEach(function(cl){var k=cl[0],W=_tbAnchoCss(k)+'white-space:nowrap;';
+  /* el TOTAL fijo abajo: cada celda sticky con su fondo (sticky en el <tr>
+     dejaba ver las filas por debajo). Se suma con los MISMOS valores
+     redondeados que se ven en cada fila de partida; los apartados no se
+     suman porque ya estan dentro de su partida */
+  var subtot=function(lab,S,bg,fw,fijo){var h='<tr style="background:'+bg+'">';var run=0,puesto=false;var ST=fijo?('position:sticky;bottom:0;z-index:3;background:'+bg+';'):'';
+    var flush=function(){if(!run)return;h+='<td colspan="'+run+'" style="'+ST+'border-top:1px solid #223049;border-bottom:1px solid #223049;border-left:0;border-right:0;padding:4px 6px;font-weight:'+fw+';color:#cfe3ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle">'+(puesto?'':lab)+'</td>';puesto=true;run=0};
+    cols.forEach(function(cl){var k=cl[0],W=ST+_tbAnchoCss(k)+'white-space:nowrap;';
       if(k==='hhC'){flush();h+=td('<b>'+(Math.round(S.hhC*100)/100)+'</b>',1,W)}
       else if(k==='hh'){flush();h+=td('<b style="color:#9FE8B0">'+(Math.round(S.hh*100)/100)+'</b>',1,W)}
       else if(k==='costo'){flush();h+=td('<b>'+_nMon(S.costo)+'</b>',1,W)}
       else if(k==='costoC'){flush();h+=td('<b style="color:#9FE8B0">'+_nMon(S.costoC)+'</b>',1,W)}
       else if(k==='dCosto'){flush();h+=td('<b style="color:#FFB4A8">'+(S.dCosto>0?('\u2212 '+_nMon(S.dCosto)):_nMon(0))+'</b>',1,W)}
       else run++});flush();
-    if(!puesto)h+='<td style="border:1px solid #223049;padding:4px 6px;font-weight:'+fw+';color:#cfe3ff;white-space:nowrap">'+lab+'</td>';
+    if(!puesto)h+='<td style="'+ST+'border:1px solid #223049;padding:4px 6px;font-weight:'+fw+';color:#cfe3ff;white-space:nowrap">'+lab+'</td>';
     return h+'</tr>'};
+  /* titulo WBS: solo el nombre y el conteo, sin sumas (una celda combinada) */
+  var titulo=function(lab){return '<tr style="background:#111c2c"><td colspan="'+cols.length+'" style="border-top:1px solid #223049;border-bottom:1px solid #223049;border-left:0;border-right:0;padding:4px 6px;font-weight:800;color:#cfe3ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lab+'</td></tr>'};
+  var r2=function(x){return Math.round((Number(x)||0)*100)/100};
   orden.forEach(function(sis){var L=porSis[sis];var S={hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0};
-    L.forEach(function(r){S.hhC+=r.hhC;S.hh+=r.hh;S.costo+=r.costo;S.costoC+=r.costoC;S.dCosto+=(r.dCosto||0);if(r.est==='Activa')S.act++});
-    H+=subtot(esc(sis)+' <span style="color:#7d8590;font-weight:600">\u00b7 '+L.length+' partidas \u00b7 '+S.act+' activas</span>',S,'#111c2c',800);
+    L.forEach(function(r){S.hhC+=r2(r.hhC);S.hh+=r2(r.hh);S.costo+=r2(r.costo);S.costoC+=r2(r.costoC);S.dCosto+=r2(r.dCosto||0);if(r.est==='Activa')S.act++});
+    H+=titulo(esc(sis)+' <span style="color:#7d8590;font-weight:600">\u00b7 '+L.length+' partidas \u00b7 '+S.act+' activas</span>');
     L.forEach(function(r,i){N++;var bg=(i%2)?'#0d1522':'#0b1220';var apag=(r.est!=='Activa');
       H+='<tr style="background:'+bg+(apag?';color:#8a94a6':'')+'">';cols.forEach(function(cl){H+=celda(r,cl[0],false,N)});H+='</tr>';
       (r.partes||[]).forEach(function(x,j){H+='<tr style="background:'+bg+';color:#9db4d6;font-size:11px">';cols.forEach(function(cl){H+=celda(x,cl[0],true,N+'.'+(j+1))});H+='</tr>'})});
     T.n+=L.length;T.hhC+=S.hhC;T.hh+=S.hh;T.costo+=S.costo;T.costoC+=S.costoC;T.dCosto+=S.dCosto;T.act+=S.act});
-  H+='</tbody><tfoot>'+subtot('TOTAL \u00b7 '+T.n+' partidas \u00b7 '+T.act+' activas',T,'#152436',900).replace('<tr style=','<tr style="position:sticky;bottom:0" data-x="1" data-s=')+'</tfoot></table>';
+  T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);
+  H+='</tbody><tfoot>'+subtot('TOTAL \u00b7 '+T.n+' partidas \u00b7 '+T.act+' activas',T,'#152436',900,true)+'</tfoot></table>';
   return H}
 /* cabecera: ordenar con clic, mover arrastrando; boton Columnas para ocultar/mostrar */
 function _crTablaBind(root,ordRef,rerender){
@@ -21412,11 +21420,12 @@ function _crTablaColsUI(doc,anchor,rerender){
 function _crTablaDocHTML(titulo){
   return '<!doctype html><html><head><meta charset="utf-8"><title>'+esc(titulo||'Tabla')+'</title><style>'+
     'html,body{margin:0;height:100%;background:#0b1220;color:#cfe3ff;font:12px system-ui,-apple-system,Segoe UI,Roboto,Arial}'+
-    '#top{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px 8px;background:#152436;border-bottom:1px solid #1d3550;position:sticky;top:0;z-index:5}'+
+    'body{display:flex;flex-direction:column;overflow:hidden}'+
+    '#top{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px 8px;background:#152436;border-bottom:1px solid #1d3550;flex:none;z-index:5}'+
     '#top input{flex:1;min-width:160px;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:8px;padding:6px 9px;font-size:12px}'+
     '#top button{background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer}'+
     '#res{font-size:11px;color:#9FE8B0;font-weight:800}'+
-    '#cuerpo{padding:6px 8px 40px}'+
+    '#cuerpo{flex:1;min-height:0;overflow:auto;padding:6px 8px 0}'+
     'table{border-collapse:collapse;font-size:11.5px}th,td{border:1px solid #223049;padding:3px 6px;white-space:nowrap}th{background:#152436;color:#8ECBF5;position:sticky;top:0;cursor:pointer;z-index:2}'+
     '</style></head><body><div id="top"><input id="_tbBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026"><span id="_tbRes"></span>'+
     '<button id="_tbCols" title="Ocultar o mostrar columnas (arrastra las cabeceras para moverlas)">\u2699 Columnas</button>'+
