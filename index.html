@@ -15949,7 +15949,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919b1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260919b2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21506,6 +21506,26 @@ function _tbWbsDe(pp){var id=String(pp.id||''),out=[];try{var T=window._crCatTit
    formulas del Excel exportado */
 function _tbMetR(a,b){if(a==null||a===''||b==null||b==='')return null;var x=Number(a),y=Number(b);if(!isFinite(x)||!isFinite(y))return null;return Math.round((x-y)*100)/100}
 function _tbDur(mr,rend){var r=Number(rend);if(mr==null||mr===''||!(r>0))return null;var x=Number(mr);if(!isFinite(x))return null;return Math.round(x/r*100)/100}
+/* los restantes de una linea y sus duraciones: metrado restante = contrato -
+   avance, restante forecast = forecast - actual; HH y costo restantes en la
+   misma proporcion que el metrado (metrado restante x unitario exacto, como
+   la formula del Excel); duraciones = metrado / rendimiento (und/dia) */
+function _tbRestantes(met,av,metF,metA,metM,hhC,costo,rend){
+  var metR=_tbMetR(met,av),metRF=_tbMetR(metF,metA),m0=Number(met);
+  var prop=function(tot,mr){if(mr==null||!(m0>0)||tot==null||tot===''||!isFinite(Number(tot)))return null;return Number(tot)*mr/m0};
+  var r=(rend!=null&&Number(rend)>0)?Number(rend):null;
+  return {metR:metR,metRF:metRF,hhR:prop(hhC,metR),hhRF:prop(hhC,metRF),costoR:prop(costo,metR),costoRF:prop(costo,metRF),rend:r,
+    durC:_tbDur(met,r),durF:_tbDur(metF,r),durM:_tbDur(metM,r),durR:_tbDur(metR,r),dur:_tbDur(metRF,r)}}
+function _tbConRest(o,R){for(var k in R)o[k]=R[k];return o}
+/* el calendario REAL del .xer del cronograma (el mismo que usan la hoja 2 y
+   la exportacion), cargado una vez por cronograma */
+async function _tbCalH2(cronId){window._crCalH2=window._crCalH2||{};if(window._crCalH2[cronId]!==undefined)return window._crCalH2[cronId];
+  try{var _f9=await sbSelect(T_CRO,'select=crudo&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(cronId)+'&limit=1');
+    var _c9=(_f9&&_f9[0]&&_f9[0].crudo)||'';
+    if(_c9){var _l9=String(_c9).split(/\r?\n/),_t9=_crXerTablas(_l9);window._crCalH2[cronId]=_crXerCalendario(_l9,(_t9.PROJECT&&_t9.PROJECT.filas.length)?_t9.PROJECT.filas[0].o.clndr_id:'')}
+    else window._crCalH2[cronId]=null}
+  catch(_e){window._crCalH2[cronId]=null}
+  return window._crCalH2[cronId]}
 /* letra de columna como Excel (0 = A, 25 = Z, 26 = AA) y su inversa */
 function _tbColL(i){var r='';i=i+1;while(i>0){var m=(i-1)%26;r=String.fromCharCode(65+m)+r;i=Math.floor((i-1)/26)}return r}
 function _tbColIx(L){var n=0;L=String(L||'');for(var i=0;i<L.length;i++)n=n*26+(L.charCodeAt(i)-64);return n-1}
@@ -21522,6 +21542,16 @@ async function _crTablaDatos(c,corte){
   var grupos={};try{window._crAgr=window._crAgr||{};var _ag=window._crAgr[c.cron_id];
     if(!_ag||(Date.now()-_ag.t)>300000){var G=await sbSelect(T_AGR,'select=grupo_id,nombre,miembros&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(c.cron_id)+'&eliminado=is.false&limit=500');_ag={t:Date.now(),G:G||[]};window._crAgr[c.cron_id]=_ag}
     _ag.G.forEach(function(g){(g.miembros||[]).forEach(function(m){grupos[m]=g.nombre||g.grupo_id})})}catch(e){}
+  /* EL RENDIMIENTO DEL ALCANCE, por actividad (hoja 2): el propio del
+     engranaje (hh/dia) o, sin el, las HH de la actividad entre sus dias del
+     cronograma (calendario real). De el sale el rendimiento de cada partida */
+  var rrDe={};try{var prog9={};try{prog9=_rlPrograma(c.cron_id,tar,alc)||{}}catch(_ep9){prog9={}}
+    var C9=null;try{C9=await _tbCalH2(c.cron_id)}catch(_ec9){C9=null}
+    tar.forEach(function(t){var cod=t.task_code,o9=prog9[cod]||{},ini=o9.ini||t.ini,fin=o9.fin||t.fin,hhT=0;
+      (t.items||[]).forEach(function(i){if(u.items[i]!=null)hhT+=(Number(u.items[i])||0)/_crVeces(rp,i)});
+      var dias=0;if(ini&&fin){try{if(C9){var i2=_crXerCalSnap(C9,ini,false),f2=_crXerCalSnap(C9,fin,true);if(_crASerial(f2)<_crASerial(i2))f2=i2;dias=_crXerCalCuenta(C9,i2,f2)}else dias=_crXerDias(ini,fin)}catch(_ed9){dias=0}}
+      var rC=0;try{rC=_cnDe(c.cron_id,cod)||0}catch(_er){rC=0}
+      rrDe[cod]={rr:rC||(dias>0?hhT/dias:0),hhT:hhT,dias:dias,rC:rC}})}catch(_e0){rrDe={}}
   var filas=[];
   _crPartidas().forEach(function(pp){
     var id=pp.id;var tomb=false;try{tomb=(typeof tombHas==='function')&&tombHas('partida',id)}catch(e){}
@@ -21578,7 +21608,9 @@ async function _crTablaDatos(c,corte){
     /* el rendimiento de la partida (und/DIA): el de la seccion APU del QPS
        (fila "Rendimiento", valor de MO), que el catalogo trae como
        rendimiento_dia; sin el, el de la tarjeta de metrado */
-    var rend9=null;try{if(Number(pp.rend)>0)rend9=Number(pp.rend);else{var _bp9=(DATA._byId&&DATA._byId[id])||null;if(_bp9&&Number(_bp9.rend)>0)rend9=Number(_bp9.rend);else{var _mm9=(typeof metaOf==='function')?metaOf(id):null;if(_mm9&&Number(_mm9.rend)>0)rend9=Number(_mm9.rend)}}}catch(_er9){rend9=null}
+    /* en su unidad por dia: (metrado / veces) x rr / HH de la actividad, por
+       cada actividad que la tiene (la cuenta del engranaje de la hoja 2) */
+    var rend9=null;try{var _rt9=0,_ok9=false;(tareasDe[id]||[]).forEach(function(cod){var x9=rrDe[cod];if(!x9||!(x9.rr>0)||!(x9.hhT>0)||!(metK>0))return;_rt9+=(metK/_crVeces(rp,id))*x9.rr/x9.hhT;_ok9=true});if(_ok9&&_rt9>0)rend9=Math.round(_rt9*10000)/10000}catch(_er9){rend9=null}
     /* los apartados (partes) de la tarjeta, cada uno con lo suyo */
     var partes=[];try{var r=(typeof _fzDe==='function')?_fzDe(id,c.cron_id):null;
       /* la parte del APU apagada en este cronograma sale de las partes (fases) y
@@ -21601,13 +21633,13 @@ async function _crTablaDatos(c,corte){
           var metFk=(cq>0?(considera?(go?0:Math.round(Math.max(0,cq-rq)*100)/100):0):null);var metMk=(metFk!=null)?Math.round(Math.max(metFk,(considera&&!go)?av:0)*100)/100:null;var escK=(metFk>0&&metMk>metFk)?(metMk/metFk):1;
           var avFk=(considera&&!go)?av:0,rAk=(metFk>0)?Math.min(1,avFk/metFk):0,rAMk=(metMk>0)?Math.min(1,avFk/metMk):0,hhMk=hhKc*escK,costoMk=costoKF*escK;
           /* restantes y duracion del apartado: su rendimiento es el de la partida si comparten unidad */
-          var metAk=(metFk!=null?Math.round(Math.min(avFk,metFk)*100)/100:null),rendK=(((x.unidad||und||'')===(und||''))?rend9:null),metRk=_tbMetR((cq>0?cq:null),(cq>0?Math.round(av*100)/100:null)),metRFk=_tbMetR(metFk,metAk);
-          partes.push({pert:x.nombre||'',metM:metMk,hhM:hhMk,costoM:costoMk,metA:(metFk!=null?Math.round(Math.min(avFk,metFk)*100)/100:null),hhA:hhKc*rAk,costoA:costoKF*rAk,metAM:(metMk!=null?Math.round(Math.min(avFk,metMk)*100)/100:null),hhAM:hhMk*rAMk,costoAM:costoMk*rAMk,av:(cq>0?Math.round(av*100)/100:null),met:(cq>0?cq:null),metF:(cq>0?(considera?(go?0:Math.round(Math.max(0,cq-rq)*100)/100):0):null),metR:metRk,metRF:metRFk,rend:rendK,dur:_tbDur(metRFk,rendK),und:x.unidad||und||'',pu:(cq>0?Math.round(costo*frac/cq*100)/100:null),hhu:((cq>0&&hhK>0)?hhK/cq:null),peso:Math.round(frac*10000)/100,hhC:hhK,hh:hhKc,noHace:Math.round(nh*10000)/100,est:estK,
-            ret:(rq<0?('+'+_apuCant(-rq)+' '+(x.unidad||'')+' m\u00e1s \u00b7 metrado final '+_apuCant(cq-rq)):rq>0?(_apuCant(rq)+' '+(x.unidad||'')+(rq<saldo-1e-9?(' \u00b7 metrado final '+_apuCant(Math.max(0,cq-rq))):'')):''),apOff:(go?(g.nombre||g.id):''),costo:costoK,costoC:costoKF,dCosto:costoK-costoKF,pct:(function(){var mF9=(rq<0?cq-rq:Math.max(0,cq-rq));return mF9>0?Math.round(av/mF9*10000)/100:(av>0?100:0)})()})})}
+          var metAk=(metFk!=null?Math.round(Math.min(avFk,metFk)*100)/100:null),rendK=((((x.unidad||und||'')===(und||''))&&rend9>0&&cq>0&&metK>0)?Math.round(rend9*cq/metK*10000)/10000:null);
+          partes.push(_tbConRest({pert:x.nombre||'',metM:metMk,hhM:hhMk,costoM:costoMk,metA:(metFk!=null?Math.round(Math.min(avFk,metFk)*100)/100:null),hhA:hhKc*rAk,costoA:costoKF*rAk,metAM:(metMk!=null?Math.round(Math.min(avFk,metMk)*100)/100:null),hhAM:hhMk*rAMk,costoAM:costoMk*rAMk,av:(cq>0?Math.round(av*100)/100:null),met:(cq>0?cq:null),metF:(cq>0?(considera?(go?0:Math.round(Math.max(0,cq-rq)*100)/100):0):null),und:x.unidad||und||'',pu:(cq>0?Math.round(costo*frac/cq*100)/100:null),hhu:((cq>0&&hhK>0)?hhK/cq:null),peso:Math.round(frac*10000)/100,hhC:hhK,hh:hhKc,noHace:Math.round(nh*10000)/100,est:estK,
+            ret:(rq<0?('+'+_apuCant(-rq)+' '+(x.unidad||'')+' m\u00e1s \u00b7 metrado final '+_apuCant(cq-rq)):rq>0?(_apuCant(rq)+' '+(x.unidad||'')+(rq<saldo-1e-9?(' \u00b7 metrado final '+_apuCant(Math.max(0,cq-rq))):'')):''),apOff:(go?(g.nombre||g.id):''),costo:costoK,costoC:costoKF,dCosto:costoK-costoKF,pct:(function(){var mF9=(rq<0?cq-rq:Math.max(0,cq-rq));return mF9>0?Math.round(av/mF9*10000)/100:(av>0?100:0)})()},_tbRestantes((cq>0?cq:null),(cq>0?Math.round(av*100)/100:null),metFk,metAk,metMk,hhK,costoK,rendK)))})}
       /* apartados del APU apagados en este cronograma que no son parte: su fila, con lo que se llevan */
       try{var atot=(ra&&typeof _apuTotal==='function')?_apuTotal(ra):0;if(atot>0&&r&&r.fases&&r.fases.length)gs.forEach(function(g){if(usados[g.id])return;var go=_apuGOffEf(id,g,c.cron_id);if(!go)return;var gf=_apuGrupoTot(ra,g.id)/atot;if(!(gf>0))return;
         var hhG=hhC*gf,cG=costo*gf;
-        partes.push({pert:(g.nombre||g.id)+' (apartado del APU)',av:null,met:null,metF:null,metM:null,hhM:0,costoM:0,metA:null,hhA:0,costoA:0,metAM:null,hhAM:0,costoAM:0,metR:null,metRF:null,rend:null,dur:null,und:und,pu:null,hhu:null,peso:Math.round(gf*10000)/100,hhC:hhG,hh:0,noHace:100,est:'Apagado',ret:'',apOff:(g.nombre||g.id),costo:cG,costoC:0,dCosto:cG,pct:null})})}catch(e){}}catch(e){}
+        partes.push({pert:(g.nombre||g.id)+' (apartado del APU)',av:null,met:null,metF:null,metM:null,hhM:0,costoM:0,metA:null,hhA:0,costoA:0,metAM:null,hhAM:0,costoAM:0,metR:null,metRF:null,hhR:null,hhRF:null,costoR:null,costoRF:null,rend:null,durC:null,durF:null,durM:null,durR:null,dur:null,und:und,pu:null,hhu:null,peso:Math.round(gf*10000)/100,hhC:hhG,hh:0,noHace:100,est:'Apagado',ret:'',apOff:(g.nombre||g.id),costo:cG,costoC:0,dCosto:cG,pct:null})})}catch(e){}}catch(e){}
     if(partes.length){
       /* la cabecera de una partida con apartados repite lo que suman sus
          apartados en actual y mayor metrado: acumCant mezcla los partes de
@@ -21616,11 +21648,14 @@ async function _crTablaDatos(c,corte){
       partes.forEach(function(q){_sA+=Number(q.hhA)||0;_sCA+=Number(q.costoA)||0;_sM+=Number(q.hhM)||0;_sCM+=Number(q.costoM)||0;_sAM+=Number(q.hhAM)||0;_sCAM+=Number(q.costoAM)||0;_sH+=Number(q.hh)||0});
       hhA=_sA;costoA=_sCA;hhM=_sM;costoM=_sCM;hhAM=_sAM;costoAM=_sCAM;
       if(metF!=null&&_sH>0){metA=Math.round(Math.min(metF,metF*_sA/_sH)*100)/100;metM=Math.round(Math.max(metF,metF*_sM/_sH)*100)/100;metAM=(_sM>0)?Math.round(Math.min(metM,metM*_sAM/_sM)*100)/100:metA}}
-    filas.push({id:id,nom:pp.nom,esp:pp.esp,sis:pp.sis||'(sin sistema)',wbs:_tbWbsDe(pp),tareas:(tareasDe[id]||[]).join(', '),grupo:grupos[id]||'',est:est,av:av,met:met,metF:metF,metR:_tbMetR(met,av),metRF:_tbMetR(metF,metA),rend:rend9,dur:_tbDur(_tbMetR(metF,metA),rend9),und:und,pu:pu,hhu:((metK>0&&hhC>0)?hhC/metK:null),pct:Math.round(pct*100)/100,hhC:hhC,hh:cuenta,noHace:Math.round(f*10000)/100,apOff:apOff.join(', '),ret:ret.join(' \u00b7 '),costo:costo,costoC:costoC,metM:metM,hhM:hhM,costoM:costoM,metA:metA,hhA:hhA,costoA:costoA,metAM:metAM,hhAM:hhAM,costoAM:costoAM,dCosto:costo-costoC,nva:!!pp.nva,partes:partes})});
+    filas.push(_tbConRest({id:id,nom:pp.nom,esp:pp.esp,sis:pp.sis||'(sin sistema)',wbs:_tbWbsDe(pp),tareas:(tareasDe[id]||[]).join(', '),grupo:grupos[id]||'',est:est,av:av,met:met,metF:metF,und:und,pu:pu,hhu:((metK>0&&hhC>0)?hhC/metK:null),pct:Math.round(pct*100)/100,hhC:hhC,hh:cuenta,noHace:Math.round(f*10000)/100,apOff:apOff.join(', '),ret:ret.join(' \u00b7 '),costo:costo,costoC:costoC,metM:metM,hhM:hhM,costoM:costoM,metA:metA,hhA:hhA,costoA:costoA,metAM:metAM,hhAM:hhAM,costoAM:costoAM,dCosto:costo-costoC,nva:!!pp.nva,partes:partes},_tbRestantes(met,av,metF,metA,metM,hhC,costo,rend9)))});
   return {filas:filas,u:u,c:c}}
 /* columnas: orden y ocultas se recuerdan en el equipo */
-var _TB_COLS=[['num','N\u00b0'],['pert','Pertenece'],['id','Item'],['nom','Partida'],['esp','Esp.'],['sis','Sistema'],['tareas','Tarea(s)'],['grupo','Agrupaci\u00f3n'],['est','Estado'],['av','Avance'],['met','Metrado contrato'],['metF','Metrado forecast'],['und','Und'],['metR','Metrado restante'],['metRF','Metrado restante forecast'],['rend','Rendimiento (und/d\u00eda)'],['dur','Duraci\u00f3n (d\u00edas)'],['pct','% avance'],['pu','Costo unitario'],['hhu','HH unitario'],['hhC','HH contrato'],['hh','HH forecast'],['noHace','% no se hace'],['apOff','Apartados apagados'],['ret','Saldo retirado'],['costo','Costo contrato'],['costoC','Costo forecast'],['metM','Metrado mayor'],['hhM','HH forecast mayor metrado'],['costoM','Costo forecast mayor metrado'],['metA','Metrado actual'],['hhA','HH actual'],['costoA','Costo actual'],['metAM','Metrado actual (MM)'],['hhAM','HH actual forecast (MM)'],['costoAM','Costo actual forecast (MM)'],['dCosto','Diferencia de costo']];
-var _TB_NUM={av:1,met:1,metF:1,metR:1,metRF:1,rend:1,dur:1,pct:1,pu:1,hhu:1,hhC:1,hh:1,noHace:1,costo:1,costoC:1,dCosto:1,metM:1,hhM:1,costoM:1,metA:1,hhA:1,costoA:1,metAM:1,hhAM:1,costoAM:1};
+var _TB_COLS=[['num','N\u00b0'],['pert','Pertenece'],['id','Item'],['nom','Partida'],['esp','Esp.'],['sis','Sistema'],['tareas','Tarea(s)'],['grupo','Agrupaci\u00f3n'],['est','Estado'],['av','Avance'],['met','Metrado contrato'],['metF','Metrado forecast'],['und','Und'],['pct','% avance'],['pu','Costo unitario'],['hhu','HH unitario'],['hhC','HH contrato'],['hh','HH forecast'],['noHace','% no se hace'],['apOff','Apartados apagados'],['ret','Saldo retirado'],['costo','Costo contrato'],['costoC','Costo forecast'],['metM','Metrado mayor'],['hhM','HH forecast mayor metrado'],['costoM','Costo forecast mayor metrado'],['metA','Metrado actual'],['hhA','HH actual'],['costoA','Costo actual'],['metAM','Metrado actual (MM)'],['hhAM','HH actual forecast (MM)'],['costoAM','Costo actual forecast (MM)'],['dCosto','Diferencia de costo'],['metR','Metrado restante'],['metRF','Metrado restante forecast'],['hhR','HH restante'],['hhRF','HH restante forecast'],['costoR','Costo restante'],['costoRF','Costo restante forecast'],['rend','Rendimiento (und/d\u00eda)'],['durC','Duraci\u00f3n contrato (d\u00edas)'],['durF','Duraci\u00f3n forecast (d\u00edas)'],['durM','Duraci\u00f3n mayor metrado (d\u00edas)'],['durR','Duraci\u00f3n restante (d\u00edas)'],['dur','Duraci\u00f3n restante forecast (d\u00edas)']];
+/* las columnas de restantes y duraciones van AL FINAL del cuadro aunque la
+   configuracion guardada no las conozca */
+var _TB_FIN={metR:1,metRF:1,hhR:1,hhRF:1,costoR:1,costoRF:1,rend:1,durC:1,durF:1,durM:1,durR:1,dur:1};
+var _TB_NUM={av:1,met:1,metF:1,metR:1,metRF:1,hhR:1,hhRF:1,costoR:1,costoRF:1,rend:1,durC:1,durF:1,durM:1,durR:1,dur:1,pct:1,pu:1,hhu:1,hhC:1,hh:1,noHace:1,costo:1,costoC:1,dCosto:1,metM:1,hhM:1,costoM:1,metA:1,hhA:1,costoA:1,metAM:1,hhAM:1,costoAM:1};
 var T_TBC='tabla_config_create_180926';
 function _tbUsuario(){try{return String((state.user&&state.user.supervisor)||'')}catch(e){return ''}}
 function _tbCfg(){var raw=null;try{raw=localStorage.getItem('obf4_tabla_cols')}catch(e){}
@@ -21628,6 +21663,9 @@ function _tbCfg(){var raw=null;try{raw=localStorage.getItem('obf4_tabla_cols')}c
   var c=null;try{c=JSON.parse(raw||'null')}catch(e){c=null}
   if(!(c&&c.orden))c={orden:_TB_COLS.map(function(x){return x[0]})};
   c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};
+  /* una vez: las columnas nuevas de la primera version salen del orden
+     guardado para irse al final del cuadro */
+  if(!c.finMig){c.finMig=1;['metR','metRF','rend','dur'].forEach(function(k){var i=(c.orden||[]).indexOf(k);if(i>=0)c.orden.splice(i,1)})}
   window._tbCfgMem={str:raw,obj:c};return c}
 /* la configuracion de la tabla es del usuario: se guarda en el equipo y en
    Supabase (una fila por usuario, con realtime) para verla igual en todos */
@@ -21666,7 +21704,7 @@ function _tbCfgSave(c){try{c.ts=(typeof nowSrv==='function'?nowSrv():Date.now())
 function _tbColsVis(){var cfg=_tbCfg(),by={};_TB_COLS.forEach(function(x){by[x[0]]=x});var out=[];(cfg.orden||[]).forEach(function(k){if(by[k]&&!cfg.ocultas[k])out.push(by[k])});
   /* una columna nueva que la configuracion guardada aun no conoce entra en su
      sitio (tras la que la precede en _TB_COLS), no al final */
-  _TB_COLS.forEach(function(x,i){if((cfg.orden||[]).indexOf(x[0])>=0||cfg.ocultas[x[0]])return;var pos=out.length;
+  _TB_COLS.forEach(function(x,i){if((cfg.orden||[]).indexOf(x[0])>=0||cfg.ocultas[x[0]])return;if(_TB_FIN[x[0]]){out.push(x);return}var pos=out.length;
     for(var j=i-1;j>=0;j--){var q=-1;for(var t=0;t<out.length;t++)if(out[t][0]===_TB_COLS[j][0]){q=t;break}if(q>=0){pos=q+1;break}}
     out.splice(pos,0,x)});
   return out}
@@ -21700,7 +21738,7 @@ function _crTablaHTML(D,q,ord){
   var numCel=function(n,z,extra){return '<td '+_EX+'position:sticky;left:0;z-index:'+z+';'+(extra||'')+'min-width:22px">'+n+'</td>'};
   /* se ordena por lo que se ve: en partidas con apartados, la suma de sus
      apartados en HH y costos, y el primer apartado en el resto */
-  var _SUM={hhC:1,hh:1,costo:1,costoC:1,dCosto:1,hhM:1,costoM:1,hhA:1,costoA:1,hhAM:1,costoAM:1};
+  var _SUM={hhC:1,hh:1,costo:1,costoC:1,dCosto:1,hhM:1,costoM:1,hhA:1,costoA:1,hhAM:1,costoAM:1,hhR:1,hhRF:1,costoR:1,costoRF:1};
   var kv=function(r){if(!(r.partes&&r.partes.length))return r[ord.k];if(_SUM[ord.k]){var t=0;r.partes.forEach(function(x){t+=Number(x[ord.k])||0});return t}return (ord.k in r.partes[0])?r.partes[0][ord.k]:r[ord.k]};
   if(ord&&ord.k&&ord.k!=='num'&&ord.k!=='pert'){F.sort(function(a,b){var x=kv(a),y=kv(b);if(_TB_NUM[ord.k]){x=Number(x)||0;y=Number(y)||0;return ord.d*(x-y)}x=String(x||'');y=String(y||'');return ord.d*(x<y?-1:x>y?1:0)})}
   var porSis={},orden=[];F.forEach(function(r){if(!porSis[r.sis]){porSis[r.sis]=[];orden.push(r.sis)}porSis[r.sis].push(r)});
@@ -21735,7 +21773,15 @@ function _crTablaHTML(D,q,ord){
       case 'hh':return td('<b style="color:'+(r.hh>0?'#9FE8B0':'#7d8590')+'">'+_nMil2(r.hh)+'</b>',1,'',r.hh,(r.hhu!=null)?fx('metF',r.metF,'*','hhu',r.hhu):'');
       case 'metR':return td(r.metR!=null?_nMil(_apuCant(r.metR)):'',1,'',r.metR,(r.metR!=null)?fx('met',r.met,'-','av',r.av):'');
       case 'metRF':return td(r.metRF!=null?('<b style="color:'+(r.metRF>0?'#FFD37A':'#7d8590')+'">'+_nMil(_apuCant(r.metRF))+'</b>'):'',1,'',r.metRF,(r.metRF!=null)?fx('metF',r.metF,'-','metA',r.metA):'');
+      case 'hhR':return td(r.hhR!=null?_nMil2(r.hhR):'',1,'',r.hhR,(r.hhR!=null)?fx('metR',r.metR,'*','hhu',r.hhu):'');
+      case 'hhRF':return td(r.hhRF!=null?('<b style="color:'+(r.hhRF>0?'#FFD37A':'#7d8590')+'">'+_nMil2(r.hhRF)+'</b>'):'',1,'',r.hhRF,(r.hhRF!=null)?fx('metRF',r.metRF,'*','hhu',r.hhu):'');
+      case 'costoR':return td(r.costoR!=null?_nMon(r.costoR):'',1,'',r.costoR,(r.costoR!=null)?fx('metR',r.metR,'*','pu',r.pu):'');
+      case 'costoRF':return td(r.costoRF!=null?('<b style="color:'+(r.costoRF>0?'#FFD37A':'#7d8590')+'">'+_nMon(r.costoRF)+'</b>'):'',1,'',r.costoRF,(r.costoRF!=null)?fx('metRF',r.metRF,'*','pu',r.pu):'');
       case 'rend':return td(r.rend!=null?_nMil2(r.rend):'',1,'',r.rend);
+      case 'durC':return td(r.durC!=null?_nMil2(r.durC):'',1,'',r.durC,(r.durC!=null)?fx('met',r.met,'/','rend',r.rend):'');
+      case 'durF':return td(r.durF!=null?('<b style="color:#9FE8B0">'+_nMil2(r.durF)+'</b>'):'',1,'',r.durF,(r.durF!=null)?fx('metF',r.metF,'/','rend',r.rend):'');
+      case 'durM':return td(r.durM!=null?('<b style="color:'+(r.durM>(Number(r.durF)||0)+1e-9?'#FFD37A':'#9FE8B0')+'">'+_nMil2(r.durM)+'</b>'):'',1,'',r.durM,(r.durM!=null)?fx('metM',r.metM,'/','rend',r.rend):'');
+      case 'durR':return td(r.durR!=null?_nMil2(r.durR):'',1,'',r.durR,(r.durR!=null)?fx('metR',r.metR,'/','rend',r.rend):'');
       case 'dur':return td(r.dur!=null?('<b style="color:#8ECBF5">'+_nMil2(r.dur)+'</b>'):'',1,'',r.dur,(r.dur!=null)?fx('metRF',r.metRF,'/','rend',r.rend):'');
       case 'noHace':return td(r.noHace>0?(r.noHace+'%'):(r.noHace<0?('<b style="color:#9FE8B0">+'+(-r.noHace)+'% más</b>'):''),1,'',r.noHace);
       case 'apOff':return td(esc(r.apOff||''));
@@ -21757,7 +21803,7 @@ function _crTablaHTML(D,q,ord){
   H+='</tr><tr>'+numCel('1',6,'top:18px;');
   cols.forEach(function(cl){H+='<th class="_tbOrd" draggable="true" data-k="'+cl[0]+'" title="Arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:18px;background:#152436;color:#8ECBF5;border:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TB_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_tbAnchoCss(cl[0])+'">'+cl[1]+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_tbPin" data-k="'+cl[0]+'" title="Inmovilizar las columnas hasta esta (como Excel); otro clic la suelta" style="margin-left:5px;cursor:pointer;font-size:11px;opacity:'+(_fzk[cl[0]]?'1':'.4')+'">📌</span><span class="_tbClr" data-k="'+cl[0]+'" title="Color de relleno de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;opacity:'+((_cfgT.colores&&_cfgT.colores[cl[0]])?'1':'.4')+'">🎨</span><span class="_tbFnt" data-k="'+cl[0]+'" title="Color de la fuente de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;font-weight:900;color:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])||'#8ECBF5')+';opacity:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])?'1':'.5')+'">A</span><span class="_tbRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
   H+='</tr></thead><tbody>';
-  var T={n:0,hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0},N=0;
+  var T={n:0,hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0,hhR:0,hhRF:0,costoR:0,costoRF:0},N=0;
   /* titulos de sistema y TOTAL: una sola celda combinada por tramo (sin lineas
      de columna cruzandolos ni ajuste de texto); solo los totales de HH y costo
      conservan su celda, alineada con su columna */
@@ -21778,6 +21824,10 @@ function _crTablaHTML(D,q,ord){
       else if(k==='costoA'){flush();h+=td('<b style="color:#8DD6ED">'+_nMon(S.costoA||0)+'</b>',1,W,S.costoA,sumF('costoA'))}
       else if(k==='hhAM'){flush();h+=td('<b style="color:#FFD37A">'+_nMil2(S.hhAM||0)+'</b>',1,W,S.hhAM,sumF('hhAM'))}
       else if(k==='costoAM'){flush();h+=td('<b style="color:#FFD37A">'+_nMon(S.costoAM||0)+'</b>',1,W,S.costoAM,sumF('costoAM'))}
+      else if(k==='hhR'){flush();h+=td('<b>'+_nMil2(S.hhR||0)+'</b>',1,W,S.hhR,sumF('hhR'))}
+      else if(k==='hhRF'){flush();h+=td('<b style="color:#FFD37A">'+_nMil2(S.hhRF||0)+'</b>',1,W,S.hhRF,sumF('hhRF'))}
+      else if(k==='costoR'){flush();h+=td('<b>'+_nMon(S.costoR||0)+'</b>',1,W,S.costoR,sumF('costoR'))}
+      else if(k==='costoRF'){flush();h+=td('<b style="color:#FFD37A">'+_nMon(S.costoRF||0)+'</b>',1,W,S.costoRF,sumF('costoRF'))}
       else if(k==='dCosto'){flush();h+=td('<b style="color:'+(S.dCosto<0?'#9FE8B0':'#FFB4A8')+'">'+(S.dCosto>0?('\u2212 '+_nMon(S.dCosto)):(S.dCosto<0?('+ '+_nMon(-S.dCosto)):_nMon(0)))+'</b>',1,W,S.dCosto,sumF('dCosto'))}
       else run++});flush();
     if(!puesto)h+='<td style="'+ST+'border:1px solid #223049;padding:4px 6px;font-weight:'+fw+';color:#cfe3ff;white-space:nowrap">'+lab+'</td>';
@@ -21799,10 +21849,10 @@ function _crTablaHTML(D,q,ord){
     var K=['costo','costoC','dCosto','hhC','hh','hhM','costoM','hhA','costoA','hhAM','costoAM'],KB={costo:1,costoC:1,dCosto:1,hhC:1,hh:1},resto={},hay=false;K.forEach(function(k){var sm=0;L.forEach(function(m){sm+=Number(m[k])||0});var d=Math.round(((Number(r[k])||0)-sm)*100)/100;resto[k]=d>0?d:0;if(d>0.05&&KB[k])hay=true});   /* solo las columnas base deciden si hay resto: las de mayor metrado/actual no cuadran por definicion */
     if(hay){var m2={};for(var k3 in r)if(k3!=='partes')m2[k3]=r[k3];K.forEach(function(k){m2[k]=resto[k]});
         /* el resto nunca lleva mayor metrado: sus columnas (MM) repiten las de forecast/actual */
-        m2.hhM=m2.hh;m2.costoM=m2.costoC;m2.hhAM=m2.hhA;m2.costoAM=m2.costoA;m2.pert='Resto de la partida';m2.met=null;m2.metF=null;m2.metM=null;m2.metA=null;m2.metAM=null;m2.av=null;m2.pu=null;m2.hhu=null;m2.pct=null;m2.metR=null;m2.metRF=null;m2.rend=null;m2.dur=null;m2.ret='';m2.apOff='';m2._np=L.length+1;L.push(m2)}
+        m2.hhM=m2.hh;m2.costoM=m2.costoC;m2.hhAM=m2.hhA;m2.costoAM=m2.costoA;m2.pert='Resto de la partida';m2.met=null;m2.metF=null;m2.metM=null;m2.metA=null;m2.metAM=null;m2.av=null;m2.pu=null;m2.hhu=null;m2.pct=null;m2.metR=null;m2.metRF=null;m2.hhR=null;m2.hhRF=null;m2.costoR=null;m2.costoRF=null;m2.rend=null;m2.durC=null;m2.durF=null;m2.durM=null;m2.durR=null;m2.dur=null;m2.ret='';m2.apOff='';m2._np=L.length+1;L.push(m2)}
     return L};
-  orden.forEach(function(sis){var L=porSis[sis];var S={hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0};
-    L.forEach(function(r){vis(r).filter(_tbVisible).forEach(function(m){S.hhC+=Number(m.hhC)||0;S.hh+=Number(m.hh)||0;S.costo+=Number(m.costo)||0;S.costoC+=Number(m.costoC)||0;S.dCosto+=Number(m.dCosto)||0;S.hhM+=Number(m.hhM)||0;S.costoM+=Number(m.costoM)||0;S.hhA+=Number(m.hhA)||0;S.costoA+=Number(m.costoA)||0;S.hhAM+=Number(m.hhAM)||0;S.costoAM+=Number(m.costoAM)||0});if(r.est==='Activa')S.act++});
+  orden.forEach(function(sis){var L=porSis[sis];var S={hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0,hhR:0,hhRF:0,costoR:0,costoRF:0};
+    L.forEach(function(r){vis(r).filter(_tbVisible).forEach(function(m){S.hhC+=Number(m.hhC)||0;S.hh+=Number(m.hh)||0;S.costo+=Number(m.costo)||0;S.costoC+=Number(m.costoC)||0;S.dCosto+=Number(m.dCosto)||0;S.hhM+=Number(m.hhM)||0;S.costoM+=Number(m.costoM)||0;S.hhA+=Number(m.hhA)||0;S.costoA+=Number(m.costoA)||0;S.hhAM+=Number(m.hhAM)||0;S.costoAM+=Number(m.costoAM)||0;S.hhR+=Number(m.hhR)||0;S.hhRF+=Number(m.hhRF)||0;S.costoR+=Number(m.costoR)||0;S.costoRF+=Number(m.costoRF)||0});if(r.est==='Activa')S.act++});
     var kS=String(sis),cS=!!_pleg[kS];
     H+=tituloN(esc(sis)+' <span style="color:#7d8590;font-weight:600">· '+L.length+' partidas · '+S.act+' activas</span>',kS,0,cS);
     /* subtitulos WBS debajo del sistema: cuantas partidas y activas tiene cada uno */
@@ -21822,8 +21872,8 @@ function _crTablaHTML(D,q,ord){
         var rk9=String(m.id||'')+'|'+String(m.pert||'')+'|'+(m._np||0);window._tbLineas[rk9]=m;
         _rn++;if(!_rnIni)_rnIni=_rn;_rnFin=_rn;
         H+='<tr data-rk="'+esc(rk9)+'" data-rn="'+_rn+'" style="background:'+bg+(apag?';color:#8a94a6':'')+'">'+numCel(_rn,4);cols.forEach(function(cl){H+=celda(m,cl[0],false,m._np?(N+'.'+m._np):N)});H+='</tr>'})});
-    T.n+=L.length;T.hhC+=S.hhC;T.hh+=S.hh;T.costo+=S.costo;T.costoC+=S.costoC;T.dCosto+=S.dCosto;T.act+=S.act;T.hhM+=S.hhM;T.costoM+=S.costoM;T.hhA+=S.hhA;T.costoA+=S.costoA;T.hhAM+=S.hhAM;T.costoAM+=S.costoAM});
-  T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);
+    T.n+=L.length;T.hhC+=S.hhC;T.hh+=S.hh;T.costo+=S.costo;T.costoC+=S.costoC;T.dCosto+=S.dCosto;T.act+=S.act;T.hhM+=S.hhM;T.costoM+=S.costoM;T.hhA+=S.hhA;T.costoA+=S.costoA;T.hhAM+=S.hhAM;T.costoAM+=S.costoAM;T.hhR+=S.hhR;T.hhRF+=S.hhRF;T.costoR+=S.costoR;T.costoRF+=S.costoRF});
+  T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);T.hhR=r2(T.hhR);T.hhRF=r2(T.hhRF);T.costoR=r2(T.costoR);T.costoRF=r2(T.costoRF);
   H+='</tbody><tfoot>'+subtot('TOTAL \u00b7 '+T.n+' partidas \u00b7 '+T.act+' activas',T,'#152436',900,true)+'</tfoot></table>';
   return H}
 /* cabecera: ordenar con clic, mover arrastrando; boton Columnas para ocultar/mostrar */
@@ -21975,7 +22025,7 @@ async function _tbExportarXlsx2(root,doc){
   var L=window._tbLineas||{};
   var esMon={costo:1,costoC:1,costoM:1,costoA:1,costoAM:1,dCosto:1,pu:1};
   var esPct={pct:1,noHace:1};
-  var sumables={hhC:1,hh:1,costo:1,costoC:1,dCosto:1,hhM:1,costoM:1,hhA:1,costoA:1,hhAM:1,costoAM:1};
+  var sumables={hhC:1,hh:1,costo:1,costoC:1,dCosto:1,hhM:1,costoM:1,hhA:1,costoA:1,hhAM:1,costoAM:1,hhR:1,hhRF:1,costoR:1,costoRF:1};
   var trs=Array.prototype.slice.call(tb.querySelectorAll('tbody tr'));
   trs.forEach(function(tr){
     if(cs(tr).display==='none')return;
@@ -22041,7 +22091,11 @@ async function _tbExportarXlsx2(root,doc){
       /* restantes y duracion: metrado - avance, forecast - actual, restante forecast / rendimiento */
       if(m&&k==='metR'&&isFinite(num)&&m.met!=null&&m.av!=null){var a1=refMet('met'),b1=refCol('av',m.av);if(a1!=null&&b1!=null){h2+=celF(ref,a1+'-'+b1,estiloDe(td,tr,NUM,'right'));return}}
       if(m&&k==='metRF'&&isFinite(num)&&m.metF!=null&&m.metA!=null){var a2=refMet('metF'),b2=refMet('metA');if(a2!=null&&b2!=null){h2+=celF(ref,a2+'-'+b2,estiloDe(td,tr,NUM,'right'));return}}
-      if(m&&k==='dur'&&isFinite(num)&&Number(m.rend)>0&&m.metRF!=null){var a3=refCol('metRF',m.metRF),b3=refCol('rend',m.rend);if(a3!=null&&b3!=null){h2+=celF(ref,a3+'/'+b3,estiloDe(td,tr,NUM,'right'));return}}
+      /* HH y costo restantes = metrado restante x unitario; duraciones = metrado / rendimiento */
+      var FX9={hhR:['metR','*','hhu'],hhRF:['metRF','*','hhu'],costoR:['metR','*','pu'],costoRF:['metRF','*','pu'],durC:['met','/','rend'],durF:['metF','/','rend'],durM:['metM','/','rend'],durR:['metR','/','rend'],dur:['metRF','/','rend']}[k];
+      if(m&&FX9&&isFinite(num)&&m[FX9[0]]!=null&&(FX9[1]!=='/'||Number(m.rend)>0)){
+        var refX=function(kk){if(kk==='pu')return refPu;if(kk==='hhu')return refHhu;if(kk==='met'||kk==='metF'||kk==='metM')return refMet(kk);return refCol(kk,m[kk])};
+        var a3=refX(FX9[0]),b3=refX(FX9[2]);if(a3!=null&&b3!=null){h2+=celF(ref,a3+FX9[1]+b3,estiloDe(td,tr,NUM,'right'));return}}
       if(isFinite(num)&&(_TB_NUM[k]||raw!=null)){h2+=celN(ref,num,estiloDe(td,tr,(k==='dCosto')?DIF:(esPct[k]?PCT:NUM),'right'));return}
       h2+=celT(ref,txt(td),estiloDe(td,tr,0,'left'))});
     filas.push('<row r="'+r+'">'+h2+'</row>');r++});
@@ -28300,7 +28354,7 @@ function _crXerMLineas(r){
     m2.hhM=m2.hh;m2.costoM=m2.costoC;m2.hhAM=m2.hhA;m2.costoAM=m2.costoA;
     m2.pert='Resto de la partida';
     m2.met=null;m2.metF=null;m2.metM=null;m2.metA=null;m2.metAM=null;
-    m2.av=null;m2.pu=null;m2.hhu=null;m2.pct=null;m2.metR=null;m2.metRF=null;m2.rend=null;m2.dur=null;m2.ret='';m2.apOff='';
+    m2.av=null;m2.pu=null;m2.hhu=null;m2.pct=null;m2.metR=null;m2.metRF=null;m2.hhR=null;m2.hhRF=null;m2.costoR=null;m2.costoRF=null;m2.rend=null;m2.durC=null;m2.durF=null;m2.durM=null;m2.durR=null;m2.dur=null;m2.ret='';m2.apOff='';
     m2._np=L.length+1;L.push(m2)}
   return L}
 
