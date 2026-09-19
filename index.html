@@ -15950,7 +15950,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919b5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260919b6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21944,22 +21944,41 @@ function _crTablaBind(root,ordRef,rerender){
     pintaSel();var r9=doc.getElementById('_tbRes');if(r9)r9.textContent=window._tbSelCol?('Columna '+_tbColL(keys9.indexOf(k))+' elegida: Ctrl+C copia sus valores'+(_TB_EDIT[k]?' \u00b7 Ctrl+V pega en toda la columna':'')):''}});
   pintaSel();window._tbRoot=root;
   if(!doc._tbClipBound){doc._tbClipBound=true;
-    doc.addEventListener('copy',function(e){try{var sc=window._tbSelCol,rt=window._tbRoot;if(!sc||!rt||(doc.activeElement&&/INPUT|TEXTAREA/.test(doc.activeElement.tagName)))return;
-      var ks=Array.prototype.map.call(rt.querySelectorAll('thead th'),function(t){return t.getAttribute('data-k')});var ix=ks.indexOf(sc.k);if(ix<0)return;
+    var msg9=function(t){try{var r9=doc.getElementById('_tbRes');if(r9)r9.textContent=t}catch(_e){}};
+    /* copiar la columna elegida: se guarda aqui (fila a fila, por su clave) y
+       se manda al portapapeles para pegarla en Excel */
+    var copiaCol=function(){var sc=window._tbSelCol,rt=window._tbRoot;if(!sc||!rt)return false;
+      var ks=Array.prototype.map.call(rt.querySelectorAll('thead th'),function(t){return t.getAttribute('data-k')});var ix=ks.indexOf(sc.k);if(ix<0)return false;
       var vals=[];rt.querySelectorAll('tbody tr[data-rk]').forEach(function(tr){var x=tr.children[ix+1];if(!x)return;var raw=x.getAttribute('data-num');vals.push({rk:tr.getAttribute('data-rk'),v:(raw!=null&&raw!=='')?raw:String(x.textContent||'').replace(/\u270e/g,'').replace(/\s+/g,' ').trim()})});
-      window._tbClip={k:sc.k,vals:vals};e.clipboardData.setData('text/plain',vals.map(function(x){return x.v}).join('\n'));e.preventDefault();
-      var r9=doc.getElementById('_tbRes');if(r9)r9.textContent=vals.length+' valores copiados de la columna '+_tbColL(ix)}catch(_e){}});
-    doc.addEventListener('paste',function(e){try{var sc=window._tbSelCol,rt=window._tbRoot;if(!sc||!rt||!_TB_EDIT[sc.k]||(doc.activeElement&&/INPUT|TEXTAREA/.test(doc.activeElement.tagName)))return;e.preventDefault();
-      var c9=window._crTablaCron;if(!c9)return;
+      window._tbClip={k:sc.k,vals:vals};var txt=vals.map(function(x){return x.v}).join('\n');
+      try{var nv=(doc.defaultView&&doc.defaultView.navigator)||navigator;if(nv.clipboard&&nv.clipboard.writeText)nv.clipboard.writeText(txt).catch(function(){})}catch(_e){}
+      msg9(vals.length+' valores copiados de la columna '+_tbColL(ix)+' \u00b7 elige la letra de Rendimiento APP y pulsa Ctrl+V');return txt};
+    /* pegar en la columna elegida (solo las editables): lo copiado aqui va
+       fila a fila por su clave; un texto de fuera (Excel), por orden */
+    var pegaCol=async function(txtDado){var sc=window._tbSelCol,rt=window._tbRoot;if(!sc||!rt)return false;
+      if(!_TB_EDIT[sc.k]){msg9('En esta columna no se pega: solo en las que llevan l\u00e1piz (Rendimiento APP)');return true}
+      var c9=window._crTablaCron;if(!c9)return true;
+      var txt=(txtDado!=null)?String(txtDado):'';
+      if(txtDado==null){try{var nv=(doc.defaultView&&doc.defaultView.navigator)||navigator;if(nv.clipboard&&nv.clipboard.readText)txt=String((await nv.clipboard.readText())||'')}catch(_e){txt=''}}
+      txt=txt.replace(/\r/g,'');
+      var clip=window._tbClip,interno=(clip&&clip.vals.length)?clip.vals.map(function(x){return x.v}).join('\n'):'';
+      var usaInterno=!!interno&&(!txt||txt.replace(/\n$/,'')===interno);
       var filas=Array.prototype.slice.call(rt.querySelectorAll('tbody tr[data-rk]')),porRk={};filas.forEach(function(tr){porRk[tr.getAttribute('data-rk')]=tr});
-      var pares=[],clip=window._tbClip,txt=String((e.clipboardData&&e.clipboardData.getData('text/plain'))||'').replace(/\r/g,'');
-      var mismo=!!(clip&&clip.vals.length&&clip.vals.map(function(x){return x.v}).join('\n')===txt.replace(/\n$/,''));
-      if(mismo)clip.vals.forEach(function(x){if(porRk[x.rk])pares.push([porRk[x.rk],x.v])});   /* la columna copiada aqui: fila a fila por su clave */
-      else{var lin=txt.split('\n');if(lin.length&&lin[lin.length-1]==='')lin.pop();for(var i=0;i<Math.min(lin.length,filas.length);i++)pares.push([filas[i],lin[i]])}   /* texto de fuera (Excel): por orden */
+      var pares=[];
+      if(usaInterno)clip.vals.forEach(function(x){if(porRk[x.rk])pares.push([porRk[x.rk],x.v])});
+      else{var lin=txt.split('\n');if(lin.length&&lin[lin.length-1]==='')lin.pop();for(var i=0;i<Math.min(lin.length,filas.length);i++)pares.push([filas[i],lin[i]])}
+      if(!pares.length){msg9('Nada que pegar: primero elige una columna y pulsa Ctrl+C');return true}
       var n=0,vistos={};pares.forEach(function(p){var m=(window._tbLineas||{})[p[0].getAttribute('data-rk')];if(!m||!m.id||vistos[m.id])return;var v=String(p[1]).replace(/\u2212/g,'-').replace(/[',\s]/g,'');if(v===''||v==='?')return;var num=Number(v);if(!isFinite(num))return;vistos[m.id]=1;_trSet(c9.cron_id,m.id,num>0?num:0,true);n++});
       try{_trPush()}catch(_ep){}
-      var r9=doc.getElementById('_tbRes');if(r9)r9.textContent=n+' rendimientos APP pegados en la columna';try{if(typeof toast==='function')toast('\u270e '+n+' rendimientos APP pegados en toda la columna')}catch(_et){}
-      try{if(typeof window._tbRerender==='function')window._tbRerender()}catch(_er){}}catch(_e){}})}
+      msg9(n+' rendimientos APP pegados en toda la columna');try{if(typeof toast==='function')toast('\u270e '+n+' rendimientos APP pegados en toda la columna')}catch(_et){}
+      try{if(typeof window._tbRerender==='function')window._tbRerender()}catch(_er){}return true};
+    /* Ctrl+C / Ctrl+V por teclado, sin depender de los eventos copy/paste */
+    doc.addEventListener('keydown',function(e){try{if(!(e.ctrlKey||e.metaKey)||e.altKey)return;var kk=String(e.key||'').toLowerCase();if(kk!=='c'&&kk!=='v')return;
+      if(doc.activeElement&&/INPUT|TEXTAREA|SELECT/.test(doc.activeElement.tagName))return;if(!window._tbSelCol)return;
+      e.preventDefault();e.stopPropagation();if(kk==='c')copiaCol();else pegaCol(null)}catch(_e){}},true);
+    /* y si copiar/pegar llega por otra via (menu del navegador), lo mismo */
+    doc.addEventListener('copy',function(e){try{if(!window._tbSelCol||(doc.activeElement&&/INPUT|TEXTAREA/.test(doc.activeElement.tagName)))return;var t=copiaCol();if(t!==false){e.clipboardData.setData('text/plain',t);e.preventDefault()}}catch(_e){}});
+    doc.addEventListener('paste',function(e){try{if(!window._tbSelCol||(doc.activeElement&&/INPUT|TEXTAREA/.test(doc.activeElement.tagName)))return;e.preventDefault();pegaCol(String((e.clipboardData&&e.clipboardData.getData('text/plain'))||''))}catch(_e){}})}
   /* lapiz del Rendimiento APP: un cuadro en la misma celda; Enter guarda,
      Esc cancela; vacio o 0 vuelve al rendimiento del alcance */
   root.querySelectorAll('._tbRendEd').forEach(function(b){b.onclick=function(e){e.stopPropagation();e.preventDefault();
@@ -22283,7 +22302,7 @@ function _crTablaDocHTML(titulo){
     '#top input{flex:1;min-width:160px;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:8px;padding:6px 9px;font-size:12px}'+
     '#top button{background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer}'+
     '#res{font-size:11px;color:#9FE8B0;font-weight:800}'+
-    '#cuerpo{flex:1;min-height:0;overflow:auto;padding:6px 8px 0}'+
+    '#cuerpo{flex:1;min-height:0;overflow:auto;padding:0}'+
     'table{border-collapse:collapse;font-size:11.5px}th,td{border:1px solid #223049;padding:3px 6px;white-space:nowrap}th{background:#152436;color:#8ECBF5;position:sticky;top:0;cursor:pointer;z-index:2}'+
     '</style></head><body><div id="top"><input id="_tbBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026"><span id="_tbRes"></span>'+
     '<button id="_tbCols" title="Ocultar o mostrar columnas (arrastra las cabeceras para moverlas)">\u2699 Columnas</button>'+
