@@ -15918,7 +15918,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918e0';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918e1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -30244,6 +30244,10 @@ function _crXerFechas(lineas,modelo){
     var iniRemF=info?(_crFec(fi.o.restart_date)||ini):(String(t.iniRem||'').slice(0,10)||ini);
     var iniRealF=info?_crFec(fi.o.act_start_date):String(t.iniReal||'').slice(0,10);
     var finRealF=info?_crFec(fi.o.act_end_date):String(t.finReal||'').slice(0,10);
+    /* el aplicativo no tiene fechas para ella: se cae a las del .xer y hay
+       que decirlo, o el usuario cree que exporto un plan que no puso */
+    if(!info&&(!String(t.ini||'')||!String(t.fin||'')))
+      out.avisos.push(cod+' ('+String(t.nombre||'')+'): no tiene fechas en el aplicativo; sale con las del .xer ('+(ini||'sin fecha')+(fin&&fin!==ini?(' → '+fin):'')+') para '+_crXer2(Number(t.hhR)||0)+' hh remanentes. Ponle inicio y fin en la hoja 2 antes de exportar');
     if(!ini){out.sinFecha.push(cod);cierra();return}
     ini=_crXerCalSnap(C,ini,false);
     fin=_crXerCalSnap(C,fin,true);
@@ -30334,7 +30338,6 @@ function _crXerFechas(lineas,modelo){
          restar una duracion de algo que este cronograma no va a hacer. */
       var hpdC=(C.hpd>0)?C.hpd:10;
       var dias=_crXerCalCuenta(C,ini,fin);
-      if(!ini||!fin)out.avisos.push(cod+' ('+t.nombre+'): no tiene fechas en el aplicativo; sale con 1 dia de duracion para '+_crXer2(Number(t.hhR)||0)+' hh remanentes. Ponle inicio y fin en la hoja 2 antes de exportar');
       var hhT=Number(t.hhT)||0,gT=Number(t.hhA)||0;
       var resta=(t.hhR!=null&&isFinite(Number(t.hhR)))?Math.max(0,Number(t.hhR)):Math.max(0,hhT-gT);
       var rC=0;
