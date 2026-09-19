@@ -15948,7 +15948,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919a6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260919a7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21648,11 +21648,22 @@ function _tbColsVis(){var cfg=_tbCfg(),by={};_TB_COLS.forEach(function(x){by[x[0
     for(var j=i-1;j>=0;j--){var q=-1;for(var t=0;t<out.length;t++)if(out[t][0]===_TB_COLS[j][0]){q=t;break}if(q>=0){pos=q+1;break}}
     out.splice(pos,0,x)});
   return out}
+/* busqueda sin tildes: cada caracter a su letra base (misma longitud que el
+   original, para poder marcar en el texto tal cual se escribio) */
+function _tbNorm(s){s=String(s==null?'':s);var out='';for(var i=0;i<s.length;i++){var ch=s.charAt(i),d=ch;try{d=ch.normalize('NFD').charAt(0)||ch}catch(e){}out+=d}return out.toLowerCase()}
+/* marca en amarillo las coincidencias dentro de un trozo de HTML ya escapado,
+   sin tocar las etiquetas ni las entidades */
+function _tbMarca(html,qq){if(!qq)return html;var partes=String(html==null?'':html).split(/(<[^>]+>|&[a-zA-Z#0-9]+;)/);
+  for(var i=0;i<partes.length;i++){var seg=partes[i];if(!seg||seg.charAt(0)==='<'||seg.charAt(0)==='&')continue;
+    var n=_tbNorm(seg),pos=0,out='',k;
+    while((k=n.indexOf(qq,pos))>=0){out+=seg.slice(pos,k)+'<mark style="background:#FFD54F;color:#111;border-radius:2px;padding:0 1px">'+seg.slice(k,k+qq.length)+'</mark>';pos=k+qq.length}
+    partes[i]=out+seg.slice(pos)}
+  return partes.join('')}
 function _crTablaHTML(D,q,ord){
   window._tbLineas={};   /* las lineas pintadas, por clave de fila: las lee el exportador a Excel */
   window._tbUltimo={D:D,q:q,ord:ord};   /* lo ultimo pintado, para que el exportador pueda repintarlo entero */
-  var F=D.filas.slice();var qq=String(q||'').toLowerCase();
-  if(qq)F=F.filter(function(r){return (r.id+' '+r.nom+' '+r.sis+' '+r.tareas+' '+r.grupo+' '+r.est+' '+r.esp+' '+(r.und||'')+' '+r.partes.map(function(x){return x.pert+' '+(x.est||'')+' '+(x.apOff||'')+' '+(x.ret||'')}).join(' ')).toLowerCase().indexOf(qq)>=0});
+  var F=D.filas.slice();var qq=_tbNorm(q||'').replace(/^\s+|\s+$/g,'');   /* sin tildes ni mayusculas */
+  if(qq)F=F.filter(function(r){return _tbNorm(r.id+' '+r.nom+' '+r.sis+' '+r.tareas+' '+r.grupo+' '+r.est+' '+r.esp+' '+(r.und||'')+' '+r.partes.map(function(x){return x.pert+' '+(x.est||'')+' '+(x.apOff||'')+' '+(x.ret||'')}).join(' ')).indexOf(qq)>=0});
   var cols=_tbColsVis();
   /* se ordena por lo que se ve: en partidas con apartados, la suma de sus
      apartados en HH y costos, y el primer apartado en el resto */
@@ -21667,7 +21678,7 @@ function _crTablaHTML(D,q,ord){
      localStorage y hace JSON.parse, y se llamaba en CADA celda */
   var _ANCHO={};cols.forEach(function(cl){_ANCHO[cl[0]]=_tbAnchoCss(cl[0])});
   /* con "ajustar texto" la celda envuelve y la fila crece hasta mostrar todo; sin el, una linea y recorte */
-  var td0=function(v,n,extra,raw){return '<td'+((raw!=null&&raw!==''&&isFinite(Number(raw)))?(' data-num="'+raw+'"'):'')+' style="border:1px solid #223049;padding:3px 6px;vertical-align:top;'+(_aj?'white-space:normal;overflow-wrap:anywhere;':'white-space:nowrap;')+(n?'text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;':'')+(extra||'')+'">'+(v==null?'':v)+'</td>'};var td=td0;
+  var td0=function(v,n,extra,raw){return '<td'+((raw!=null&&raw!==''&&isFinite(Number(raw)))?(' data-num="'+raw+'"'):'')+' style="border:1px solid #223049;padding:3px 6px;vertical-align:top;'+(_aj?'white-space:normal;overflow-wrap:anywhere;':'white-space:nowrap;')+(n?'text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;':'')+(extra||'')+'">'+((v==null)?'':((qq&&!n)?_tbMarca(v,qq):v))+'</td>'};var td=td0;   /* con busqueda, las coincidencias en amarillo */
   var celda=function(r,k,esParte,num){var W=(_ANCHO[k]!=null?_ANCHO[k]:_tbAnchoCss(k));var td=function(v,n,extra,raw){return td0(v,n,(extra||'')+W,raw)};
     switch(k){
       case 'num':return td('<b style="color:'+(esParte?'#9db4d6':'#cfe3ff')+'">'+num+'</b>');
