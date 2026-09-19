@@ -4978,7 +4978,7 @@ function _crPintaHoja2(D,P,sel,fec,q){
        calendario real, o la hoja 2 ensena una resta que el archivo no tiene */
     if(_C9){try{ini=_crXerCalSnap(_C9,ini,false);fin=_crXerCalSnap(_C9,fin,true);
       if(_crASerial(fin)<_crASerial(ini))fin=ini}catch(_e8){}}
-    var dias=_C9?_crXerCalCuenta(_C9,ini,fin):_crXerDias(ini,fin),hhT=hhs[k]||0,gT=gans[k]||0;
+    var dias=_C9?_crXerCalCuenta(_C9,ini,fin):_crXerDias(ini,fin),hhT=hhs[k]||0,gT=Math.round((gans[k]||0)*100)/100;   /* a centimos, como el .xer */
     var rC=_cnDe(X9.cron,t.task_code);
     /* LA REGLA DEL REMANENTE, la misma funcion que usa el .xer: sin HH manda
        el alcance de la actividad y el % fisico de sus partidas */
@@ -5116,7 +5116,7 @@ function _crPintaHoja2(D,P,sel,fec,q){
         '<span style="font-size:11px;font-weight:800;color:'+
           (info?'#7d8590':(hh>0?'#9FE8B0':'#E8C9A0'))+'">'+
           (info?'informativa':(Math.round(hh*100)/100)+' hh')+'</span>'+
-        (info?'':durTxt(t,k))+'</span>'):'')+
+        durTxt(t,k)+'</span>'):'')+
       ((esApp&&admH2)?(function(){var bs='display:inline-block;cursor:pointer;background:#1c2440;border:1px solid #33447a;border-radius:5px;padding:0 5px;font-size:10px;font-weight:900;color:#8ECBF5;line-height:16px';
         return '<span class="_crNoTog" style="flex:none;display:inline-flex;gap:2px;align-items:center">'+
           '<span class="_crNoTog _crTP6" data-t="'+esc(t.task_code)+'" data-d="izq" title="Subir un nivel de WBS (como en P6)" style="'+bs+'">\u25c0</span>'+
@@ -15918,7 +15918,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918d9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918e0';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28524,6 +28524,14 @@ async function _crXerModelo(c,opt){
     else if(m.pct>=100-1e-9)m.estado='Complete';   /* la regla: Complete si su % ya es 100, con HH o sin ellas */
     else if(m.pct>0)m.estado='Active';
     else m.estado='NotStart';
+    /* sin alcance (HH apagadas, fuera, saldo retirado) pero ejecutada del todo
+       sobre el metrado del CONTRATO: en P6 es Complete con sus fechas reales,
+       no una Not Started con 0 dias (A1490: 1206 de 1206 m hechos) */
+    if(m.alcance===false&&!(modo==='tal'&&m.tipo==='xer')&&m.estado!=='Complete'){
+      var _hecho9=0,_tot9=0;
+      (m.items||[]).forEach(function(i9){var r9=(typeof filaDe==='function')?filaDe(i9):(filaDe&&filaDe[i9]);if(!r9)return;
+        var mt9=Number(r9.met)||0,av9=Number(r9.av)||0;_tot9+=mt9;_hecho9+=Math.min(mt9,av9)});
+      if(_tot9>0&&_hecho9>=_tot9-1e-9){m.estado='Complete';m.pct=100}}
 
     /* --- las fechas reales, de los partes hasta el corte --- */
     if(modo==='tal'&&m.tipo==='xer'){/* ya vienen del archivo */}
@@ -28906,6 +28914,10 @@ function _crXerEscribe(lineas,modelo){
     else frRem=1-Math.max(0,Math.min(100,Number(m.pct)||0))/100;
     if(!(frRem>0))frRem=0;
     if(hito){dur=0;pw('target_drtn_hr_cnt','0');pw('remain_drtn_hr_cnt','0')}
+    else if(!loe&&m.alcance===false&&m.estado!=='Complete'){
+      /* sin alcance: P6 pone Remaining = Original en toda Not Started, asi que
+         el remanente 0 exige duracion original 0 (no ocupa tiempo en el plan) */
+      dur=0;pw('target_drtn_hr_cnt','0');pw('remain_drtn_hr_cnt','0')}
     else if(!loe){
       if(m.hhT>0&&!(dur>0)){dur=hpd;pw('target_drtn_hr_cnt',_crXerMNum(dur))}
       if(dur>0)pw('remain_drtn_hr_cnt',_crXerMNum(dur*frRem))}
@@ -29158,6 +29170,16 @@ function _crXerMVacia(lineas,fi,TA,TR,mias,out,conAvance){
   pw('target_work_qty','0');pw('remain_work_qty','0');pw('act_work_qty','0');
   pw('target_equip_qty','0');pw('remain_equip_qty','0');pw('act_equip_qty','0');
   pw('act_this_per_work_qty','0');pw('act_this_per_equip_qty','0');
+  /* el .xer no puede salir con restricciones NI EN LAS AJENAS: al F9 de P6 una
+     restriccion de una actividad que el aplicativo no gestiona empuja igual a
+     sus sucesoras gestionadas y deshace el corrido. Lo mismo el fin esperado y
+     la suspension, que le hacen recalcular la duracion remanente. */
+  if(out&&out.cstrAjenas==null){out.cstrAjenas=0;out.cstrAjenasL=[]}
+  var _ca=String(fi.o.cstr_type||'').trim(),_cb=String(fi.o.cstr_type2||'').trim();
+  if(out&&(_ca||_cb)){out.cstrAjenas++;
+    if(out.cstrAjenasL.length<200)out.cstrAjenasL.push(_crTx(fi.o.task_code)+' '+(_ca||_cb).replace(/^CS_/,''))}
+  pw('cstr_type','');pw('cstr_date','');pw('cstr_type2','');pw('cstr_date2','');
+  pw('expect_end_date','');pw('suspend_date','');pw('resume_date','');
   if(conAvance){
     /* sin HH del aplicativo no puede quedar el % del archivo viejo: P6 ensena
        actividades "en curso" con cero horas */
@@ -30182,13 +30204,24 @@ function _crXerFechas(lineas,modelo){
     var esDeriv=(tt==='TT_LOE'||tt==='TT_WBS');
     if(t.hito&&!esHito)out.avisos.push(cod+': el aplicativo la trata como hito y el .xer la trae como '+tt);
     if(t.loe&&!esDeriv)out.avisos.push(cod+': el aplicativo la trata de nivel de esfuerzo y el .xer la trae como '+tt);
-    if(esDeriv){out.loe++;return}
-
-    /* lo que rompe el remanente se limpia SIEMPRE, hasta en las informativas:
+    /* lo que rompe el remanente se limpia SIEMPRE, hasta en las informativas,
+       en los hitos, en las de nivel de esfuerzo y en las que no tienen fecha:
        un fin esperado viejo hace que P6 recalcule la duracion remanente y pise
-       lo escrito (SCHEDOPTIONS.sched_use_expect_end_flag viene en Y) */
+       lo escrito (SCHEDOPTIONS.sched_use_expect_end_flag viene en Y), y una
+       restriccion vieja devuelve la actividad a su fecha en el primer F9.
+       Va ANTES de los return de LOE / hito / sin fecha: si no, una informativa
+       de esos tipos se cuela con su restriccion y E-28 bloquea la descarga. */
+    var ct=String(fi.o.cstr_type||'').trim(),cd=_crFec(fi.o.cstr_date);
+    var ct2=String(fi.o.cstr_type2||'').trim(),cd2=_crFec(fi.o.cstr_date2);
+    if(ct||cd||ct2||cd2){
+      out.cstrLib++;
+      if(out.cstrLibL.length<400)out.cstrLibL.push(cod+
+        (ct?(' ('+ct.replace(/^CS_/,'')+(cd?(' '+cd):'')+')'):'')+
+        (ct2?(' + '+ct2.replace(/^CS_/,'')+(cd2?(' '+cd2):'')):''))}
     pw('expect_end_date','');pw('suspend_date','');pw('resume_date','');
+    pw('cstr_type','');pw('cstr_date','');
     pw('cstr_type2','');pw('cstr_date2','');
+    if(esDeriv){cierra();out.loe++;return}
 
     var C=_crXerCalendario(lineas,fi.o.clndr_id);
 
@@ -30342,6 +30375,11 @@ function _crXerFechas(lineas,modelo){
       pw('restart_date',_crXerFec(ir,hIr));
       pw('reend_date',_crXerFec(F.iso,F.hora));
       pw('remain_drtn_hr_cnt',_crXerNum(remH));
+      if(!alc9&&!info){
+        /* sin alcance: duracion original 0 y fin = inicio, o P6 vuelve a poner
+           Remaining = Original al importar una Not Started */
+        pw('target_drtn_hr_cnt','0');pw('target_end_date',_crXerFec(ini,hIni));
+        t.durH=0}
       /* en curso y sin empezar, las TEMPRANAS son las del remanente (es lo
          que hace P6: para una actividad iniciada, early_start es el reinicio,
          no la fecha real, que ya viaja en act_start_date) */
@@ -30351,20 +30389,8 @@ function _crXerFechas(lineas,modelo){
       pw('early_end_date',_crXerFec(eFin,hEf));
       _crXerLate(pw,ir,hIr,F.iso,F.hora,est,eIni,hEi,eFin,hEf)}
 
-    /* ---------------- restricciones: NINGUNA ----------------
-       Pedido del usuario: el .xer no puede salir con restricciones. En todo lo
-       que el aplicativo gestiona (informativas incluidas) se vacian
-       cstr_type, cstr_date, cstr_type2 y cstr_date2; tampoco se ancla nada con
-       CS_MSOA. Lo que se limpia se cuenta y se enumera en el mensaje. */
-    var ct=String(fi.o.cstr_type||'').trim(),cd=_crFec(fi.o.cstr_date);
-    var ct2=String(fi.o.cstr_type2||'').trim(),cd2=_crFec(fi.o.cstr_date2);
-    if(ct||cd||ct2||cd2){
-      out.cstrLib++;
-      if(out.cstrLibL.length<400)out.cstrLibL.push(cod+
-        (ct?(' ('+ct.replace(/^CS_/,'')+(cd?(' '+cd):'')+')'):'')+
-        (ct2?(' + '+ct2.replace(/^CS_/,'')+(cd2?(' '+cd2):'')):''))}
-    pw('cstr_type','');pw('cstr_date','');
-    pw('cstr_type2','');pw('cstr_date2','');
+    /* las restricciones ya se vaciaron y se contaron arriba, antes de los
+       return de LOE / hito / sin fecha */
 
     cierra()});
 
@@ -30966,14 +30992,18 @@ function _crXerValida(lineas,modelo){
     if(!TAS.filas.length)return;
     var ges=(modelo&&modelo.tareas)?modelo.tareas:null;
     var n=0,LS=[];
+    var nA=0,LA=[];
     TAS.filas.forEach(function(f){
       var cod=_crTx(f.o.task_code);
-      if(ges&&!(ges[cod]||ges[String(cod).toUpperCase()]))return;
       var a=String(f.o.cstr_type||'').trim(),b=String(f.o.cstr_type2||'').trim();
       if(!a&&!b)return;
+      if(ges&&!(ges[cod]||ges[String(cod).toUpperCase()])){
+        nA++;if(LA.length<30)LA.push(cod+' '+(a||b).replace(/^CS_/,''));return}
       n++;if(LS.length<30)LS.push(cod+' '+(a||b).replace(/^CS_/,''))});
     if(n)E(n+' actividad(es) del aplicativo salen con restriccion: '+LS.join(', ')+
-      ' · el .xer tiene que salir sin restricciones (cstr_type y cstr_type2 vacios)')})();
+      ' · el .xer tiene que salir sin restricciones (cstr_type y cstr_type2 vacios)');
+    if(nA)E(nA+' actividad(es) que el aplicativo no gestiona salen con restriccion: '+LA.join(', ')+
+      ' · al F9 empujan igual a sus sucesoras y el .xer tiene que salir sin ninguna')})();
 
   return {ok:err.length===0,errores:err,avisos:avi,tablas:orden,
     n:{tareas:TAS.filas.length,rel:TPR.filas.length,asig:TRS.filas.length,wbs:WBS.filas.length,proyectos:PRO.filas.length}}}
@@ -31058,6 +31088,19 @@ async function _crXerArma(c,opt){
   /* el calendario del archivo manda sobre lo que el modelo dedujo por su cuenta */
   modelo.hpd=Cp.hpd;modelo.horaIni=Cp.abre;modelo.horaFin=Cp.cierra;
 
+  /* las restricciones que traia el ARCHIVO ORIGINAL: hay que contarlas aqui,
+     porque _crXerEscribe ya las vacia y despues _crXerFechas no ve ninguna */
+  var _cstr0=(function(){
+    var TT=_crXerTablas(lineas),TX=TT.TASK,n=0,L=[];
+    if(TX&&TX.cs.length)TX.filas.forEach(function(f){
+      var a=String(f.o.cstr_type||'').trim(),b=String(f.o.cstr_type2||'').trim();
+      var da=_crFec(f.o.cstr_date),db=_crFec(f.o.cstr_date2);
+      if(!a&&!b&&!da&&!db)return;
+      n++;if(L.length<400)L.push(_crTx(f.o.task_code)+
+        (a?(' ('+a.replace(/^CS_/,'')+(da?(' '+da):'')+')'):'')+
+        (b?(' + '+b.replace(/^CS_/,'')+(db?(' '+db):'')):''))});
+    return {n:n,L:L}})();
+
   /* --- 4. cantidades, estados, reales, remanentes, altas y bajas --- */
   di('4/8 Escribiendo HH, costo, estados, actividades y WBS…');
   var esc9=await _crXerEscribe(lineas,modelo);
@@ -31065,6 +31108,7 @@ async function _crXerArma(c,opt){
   /* --- 5. calendario real, fechas y predecesoras --- */
   di('5/8 Calendario real, fechas, duraciones y predecesoras…');
   var fe=_crXerFechas(lineas,modelo);
+  fe.cstrLib=_cstr0.n;fe.cstrLibL=_cstr0.L;
 
   /* --- 6. cabecera del proyecto y del archivo --- */
   di('6/8 Fecha de datos, nombre del proyecto y cabecera…');
@@ -31166,7 +31210,7 @@ function _crXerMensaje(r,modo,mm){
     (val.ok?(cuadra?'✔ ':'⚠ '):'✖ ')+'<b>'+_crXerEsc(r.nombre)+'.xer</b> · '+
     (modo==='tal'?'tal cual esta':'para reprogramacion')+
     (mm?' · <b>CON MAYOR METRADO</b>':' · normal')+
-    (val.ok?'':' · NO SE DESCARGO'));
+    (val.ok?'':' · NO SE DESCARGO')+' · <span style="opacity:.6">'+_crXerEsc(typeof APP_VER!=='undefined'?APP_VER:'')+'</span>');
 
   /* --- totales del archivo frente al TOTAL de la tabla --- */
   lin(difHH<=0.05?claro:rojo,'HH target: archivo <b>'+_crXerHH(A.hhT)+'</b> hh · TOTAL de la tabla <b>'+_crXerHH(T.hhT)+'</b> hh'+
@@ -31298,6 +31342,21 @@ function _crXerMensaje(r,modo,mm){
     lin(ambar,'Restricciones: se limpiaron <b>'+(fe.cstrLib||0)+'</b> (el .xer sale sin ninguna restriccion; si no, el primer F9 de P6 deshace el corrido)');
     lista(ambar,(fe.cstrLibL||[]).map(function(x){return _crXerEsc(x)}))}
   else lin(claro,'Restricciones: el archivo sale <b>sin ninguna</b> en las actividades del aplicativo.');
+  /* sin restricciones, en P6 lo unico que sostiene una fecha es la logica */
+  (function(){
+    var TT=_crXerTablas(r.txt.split(/\r?\n/)),TX=TT.TASK,TQ=TT.TASKPRED;
+    if(!TX||!TX.cs.length)return;
+    var np={};if(TQ&&TQ.cs.length)TQ.filas.forEach(function(f){np[String(f.o.task_id)]=1});
+    var dd=String(fe.dataDate||'').slice(0,10),L=[];
+    TX.filas.forEach(function(f){
+      if(np[String(f.o.task_id)])return;
+      if(String(f.o.status_code||'')==='TK_Complete')return;
+      var rs=String(f.o.restart_date||'').slice(0,10);
+      if(!dd||!rs||rs<=dd)return;
+      if(L.length<40)L.push(_crTx(f.o.task_code)+' '+_crTx(f.o.task_name)+' — arranca el '+rs+', sin ninguna predecesora')});
+    if(!L.length)return;
+    lin(ambar,'⚠ <b>'+L.length+' actividad(es) sin predecesoras arrancan despues de la fecha de datos ('+_crXerEsc(dd)+')</b>: como el .xer sale sin restricciones, al primer F9 P6 las va a traer a la fecha de datos. Si esa fecha tiene que sostenerse, ponle una predecesora en el aplicativo antes de exportar');
+    lista(ambar,L.map(function(x){return _crXerEsc(x)}))})();
 
   /* --- validacion estructural --- */
   if(!val.ok){
