@@ -15950,7 +15950,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919c0';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260919c1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -29146,6 +29146,19 @@ async function _crXerModelo(c,opt){
     else if(m.estado==='Active')m.iniRem=corte;
     else{var ir=m.ini||corte;m.iniRem=(corte&&ir<corte)?corte:ir}
 
+    /* LAS DURACIONES DE LA TABLA de esta actividad (Rendimiento APP): la
+       mayor de sus lineas, en dias laborables (cada partida abarca toda su
+       actividad, como reparte el engranaje). rd = restante (forecast o, con
+       mayor metrado, (mayor - actual MM) / rendimiento); tot = duracion total
+       (forecast o mayor metrado). Sin rendimiento en ninguna linea: null y
+       manda la regla de HH. Se calcula ANTES de soltar _lineas. */
+    (function(){var rd=null,tot=null;
+      (m._lineas||[]).forEach(function(l){if(!(Number(l.rend)>0))return;
+        var r1=mm?(((l.metM!=null&&l.metAM!=null)?(Math.max(0,Number(l.metM)-Number(l.metAM))/Number(l.rend)):null)):((l.dur!=null)?Number(l.dur):null);
+        var t1=mm?((l.durM!=null)?Number(l.durM):null):((l.durF!=null)?Number(l.durF):null);
+        if(r1!=null&&isFinite(r1)&&(rd==null||r1>rd))rd=r1;
+        if(t1!=null&&isFinite(t1)&&(tot==null||t1>tot))tot=t1});
+      m.durTab=(rd==null&&tot==null)?null:{rd:(rd==null?0:Math.round(rd*10000)/10000),tot:Math.round(Math.max(rd||0,tot||0)*10000)/10000}})();
     delete m._lineas;delete m._aporte});
 
   /* ---- las relaciones, incluidas las tumbas ---- */
@@ -29176,18 +29189,6 @@ async function _crXerModelo(c,opt){
     '): el .xer saldra con los titulos del archivo original')}
 
   /* ---- el modelo ---- */
-  /* LAS DURACIONES DE LA TABLA por actividad (Rendimiento APP): la mayor
-     de sus lineas, en dias laborables (cada partida abarca toda su actividad,
-     como reparte el engranaje). rd = restante (forecast, o con mayor metrado:
-     (mayor - actual MM) / rendimiento); tot = duracion total (forecast o
-     mayor metrado). Sin rendimiento en ninguna linea: null, manda la regla de HH */
-  ordenCod.forEach(function(cod){var m=M[cod];if(!m||m.eliminado)return;var rd=null,tot=null;
-    (m._lineas||[]).forEach(function(l){if(!(Number(l.rend)>0))return;
-      var r1=mm?(((l.metM!=null&&l.metAM!=null)?(Math.max(0,Number(l.metM)-Number(l.metAM))/Number(l.rend)):null)):((l.dur!=null)?Number(l.dur):null);
-      var t1=mm?((l.durM!=null)?Number(l.durM):null):((l.durF!=null)?Number(l.durF):null);
-      if(r1!=null&&isFinite(r1)&&(rd==null||r1>rd))rd=r1;
-      if(t1!=null&&isFinite(t1)&&(tot==null||t1>tot))tot=t1});
-    m.durTab=(rd==null&&tot==null)?null:{rd:(rd==null?0:Math.round(rd*10000)/10000),tot:Math.round(Math.max(rd||0,tot||0)*10000)/10000}});
   var totalesTareas={hhT:0,hhA:0,hhR:0,costoT:0,costoA:0};
   ordenCod.forEach(function(cod){
     var m=M[cod];if(m.eliminado)return;
