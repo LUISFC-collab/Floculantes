@@ -4455,7 +4455,7 @@ async function _crXerRelaciones(lineas,c,alcLive){
   TA.filas.forEach(function(fi){var cod=_crTx(fi.o.task_code),o=prog[cod],toca=false;
     var pw=function(campo,val){var j=TA.col[campo];if(j!=null&&fi.v[j]!==val){fi.v[j]=val;toca=true}};
     /* TODAS con duracion fija por unidades (Fixed Units) */
-    pw('duration_type','DT_FixedQty');
+    pw('duration_type','DT_FixedDrtn');
     if(!o||!o.ini||!o.fin){if(toca)lineas[fi.i]='%R\t'+fi.v.join('\t');return}
     var hpd=_crXerHpd(T,fi),rC=0;try{rC=_cnDe(c.cron_id,cod)||0}catch(_e0){}
     var R=_crXerPlanTarea(fi,o,tOri[cod],hpd,rC,dataDate);
@@ -7702,7 +7702,7 @@ async function _crXerCompleta(lineas,c,corte,rpX,soloPres){
       fi.v[TA.col.remain_work_qty]=r2(D.hh*(1-f));
       fi.v[TA.col.act_work_qty]=r2(D.hh*f);
       /* duracion fija y unidades: al correr la duracion en P6 las HH no cambian */
-      if(TA.col.duration_type!=null)fi.v[TA.col.duration_type]='DT_FixedQty';
+      if(TA.col.duration_type!=null)fi.v[TA.col.duration_type]='DT_FixedDrtn';
       var dur=Number(fi.o.target_drtn_hr_cnt)||0,rdur=Number(fi.o.remain_drtn_hr_cnt)||0;
       if(!soloPres){
         /* el avance de la tarea, coherente con sus unidades: % fisico, estado,
@@ -7772,7 +7772,7 @@ async function _crXerCompleta(lineas,c,corte,rpX,soloPres){
     pon('target_work_qty',r2(D.hh));
     pon('remain_work_qty',r2(D.hh*(1-f)));
     pon('act_work_qty',r2(D.hh*f));
-    pon('duration_type','DT_FixedQty');
+    pon('duration_type','DT_FixedDrtn');
     pon('target_drtn_hr_cnt',String(horas));
     pon('remain_drtn_hr_cnt',String(Math.round(horas*(1-f)*100)/100));
     pon('target_start_date',_crXerFec(ini,'07:00'));
@@ -15950,7 +15950,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919b9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260919c0';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28949,7 +28949,7 @@ async function _crXerModelo(c,opt){
           var ap=t._aporte[r.id]||(t._aporte[r.id]={hhT:0,hhA:0,costoT:0,costoA:0});
           ap.hhT+=aT;ap.hhA+=aA;ap.costoT+=cT2;ap.costoA+=cA2;
           if(t.items.indexOf(r.id)<0)t.items.push(r.id);
-          t._lineas.push({id:r.id,pert:m.pert||'',metF:m.metF,metA:m.metA,pct:m.pct})});
+          t._lineas.push({id:r.id,pert:m.pert||'',metF:m.metF,metA:m.metA,pct:m.pct,dur:m.dur,durF:m.durF,durM:m.durM,metM:m.metM,metAM:m.metAM,rend:m.rend})});
         return}
       restT.hhT+=vals.hhT;restT.hhA+=vals.hhA;
       restT.costoT+=vals.costoT;restT.costoA+=vals.costoA;
@@ -28977,7 +28977,7 @@ async function _crXerModelo(c,opt){
       ap2.hhT+=aT;ap2.hhA+=aA;ap2.costoT+=cT3;ap2.costoA+=cA3;
       if(t.items.indexOf(r.id)<0)t.items.push(r.id);
       restoLin.forEach(function(m){
-        t._lineas.push({id:r.id,pert:m.pert||'',metF:m.metF,metA:m.metA,pct:m.pct})})})});
+        t._lineas.push({id:r.id,pert:m.pert||'',metF:m.metF,metA:m.metA,pct:m.pct,dur:m.dur,durF:m.durF,durM:m.durM,metM:m.metM,metAM:m.metAM,rend:m.rend})})})});
 
   /* ---- las partidas del CONTRATO que esta tabla ya no cuenta: no descuadran
          el total, pero el usuario pidio que el mensaje diga de cuantas HH se
@@ -29176,6 +29176,18 @@ async function _crXerModelo(c,opt){
     '): el .xer saldra con los titulos del archivo original')}
 
   /* ---- el modelo ---- */
+  /* LAS DURACIONES DE LA TABLA por actividad (Rendimiento APP): la mayor
+     de sus lineas, en dias laborables (cada partida abarca toda su actividad,
+     como reparte el engranaje). rd = restante (forecast, o con mayor metrado:
+     (mayor - actual MM) / rendimiento); tot = duracion total (forecast o
+     mayor metrado). Sin rendimiento en ninguna linea: null, manda la regla de HH */
+  ordenCod.forEach(function(cod){var m=M[cod];if(!m||m.eliminado)return;var rd=null,tot=null;
+    (m._lineas||[]).forEach(function(l){if(!(Number(l.rend)>0))return;
+      var r1=mm?(((l.metM!=null&&l.metAM!=null)?(Math.max(0,Number(l.metM)-Number(l.metAM))/Number(l.rend)):null)):((l.dur!=null)?Number(l.dur):null);
+      var t1=mm?((l.durM!=null)?Number(l.durM):null):((l.durF!=null)?Number(l.durF):null);
+      if(r1!=null&&isFinite(r1)&&(rd==null||r1>rd))rd=r1;
+      if(t1!=null&&isFinite(t1)&&(tot==null||t1>tot))tot=t1});
+    m.durTab=(rd==null&&tot==null)?null:{rd:(rd==null?0:Math.round(rd*10000)/10000),tot:Math.round(Math.max(rd||0,tot||0)*10000)/10000}});
   var totalesTareas={hhT:0,hhA:0,hhR:0,costoT:0,costoA:0};
   ordenCod.forEach(function(cod){
     var m=M[cod];if(m.eliminado)return;
@@ -29506,7 +29518,7 @@ function _crXerEscribe(lineas,modelo){
     /* --- tipo de duracion: "Duracion y unidades fijas". Al correr la
        duracion en P6 las unidades no cambian, que es lo que el aplicativo
        necesita. Los hitos y las LOE no admiten tipo de duracion. --- */
-    if(!hito&&!loe)pw('duration_type','DT_FixedDUR2');
+    if(!hito&&!loe)pw('duration_type','DT_FixedDrtn');
 
     /* --- el avance --- */
     if(m.estado){
@@ -29621,7 +29633,7 @@ function _crXerEscribe(lineas,modelo){
     pon('task_code',_crXerMTx(cod,40));
     pon('task_name',_crXerMTx(m.nombre||cod,200));
     pon('task_type','TT_Task');
-    pon('duration_type','DT_FixedDUR2');
+    pon('duration_type','DT_FixedDrtn');
     pon('priority_type','PT_Normal');
     pon('rsrc_id','');
     pon('target_work_qty',_crXerMNum(m.hhT));
@@ -30483,6 +30495,11 @@ function _crXerCalAbre(C,iso){var t=_crXerCalTurnosDia(C,iso);return t.length?_c
 function _crXerCalCierra(C,iso){var t=_crXerCalTurnosDia(C,iso);return t.length?_crXerHoraTxt(t[t.length-1].b):(C.cierra||'18:00')}
 
 /* el dia habil mas cercano: hacia adelante (atras=false) o hacia atras */
+/* retroceder N dias laborables desde una fecha (para completar el inicio
+   real: fecha de datos menos los dias ya trabajados) */
+function _crXerCalAtras(C,iso,dias){var n=Math.max(0,Math.round(Number(dias)||0));var s0=_crASerial(iso);if(s0==='')return iso;var g=0,d=s0;
+  while(g<n&&d>s0-3000){d--;if(_crXerCalLab(C,_crDeSerial(d)))g++}
+  var r=_crDeSerial(d);if(!_crXerCalLab(C,r))r=_crXerCalSnap(C,r,true);return r}
 function _crXerCalSnap(C,iso,atras){
   if(!iso)return iso;
   var n=_crASerial(iso);if(n==='')return iso;
@@ -30703,7 +30720,8 @@ function _crXerHpdLag(lineas,T,filaSuc,filaPred){
                                                 resta / (rendimiento propio, o
                                                 HH entre dias). reend_date sale
                                                 de consumir esas mismas horas
-     duration_type                            = DT_FixedQty (solo tareas)
+     duration_type                            = DT_FixedDrtn, Fixed Duration
+                                                and Units/Time (solo tareas)
      total_float_hr_cnt / free_float_hr_cnt   = segun _XER_LATE
 
    Reglas:
@@ -30867,7 +30885,7 @@ function _crXerFechas(lineas,modelo){
     var hIni=_crXerCalAbre(C,ini),hFin=_crXerCalCierra(C,fin);
     var durH=_crXerCalHoras(C,ini,fin);
     if(!(durH>0))durH=C.hpd;
-    pw('duration_type','DT_FixedQty');
+    pw('duration_type','DT_FixedDrtn');
     pw('target_start_date',_crXerFec(ini,hIni));
     pw('target_end_date',_crXerFec(fin,hFin));
     pw('target_drtn_hr_cnt',_crXerNum(durH));
@@ -30929,6 +30947,20 @@ function _crXerFechas(lineas,modelo){
       var alc9=info?true:(t.alcance!==false);
       var R9=_crRemDe({hhT:hhT,hhA:gT,hhR:resta,dias:dias,rC:rC,pct:pct,alcance:alc9});
       var rDef=R9.rDef,rr=R9.rr,rd=R9.rd,porHH=R9.porHH;
+      /* REMANENTE POR LA TABLA (Rendimiento APP): la duracion restante de la
+         tabla manda; el rendimiento implicito es resta / rd. Y el real se
+         completa: la actividad dura en total lo que dice la tabla, asi que
+         en una iniciada el inicio real se pone (total - restante) dias
+         laborables antes de la fecha de datos y la duracion original es ese
+         total: original = real + remanente, congruente para P6. */
+      var deTabla=false,totTab=null;
+      if(String(modelo.rem||'')==='tabla'&&!info&&t.durTab&&t.durTab.rd!=null&&alc9){
+        deTabla=true;rd=Math.max(0,Number(t.durTab.rd)||0);totTab=Math.max(rd,Number(t.durTab.tot)||0);
+        if(rd>0&&resta>0)rr=resta/rd;porHH=true;R9.motivo='tabla';
+        out.remTabla=(out.remTabla||0)+1;if(!out.remTablaL)out.remTablaL=[];
+        if(out.remTablaL.length<300)out.remTablaL.push(cod+': resta '+_crXer2(rd)+' d de '+_crXer2(totTab)+' d')}
+      else if(String(modelo.rem||'')==='tabla'&&!info){out.remSinTabla=(out.remSinTabla||0)+1;if(!out.remSinTablaL)out.remSinTablaL=[];
+        if(out.remSinTablaL.length<300)out.remSinTablaL.push(cod+(alc9?': sin rendimiento en la tabla':': sin alcance')+' \u00b7 por la regla de HH')}
       if(rd>5000){out.avisos.push(cod+': el rendimiento propio ('+_crXer2(rC)+' hh/dia) da '+_crXer2(rd)+' dias de remanente; se corta en 5000');rd=5000}
       rd=Math.round(rd*10000)/10000;
       var remH=Math.round(rd*hpdC*100)/100;
@@ -30959,6 +30991,26 @@ function _crXerFechas(lineas,modelo){
       pw('restart_date',_crXerFec(ir,hIr));
       pw('reend_date',_crXerFec(F.iso,F.hora));
       pw('remain_drtn_hr_cnt',_crXerNum(remH));
+      if(deTabla){
+        var totH=Math.round(totTab*hpdC*100)/100;
+        if(est==='Active'){
+          /* el inicio real: (total - restante) dias laborables antes de la fecha de datos */
+          var actD=Math.max(0,Math.round((totTab-rd)*100)/100);
+          var ar=_crXerCalAtras(C,PR.iso,actD),hAr=_crXerCalAbre(C,ar);
+          pw('act_start_date',_crXerFec(ar,hAr));
+          pw('target_start_date',_crXerFec(ar,hAr));
+          ini=ar;hIni=hAr;
+          /* el plan de una iniciada acaba donde acaba su remanente */
+          pw('target_end_date',_crXerFec(F.iso,F.hora));
+          pw('target_drtn_hr_cnt',_crXerNum(totH));
+          t.durH=totH}
+        else{
+          /* sin empezar: original = remanente (regla de P6) y fin = inicio + duracion */
+          var F0=(remH>0)?_crXerCalFinHoras(C,ini,remH,hIni):{iso:ini,hora:hIni};
+          pw('target_end_date',_crXerFec(F0.iso,F0.hora));
+          pw('target_drtn_hr_cnt',_crXerNum(remH));
+          t.durH=remH}
+        t.deTabla=true;t.totTab=totTab}
       if(!alc9&&!info){
         /* sin alcance: duracion original 0 y fin = inicio, o P6 vuelve a poner
            Remaining = Original al importar una Not Started */
@@ -30998,6 +31050,9 @@ function _crXerFechas(lineas,modelo){
       var pr=function(campo,val){var j=TRd.col[campo];if(j==null)return;
         var sv=String(val==null?'':val);if(x.v[j]!==sv){x.v[j]=sv;ch=true}};
       CAMPOS.forEach(function(k){var j=TA.col[k];if(j==null)return;pr(k,fi.v[j])});
+      /* con el remanente por la tabla el inicio real de la tarea cambio: la
+         asignacion que lleva horas reales lo sigue */
+      if(t.deTabla&&(Number(x.o.act_reg_qty)||0)>0){var ja=TA.col.act_start_date;if(ja!=null)pr('act_start_date',fi.v[ja])}
       var jd=TA.col.target_drtn_hr_cnt,jr=TA.col.remain_drtn_hr_cnt;
       var dur=(jd==null)?0:(Number(fi.v[jd])||0);
       var rdur=(jr==null)?0:(Number(fi.v[jr])||0);
@@ -31668,6 +31723,7 @@ async function _crXerArma(c,opt){
   modelo.cron=modelo.cron||c;
   modelo.cronId=modelo.cronId||c.cron_id;
   modelo.modo=modo;modelo.mm=mm;modelo.corte=corte;modelo.sem=sem;
+  modelo.rem=(opt.rem==='tabla')?'tabla':'hh';   /* de donde sale el remanente */
   modelo.hoy=modelo.hoy||hoy;
   /* el calendario del archivo manda sobre lo que el modelo dedujo por su cuenta */
   modelo.hpd=Cp.hpd;modelo.horaIni=Cp.abre;modelo.horaFin=Cp.cierra;
@@ -31796,6 +31852,15 @@ function _crXerMensaje(r,modo,mm){
     (mm?' · <b>CON MAYOR METRADO</b>':' · normal')+
     (val.ok?'':' · NO SE DESCARGO')+' · <span style="opacity:.6">'+_crXerEsc(typeof APP_VER!=='undefined'?APP_VER:'')+'</span>');
 
+  /* --- de donde sale el remanente y el tipo de duracion --- */
+  var remT=String((r.modelo&&r.modelo.rem)||'hh');
+  if(remT==='tabla'){
+    lin(claro,'Remanente: <b>por las duraciones de la tabla</b> (Rendimiento APP): '+(fe.remTabla||0)+' actividades con la duraci\u00f3n restante de la tabla'+
+      ((fe.remSinTabla||0)?(' \u00b7 <span style="color:'+ambar+'">'+fe.remSinTabla+' sin rendimiento en la tabla o sin alcance: por la regla de HH</span>'):'')+
+      '. En las iniciadas el inicio real se completa para que original = real + remanente.');
+    lista(ambar,(fe.remSinTablaL||[]).slice(0,60))}
+  else lin(claro,'Remanente: <b>por HH y rendimiento de la actividad</b> (hoja 2: resta entre el rendimiento propio, o HH entre d\u00edas).');
+  lin(claro,'Tipo de duraci\u00f3n: <b>Fixed Duration and Units/Time</b> en todas las tareas; unidades = duraci\u00f3n \u00d7 unidades/tiempo, con las HH reales y remanentes del aplicativo.');
   /* --- totales del archivo frente al TOTAL de la tabla --- */
   lin(difHH<=0.05?claro:rojo,'HH target: archivo <b>'+_crXerHH(A.hhT)+'</b> hh · TOTAL de la tabla <b>'+_crXerHH(T.hhT)+'</b> hh'+
     ((difHH>0.05)?(' · <b>faltan '+_crXerHH((Number(T.hhT)||0)-A.hhT)+' hh</b>'):' · sin diferencia'));
@@ -31987,7 +32052,7 @@ async function _crXerDescarga(c,modo,mm,o){
   var hoy=(typeof todayISO==='function')?todayISO():'';
   var corte=o.corte||hoy;
   var sem=(o.sem!=null)?Number(o.sem)||0:((modo==='rep')?_crXerSemReporte(corte):0);
-  var r=await _crXerArma(c,{modo:modo,mm:mm,corte:corte,sem:sem,alcLive:o.alcLive||null,aviso:aviso});
+  var r=await _crXerArma(c,{modo:modo,mm:mm,corte:corte,sem:sem,alcLive:o.alcLive||null,aviso:aviso,rem:(o.rem||_crXerRemPref())});
   var html=_crXerMensaje(r,modo,mm);
   if(!r.val.ok){pinta(html);return r}
   var blob=new Blob([_crBytes(r.txt)],{type:'application/octet-stream'});
@@ -32013,6 +32078,11 @@ function _crXerSemReporte(iso){
    Sustituye al onclick de #_crFeXrel (index.html ~3832).
    Uso:  document.getElementById('_crFeXrel').onclick=function(){_crXerMenuUI(this,c,{pinta:..., alcLive:...})}
    ---------------------------------------------------------------------------- */
+/* de donde sale el remanente del .xer: 'hh' (HH y rendimiento de la
+   actividad, hoja 2) o 'tabla' (las duraciones de la tabla, Rendimiento APP);
+   se recuerda en la configuracion del usuario (tabla_config, realtime) */
+function _crXerRemPref(){try{return (_tbCfg().xerRem==='tabla')?'tabla':'hh'}catch(e){return 'hh'}}
+function _crXerRemSet(v){try{var cfg=_tbCfg();cfg.xerRem=(v==='tabla')?'tabla':'hh';_tbCfgSave(cfg)}catch(e){}}
 function _crXerMenuUI(b,c,o){
   o=o||{};
   var old=document.getElementById('_crXerMenu');if(old){old.remove();return}
@@ -32024,7 +32094,9 @@ function _crXerMenuUI(b,c,o){
   var bt=function(m,mm,col,tit,desc){
     return '<button data-m="'+m+'" data-mm="'+(mm?'1':'0')+'" style="background:'+col+';color:#fff;border:0;border-radius:8px;padding:8px 10px;text-align:left;cursor:pointer;font-family:inherit">'+
       '<b style="font-size:12px">'+tit+'</b><br><span style="font-size:10.5px;opacity:.92;white-space:normal">'+desc+'</span></button>'};
-  menu.innerHTML='<b style="font-size:11px;color:#8ECBF5;letter-spacing:.04em">¿QUÉ .XER QUIERES?</b>'+
+  var remB=function(v,txt){var on=(_crXerRemPref()===v);return '<button data-rem="'+v+'" style="background:'+(on?'#1B5E8A':'#151c28')+';color:'+(on?'#fff':'#9db4d6')+';border:1px solid '+(on?'#8ECBF5':'#24344f')+';border-radius:8px;padding:5px 8px;cursor:pointer;font-family:inherit;font-size:10.5px;font-weight:'+(on?'800':'600')+'">'+txt+'</button>'};
+  menu.innerHTML='<b style="font-size:11px;color:#8ECBF5;letter-spacing:.04em">\u00bfQU\u00c9 .XER QUIERES?</b>'+
+    '<div id="_crXerRemFila" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:#cfe3ff;padding:2px 0 4px;border-bottom:1px solid #24344f"><span style="font-weight:800;color:#8ECBF5">Remanente:</span>'+remB('hh','\u23f1 por HH y rendimiento de la actividad (hoja 2)')+remB('tabla','\ud83d\udcca por las duraciones de la tabla (Rendimiento APP)')+'</div>'+
     bt('tal',0,'#4a2f7a','📄 Tal cual está · normal',
       'HH y costo <b>forecast</b> de la tabla, fechas, duraciones y predecesoras del aplicativo, y el calendario real del archivo. '+
       '<b>Conserva</b> los avances y la fecha de datos que trae el .xer y su mismo Project ID: P6 te ofrecerá ACTUALIZAR el proyecto que ya tienes.')+
@@ -32040,6 +32112,9 @@ function _crXerMenuUI(b,c,o){
   var cierra=function(){try{menu.remove()}catch(_e){}document.removeEventListener('pointerdown',fuera,true)};
   var fuera=function(ev){if(!menu.contains(ev.target)&&ev.target!==b)cierra()};
   setTimeout(function(){document.addEventListener('pointerdown',fuera,true)},0);
+  var rs=menu.querySelectorAll('button[data-rem]');
+  for(var j=0;j<rs.length;j++)(function(x){x.onclick=function(ev){ev.stopPropagation();_crXerRemSet(x.getAttribute('data-rem'));
+    for(var q=0;q<rs.length;q++){var on=(rs[q].getAttribute('data-rem')===_crXerRemPref());rs[q].style.background=on?'#1B5E8A':'#151c28';rs[q].style.color=on?'#fff':'#9db4d6';rs[q].style.borderColor=on?'#8ECBF5':'#24344f';rs[q].style.fontWeight=on?'800':'600'}}})(rs[j]);
   var xs=menu.querySelectorAll('button[data-m]');
   for(var i=0;i<xs.length;i++)(function(x){
     x.onclick=async function(ev){
