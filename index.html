@@ -4606,6 +4606,97 @@ async function _crTareaMover(c,desde,hasta){
   if(wbsCambio)await sbUpsert(T_CRT,[wbsCambio],'proyecto,cron_id,task_code');
   toast('\u2195 '+desde+' movida delante de '+hasta);
   await _crTareasTocadas(c.cron_id);return true}
+/* ============================================================================
+   LA REGLA DEL REMANENTE POR ACTIVIDAD  (hoja 2 y .xer, UNA sola cuenta)
+
+   Una actividad no puede restar 0 hh, y menos si ya esta fuera del alcance:
+     * con HH (hhT>0 y rendimiento>0) el remanente sale del rendimiento, como
+       siempre:  rd = (hhT-hhA) / rr
+     * sin HH manda el ALCANCE y el % de avance de la actividad:
+         - sin alcance (todas sus partidas fuera, apagadas, lapida o sin nada
+           por hacer): rd = 0, remanente 0 h
+         - con alcance: rd = dias x (1 - pct/100), con el % fisico de sus
+           partidas (o el % propio de la tarea si no tiene partidas)
+
+   a = {hhT,hhA,hhR,dias,rC,pct,alcance,estadoX}
+   devuelve {rd,rr,rDef,porHH,pct,estado,motivo,hhR,alcance}
+     rd     dias laborables que le restan
+     rr     rendimiento con el que se mide (propio o HH entre dias)
+     motivo '' con HH, 'por %' sin HH y con alcance, 'sin alcance' sin el
+   ============================================================================ */
+function _crRemDe(a){
+  a=a||{};
+  var hhT=Number(a.hhT);if(!isFinite(hhT)||hhT<0)hhT=0;
+  var hhA=Number(a.hhA);if(!isFinite(hhA)||hhA<0)hhA=0;if(hhA>hhT)hhA=hhT;
+  var hhR=(a.hhR!=null&&isFinite(Number(a.hhR)))?Math.max(0,Number(a.hhR)):Math.max(0,hhT-hhA);
+  var dias=Number(a.dias);if(!isFinite(dias)||dias<0)dias=0;
+  var rC=Number(a.rC);if(!isFinite(rC)||rC<0)rC=0;
+  var alcance=(a.alcance===false)?false:true;
+  var rDef=(dias>0)?(hhT/dias):0;
+  var rr=rC||rDef;
+  var porHH=(hhT>0&&rr>0);
+  var pct,rd,motivo='';
+  if(porHH){pct=hhA/hhT*100;rd=hhR/rr}
+  else{
+    pct=Number(a.pct);if(!isFinite(pct))pct=0;
+    if(pct<0)pct=0;if(pct>100)pct=100;
+    if(!alcance){rd=0;motivo='sin alcance'}
+    else{rd=(dias>0)?(dias*(1-pct/100)):0;motivo='por %'}}
+  if(pct<0)pct=0;if(pct>100)pct=100;
+  var estado=(pct>=100-1e-9)?'Complete':((pct>0)?'Active':'NotStart');
+  var ex=String(a.estadoX||'');
+  if(ex==='Complete'||ex==='Active'||ex==='NotStart')estado=ex;
+  if(estado==='Complete')rd=0;
+  if(!(rd>0))rd=0;
+  return {rd:Math.round(rd*10000)/10000,rr:rr,rDef:rDef,porHH:porHH,
+    pct:Math.round(pct*100)/100,estado:estado,motivo:motivo,
+    hhR:Math.round(hhR*100)/100,alcance:alcance}}
+
+/* Si una partida CUENTA en el alcance de este cronograma, con su fila de
+   _crTablaDatos: incluida (no fuera), sin las HH apagadas, no lapida, y con
+   algo por hacer o ya hecho (metrado forecast > 0 o avance > 0). */
+function _crRemFila(r){
+  if(!r)return {ok:false,motivo:'sin fila en la tabla del alcance'};
+  var e=String(r.est||'');
+  if(e==='Fuera')return {ok:false,motivo:'fuera de este cronograma'};
+  if(e==='HH apagadas')return {ok:false,motivo:'HH apagadas'};
+  if(e==='Lápida'||e==='Lapida')return {ok:false,motivo:'partida borrada (lapida)'};
+  if(e==='Sin tarea')return {ok:false,motivo:'sin actividad que la agrupe'};
+  var mF=(r.metF==null)?null:(Number(r.metF)||0);
+  var mA=(r.metA==null)?null:(Number(r.metA)||0);
+  if(mF!=null){
+    if(mF>0||(mA!=null&&mA>0))return {ok:true,motivo:''};
+    return {ok:false,motivo:'sin metrado por hacer (todo el saldo retirado)'}}
+  if((Number(r.hh)||0)>0||(Number(r.hhA)||0)>0||(Number(r.pct)||0)>0)return {ok:true,motivo:''};
+  return {ok:false,motivo:'sin nada por hacer en este cronograma'}}
+
+/* El ALCANCE de una actividad y su % fisico, con las filas de _crTablaDatos de
+   sus partidas (porFila[id]). El % es el promedio ponderado por metrado
+   forecast (avance / metrado forecast, topado a 100; el saldo retirado no
+   cuenta como hecho). Las actividades SIN partidas (informativas: KOM,
+   movilizacion, gestion) tienen alcance por definicion y devuelven pct null:
+   su % lo pone quien llama (el de la propia tarea). */
+function _crRemAlc(items,porFila){
+  var o={alcance:true,conPartidas:false,pct:null,dentro:[],fuera:[],motivo:''};
+  var L=items||[],v={},pT=0,pA=0,k,i,r,q,mF,mA,h,hA;
+  for(k=0;k<L.length;k++){
+    i=L[k];if(!i||v[i])continue;v[i]=1;o.conPartidas=true;
+    r=porFila?porFila[i]:null;
+    q=_crRemFila(r);
+    if(!q.ok){o.fuera.push(String(i)+' '+q.motivo);continue}
+    o.dentro.push(String(i));
+    mF=(r.metF==null)?null:(Number(r.metF)||0);
+    mA=(r.metA==null)?null:(Number(r.metA)||0);
+    if(mF!=null&&mF>0){pT+=mF;pA+=Math.max(0,Math.min(mF,mA||0))}
+    else{h=Number(r.hh)||0;hA=Number(r.hhA)||0;
+      if(h>0){pT+=h;pA+=Math.max(0,Math.min(h,hA))}
+      else{pT+=1;pA+=Math.max(0,Math.min(100,Number(r.pct)||0))/100}}}
+  if(!o.conPartidas)return o;
+  o.alcance=(o.dentro.length>0);
+  o.pct=(pT>0)?(Math.round(Math.max(0,Math.min(100,pA/pT*100))*100)/100):0;
+  if(!o.alcance)o.motivo='sin alcance en este cronograma, remanente 0 (sus partidas: '+o.fuera.join(', ')+')';
+  return o}
+
 /* Lo que la hoja 2 necesita, cargado una sola vez. */
 async function _crCargaH2(cronId){
   if(_crH2)return _crH2;
@@ -4626,17 +4717,20 @@ async function _crCargaH2(cronId){
   /* la fraccion ya ejecutada que dice la TABLA (sumando las lineas de
      apartado, que es de donde sale el .xer); sin esto la hoja 2 medía el
      avance con pctOf y ensenaba una resta que el archivo no tiene */
-  d.frac=null;
+  /* y las FILAS de la tabla por partida: de ahi salen el alcance de cada
+     actividad y su % fisico por metrado (la regla del remanente) */
+  d.frac=null;d.filas=null;
   try{
     var _cc=(window._crCache||[]).filter(function(z){return z&&z.cron_id===cronId})[0]||{cron_id:cronId};
-    var _D9=await _crTablaDatos(_cc),_fr={};
+    var _D9=await _crTablaDatos(_cc),_fr={},_fi={};
     (_D9.filas||[]).forEach(function(r){
       var hT=0,hA=0;
       if(r.partes&&r.partes.length)r.partes.forEach(function(q){hT+=Number(q.hh)||0;hA+=Number(q.hhA)||0});
       else{hT=Number(r.hh)||0;hA=Number(r.hhA)||0}
-      _fr[r.id]=(hT>0)?Math.max(0,Math.min(1,hA/hT)):0});
-    d.frac=_fr}
-  catch(_e){d.frac=null}
+      _fr[r.id]=(hT>0)?Math.max(0,Math.min(1,hA/hT)):0;
+      _fi[r.id]=r});
+    d.frac=_fr;d.filas=_fi}
+  catch(_e){d.frac=null;d.filas=null}
   _crH2=d;return d}
 /* Entre que actividades se parte una partida, y cuanto se lleva cada una.
    Devuelve la actividad elegida, para poder saltar a ella. */
@@ -4880,18 +4974,27 @@ function _crPintaHoja2(D,P,sel,fec,q){
   var durTxt=function(t,k){try{
     var o=(X9.prog||{})[t.task_code]||{},ini=o.ini||t.ini,fin=o.fin||t.fin;if(!ini||!fin)return '';
     var _C9=(window._crCalH2||{})[X9.cron]||null;
-    var dias=_C9?_crXerCalCuenta(_C9,ini,fin):_crXerDias(ini,fin),hhT=hhs[k]||0,gT=gans[k]||0,resta=Math.max(0,hhT-gT);
-    var rC=_cnDe(X9.cron,t.task_code),rDef=dias>0?hhT/dias:0,rr=rC||rDef,rd=rr>0?resta/rr:0;
-    /* sin HH (informativas, partidas retiradas) no hay rendimiento del que
-       tirar: el .xer exporta la duracion que le falta por avance, y aqui se
-       ensena lo mismo (_crXerFechas, el 'if(!porHH)') */
-    if(!(hhT>0&&rr>0)){var _p9=Math.max(0,Math.min(100,Number(t.pct)||0));
-      rd=(String(t.estado||'')==='Complete')?0:(dias>0?dias*(1-_p9/100):0)}
+    /* las MISMAS fechas que usa la exportacion: pegadas al dia habil del
+       calendario real, o la hoja 2 ensena una resta que el archivo no tiene */
+    if(_C9){try{ini=_crXerCalSnap(_C9,ini,false);fin=_crXerCalSnap(_C9,fin,true);
+      if(_crASerial(fin)<_crASerial(ini))fin=ini}catch(_e8){}}
+    var dias=_C9?_crXerCalCuenta(_C9,ini,fin):_crXerDias(ini,fin),hhT=hhs[k]||0,gT=gans[k]||0;
+    var rC=_cnDe(X9.cron,t.task_code);
+    /* LA REGLA DEL REMANENTE, la misma funcion que usa el .xer: sin HH manda
+       el alcance de la actividad y el % fisico de sus partidas */
+    var A9=(D&&D.filas)?_crRemAlc(t.items,D.filas):{alcance:true,pct:null,motivo:''};
+    var R9=_crRemDe({hhT:hhT,hhA:gT,dias:dias,rC:rC,alcance:A9.alcance,
+      pct:(A9.pct==null)?Math.max(0,Math.min(100,Number(t.pct)||0)):A9.pct});
+    var rd=R9.rd,rr=R9.rr,rDef=R9.rDef;
     var f2=function(x){return (Math.round(x*100)/100).toFixed(2)};
     return '<span class="_crNoTog" style="flex-basis:100%;display:flex;gap:4px;align-items:center;justify-content:flex-end;flex-wrap:wrap;font-size:10px;color:#9db4d6;white-space:normal">'+
       '<span title="Duraci\u00f3n seg\u00fan sus fechas, en d\u00edas laborables">\u23f1 '+dias+' d</span><span>\u00b7</span>'+
-      '<span title="Lo que le falta a ese rendimiento">resta <b style="color:'+(rC?'#FFD27A':'#cfe3ff')+'">'+f2(rd)+' d</b></span><span>\u00b7</span>'+
-      '<span title="'+(rC?'Rendimiento propio':'Rendimiento seg\u00fan el cronograma: HH entre d\u00edas')+'">a '+f2(rr)+' hh/d</span>'+
+      '<span title="Lo que le falta a ese rendimiento">resta <b style="color:'+(R9.alcance?(rC?'#FFD27A':'#cfe3ff'):'#7d8590')+'">'+f2(rd)+' d</b></span><span>\u00b7</span>'+
+      (R9.porHH
+        ?('<span title="'+(rC?'Rendimiento propio':'Rendimiento seg\u00fan el cronograma: HH entre d\u00edas')+'">a '+f2(rr)+' hh/d</span>')
+        :(R9.alcance
+          ?('<span style="color:#8DD6ED" title="Sin HH en este cronograma: lo que resta sale del % de avance de sus partidas (d\u00edas \u00d7 (1 \u2212 %))">por % ('+f2(R9.pct)+' %)</span>')
+          :('<span style="color:#F0A3A3" title="'+esc(A9.motivo||'sin alcance en este cronograma')+'">sin alcance</span>')))+
       (X9.adm?('<button class="_crNoTog _h2Rend" data-cod="'+esc(t.task_code)+'" data-def="'+f2(rDef)+'" data-act="'+(rC||'')+'" title="'+(rC?('Rendimiento propio: '+f2(rC)+' hh por d\u00eda \u00b7 el remanente se exporta al .xer con \u00e9l \u00b7 clic para cambiarlo o quitarlo'):'Poner un rendimiento propio (hh por d\u00eda) para el remanente')+'" style="width:20px;height:20px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:11px;line-height:1;padding:0;margin-left:2px;'+(rC?'border:1.5px solid #FFD27A;background:#7A4B00;color:#FFD27A;animation:_rpLate 1.6s ease-in-out infinite':'border:1.5px solid #33447a;background:#151c28;color:#8ECBF5')+'">\u2699</button>'):'')+
       '</span>'+
       /* la ORIGINAL: las fechas de la tarea tal como vinieron del cronograma */
@@ -15815,7 +15918,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260918d8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260918d9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28181,6 +28284,11 @@ async function _crXerModelo(c,opt){
       taskType:tipoX,
       movida:mov,
       informativa:(!((t.items||[]).length)&&!(fx&&(((Number(fx.o.target_work_qty)||0)>0)||((Number(fx.o.act_work_qty)||0)>0)))),   /* con HH en el archivo y sin partidas: se vacia, no se respeta */
+      /* la regla del remanente: el alcance de la actividad y su % fisico se
+         calculan mas abajo, con las filas de la tabla de sus partidas */
+      alcance:true,motivoSinAlcance:'',partidasFuera:[],pctFis:null,
+      pctTarea:Math.max(0,Math.min(100,Number(t.pct)||0)),
+      rd:null,rr:0,rC:0,dias:0,porHH:false,
       taskId:fx?String(fx.o.task_id||''):'',
       clndrId:fx?String(fx.o.clndr_id||''):'',
       _aporte:{},
@@ -28383,20 +28491,24 @@ async function _crXerModelo(c,opt){
     m.hhR=_crXerM2(Math.max(0,m.hhT-m.hhA));
     m.costoR=_crXerM2(Math.max(0,m.costoT-m.costoA));
 
+    /* --- el ALCANCE de la actividad (la regla del remanente) ---
+       tiene alcance si al menos una de sus partidas CUENTA en este cronograma:
+       incluida, sin las HH apagadas, no lapida y con algo por hacer o hecho.
+       Las que no tienen partidas (informativas) tienen alcance por definicion. */
+    var A9=_crRemAlc(m.items,filaDe);
+    m.alcance=A9.alcance;
+    m.pctFis=A9.pct;
+    m.partidasFuera=A9.fuera;
+    m.motivoSinAlcance=A9.motivo||'';
+
     /* --- el % --- */
     if(modo==='tal'&&m.tipo==='xer'&&m.xPct!=null)m.pct=_crXerM2(Math.max(0,Math.min(100,m.xPct)));
     else if(m.hhT>0)m.pct=_crXerM2(Math.max(0,Math.min(100,m.hhA/m.hhT*100)));
-    else if(m._lineas.length){
-      /* sin HH (todo retirado, apagado o solo costo): 100 si todo su metrado
-         esta hecho o retirado, si no 0. Es lo que dice la tabla. */
-      var todo=true;
-      m._lineas.forEach(function(z){
-        var mf=(z.metF==null)?null:Number(z.metF);
-        var ma=(z.metA==null)?null:Number(z.metA);
-        if(mf!=null){if(!(mf<=0||(ma!=null&&ma>=mf-1e-9)))todo=false}
-        else if(!((Number(z.pct)||0)>=100-1e-9))todo=false});
-      m.pct=todo?100:0}
-    else m.pct=0;
+    else{
+      /* sin HH manda el % FISICO de sus partidas (promedio ponderado por
+         metrado forecast, el saldo retirado no cuenta como hecho); sin
+         partidas, el % propio de la tarea (el del .xer o el que se edite) */
+      m.pct=_crXerM2((A9.pct==null)?(Number(m.pctTarea)||0):A9.pct)}
 
     /* --- el estado --- */
     if(modo==='tal'&&m.tipo==='xer'){
@@ -28409,7 +28521,7 @@ async function _crXerModelo(c,opt){
     else if(m.informativa&&m.hhT<=0&&m.costoT<=0){
       /* informativa: se respeta lo que trae el archivo, no se inventa estado */
       m.estado='';m.pct=null}
-    else if(m.pct>=100-1e-9&&(m.hhT>0||m.costoT>0||m._lineas.length))m.estado='Complete';
+    else if(m.pct>=100-1e-9)m.estado='Complete';   /* la regla: Complete si su % ya es 100, con HH o sin ellas */
     else if(m.pct>0)m.estado='Active';
     else m.estado='NotStart';
 
@@ -28783,10 +28895,20 @@ function _crXerEscribe(lineas,modelo){
 
     /* --- duracion: con HH y duracion 0 P6 borra las unidades --- */
     var dur=Number(fi.o.target_drtn_hr_cnt)||0;
+    /* LA REGLA DEL REMANENTE, tambien cuando la actividad no tiene HH: con HH
+       manda lo que falta de HH; sin HH y con alcance, lo que falta por avance;
+       sin alcance, cero. (_crXerFechas lo afina luego con el calendario real
+       y el rendimiento propio, pero la fila ya sale coherente.) */
+    var frRem=0;
+    if(m.estado==='Complete')frRem=0;
+    else if(m.hhT>0)frRem=(m.hhR/m.hhT);
+    else if(m.alcance===false)frRem=0;
+    else frRem=1-Math.max(0,Math.min(100,Number(m.pct)||0))/100;
+    if(!(frRem>0))frRem=0;
     if(hito){dur=0;pw('target_drtn_hr_cnt','0');pw('remain_drtn_hr_cnt','0')}
     else if(!loe){
       if(m.hhT>0&&!(dur>0)){dur=hpd;pw('target_drtn_hr_cnt',_crXerMNum(dur))}
-      if(dur>0)pw('remain_drtn_hr_cnt',_crXerMNum(dur*((m.hhT>0)?(m.hhR/m.hhT):((m.estado==='Complete')?0:1))))}
+      if(dur>0)pw('remain_drtn_hr_cnt',_crXerMNum(dur*frRem))}
 
     /* --- tipo de duracion: "Duracion y unidades fijas". Al correr la
        duracion en P6 las unidades no cambian, que es lo que el aplicativo
@@ -28825,7 +28947,7 @@ function _crXerEscribe(lineas,modelo){
     var lab=mias.filter(esLabor);
     var qT=(hito||loe)?0:m.hhT, qA=(hito||loe)?0:m.hhA, qR=(hito||loe)?0:m.hhR;
     var cT=(hito||loe)?0:m.costoT, cA=(hito||loe)?0:m.costoA, cR=(hito||loe)?0:m.costoR;
-    var rdur=(dur>0)?(dur*((m.hhT>0)?(m.hhR/m.hhT):0)):0;
+    var rdur=(dur>0)?(dur*frRem):0;
 
     var principal=lab.length?lab[0]:null;
     /* las demas se quedan a cero: dos asignaciones con las mismas horas hacen
@@ -28915,7 +29037,14 @@ function _crXerEscribe(lineas,modelo){
     pon('target_equip_qty','0');pon('act_equip_qty','0');pon('remain_equip_qty','0');
     pon('act_this_per_work_qty','0');pon('act_this_per_equip_qty','0');
     pon('target_drtn_hr_cnt',_crXerMNum(horas));
-    pon('remain_drtn_hr_cnt',_crXerMNum(horas*((m.hhT>0)?(m.hhR/m.hhT):((m.estado==='Complete')?0:1))));
+    /* la regla del remanente, igual que en las filas que ya existian */
+    var frRem2=0;
+    if(m.estado==='Complete')frRem2=0;
+    else if(m.hhT>0)frRem2=(m.hhR/m.hhT);
+    else if(m.alcance===false)frRem2=0;
+    else frRem2=1-Math.max(0,Math.min(100,Number(m.pct)||0))/100;
+    if(!(frRem2>0))frRem2=0;
+    pon('remain_drtn_hr_cnt',_crXerMNum(horas*frRem2));
     pon('target_start_date',_crXerMFecH(ini,hIni));
     pon('target_end_date',_crXerMFecH(fin,hFin));
     pon('early_start_date',_crXerMFecH(m.iniRem||ini,hIni));
@@ -29158,6 +29287,18 @@ function _crXerAuditoria(lineas,modelo){
     nRev++;
     var n0=difs.length;
 
+    /* --- LA REGLA DEL REMANENTE: remain_drtn_hr_cnt = rd x horas de jornada,
+       en TODAS las actividades, con HH y sin ellas. Las de nivel de esfuerzo y
+       resumen no se tocan (P6 las deriva) y no traen rd. --- */
+    if(m.rd!=null&&!m.loe){
+      var hpdT=Number(m.hpdCal)||hpd;
+      var espRem=_crXerM2((Number(m.rd)||0)*hpdT);
+      var remArch=_crXerM2(Number(f.o.remain_drtn_hr_cnt)||0);
+      if(Math.abs(remArch-espRem)>0.02+1e-9)
+        dif(cod,'duracion remanente (h)',remArch,espRem);
+      if(m.alcance===false&&remArch>0.02)
+        dif(cod,'remanente sin alcance',remArch+' h',0)}
+
     var lab=(asigDe[String(f.o.task_id)]||[]).filter(esLabor);
     var aT=Number(f.o.target_work_qty)||0;
     var aA=Number(f.o.act_work_qty)||0;
@@ -29312,6 +29453,28 @@ function _crXerAuditoria(lineas,modelo){
 
   var faltan=(modelo.sinArchivo||[]).slice();
 
+  /* --- LA REGLA DEL REMANENTE: las actividades SIN ALCANCE (remanente 0) y
+     las que, sin HH, van por su % de avance --- */
+  var sinAlcance=[],porPct=[];
+  codigos.forEach(function(cod){
+    var m=modelo.tareas[cod];
+    if(!m||m.eliminado||m.loe)return;
+    var fz=enArch[String(cod).toUpperCase()];
+    var remA=fz?_crXerM2(Number(fz.o.remain_drtn_hr_cnt)||0):0;
+    if(m.alcance===false){
+      sinAlcance.push({cod:cod,nombre:String(m.nombre||''),
+        motivo:String(m.motivoSinAlcance||'sin alcance en este cronograma'),
+        partidas:(m.partidasFuera||[]).slice(),
+        dias:Number(m.dias)||0,rd:Number(m.rd)||0,remH:remA,pct:_crXerM2(m.pct==null?0:m.pct)});
+      return}
+    if(m.porHH===false&&m.rd!=null&&!m.hito&&!((Number(m.hhT)||0)>0))
+      /* las informativas van con el % del propio archivo (m.pct viene null) */
+      porPct.push({cod:cod,nombre:String(m.nombre||''),
+        pct:_crXerM2((m.pct==null)?(fz?(Number(fz.o.phys_complete_pct)||0):0):m.pct),
+        dias:Number(m.dias)||0,
+        rd:Number(m.rd)||0,remH:remA,
+        partidas:(m.items||[]).slice()})});
+
   /* --- el resumen en espanol, con dos decimales y miles con apostrofo --- */
   var R=[];
   var ok=(difs.length===0);
@@ -29349,6 +29512,20 @@ function _crXerAuditoria(lineas,modelo){
       R.push('  \u00b7 '+s.id+' '+s.nombre+' \u2014 '+_crXerMil(s.hhContrato)+
         ' hh de contrato, '+_crXerMil(s.costoContrato)+' de costo \u00b7 '+s.motivo)})}
 
+  if(sinAlcance.length){
+    R.push('');
+    R.push('ACTIVIDADES SIN ALCANCE EN ESTE CRONOGRAMA ('+sinAlcance.length+'): remanente 0, no restan dias');
+    sinAlcance.forEach(function(s){
+      R.push('  · '+s.cod+' '+s.nombre+' — '+_crXerMil(s.dias)+' d de duracion, resta '+
+        _crXerMil(s.rd)+' d ('+_crXerMil(s.remH)+' h en el archivo) · '+s.motivo)})}
+  if(porPct.length){
+    R.push('');
+    R.push('ACTIVIDADES SIN HH QUE VAN POR SU % DE AVANCE ('+porPct.length+'):');
+    porPct.forEach(function(s){
+      R.push('  · '+s.cod+' '+s.nombre+' — '+_crXerMil(s.pct)+' % de '+
+        _crXerMil(s.dias)+' d: resta '+_crXerMil(s.rd)+' d ('+_crXerMil(s.remH)+' h)'+
+        (s.partidas.length?(' · partidas: '+s.partidas.join(', ')):' · sin partidas (informativa)'))})}
+
   if(difs.length){
     R.push('');
     R.push('DIFERENCIAS ('+difs.length+'):');
@@ -29367,6 +29544,7 @@ function _crXerAuditoria(lineas,modelo){
     modelo.avisos.forEach(function(a){R.push('  \u00b7 '+a)})}
 
   return {ok:ok,difs:difs,faltan:faltan,avisos:avisos,
+    sinAlcance:sinAlcance,porPct:porPct,
     totales:{tabla:tabla,archivo:{hhT:tot.hhT,hhA:tot.hhA,hhR:tot.hhR,costoT:tot.costoT,costoA:tot.costoA},
              esperado:esperado,perdido:perd},
     fechaDatos:fechaDatos,revisadas:nRev,sinDiferencias:nOk,
@@ -29866,14 +30044,16 @@ function _crXerDD(lineas,modelo){
    'nada'   no se tocan (deja el flotante de la corrida vieja del archivo, que
             ya no corresponde a las fechas escritas: NO recomendado) */
 var _XER_LATE='vacio';
-/* liberar las restricciones del archivo que contradicen la fecha escrita: sin
-   esto, el primer F9 de P6 devuelve la actividad a su fecha de restriccion y
-   el "corrido" se deshace. Se cuentan y se enumeran en el mensaje. */
+/* NINGUNA restriccion en el archivo (pedido del usuario): en todas las
+   actividades que el aplicativo gestiona salen vacios cstr_type, cstr_date,
+   cstr_type2 y cstr_date2. Una restriccion vieja devuelve la actividad a su
+   fecha en el primer F9 de P6 y deshace el "corrido". Se cuentan y se
+   enumeran en el mensaje. */
 var _XER_LIBERA_CSTR=true;
-/* anclar con CS_MSOA (Start On or After) las actividades que el usuario movio
-   a mano y que no tienen predecesoras: es lo unico que sostiene su fecha
-   nueva cuando P6 reprograma. */
-var _XER_ANCLA_MOVIDAS=true;
+/* anclar con CS_MSOA las movidas: DESACTIVADO. El usuario no quiere que el
+   .xer salga con restricciones, ni siquiera con las que pondria el
+   aplicativo para sostener una fecha movida a mano. */
+var _XER_ANCLA_MOVIDAS=false;
 /* el calendario con el que se traduce el lag: por contrato, el de la SUCESORA.
    Si el archivo trae SCHEDOPTIONS.sched_calendar_on_relationship_lag se
    respeta lo que diga (en PRUEBA-XER dice rcal_Predecessor, pero todas las
@@ -29938,6 +30118,7 @@ function _crXerFechas(lineas,modelo){
   var out={fechas:0,hitos:0,loe:0,informativas:0,sinModelo:0,sinFecha:[],
     cstrLib:0,cstrLibL:[],cstrAnc:0,dupCod:[],
     rend:{},conRend:0,rendL:[],
+    sinAlc:0,sinAlcL:[],porPct:0,porPctL:[],
     rel_new:0,rel_act:0,rel_del:0,rel_dup:0,rel_huerf:0,rel_ajenas:0,rel_sin:[],
     dataDate:'',dataHora:'',calendario:'',avisos:[]};
   if(!modelo||!modelo.tareas)throw new Error('_crXerFechas: el modelo no trae tareas');
@@ -30059,8 +30240,9 @@ function _crXerFechas(lineas,modelo){
         pw('early_start_date',_crXerFec(fr,hr));pw('early_end_date',_crXerFec(fr,hr))}
       _crXerLate(pw,fr,hr,fr,hr,est);
       /* un hito no dura: ni HH ni rendimiento que repartir */
-      t.rd=0;t.rr=0;t.rC=0;t.diasCal=0;
-      out.rend[cod]={rd:0,rr:0,rC:0,dias:0,hhT:Number(t.hhT)||0,hhA:Number(t.hhA)||0,resta:0,remH:0,porHH:false};
+      t.rd=0;t.rr=0;t.rC=0;t.diasCal=0;t.dias=0;t.porHH=false;t.hpdCal=(C.hpd>0)?C.hpd:10;t.remH=0;
+      out.rend[cod]={rd:0,rr:0,rC:0,dias:0,hhT:Number(t.hhT)||0,hhA:Number(t.hhA)||0,resta:0,remH:0,porHH:false,
+        alcance:(t.alcance!==false),pct:_crXerM2(pctFuente),motivo:'hito'};
       out.hitos++;cierra();return}
 
     /* ---------------- tarea normal ---------------- */
@@ -30080,8 +30262,10 @@ function _crXerFechas(lineas,modelo){
       pw('remain_drtn_hr_cnt','0');
       pw('restart_date','');pw('reend_date','');
       t.rd=0;t.rr=0;t.rC=0;t.diasCal=_crXerCalCuenta(C,ini,fin);
+      t.dias=t.diasCal;t.porHH=false;t.hpdCal=(C.hpd>0)?C.hpd:10;t.remH=0;
       out.rend[cod]={rd:0,rr:0,rC:0,dias:t.diasCal,hhT:Number(t.hhT)||0,
-        hhA:Number(t.hhA)||0,resta:0,remH:0,porHH:false};
+        hhA:Number(t.hhA)||0,resta:0,remH:0,porHH:false,
+        alcance:(t.alcance!==false),pct:_crXerM2(pctFuente),motivo:'terminada'};
       var ri=iniRealF||_crFec(fi.o.act_start_date)||ini;
       var rf=finRealF||_crFec(fi.o.act_end_date)||fin;
       eIni=_crXerCalSnap(C,ri,false);eFin=_crXerCalSnap(C,rf,true);
@@ -30110,8 +30294,11 @@ function _crXerFechas(lineas,modelo){
          reend = consumir esas horas desde restart (si rd es entero, cae en el
          cierre del ultimo dia) y remain_qty_per_hr = rr / hpd, que es lo que
          sale solo al repartir remain_qty entre la duracion remanente.
-         Sin HH (informativas, partidas retiradas) no hay rendimiento del que
-         tirar: se cae al reparto proporcional de la duracion. */
+         Sin HH (informativas, partidas retiradas, partidas fuera) no hay
+         rendimiento del que tirar: manda LA REGLA DEL REMANENTE (_crRemDe, la
+         misma funcion que usa la hoja 2): con alcance, dias x (1 - pct/100)
+         con el % fisico de sus partidas; SIN alcance, cero, porque no puede
+         restar una duracion de algo que este cronograma no va a hacer. */
       var hpdC=(C.hpd>0)?C.hpd:10;
       var dias=_crXerCalCuenta(C,ini,fin);
       if(!ini||!fin)out.avisos.push(cod+' ('+t.nombre+'): no tiene fechas en el aplicativo; sale con 1 dia de duracion para '+_crXer2(Number(t.hhR)||0)+' hh remanentes. Ponle inicio y fin en la hoja 2 antes de exportar');
@@ -30120,20 +30307,29 @@ function _crXerFechas(lineas,modelo){
       var rC=0;
       if(t.rend!=null&&Number(t.rend)>0)rC=Number(t.rend);
       else{try{if(typeof _cnDe==='function'){var _q=_cnDe(modelo.cronId,cod);if(_q>0)rC=Number(_q)}}catch(_er){}}
-      var rDef=(dias>0)?(hhT/dias):0;
-      var rr=rC||rDef;
-      var rd=(rr>0)?(resta/rr):0;
-      var porHH=(hhT>0&&rr>0);
-      if(!porHH)rd=(dias>0)?(dias*(1-pct/100)):0;
+      /* las informativas van con lo del archivo, y ahi hay alcance por
+         definicion (no tienen partidas que mirar) */
+      var alc9=info?true:(t.alcance!==false);
+      var R9=_crRemDe({hhT:hhT,hhA:gT,hhR:resta,dias:dias,rC:rC,pct:pct,alcance:alc9});
+      var rDef=R9.rDef,rr=R9.rr,rd=R9.rd,porHH=R9.porHH;
       if(rd>5000){out.avisos.push(cod+': el rendimiento propio ('+_crXer2(rC)+' hh/dia) da '+_crXer2(rd)+' dias de remanente; se corta en 5000');rd=5000}
       rd=Math.round(rd*10000)/10000;
       var remH=Math.round(rd*hpdC*100)/100;
       if(!(remH>0))remH=0;
       /* se guarda para que la auditoria y el mensaje puedan comparar */
       t.rd=rd;t.rr=Math.round(rr*100)/100;t.rC=Math.round(rC*100)/100;t.diasCal=dias;
+      t.dias=dias;t.porHH=porHH;t.hpdCal=hpdC;t.remH=remH;
       out.rend[cod]={rd:rd,rr:Math.round(rr*100)/100,rC:Math.round(rC*100)/100,
         dias:dias,hhT:Math.round(hhT*100)/100,hhA:Math.round(gT*100)/100,
-        resta:Math.round(resta*100)/100,remH:remH,porHH:porHH};
+        resta:Math.round(resta*100)/100,remH:remH,porHH:porHH,
+        alcance:alc9,pct:_crXerM2(pct),motivo:R9.motivo};
+      if(!porHH){
+        if(!alc9){out.sinAlc=(out.sinAlc||0)+1;
+          if(!out.sinAlcL)out.sinAlcL=[];
+          if(out.sinAlcL.length<300)out.sinAlcL.push(cod+': '+(t.motivoSinAlcance||'sin alcance en este cronograma')+' · remanente 0')}
+        else{out.porPct=(out.porPct||0)+1;
+          if(!out.porPctL)out.porPctL=[];
+          if(out.porPctL.length<300)out.porPctL.push(cod+': sin HH, resta '+_crXer2(rd)+' d de '+dias+' d por su % de avance ('+_crXer2(pct)+' %)')}}
       if(rC>0){out.conRend++;
         if(out.rendL.length<300)out.rendL.push(cod+': resta '+_crXer2(rd)+' d a '+_crXer2(rC)+' hh/dia (por defecto '+_crXer2(rDef)+')')}
       var ir=iniRemF||ini;
@@ -30155,16 +30351,20 @@ function _crXerFechas(lineas,modelo){
       pw('early_end_date',_crXerFec(eFin,hEf));
       _crXerLate(pw,ir,hIr,F.iso,F.hora,est,eIni,hEi,eFin,hEf)}
 
-    /* ---------------- restricciones ---------------- */
+    /* ---------------- restricciones: NINGUNA ----------------
+       Pedido del usuario: el .xer no puede salir con restricciones. En todo lo
+       que el aplicativo gestiona (informativas incluidas) se vacian
+       cstr_type, cstr_date, cstr_type2 y cstr_date2; tampoco se ancla nada con
+       CS_MSOA. Lo que se limpia se cuenta y se enumera en el mensaje. */
     var ct=String(fi.o.cstr_type||'').trim(),cd=_crFec(fi.o.cstr_date);
-    var esIni=/^(CS_MSO|CS_MSOA|CS_MSOB|CS_MANDSTART)$/.test(ct);
-    var esFin=/^(CS_MEO|CS_MEOA|CS_MEOB|CS_MANDFIN)$/.test(ct);
-    if(info){cierra();return}
-    if(_XER_ANCLA_MOVIDAS&&t.movida&&!tienePred[cod]&&!ct&&est!=='Complete'){
-      pw('cstr_type','CS_MSOA');pw('cstr_date',_crXerFec(ini,hIni));out.cstrAnc++}
-    else if(_XER_LIBERA_CSTR&&ct&&cd&&((esIni&&cd!==ini)||(esFin&&cd!==fin))){
-      pw('cstr_type','');pw('cstr_date','');out.cstrLib++;
-      if(out.cstrLibL.length<200)out.cstrLibL.push(cod+' ('+ct.replace(/^CS_/,'')+' '+cd+')')}
+    var ct2=String(fi.o.cstr_type2||'').trim(),cd2=_crFec(fi.o.cstr_date2);
+    if(ct||cd||ct2||cd2){
+      out.cstrLib++;
+      if(out.cstrLibL.length<400)out.cstrLibL.push(cod+
+        (ct?(' ('+ct.replace(/^CS_/,'')+(cd?(' '+cd):'')+')'):'')+
+        (ct2?(' + '+ct2.replace(/^CS_/,'')+(cd2?(' '+cd2):'')):''))}
+    pw('cstr_type','');pw('cstr_date','');
+    pw('cstr_type2','');pw('cstr_date2','');
 
     cierra()});
 
@@ -30506,7 +30706,7 @@ function _crXerTotales(lineas){
      E-26 longitudes de texto (aviso)
      E-27 el aplanado a Windows-1252 no puede cambiar el numero de campos
    ============================================================================ */
-function _crXerValida(lineas){
+function _crXerValida(lineas,modelo){
   var err=[],avi=[];
   var E=function(m){if(err.length<300)err.push(m)};
   var A=function(m){if(avi.length<300)avi.push(m)};
@@ -30759,6 +30959,22 @@ function _crXerValida(lineas){
     WBS.filas.forEach(function(f){
       if(_crTx(f.o.wbs_short_name).length>40)A('PROJWBS: el codigo "'+_crTx(f.o.wbs_short_name)+'" pasa de 40 caracteres')})})();
 
+  /* ---- E-28: NINGUNA restriccion en lo que gestiona el aplicativo ----
+     Pedido del usuario: el .xer no puede salir con restricciones. Si el modelo
+     viene, se miran solo sus actividades; sin modelo, todas las de TASK. */
+  (function(){
+    if(!TAS.filas.length)return;
+    var ges=(modelo&&modelo.tareas)?modelo.tareas:null;
+    var n=0,LS=[];
+    TAS.filas.forEach(function(f){
+      var cod=_crTx(f.o.task_code);
+      if(ges&&!(ges[cod]||ges[String(cod).toUpperCase()]))return;
+      var a=String(f.o.cstr_type||'').trim(),b=String(f.o.cstr_type2||'').trim();
+      if(!a&&!b)return;
+      n++;if(LS.length<30)LS.push(cod+' '+(a||b).replace(/^CS_/,''))});
+    if(n)E(n+' actividad(es) del aplicativo salen con restriccion: '+LS.join(', ')+
+      ' · el .xer tiene que salir sin restricciones (cstr_type y cstr_type2 vacios)')})();
+
   return {ok:err.length===0,errores:err,avisos:avi,tablas:orden,
     n:{tareas:TAS.filas.length,rel:TPR.filas.length,asig:TRS.filas.length,wbs:WBS.filas.length,proyectos:PRO.filas.length}}}
 
@@ -30856,7 +31072,7 @@ async function _crXerArma(c,opt){
 
   /* --- 7. validacion estructural --- */
   di('7/8 Comprobando la estructura del archivo…');
-  var val=_crXerValida(lineas);
+  var val=_crXerValida(lineas,modelo);
 
   /* --- 8. auditoria campo a campo contra el modelo ---
      La auditoria compara PROJECT.last_recalc_date con modelo.corte, y la fecha
@@ -30996,6 +31212,27 @@ function _crXerMensaje(r,modo,mm){
     lin(ambar,'⚙ <b>'+fe.conRend+'</b> actividad(es) con <b>rendimiento propio</b>: su duracion remanente sale de las HH que restan entre ese rendimiento, no del % de avance');
     lista(ambar,(fe.rendL||[]).map(function(x){return _crXerEsc(x)}))}
 
+  /* --- LA REGLA DEL REMANENTE: sin alcance y por % --- */
+  var sAl=(aud&&aud.sinAlcance)||[],sPc=(aud&&aud.porPct)||[];
+  if(sAl.length){
+    lin(ambar,'⚠ <b>'+sAl.length+'</b> actividad(es) <b>sin alcance en este cronograma</b>: salen con remanente <b>0</b> (sus partidas no cuentan aqui)');
+    var lA=[];
+    for(i=0;i<sAl.length;i++){
+      var a9=sAl[i];
+      lA.push('<b>'+_crXerEsc(a9.cod)+'</b> '+_crXerEsc(a9.nombre)+' — '+_crXerHH(a9.dias)+' d de duracion, remanente <b>'+
+        _crXerHH(a9.remH)+' h</b>'+
+        (a9.partidas&&a9.partidas.length?(' · <i>sus partidas: '+_crXerEsc(a9.partidas.join(', '))+'</i>'):' · <i>'+_crXerEsc(a9.motivo)+'</i>'))}
+    lista(ambar,lA)}
+  if(sPc.length){
+    lin(claro,'<b>'+sPc.length+'</b> actividad(es) <b>sin HH</b>: su remanente sale del <b>% de avance</b> (dias × (1 − %))');
+    var lP=[];
+    for(i=0;i<sPc.length;i++){
+      var p9=sPc[i];
+      lP.push('<b>'+_crXerEsc(p9.cod)+'</b> '+_crXerEsc(p9.nombre)+' — '+_crXerHH(p9.pct)+' % de '+
+        _crXerHH(p9.dias)+' d: resta <b>'+_crXerHH(p9.rd)+' d</b> ('+_crXerHH(p9.remH)+' h)'+
+        (p9.partidas&&p9.partidas.length?(' · partidas: '+_crXerEsc(p9.partidas.join(', '))):' · sin partidas (informativa)'))}
+    lista(claro,lP)}
+
   /* --- EN ROJO: las partidas de la tabla que no llegan al archivo --- */
   if(pierden.length){
     lin(rojo,'⛔ <b>'+pierden.length+' partida(s) del TOTAL de la tabla NO llegan al archivo</b> ('+
@@ -31056,11 +31293,11 @@ function _crXerMensaje(r,modo,mm){
   else if(fe.sinModelo)
     lin(ambar,'⚠ '+fe.sinModelo+' actividad(es) del .xer que el aplicativo no gestiona: se dejan como estan');
 
-  /* --- restricciones --- */
-  if((fe.cstrLib||0)||(fe.cstrAnc||0)){
-    lin(ambar,'Restricciones: <b>'+(fe.cstrLib||0)+'</b> liberadas porque contradecian la fecha escrita (si no, el primer F9 de P6 deshace el corrido)'+
-      ((fe.cstrAnc||0)?(' · <b>'+fe.cstrAnc+'</b> ancladas con Start On or After por haberlas movido a mano'):''));
+  /* --- restricciones: el archivo sale SIN ninguna --- */
+  if((fe.cstrLib||0)){
+    lin(ambar,'Restricciones: se limpiaron <b>'+(fe.cstrLib||0)+'</b> (el .xer sale sin ninguna restriccion; si no, el primer F9 de P6 deshace el corrido)');
     lista(ambar,(fe.cstrLibL||[]).map(function(x){return _crXerEsc(x)}))}
+  else lin(claro,'Restricciones: el archivo sale <b>sin ninguna</b> en las actividades del aplicativo.');
 
   /* --- validacion estructural --- */
   if(!val.ok){
