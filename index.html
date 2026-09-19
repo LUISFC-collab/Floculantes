@@ -15950,7 +15950,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919b3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260919b4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21530,6 +21530,22 @@ async function _tbCalH2(cronId){window._crCalH2=window._crCalH2||{};if(window._c
 /* letra de columna como Excel (0 = A, 25 = Z, 26 = AA) y su inversa */
 function _tbColL(i){var r='';i=i+1;while(i>0){var m=(i-1)%26;r=String.fromCharCode(65+m)+r;i=Math.floor((i-1)/26)}return r}
 function _tbColIx(L){var n=0;L=String(L||'');for(var i=0;i<L.length;i++)n=n*26+(L.charCodeAt(i)-64);return n-1}
+/* LAS FORMULAS DE LA TABLA, por columna: [columna a, operador, columna b].
+   Las de siempre estan aqui; el usuario puede cambiar la de una columna
+   desde la barra fx (otra columna en una referencia, otro operador) y la
+   configuracion (cfg.formulas) manda: en la tabla, en los totales y en el
+   Excel. Siempre para TODA la columna, nunca para una fila. */
+var _TB_FX={hhC:['met','*','hhu'],hh:['metF','*','hhu'],hhM:['metM','*','hhu'],hhA:['metA','*','hhu'],hhAM:['metAM','*','hhu'],
+  costo:['met','*','pu'],costoC:['metF','*','pu'],costoM:['metM','*','pu'],costoA:['metA','*','pu'],costoAM:['metAM','*','pu'],
+  dCosto:['costo','-','costoC'],metR:['met','-','av'],metRF:['metF','-','metA'],hhR:['metR','*','hhu'],hhRF:['metRF','*','hhu'],
+  costoR:['metR','*','pu'],costoRF:['metRF','*','pu'],durC:['met','/','rend'],durF:['metF','/','rend'],durM:['metM','/','rend'],durR:['metR','/','rend'],dur:['metRF','/','rend']};
+function _tbFxDe(k){var o=null;try{var cfg=_tbCfg();o=cfg.formulas&&cfg.formulas[k]}catch(e){o=null}
+  if(o&&o.length===3&&_TB_NUM[o[0]]&&_TB_NUM[o[2]]&&'+-*/'.indexOf(o[1])>=0&&o[0]!==k&&o[2]!==k)return o;return _TB_FX[k]||null}
+function _tbFxCambiada(k){var o=_tbFxDe(k),d=_TB_FX[k];if(!o)return false;if(!d)return true;return o[0]!==d[0]||o[1]!==d[1]||o[2]!==d[2]}
+function _tbFxCalc(a,op,b){if(a==null||a===''||b==null||b==='')return null;var x=Number(a),y=Number(b);if(!isFinite(x)||!isFinite(y))return null;if(op==='+')return x+y;if(op==='-')return x-y;if(op==='*')return x*y;if(op==='/')return (y!==0)?x/y:null;return null}
+/* una linea de la tabla con las columnas de formula cambiada recalculadas */
+function _tbFxAplica(m){try{_TB_COLS.forEach(function(cl){var k=cl[0];if(!_tbFxCambiada(k))return;var F=_tbFxDe(k);m[k]=_tbFxCalc(m[F[0]],F[1],m[F[2]])})}catch(e){}return m}
+function _tbFxSimb(op){return op==='*'?'\u00d7':(op==='/'?'\u00f7':(op==='-'?'\u2212':'+'))}
 async function _crTablaDatos(c,corte){
   try{await _crCatOk()}catch(e){}
   /* foto a una fecha de corte (exportacion semanal, .xer corrido a otra
@@ -21740,8 +21756,9 @@ function _crTablaHTML(D,q,ord){
   var LET={};cols.forEach(function(cl,i){LET[cl[0]]=_tbColL(i)});var _rn=1,_rnIni=0,_rnFin=0;
   var rf=function(k,v){if(v==null||v===''||!isFinite(Number(v)))return null;if(LET[k])return LET[k]+_rn;return String(Math.round(Number(v)*10000)/10000)};
   var fx=function(a,va,op,b,vb){var x=rf(a,va),y=rf(b,vb);return (x!=null&&y!=null)?('='+x+op+y):''};
+  var fxK=function(k,r){var F=_tbFxDe(k);if(!F)return '';return fx(F[0],r[F[0]],F[1],F[2],r[F[2]])};   /* la formula de la columna (la de siempre o la cambiada) */
   var sumF=function(k){return (_rnIni&&LET[k])?('=SUM('+LET[k]+_rnIni+':'+LET[k]+_rnFin+')'):''};
-  var _EX='class="_tbEx" style="background:#1b2a40;color:#9db4d6;text-align:center;font-weight:800;font-size:10.5px;padding:1px 5px;border:1px solid #223049;user-select:none;';
+  var _EX='class="_tbEx" style="background:#1b2a40;color:#9db4d6;text-align:center;font-weight:800;font-size:10.5px;padding:1px 5px;border-right:1px solid #223049;border-bottom:1px solid #223049;user-select:none;';
   var numCel=function(n,z,extra){return '<td '+_EX+'position:sticky;left:0;z-index:'+z+';'+(extra||'')+'min-width:22px">'+n+'</td>'};
   /* se ordena por lo que se ve: en partidas con apartados, la suma de sus
      apartados en HH y costos, y el primer apartado en el resto */
@@ -21756,7 +21773,7 @@ function _crTablaHTML(D,q,ord){
      localStorage y hace JSON.parse, y se llamaba en CADA celda */
   var _ANCHO={};cols.forEach(function(cl){_ANCHO[cl[0]]=_tbAnchoCss(cl[0])});
   /* con "ajustar texto" la celda envuelve y la fila crece hasta mostrar todo; sin el, una linea y recorte */
-  var td0=function(v,n,extra,raw,f){return '<td'+((raw!=null&&raw!==''&&isFinite(Number(raw)))?(' data-num="'+raw+'"'):'')+(f?(' data-f="'+esc(f)+'"'):'')+' style="border:1px solid #223049;padding:3px 6px;vertical-align:top;'+(_aj?'white-space:normal;overflow-wrap:anywhere;':'white-space:nowrap;')+(n?'text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;':'')+(extra||'')+'">'+((v==null)?'':((qq&&!n)?_tbMarca(v,qq):v))+'</td>'};var td=td0;   /* con busqueda, las coincidencias en amarillo */
+  var td0=function(v,n,extra,raw,f){return '<td'+((raw!=null&&raw!==''&&isFinite(Number(raw)))?(' data-num="'+raw+'"'):'')+(f?(' data-f="'+esc(f)+'"'):'')+' style="border-right:1px solid #223049;border-bottom:1px solid #223049;padding:3px 6px;vertical-align:top;'+(_aj?'white-space:normal;overflow-wrap:anywhere;':'white-space:nowrap;')+(n?'text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;':'')+(extra||'')+'">'+((v==null)?'':((qq&&!n)?_tbMarca(v,qq):v))+'</td>'};var td=td0;   /* con busqueda, las coincidencias en amarillo */
   var celda=function(r,k,esParte,num){var W=(_ANCHO[k]!=null?_ANCHO[k]:_tbAnchoCss(k));var td=function(v,n,extra,raw,f){return td0(v,n,(extra||'')+W,raw,f)};
     switch(k){
       case 'num':return td('<b style="color:'+(esParte?'#9db4d6':'#cfe3ff')+'">'+num+'</b>');
@@ -21775,41 +21792,41 @@ function _crTablaHTML(D,q,ord){
       case 'pct':return td((r.pct!=null&&(r.met!=null||!r.pert))?(r.pct+'%'):'',1);
       case 'pu':return td(r.pu!=null?_nMon(r.pu):'',1);
       case 'hhu':return td(r.hhu!=null?_nMil2(r.hhu):'',1,'',r.hhu);
-      case 'dCosto':return td(r.dCosto>0?('<b style="color:#FFB4A8">\u2212 '+_nMon(r.dCosto)+'</b>'):(r.dCosto<0?('<b style="color:#9FE8B0">+ '+_nMon(-r.dCosto)+'</b>'):(r.dCosto!=null?_nMon(0):'')),1,'',r.dCosto,(r.dCosto!=null)?fx('costo',r.costo,'-','costoC',r.costoC):'');
-      case 'hhC':return td(_nMil2(r.hhC),1,'',r.hhC,(r.hhu!=null)?fx('met',r.met,'*','hhu',r.hhu):'');
-      case 'hh':return td('<b style="color:'+(r.hh>0?'#9FE8B0':'#7d8590')+'">'+_nMil2(r.hh)+'</b>',1,'',r.hh,(r.hhu!=null)?fx('metF',r.metF,'*','hhu',r.hhu):'');
-      case 'metR':return td(r.metR!=null?_nMil(_apuCant(r.metR)):'',1,'',r.metR,(r.metR!=null)?fx('met',r.met,'-','av',r.av):'');
-      case 'metRF':return td(r.metRF!=null?('<b style="color:'+(r.metRF>0?'#FFD37A':'#7d8590')+'">'+_nMil(_apuCant(r.metRF))+'</b>'):'',1,'',r.metRF,(r.metRF!=null)?fx('metF',r.metF,'-','metA',r.metA):'');
-      case 'hhR':return td(r.hhR!=null?_nMil2(r.hhR):'',1,'',r.hhR,(r.hhR!=null)?fx('metR',r.metR,'*','hhu',r.hhu):'');
-      case 'hhRF':return td(r.hhRF!=null?('<b style="color:'+(r.hhRF>0?'#FFD37A':'#7d8590')+'">'+_nMil2(r.hhRF)+'</b>'):'',1,'',r.hhRF,(r.hhRF!=null)?fx('metRF',r.metRF,'*','hhu',r.hhu):'');
-      case 'costoR':return td(r.costoR!=null?_nMon(r.costoR):'',1,'',r.costoR,(r.costoR!=null)?fx('metR',r.metR,'*','pu',r.pu):'');
-      case 'costoRF':return td(r.costoRF!=null?('<b style="color:'+(r.costoRF>0?'#FFD37A':'#7d8590')+'">'+_nMon(r.costoRF)+'</b>'):'',1,'',r.costoRF,(r.costoRF!=null)?fx('metRF',r.metRF,'*','pu',r.pu):'');
+      case 'dCosto':return td(r.dCosto>0?('<b style="color:#FFB4A8">\u2212 '+_nMon(r.dCosto)+'</b>'):(r.dCosto<0?('<b style="color:#9FE8B0">+ '+_nMon(-r.dCosto)+'</b>'):(r.dCosto!=null?_nMon(0):'')),1,'',r.dCosto,fxK(k,r));
+      case 'hhC':return td(_nMil2(r.hhC),1,'',r.hhC,fxK(k,r));
+      case 'hh':return td('<b style="color:'+(r.hh>0?'#9FE8B0':'#7d8590')+'">'+_nMil2(r.hh)+'</b>',1,'',r.hh,fxK(k,r));
+      case 'metR':return td(r.metR!=null?_nMil(_apuCant(r.metR)):'',1,'',r.metR,fxK(k,r));
+      case 'metRF':return td(r.metRF!=null?('<b style="color:'+(r.metRF>0?'#FFD37A':'#7d8590')+'">'+_nMil(_apuCant(r.metRF))+'</b>'):'',1,'',r.metRF,fxK(k,r));
+      case 'hhR':return td(r.hhR!=null?_nMil2(r.hhR):'',1,'',r.hhR,fxK(k,r));
+      case 'hhRF':return td(r.hhRF!=null?('<b style="color:'+(r.hhRF>0?'#FFD37A':'#7d8590')+'">'+_nMil2(r.hhRF)+'</b>'):'',1,'',r.hhRF,fxK(k,r));
+      case 'costoR':return td(r.costoR!=null?_nMon(r.costoR):'',1,'',r.costoR,fxK(k,r));
+      case 'costoRF':return td(r.costoRF!=null?('<b style="color:'+(r.costoRF>0?'#FFD37A':'#7d8590')+'">'+_nMon(r.costoRF)+'</b>'):'',1,'',r.costoRF,fxK(k,r));
       case 'rendQ':return td(r.rendQ!=null?_nMil2(r.rendQ):'',1,'',r.rendQ);
       case 'rend':return td((r.rend!=null?('<b style="color:'+(r.rendEd?'#FFD27A':'#cfe3ff')+'">'+_nMil2(r.rend)+'</b>'):'')+(r.id?('<span class="_tbRendEd" data-id="'+esc(r.id)+'" data-rb="'+(r.rendBase!=null?r.rendBase:'')+'" title="Cambiar el rendimiento APP de la partida '+esc(r.id)+' (und/d\u00eda); vac\u00edo o 0 vuelve al del alcance'+(r.pert?'. Los apartados lo reparten seg\u00fan su metrado':'')+'" style="margin-left:4px;cursor:pointer;opacity:'+(r.rendEd?'1':'.55')+';font-size:10px;color:#FFD27A">\u270e</span>'):''),1,'',r.rend);
-      case 'durC':return td(r.durC!=null?_nMil2(r.durC):'',1,'',r.durC,(r.durC!=null)?fx('met',r.met,'/','rend',r.rend):'');
-      case 'durF':return td(r.durF!=null?('<b style="color:#9FE8B0">'+_nMil2(r.durF)+'</b>'):'',1,'',r.durF,(r.durF!=null)?fx('metF',r.metF,'/','rend',r.rend):'');
-      case 'durM':return td(r.durM!=null?('<b style="color:'+(r.durM>(Number(r.durF)||0)+1e-9?'#FFD37A':'#9FE8B0')+'">'+_nMil2(r.durM)+'</b>'):'',1,'',r.durM,(r.durM!=null)?fx('metM',r.metM,'/','rend',r.rend):'');
-      case 'durR':return td(r.durR!=null?_nMil2(r.durR):'',1,'',r.durR,(r.durR!=null)?fx('metR',r.metR,'/','rend',r.rend):'');
-      case 'dur':return td(r.dur!=null?('<b style="color:#8ECBF5">'+_nMil2(r.dur)+'</b>'):'',1,'',r.dur,(r.dur!=null)?fx('metRF',r.metRF,'/','rend',r.rend):'');
+      case 'durC':return td(r.durC!=null?_nMil2(r.durC):'',1,'',r.durC,fxK(k,r));
+      case 'durF':return td(r.durF!=null?('<b style="color:#9FE8B0">'+_nMil2(r.durF)+'</b>'):'',1,'',r.durF,fxK(k,r));
+      case 'durM':return td(r.durM!=null?('<b style="color:'+(r.durM>(Number(r.durF)||0)+1e-9?'#FFD37A':'#9FE8B0')+'">'+_nMil2(r.durM)+'</b>'):'',1,'',r.durM,fxK(k,r));
+      case 'durR':return td(r.durR!=null?_nMil2(r.durR):'',1,'',r.durR,fxK(k,r));
+      case 'dur':return td(r.dur!=null?('<b style="color:#8ECBF5">'+_nMil2(r.dur)+'</b>'):'',1,'',r.dur,fxK(k,r));
       case 'noHace':return td(r.noHace>0?(r.noHace+'%'):(r.noHace<0?('<b style="color:#9FE8B0">+'+(-r.noHace)+'% más</b>'):''),1,'',r.noHace);
       case 'apOff':return td(esc(r.apOff||''));
       case 'ret':return td(esc(r.ret||''));
-      case 'costo':return td(_nMon(r.costo),1,'',r.costo,(r.pu!=null)?fx('met',r.met,'*','pu',r.pu):'');
-      case 'costoC':return td('<b style="color:'+(r.costoC>0?'#9FE8B0':'#7d8590')+'">'+_nMon(r.costoC)+'</b>',1,'',r.costoC,(r.pu!=null)?fx('metF',r.metF,'*','pu',r.pu):'');
+      case 'costo':return td(_nMon(r.costo),1,'',r.costo,fxK(k,r));
+      case 'costoC':return td('<b style="color:'+(r.costoC>0?'#9FE8B0':'#7d8590')+'">'+_nMon(r.costoC)+'</b>',1,'',r.costoC,fxK(k,r));
       case 'metM':return td(r.metM!=null?('<b style="color:'+(r.metM>(Number(r.metF)||0)+1e-9?'#FFD37A':'#cfe3ff')+'">'+_nMil(_apuCant(r.metM))+'</b>'):'',1);
-      case 'hhM':return td(r.hhM!=null?('<b style="color:'+(r.hhM>(Number(r.hh)||0)+1e-9?'#FFD37A':'#9FE8B0')+'">'+_nMil2(r.hhM)+'</b>'):'',1,'',r.hhM,(r.hhu!=null)?fx('metM',r.metM,'*','hhu',r.hhu):'');
-      case 'costoM':return td(r.costoM!=null?('<b style="color:'+(r.costoM>(Number(r.costoC)||0)+1e-9?'#FFD37A':'#9FE8B0')+'">'+_nMon(r.costoM)+'</b>'):'',1,'',r.costoM,(r.pu!=null)?fx('metM',r.metM,'*','pu',r.pu):'');
+      case 'hhM':return td(r.hhM!=null?('<b style="color:'+(r.hhM>(Number(r.hh)||0)+1e-9?'#FFD37A':'#9FE8B0')+'">'+_nMil2(r.hhM)+'</b>'):'',1,'',r.hhM,fxK(k,r));
+      case 'costoM':return td(r.costoM!=null?('<b style="color:'+(r.costoM>(Number(r.costoC)||0)+1e-9?'#FFD37A':'#9FE8B0')+'">'+_nMon(r.costoM)+'</b>'):'',1,'',r.costoM,fxK(k,r));
       case 'metA':return td(r.metA!=null?_nMil(_apuCant(r.metA)):'',1);
-      case 'hhA':return td(r.hhA!=null?('<b style="color:#8DD6ED">'+_nMil2(r.hhA)+'</b>'):'',1,'',r.hhA,(r.hhu!=null)?fx('metA',r.metA,'*','hhu',r.hhu):'');
-      case 'costoA':return td(r.costoA!=null?('<b style="color:#8DD6ED">'+_nMon(r.costoA)+'</b>'):'',1,'',r.costoA,(r.pu!=null)?fx('metA',r.metA,'*','pu',r.pu):'');
+      case 'hhA':return td(r.hhA!=null?('<b style="color:#8DD6ED">'+_nMil2(r.hhA)+'</b>'):'',1,'',r.hhA,fxK(k,r));
+      case 'costoA':return td(r.costoA!=null?('<b style="color:#8DD6ED">'+_nMon(r.costoA)+'</b>'):'',1,'',r.costoA,fxK(k,r));
       case 'metAM':return td(r.metAM!=null?('<b style="color:'+(r.metAM>(Number(r.metA)||0)+1e-9?'#FFD37A':'#cfe3ff')+'">'+_nMil(_apuCant(r.metAM))+'</b>'):'',1);
-      case 'hhAM':return td(r.hhAM!=null?('<b style="color:'+(r.hhAM>(Number(r.hhA)||0)+1e-9?'#FFD37A':'#8DD6ED')+'">'+_nMil2(r.hhAM)+'</b>'):'',1,'',r.hhAM,(r.hhu!=null)?fx('metAM',r.metAM,'*','hhu',r.hhu):'');
-      case 'costoAM':return td(r.costoAM!=null?('<b style="color:'+(r.costoAM>(Number(r.costoA)||0)+1e-9?'#FFD37A':'#8DD6ED')+'">'+_nMon(r.costoAM)+'</b>'):'',1,'',r.costoAM,(r.pu!=null)?fx('metAM',r.metAM,'*','pu',r.pu):'');
+      case 'hhAM':return td(r.hhAM!=null?('<b style="color:'+(r.hhAM>(Number(r.hhA)||0)+1e-9?'#FFD37A':'#8DD6ED')+'">'+_nMil2(r.hhAM)+'</b>'):'',1,'',r.hhAM,fxK(k,r));
+      case 'costoAM':return td(r.costoAM!=null?('<b style="color:'+(r.costoAM>(Number(r.costoA)||0)+1e-9?'#FFD37A':'#8DD6ED')+'">'+_nMon(r.costoAM)+'</b>'):'',1,'',r.costoAM,fxK(k,r));
     }return td('')};
-  var H='<table style="border-collapse:collapse;font-size:11.5px;min-width:100%"><thead><tr class="_tbLet">'+numCel('',7,'top:0;');
-  cols.forEach(function(cl,i){H+='<td '+_EX+'position:sticky;top:0;z-index:5;height:18px;line-height:16px;box-sizing:border-box">'+_tbColL(i)+'</td>'});
+  var H='<table style="border-collapse:separate;border-spacing:0;border-left:1px solid #223049;border-top:1px solid #223049;font-size:11.5px;min-width:100%"><thead><tr class="_tbLet">'+numCel('',7,'top:0;');
+  cols.forEach(function(cl,i){H+='<td data-lk="'+cl[0]+'" title="Seleccionar la columna: Ctrl+C copia sus valores; en una columna con l\u00e1piz, Ctrl+V los pega en toda la columna" '+_EX+'position:sticky;top:0;z-index:5;height:18px;line-height:16px;box-sizing:border-box;cursor:pointer">'+_tbColL(i)+'</td>'});
   H+='</tr><tr>'+numCel('1',6,'top:18px;');
-  cols.forEach(function(cl){H+='<th class="_tbOrd" draggable="true" data-k="'+cl[0]+'" title="Arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:18px;background:#152436;color:#8ECBF5;border:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TB_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_tbAnchoCss(cl[0])+'">'+cl[1]+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_tbPin" data-k="'+cl[0]+'" title="Inmovilizar las columnas hasta esta (como Excel); otro clic la suelta" style="margin-left:5px;cursor:pointer;font-size:11px;opacity:'+(_fzk[cl[0]]?'1':'.4')+'">📌</span><span class="_tbClr" data-k="'+cl[0]+'" title="Color de relleno de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;opacity:'+((_cfgT.colores&&_cfgT.colores[cl[0]])?'1':'.4')+'">🎨</span><span class="_tbFnt" data-k="'+cl[0]+'" title="Color de la fuente de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;font-weight:900;color:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])||'#8ECBF5')+';opacity:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])?'1':'.5')+'">A</span><span class="_tbRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
+  cols.forEach(function(cl){H+='<th class="_tbOrd" draggable="true" data-k="'+cl[0]+'" title="Arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:18px;background:#152436;color:#8ECBF5;border-right:1px solid #223049;border-bottom:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TB_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_tbAnchoCss(cl[0])+'">'+cl[1]+(_tbFxCambiada(cl[0])?' <span title="F\u00f3rmula cambiada por ti: '+_tbFxDe(cl[0]).join(' ')+'" style="color:#FFD27A;font-style:italic;font-weight:900">\u0192</span>':'')+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_tbPin" data-k="'+cl[0]+'" title="Inmovilizar las columnas hasta esta (como Excel); otro clic la suelta" style="margin-left:5px;cursor:pointer;font-size:11px;opacity:'+(_fzk[cl[0]]?'1':'.4')+'">📌</span><span class="_tbClr" data-k="'+cl[0]+'" title="Color de relleno de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;opacity:'+((_cfgT.colores&&_cfgT.colores[cl[0]])?'1':'.4')+'">🎨</span><span class="_tbFnt" data-k="'+cl[0]+'" title="Color de la fuente de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;font-weight:900;color:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])||'#8ECBF5')+';opacity:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])?'1':'.5')+'">A</span><span class="_tbRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
   H+='</tr></thead><tbody>';
   var T={n:0,hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0,hhR:0,hhRF:0,costoR:0,costoRF:0},N=0;
   /* titulos de sistema y TOTAL: una sola celda combinada por tramo (sin lineas
@@ -21838,7 +21855,7 @@ function _crTablaHTML(D,q,ord){
       else if(k==='costoRF'){flush();h+=td('<b style="color:#FFD37A">'+_nMon(S.costoRF||0)+'</b>',1,W,S.costoRF,sumF('costoRF'))}
       else if(k==='dCosto'){flush();h+=td('<b style="color:'+(S.dCosto<0?'#9FE8B0':'#FFB4A8')+'">'+(S.dCosto>0?('\u2212 '+_nMon(S.dCosto)):(S.dCosto<0?('+ '+_nMon(-S.dCosto)):_nMon(0)))+'</b>',1,W,S.dCosto,sumF('dCosto'))}
       else run++});flush();
-    if(!puesto)h+='<td style="'+ST+'border:1px solid #223049;padding:4px 6px;font-weight:'+fw+';color:#cfe3ff;white-space:nowrap">'+lab+'</td>';
+    if(!puesto)h+='<td style="'+ST+'border-right:1px solid #223049;border-bottom:1px solid #223049;padding:4px 6px;font-weight:'+fw+';color:#cfe3ff;white-space:nowrap">'+lab+'</td>';
     return h+'</tr>'};
   /* titulo WBS: solo el nombre y el conteo, sin sumas (una celda combinada) */
   var titulo=function(lab){return '<tr style="background:#111c2c"><td colspan="'+cols.length+'" style="border-top:1px solid #223049;border-bottom:1px solid #223049;border-left:0;border-right:0;padding:4px 6px;font-weight:800;color:#cfe3ff;white-space:nowrap"><span style="position:sticky;left:6px;display:inline-block">'+lab+'</span></td></tr>'};
@@ -21859,6 +21876,8 @@ function _crTablaHTML(D,q,ord){
         /* el resto nunca lleva mayor metrado: sus columnas (MM) repiten las de forecast/actual */
         m2.hhM=m2.hh;m2.costoM=m2.costoC;m2.hhAM=m2.hhA;m2.costoAM=m2.costoA;m2.pert='Resto de la partida';m2.met=null;m2.metF=null;m2.metM=null;m2.metA=null;m2.metAM=null;m2.av=null;m2.pu=null;m2.hhu=null;m2.pct=null;m2.metR=null;m2.metRF=null;m2.hhR=null;m2.hhRF=null;m2.costoR=null;m2.costoRF=null;m2.rendQ=null;m2.rend=null;m2.durC=null;m2.durF=null;m2.durM=null;m2.durR=null;m2.dur=null;m2.ret='';m2.apOff='';m2._np=L.length+1;L.push(m2)}
     return L};
+  /* con formulas cambiadas por el usuario, cada linea se recalcula con ellas */
+  var vis0=vis;vis=function(r){return vis0(r).map(_tbFxAplica)};
   orden.forEach(function(sis){var L=porSis[sis];var S={hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0,hhR:0,hhRF:0,costoR:0,costoRF:0};
     L.forEach(function(r){vis(r).filter(_tbVisible).forEach(function(m){S.hhC+=Number(m.hhC)||0;S.hh+=Number(m.hh)||0;S.costo+=Number(m.costo)||0;S.costoC+=Number(m.costoC)||0;S.dCosto+=Number(m.dCosto)||0;S.hhM+=Number(m.hhM)||0;S.costoM+=Number(m.costoM)||0;S.hhA+=Number(m.hhA)||0;S.costoA+=Number(m.costoA)||0;S.hhAM+=Number(m.hhAM)||0;S.costoAM+=Number(m.costoAM)||0;S.hhR+=Number(m.hhR)||0;S.hhRF+=Number(m.hhRF)||0;S.costoR+=Number(m.costoR)||0;S.costoRF+=Number(m.costoRF)||0});if(r.est==='Activa')S.act++});
     var kS=String(sis),cS=!!_pleg[kS];
@@ -21887,6 +21906,8 @@ function _crTablaHTML(D,q,ord){
 /* cabecera: ordenar con clic, mover arrastrando; boton Columnas para ocultar/mostrar */
 function _crTablaBind(root,ordRef,rerender){
   var doc=root.ownerDocument||document;
+  window._tbRerender=rerender;   /* lo usa la barra fx al cambiar una formula */
+  var keys9=Array.prototype.map.call(root.querySelectorAll('thead th'),function(t){return t.getAttribute('data-k')});
   /* pin: inmoviliza hasta esa columna (otro clic la suelta) */
   root.querySelectorAll('._tbPin').forEach(function(b){b.onclick=function(e){e.stopPropagation();e.preventDefault();var k=b.getAttribute('data-k'),cfg=_tbCfg();cfg.fija=cfg.fija||{};cfg.fija.col=(cfg.fija.col===k)?null:k;_tbCfgSave(cfg);rerender()};b.onmousedown=function(e){e.stopPropagation()}});
   /* color de relleno de la columna */
@@ -21910,6 +21931,34 @@ function _crTablaBind(root,ordRef,rerender){
     if(bC)bC.onclick=function(){var cfg=_tbCfg();cfg.pleg={};root.querySelectorAll('tr._tbTit').forEach(function(tr){var k=tr.getAttribute('data-wk');if(k&&k.indexOf(' / ')<0)cfg.pleg[k]=1});_tbCfgSave(cfg);rerender()}}catch(e){}
   /* exportar a Excel el cuadro tal como se ve */
   try{var bX=doc.getElementById('_tbXls');if(bX)bX.onclick=async function(){bX.disabled=true;var t0=bX.textContent;bX.textContent='Armando…';try{await _tbExportarXlsx(root,doc)}catch(e){try{alert('No se pudo exportar: '+((e&&e.message)||e))}catch(_e){}}bX.disabled=false;bX.textContent=t0}}catch(e){}
+  /* seleccion de una columna por su letra: Ctrl+C copia sus valores (y al
+     portapapeles, para Excel); en una columna editable (con lapiz) Ctrl+V los
+     pega fila a fila en toda la columna; se guardan en Supabase como siempre */
+  var _TB_EDIT={rend:1};
+  var pintaSel=function(){var sc=window._tbSelCol;root.querySelectorAll('._tbColSel').forEach(function(x){x.classList.remove('_tbColSel');x.style.outline=x._tbOc||'';x.style.outlineOffset=x._tbOc?'-2px':'';x._tbOc=null});
+    if(!sc)return;var ix=keys9.indexOf(sc.k);if(ix<0){window._tbSelCol=null;return}
+    root.querySelectorAll('tr').forEach(function(tr){if(tr.children.length!==keys9.length+1)return;var x=tr.children[ix+1];if(!x)return;x.classList.add('_tbColSel');x._tbOc=x.style.outline||'';x.style.outline='1px solid #8ECBF5';x.style.outlineOffset='-1px'})};
+  root.querySelectorAll('thead tr._tbLet td[data-lk]').forEach(function(l){l.onclick=function(e){e.stopPropagation();var k=l.getAttribute('data-lk');window._tbSelCol=(window._tbSelCol&&window._tbSelCol.k===k)?null:{k:k};
+    try{var prev=root.querySelector('td._tbSelC');if(prev){prev.classList.remove('_tbSelC');prev.style.outline=''}}catch(_e){}window._tbSelKey=null;try{_tbFxMuestra(root,doc,null)}catch(_e2){}
+    pintaSel();var r9=doc.getElementById('_tbRes');if(r9)r9.textContent=window._tbSelCol?('Columna '+_tbColL(keys9.indexOf(k))+' elegida: Ctrl+C copia sus valores'+(_TB_EDIT[k]?' \u00b7 Ctrl+V pega en toda la columna':'')):''}});
+  pintaSel();window._tbRoot=root;
+  if(!doc._tbClipBound){doc._tbClipBound=true;
+    doc.addEventListener('copy',function(e){try{var sc=window._tbSelCol,rt=window._tbRoot;if(!sc||!rt||(doc.activeElement&&/INPUT|TEXTAREA/.test(doc.activeElement.tagName)))return;
+      var ks=Array.prototype.map.call(rt.querySelectorAll('thead th'),function(t){return t.getAttribute('data-k')});var ix=ks.indexOf(sc.k);if(ix<0)return;
+      var vals=[];rt.querySelectorAll('tbody tr[data-rk]').forEach(function(tr){var x=tr.children[ix+1];if(!x)return;var raw=x.getAttribute('data-num');vals.push({rk:tr.getAttribute('data-rk'),v:(raw!=null&&raw!=='')?raw:String(x.textContent||'').replace(/\u270e/g,'').replace(/\s+/g,' ').trim()})});
+      window._tbClip={k:sc.k,vals:vals};e.clipboardData.setData('text/plain',vals.map(function(x){return x.v}).join('\n'));e.preventDefault();
+      var r9=doc.getElementById('_tbRes');if(r9)r9.textContent=vals.length+' valores copiados de la columna '+_tbColL(ix)}catch(_e){}});
+    doc.addEventListener('paste',function(e){try{var sc=window._tbSelCol,rt=window._tbRoot;if(!sc||!rt||!_TB_EDIT[sc.k]||(doc.activeElement&&/INPUT|TEXTAREA/.test(doc.activeElement.tagName)))return;e.preventDefault();
+      var c9=window._crTablaCron;if(!c9)return;
+      var filas=Array.prototype.slice.call(rt.querySelectorAll('tbody tr[data-rk]')),porRk={};filas.forEach(function(tr){porRk[tr.getAttribute('data-rk')]=tr});
+      var pares=[],clip=window._tbClip,txt=String((e.clipboardData&&e.clipboardData.getData('text/plain'))||'').replace(/\r/g,'');
+      var mismo=!!(clip&&clip.vals.length&&clip.vals.map(function(x){return x.v}).join('\n')===txt.replace(/\n$/,''));
+      if(mismo)clip.vals.forEach(function(x){if(porRk[x.rk])pares.push([porRk[x.rk],x.v])});   /* la columna copiada aqui: fila a fila por su clave */
+      else{var lin=txt.split('\n');if(lin.length&&lin[lin.length-1]==='')lin.pop();for(var i=0;i<Math.min(lin.length,filas.length);i++)pares.push([filas[i],lin[i]])}   /* texto de fuera (Excel): por orden */
+      var n=0,vistos={};pares.forEach(function(p){var m=(window._tbLineas||{})[p[0].getAttribute('data-rk')];if(!m||!m.id||vistos[m.id])return;var v=String(p[1]).replace(/\u2212/g,'-').replace(/[',\s]/g,'');if(v===''||v==='?')return;var num=Number(v);if(!isFinite(num))return;vistos[m.id]=1;_trSet(c9.cron_id,m.id,num>0?num:0,true);n++});
+      try{_trPush()}catch(_ep){}
+      var r9=doc.getElementById('_tbRes');if(r9)r9.textContent=n+' rendimientos APP pegados en la columna';try{if(typeof toast==='function')toast('\u270e '+n+' rendimientos APP pegados en toda la columna')}catch(_et){}
+      try{if(typeof window._tbRerender==='function')window._tbRerender()}catch(_er){}}catch(_e){}})}
   /* lapiz del Rendimiento APP: un cuadro en la misma celda; Enter guarda,
      Esc cancela; vacio o 0 vuelve al rendimiento del alcance */
   root.querySelectorAll('._tbRendEd').forEach(function(b){b.onclick=function(e){e.stopPropagation();e.preventDefault();
@@ -21926,7 +21975,7 @@ function _crTablaBind(root,ordRef,rerender){
     td.innerHTML='';td.appendChild(inp);inp.focus();inp.select()}});
   /* celda elegida (clic) y botones Inmovilizar / Movilizar de la barra; la
      barra fx ensena su referencia y su formula (la columna de numeros no cuenta) */
-  root.querySelectorAll('tbody td, tfoot td').forEach(function(td){if(td.classList.contains('_tbEx'))return;td.onclick=function(){if(td.parentNode&&td.parentNode.classList&&td.parentNode.classList.contains('_tbTit'))return;try{var prev=root.querySelector('td._tbSelC');if(prev){prev.classList.remove('_tbSelC');prev.style.outline=''}}catch(_e){}td.classList.add('_tbSelC');td.style.outline='2px solid #FFD37A';td.style.outlineOffset='-2px';var tr=td.parentNode;window._tbSel={fila:Array.prototype.indexOf.call(tr.parentNode.children,tr),col:Array.prototype.indexOf.call(tr.children,td)-1,colspan:tr.children.length-1};try{_tbFxMuestra(root,doc,td)}catch(_e2){}}});
+  root.querySelectorAll('tbody td, tfoot td').forEach(function(td){if(td.classList.contains('_tbEx'))return;td.onclick=function(){if(window._tbFxDragged)return;if(td.parentNode&&td.parentNode.classList&&td.parentNode.classList.contains('_tbTit'))return;try{var prev=root.querySelector('td._tbSelC');if(prev){prev.classList.remove('_tbSelC');prev.style.outline=''}}catch(_e){}td.classList.add('_tbSelC');td.style.outline='2px solid #FFD37A';td.style.outlineOffset='-2px';var tr=td.parentNode;window._tbSel={fila:Array.prototype.indexOf.call(tr.parentNode.children,tr),col:Array.prototype.indexOf.call(tr.children,td)-1,colspan:tr.children.length-1};window._tbSelKey={rk:tr.getAttribute('data-rk')||'',k:keys9[window._tbSel.col]||''};try{_tbFxMuestra(root,doc,td)}catch(_e2){}}});
   try{_tbFxMuestra(root,doc,null)}catch(_e3){}
   try{var bF=doc.getElementById('_tbFzCel'),bN=doc.getElementById('_tbFzNo'),res=doc.getElementById('_tbRes');
     if(bF)bF.onclick=function(){var sel=window._tbSel;if(!sel){if(res)res.textContent='Toca primero una celda: se inmovilizan las filas de arriba y las columnas a su izquierda';return}var cfg=_tbCfg();var keys=Array.prototype.map.call(root.querySelectorAll('thead th'),function(t){return t.getAttribute('data-k')});cfg.fija={col:(sel.colspan===keys.length&&sel.col>0)?keys[sel.col-1]:null,fila:sel.fila>0?sel.fila:0};_tbCfgSave(cfg);window._tbSel=null;rerender()};
@@ -21946,13 +21995,16 @@ function _crTablaBind(root,ordRef,rerender){
     th.ondragover=function(e){e.preventDefault();th.style.outline='2px solid #8ECBF5'};
     th.ondragleave=function(){th.style.outline=''};
     th.ondrop=function(e){e.preventDefault();th.style.outline='';var de='';try{de=e.dataTransfer.getData('text/plain')}catch(_e){}var a=th.getAttribute('data-k');if(!de||de===a)return;
-      var cfg=_tbCfg();var o=cfg.orden.slice();_TB_COLS.forEach(function(x){if(o.indexOf(x[0])<0)o.push(x[0])});var i=o.indexOf(de),j=o.indexOf(a);if(i<0||j<0)return;o.splice(i,1);o.splice(j,0,de);cfg.orden=o;_tbCfgSave(cfg);rerender()}})}
+      var cfg=_tbCfg();var o=cfg.orden.slice();_TB_COLS.forEach(function(x){if(o.indexOf(x[0])<0)o.push(x[0])});var i=o.indexOf(de),j=o.indexOf(a);if(i<0||j<0)return;o.splice(i,1);o.splice(j,0,de);cfg.orden=o;_tbCfgSave(cfg);rerender()}});
+  /* la celda elegida sigue elegida tras repintar (y la barra fx con ella) */
+  try{var sk=window._tbSelKey;if(sk&&sk.rk){var tr9=root.querySelector('tbody tr[data-rk="'+sk.rk+'"]'),ix9=keys9.indexOf(sk.k);var td9=(tr9&&ix9>=0)?tr9.children[ix9+1]:null;if(td9&&td9.onclick)td9.onclick()}}catch(_es){}}
 /* la barra de formulas, como la de Excel: referencia de la celda (K12) y su
    contenido; si es formula (=K12*O12) se pinta cada referencia de un color y
    las celdas que usa quedan recuadradas con ese mismo color */
 function _tbFxMuestra(root,doc,td){try{
   var pal=['#4A8CF0','#E0574F','#9B59B6','#2ECC71','#F39C12','#1ABC9C'];
-  (window._tbRefHi||[]).forEach(function(x){try{x.style.outline=x._tbO||'';x.style.outlineOffset=x._tbO?'-2px':'';x._tbO=null}catch(_e){}});window._tbRefHi=[];
+  (window._tbRefHi||[]).forEach(function(x){try{x.style.outline=x._tbO||'';x.style.outlineOffset=x._tbO?'-2px':'';x._tbO=null;x.onmousedown=null;x.style.cursor=''}catch(_e){}});window._tbRefHi=[];
+  try{var pp0=doc.getElementById('_tbFxPop');if(pp0)pp0.remove()}catch(_e0){}
   var ref=doc.getElementById('_tbFxRef'),val=doc.getElementById('_tbFxVal');
   if(!td){if(ref)ref.textContent='';if(val)val.innerHTML='';return}
   var tr=td.parentNode,tb=td.closest('table');var rn=tr.getAttribute('data-rn')||'';
@@ -21960,15 +22012,61 @@ function _tbFxMuestra(root,doc,td){try{
   var ci=0;for(var i9=0;i9<tr.children.length;i9++){var s9=tr.children[i9];if(s9===td)break;if(s9.classList&&s9.classList.contains('_tbEx'))continue;ci+=parseInt(s9.getAttribute('colspan'),10)||1}
   if(tr.parentNode&&tr.parentNode.tagName==='THEAD')rn='1';
   if(ref)ref.textContent=_tbColL(ci)+rn;
+  var keys=Array.prototype.map.call(tb.querySelectorAll('thead th'),function(t){return t.getAttribute('data-k')}),k=keys[ci]||'';
   var f=td.getAttribute('data-f')||'',raw=td.getAttribute('data-num');
   if(!f){if(val)val.textContent=(raw!=null&&raw!=='')?String(Math.round(Number(raw)*100)/100):String(td.textContent||'').replace(/\s+/g,' ').trim();return}
+  /* en una fila de datos la formula es la de la columna y se puede cambiar; la SUMA del TOTAL no */
+  var enCuerpo=!!(tr.parentNode&&tr.parentNode.tagName==='TBODY'),F=enCuerpo?_tbFxDe(k):null;
+  var posDe=[];if(F){if(keys.indexOf(F[0])>=0)posDe.push(0);if(keys.indexOf(F[2])>=0)posDe.push(2)}
+  var colorDe=function(n){return F?pal[(posDe[n]===2)?1:0]:pal[n%pal.length]};
+  var cel=function(cc,rr){var trx=tb.querySelector('tr[data-rn="'+rr+'"]')||(rr==='1'?tb.querySelector('thead tr:not(._tbLet)'):null);if(!trx)return null;return trx.children[_tbColIx(cc)+1]||null};
   var n=0;
-  var html=esc(f).replace(/([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?/g,function(m0,c1,r1,c2,r2){var col=pal[n%pal.length];n++;
-    var cel=function(cc,rr){var trx=tb.querySelector('tr[data-rn="'+rr+'"]')||(rr==='1'?tb.querySelector('thead tr:not(._tbLet)'):null);if(!trx)return null;return trx.children[_tbColIx(cc)+1]||null};
-    var marca=function(x){if(!x||x===td)return;x._tbO=x.style.outline||'';x.style.outline='2px solid '+col;x.style.outlineOffset='-2px';window._tbRefHi.push(x)};
+  var html=esc(f).replace(/([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?/g,function(m0,c1,r1,c2,r2){var col=colorDe(n),pos=(F&&posDe[n]!=null)?posDe[n]:null;n++;
+    var marca=function(x){if(!x||x===td)return;x._tbO=x.style.outline||'';x.style.outline='2px solid '+col;x.style.outlineOffset='-2px';window._tbRefHi.push(x);
+      if(F&&pos!=null)_tbFxArrastre(x,root,doc,k,pos,keys,col)};
     if(c2){var a=Number(r1),b=Number(r2);for(var q=a;q<=b;q++)marca(cel(c1,String(q)))}else marca(cel(c1,r1));
     return '<span style="color:'+col+';font-weight:800">'+m0+'</span>'});
-  if(val)val.innerHTML=html}catch(e){}}
+  if(F){
+    var nom={};_TB_COLS.forEach(function(x){nom[x[0]]=x[1]});
+    var L9=(window._tbLineas||{})[tr.getAttribute('data-rk')||'']||{};
+    var opTxt=function(pos){var kk=F[pos],ix=keys.indexOf(kk);if(ix>=0)return _tbColL(ix)+rn;var v=Number(L9[kk]);return isFinite(v)?String(Math.round(v*10000)/10000):'?'};
+    var refSpan=function(pos){var c0=pal[pos===2?1:0];return '<span class="_tbFxRef" data-pos="'+pos+'" title="'+esc(nom[F[pos]]||F[pos])+' \u00b7 toca para elegir otra columna (cambia toda la columna '+_tbColL(ci)+')" style="color:'+c0+';font-weight:800;cursor:pointer;border-bottom:1px dashed '+c0+'">'+esc(opTxt(pos))+'</span>'};
+    html='= '+refSpan(0)+' <span class="_tbFxOp" title="Cambiar el operador (\u00d7 \u00f7 + \u2212): toda la columna '+_tbColL(ci)+'" style="cursor:pointer;font-weight:900;padding:0 5px;border:1px solid #2b4162;border-radius:4px;color:#cfe3ff">'+_tbFxSimb(F[1])+'</span> '+refSpan(2)+
+      (_tbFxCambiada(k)?' <span class="_tbFxReset" title="Volver a la f\u00f3rmula original de la columna" style="cursor:pointer;color:#FFB4A8;font-weight:900;margin-left:6px">\u21ba original</span>':'')+
+      ' <span style="color:#7d8590;font-size:11px;margin-left:8px">'+esc((nom[F[0]]||F[0])+' '+_tbFxSimb(F[1])+' '+(nom[F[2]]||F[2]))+' \u00b7 arrastra un recuadro a otra columna, toca una referencia o el operador: cambia TODA la columna</span>'}
+  if(val){val.innerHTML=html;
+    if(F){Array.prototype.forEach.call(val.querySelectorAll('._tbFxRef'),function(sp){sp.onclick=function(e){e.stopPropagation();_tbFxElige(doc,sp,k,Number(sp.getAttribute('data-pos')),keys)}});
+      var op9=val.querySelector('._tbFxOp');if(op9)op9.onclick=function(e){e.stopPropagation();var ord9=['*','/','+','-'],F2=_tbFxDe(k).slice();F2[1]=ord9[(ord9.indexOf(F2[1])+1)%4];_tbFxGuarda(k,F2)};
+      var rs9=val.querySelector('._tbFxReset');if(rs9)rs9.onclick=function(e){e.stopPropagation();_tbFxGuarda(k,null)}}}
+  }catch(e){}}
+/* guardar la formula de una columna (null = la original) y repintar */
+function _tbFxGuarda(k,F){var cfg=_tbCfg();cfg.formulas=cfg.formulas||{};if(F)cfg.formulas[k]=F;else delete cfg.formulas[k];_tbCfgSave(cfg);
+  try{if(typeof toast==='function')toast(F?('\u0192 '+k+' = '+F[0]+' '+_tbFxSimb(F[1])+' '+F[2]+' en toda la columna'):('\u21ba '+k+': f\u00f3rmula original'))}catch(_e){}
+  try{if(typeof window._tbRerender==='function')window._tbRerender()}catch(e){}}
+/* elegir la columna de una referencia: lista de columnas numericas, con su letra */
+function _tbFxElige(doc,anchor,k,pos,keys){var old=doc.getElementById('_tbFxPop');if(old){old.remove();return}
+  var F=_tbFxDe(k);if(!F)return;var pop=doc.createElement('div');pop.id='_tbFxPop';
+  pop.style.cssText='position:fixed;z-index:2147483647;background:#152436;border:1px solid #1d3550;border-radius:10px;padding:6px 8px;display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;font-size:12px;color:#cfe3ff;box-shadow:0 10px 30px rgba(0,0,0,.5);max-height:70vh;overflow:auto';
+  var r=anchor.getBoundingClientRect();pop.style.left=Math.max(4,r.left)+'px';pop.style.top=(r.bottom+4)+'px';
+  var h='<div style="grid-column:1/3;font-weight:800;color:#8ECBF5;margin-bottom:2px">Columna para esta referencia (toda la columna)</div>';
+  _TB_COLS.forEach(function(x){if(!_TB_NUM[x[0]]||x[0]===k)return;var ix=keys.indexOf(x[0]);h+='<div class="_tbFxOpc" data-k="'+x[0]+'" style="cursor:pointer;padding:2px 4px;border-radius:5px;'+(x[0]===F[pos]?'background:#243b55;font-weight:800;':'')+'">'+(ix>=0?('<b style="color:#8ECBF5">'+_tbColL(ix)+'</b> '):'<span style="color:#7d8590">(oculta)</span> ')+x[1]+'</div>'});
+  pop.innerHTML=h;doc.body.appendChild(pop);
+  Array.prototype.forEach.call(pop.querySelectorAll('._tbFxOpc'),function(o){o.onclick=function(e){e.stopPropagation();var F2=F.slice();F2[pos]=o.getAttribute('data-k');pop.remove();_tbFxGuarda(k,F2)}});
+  pop.onclick=function(e){e.stopPropagation()};
+  setTimeout(function(){var c9=function(){try{pop.remove()}catch(_e){}doc.removeEventListener('click',c9)};doc.addEventListener('click',c9)},0)}
+/* arrastrar el recuadro de una referencia a otra columna (como en Excel): la
+   formula de TODA la columna pasa a usar esa columna */
+function _tbFxArrastre(x,root,doc,k,pos,keys,col){x.style.cursor='move';
+  x.onmousedown=function(e){if(e.button!==0)return;var x0=e.clientX,y0=e.clientY,mov=false,ult=null;
+    var limpia=function(){if(ult){ult.style.outline='';ult=null}};
+    var colDe=function(ev){var el=doc.elementFromPoint(ev.clientX,ev.clientY);var td9=(el&&el.closest)?el.closest('td,th'):null;if(!td9||(td9.classList&&td9.classList.contains('_tbEx')))return null;if((parseInt(td9.getAttribute('colspan'),10)||1)>1)return null;
+      var tr9=td9.parentNode,c=0;for(var i=0;i<tr9.children.length;i++){var s9=tr9.children[i];if(s9===td9)break;if(s9.classList&&s9.classList.contains('_tbEx'))continue;c+=parseInt(s9.getAttribute('colspan'),10)||1}return {k:keys[c],ci:c}};
+    var mm=function(ev){if(!mov&&Math.abs(ev.clientX-x0)+Math.abs(ev.clientY-y0)<4)return;mov=true;doc.body.style.cursor='move';
+      var c9=colDe(ev);limpia();if(c9&&_TB_NUM[c9.k]&&c9.k!==k){var th9=root.querySelectorAll('thead th')[c9.ci];if(th9){th9.style.outline='2px solid '+col;ult=th9}}};
+    var mu=function(ev){doc.removeEventListener('mousemove',mm);doc.removeEventListener('mouseup',mu);doc.body.style.cursor='';limpia();if(!mov)return;
+      window._tbFxDragged=true;setTimeout(function(){window._tbFxDragged=false},80);
+      var c9=colDe(ev);if(!c9||!_TB_NUM[c9.k]||c9.k===k)return;var F2=_tbFxDe(k).slice();F2[pos]=c9.k;_tbFxGuarda(k,F2)};
+    e.preventDefault();e.stopPropagation();doc.addEventListener('mousemove',mm);doc.addEventListener('mouseup',mu)}}
 function _crTablaColsUI(doc,anchor,rerender){
   var old=doc.getElementById('_tbColsPop');if(old){old.remove();return}
   var cfg=_tbCfg();var pop=doc.createElement('div');pop.id='_tbColsPop';
@@ -22097,6 +22195,9 @@ async function _tbExportarXlsx2(root,doc){
     tds.forEach(function(td,i){
       var k=keys[i],ref=colL(i)+r,raw=td.getAttribute('data-num');
       var num=(raw!=null&&raw!=='')?Number(raw):((m&&_TB_NUM[k]&&m[k]!=null&&m[k]!=='')?Number(m[k]):NaN);
+      /* formula cambiada por el usuario para esta columna: manda sobre las de siempre */
+      if(m&&_tbFxCambiada(k)&&isFinite(num)){var OV=_tbFxDe(k),refX9=function(kk){if(kk==='pu')return refPu;if(kk==='hhu')return refHhu;if(kk==='met'||kk==='metF'||kk==='metM'||kk==='metA'||kk==='metAM'){var q9=refMet(kk);if(q9!=null)return q9}return refCol(kk,m[kk])};
+        var a9=refX9(OV[0]),b9=refX9(OV[2]);if(a9!=null&&b9!=null){h2+=celF(ref,a9+OV[1]+b9,estiloDe(td,tr,(k==='dCosto')?DIF:NUM,'right'));return}}
       if(m&&k==='pu'&&pu!=null){h2+=celN(ref,pu,estiloDe(td,tr,NUM,'right'));return}
       if(m&&k==='met'&&metX.met!=null){h2+=celN(ref,metX.met,estiloDe(td,tr,NUM,'right'));return}
       if(m&&(k==='metF'||k==='metM'||k==='metA'||k==='metAM')&&metX[k]!=null){h2+=celN(ref,metX[k],estiloDe(td,tr,NUM,'right'));return}
@@ -22464,10 +22565,10 @@ function _trAll(){if(!state.tabrend){try{state.tabrend=JSON.parse(localStorage.g
 function _trSaveLocal(){try{localStorage.setItem('obf4_tabrend',JSON.stringify(_trAll()))}catch(e){}}
 function _trKey(cron,id){return String(cron)+'|'+String(id)}
 function _trDe(cron,id){var x=_trAll()[_trKey(cron,id)];if(!x||x.eliminado)return null;var r=Number(x.rend);return (isFinite(r)&&r>0)?r:null}
-function _trSet(cron,id,rend){var all=_trAll(),k=_trKey(cron,id),t=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'';
+function _trSet(cron,id,rend,sinPush){var all=_trAll(),k=_trKey(cron,id),t=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'';
   var r=Number(rend)||0,x=all[k]||{cron_id:String(cron),partida_id:String(id)};
   x.rend=r>0?r:0;x.quien=yo;x.ts=t;x.cell_at=Date.now();x.eliminado=!(r>0);x.elim_por=(r>0)?'':yo;x.elim_ts=(r>0)?0:t;
-  all[k]=x;_trSaveLocal();try{_trPush()}catch(e){}}
+  all[k]=x;_trSaveLocal();if(!sinPush)try{_trPush()}catch(e){}}
 async function _trPush(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
   var all=_trAll(),out=[];
   Object.keys(all).forEach(function(k){var x=all[k]||{};if(!x.ts||!x.cron_id||!x.partida_id)return;
