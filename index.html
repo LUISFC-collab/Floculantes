@@ -5543,9 +5543,16 @@ function _crCurvaRep(c,tar,u,semanas,filas,C,alc){
     var lab=function(iso){if(C)return _crXerCalLab(C,iso);var w=new Date(iso+'T00:00:00Z').getUTCDay();return w!==0&&w!==6};
     /* el corte: el dia habil anterior a la fecha de datos (sin calendario,
        lunes a viernes); nunca a mas de un mes */
-    var ant9=function(){var x=_crDeSerial(_crASerial(dd)-1);for(var k9=0;k9<7&&!lab(x);k9++)x=_crDeSerial(_crASerial(x)-1);return x};
-    var corte=C?_crXerCalAnt(C,dd):ant9();
-    if(!corte||corte>=dd||(_crASerial(dd)-_crASerial(corte))>31)corte=ant9();
+    /* EL CORTE no se adivina solo por convencion: el menor reinicio (restart)
+       que no sea anterior a la fecha de datos es el primer dia que el archivo
+       da por NO trabajado; el corte es el habil anterior a ese piso. Vale para
+       el .xer de la app (restart = fecha de datos) y para uno de P6 con la
+       fecha de datos a las 18:00 del propio dia de corte. */
+    var piso='';tar.forEach(function(z){var r9=String((z&&z.ini_rem)||'').slice(0,10);if(r9&&r9>=dd&&(!piso||r9<piso))piso=r9});
+    if(!piso||(_crASerial(piso)-_crASerial(dd))>7)piso=dd;
+    var ant9=function(){var x=_crDeSerial(_crASerial(piso)-1);for(var k9=0;k9<7&&!lab(x);k9++)x=_crDeSerial(_crASerial(x)-1);return x};
+    var corte=C?_crXerCalAnt(C,piso):ant9();
+    if(!corte||corte>=piso||(_crASerial(piso)-_crASerial(corte))>31)corte=ant9();
     var porId={};(filas||[]).forEach(function(r){if(r&&r.id)porId[r.id]=r});
     var _mF={},frac=function(id,iso){var k=id+'|'+iso,v=_mF[k];if(v!=null)return v;v=Math.max(0,Math.min(1,Number(_crFracHechaAt(porId[id],iso))||0));_mF[k]=v;return v};
     var rp=_crReparto(tar);
@@ -5604,7 +5611,11 @@ function _crCurvaRep(c,tar,u,semanas,filas,C,alc){
       var a=_crASerial(ir),b=_crASerial(fr);if(b<a)b=a;if(b-a>20000)b=a+20000;
       var dl=[];for(var d=a;d<=b;d++){var f=_crDeSerial(d);if(lab(f))dl.push(f)}
       if(!dl.length)dl=[ir];
-      var pd=hhR/dl.length;dl.forEach(function(f){pon(f,pd)});remTot+=hhR});
+      /* P6 reparte el remanente a unidades/HORA constantes: con dias de
+         jornada desigual (sabado corto, dia especial) se pesa por sus horas */
+      var pes=[],tp=0;dl.forEach(function(f){var h9=C?(Number(_crXerCalHorasDia(C,f))||0):1;if(!(h9>0))h9=1;pes.push(h9);tp+=h9});
+      if(!(tp>0)){tp=dl.length;pes=dl.map(function(){return 1})}
+      dl.forEach(function(f,ix){pon(f,hhR*pes[ix]/tp)});remTot+=hhR});
     var acum=[],cc=0;
     for(var s2=0;s2<semanas.length;s2++){cc+=porSem[s2];acum.push(Math.min(1,cc/hhUni))}
     return {porSem:porSem,acum:acum,pesoTot:hhUni,conHH:true,hhUniverso:u.hh,rep:true,dataDate:dd,corte:corte,finMax:finMax,ganado:Math.round(ganTot*100)/100,remanente:Math.round(remTot*100)/100,sinFechas:sinFechas}}
@@ -16071,7 +16082,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919c4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260919c5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
