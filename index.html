@@ -15950,7 +15950,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919b6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260919b7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21710,12 +21710,19 @@ function _tbAplicaFijas(root){try{var cfg=_tbCfg(),tb=root.querySelector('table'
      letras y las columnas inmovilizadas empiezan tras la de numeros */
   var letra=tb.querySelector('thead tr._tbLet'),hL=letra?letra.offsetHeight:0;
   if(hL){ths.forEach(function(t){t.style.top=hL+'px'});var c1=tb.querySelector('thead tr:not(._tbLet) td._tbEx');if(c1)c1.style.top=hL+'px'}
-  var nW=0;try{var n0=tb.querySelector('tbody td._tbEx')||tb.querySelector('thead td._tbEx');nW=n0?n0.offsetWidth:0}catch(_e0){}
+  var nW=0;try{var n0=tb.querySelector('tbody td._tbEx')||tb.querySelector('thead td._tbEx');nW=n0?n0.getBoundingClientRect().width:0}catch(_e0){}
+  var tbL=0;try{tbL=tb.getBoundingClientRect().left}catch(_e1){}
   var celdaDe=function(tr,ci){return (tr.children.length===keys.length+1)?tr.children[ci+1]:null};
   keys.forEach(function(k,ci){var col=cfg.colores&&cfg.colores[k];if(!col)return;rows.forEach(function(tr){if(tr.parentNode&&tr.parentNode.tagName==='THEAD')return;var td=celdaDe(tr,ci);if(td)td.style.background=col})});
   keys.forEach(function(k,ci){var fc=cfg.fuentes&&cfg.fuentes[k];if(!fc)return;rows.forEach(function(tr){if(tr.parentNode&&tr.parentNode.tagName==='THEAD')return;var td=celdaDe(tr,ci);if(!td)return;td.style.color=fc;Array.prototype.forEach.call(td.querySelectorAll('b,span,s'),function(el){el.style.color=fc})})});
   var nFz=0;if(cfg.fija&&cfg.fija.col){var ix=keys.indexOf(cfg.fija.col);if(ix>=0)nFz=ix+1}
-  var left=nW;for(var ci=0;ci<nFz;ci++){var w=ths[ci].offsetWidth;rows.forEach(function(tr){var td=celdaDe(tr,ci);if(!td)return;var esTh=(td.tagName==='TH'),esLet=!!(tr.classList&&tr.classList.contains('_tbLet'));td.style.position='sticky';td.style.left=left+'px';td.style.zIndex=esTh?'6':(esLet?'7':'3');if(!esTh&&!td.style.background)td.style.background=(tr.style.background||'#0b1220');td.style.boxShadow=(ci===nFz-1)?'2px 0 0 #3a5a8a':''});left+=w}
+  /* el 'left' de cada columna fija es su posicion EXACTA en la tabla (con
+     decimales): sumando anchos redondeados se abrian huecos de 1 px entre
+     columnas fijas por los que se veia pasar lo de abajo. Y una sombra de
+     1 px del color del borde a la izquierda de cada celda fija tapa
+     cualquier resto */
+  var left=nW;for(var ci=0;ci<nFz;ci++){var w=ths[ci].getBoundingClientRect().width;var lx=left;try{var rx=ths[ci].getBoundingClientRect().left-tbL;if(isFinite(rx)&&rx>=0)lx=rx}catch(_e2){}
+    rows.forEach(function(tr){var td=celdaDe(tr,ci);if(!td)return;var esTh=(td.tagName==='TH'),esLet=!!(tr.classList&&tr.classList.contains('_tbLet'));td.style.position='sticky';td.style.left=lx+'px';td.style.zIndex=esTh?'6':(esLet?'7':'3');if(!esTh&&!td.style.background)td.style.background=(tr.style.background||'#0b1220');td.style.boxShadow='-1px 0 0 #223049'+((ci===nFz-1)?', 2px 0 0 #3a5a8a':'')});left+=w}
   var nFr=(cfg.fija&&cfg.fija.fila>0)?Number(cfg.fija.fila):0;
   if(nFr){var top=tb.tHead?tb.tHead.offsetHeight:0;var body=tb.tBodies[0];var brs=body?Array.prototype.slice.call(body.rows).slice(0,nFr):[];
     brs.forEach(function(tr,i){var h=tr.offsetHeight;Array.prototype.forEach.call(tr.children,function(td){td.style.position='sticky';td.style.top=top+'px';td.style.zIndex=(td.style.left?'5':'4');if(!td.style.background)td.style.background=(tr.style.background||'#0b1220');if(i===brs.length-1)td.style.boxShadow=(td.style.boxShadow?td.style.boxShadow+',':'')+'0 2px 0 #3a5a8a'});top+=h})}
@@ -21992,7 +21999,9 @@ function _crTablaBind(root,ordRef,rerender){
       else{td.innerHTML=old;rerender()}};
     inp.onkeydown=function(ev){if(ev.key==='Enter'){ev.preventDefault();cierra(true)}else if(ev.key==='Escape'){ev.preventDefault();cierra(false)}ev.stopPropagation()};
     inp.onblur=function(){cierra(true)};inp.onclick=function(ev){ev.stopPropagation()};
-    td.innerHTML='';td.appendChild(inp);inp.focus();inp.select()}});
+    td.innerHTML='';td.appendChild(inp);inp.focus();inp.select()};
+    /* como Excel: doble clic en la celda tambien abre el cuadro */
+    try{var tdL=b.parentNode;if(tdL)tdL.ondblclick=function(e){e.preventDefault();e.stopPropagation();b.onclick(e)}}catch(_e3){}});
   /* celda elegida (clic) y botones Inmovilizar / Movilizar de la barra; la
      barra fx ensena su referencia y su formula (la columna de numeros no cuenta) */
   root.querySelectorAll('tbody td, tfoot td').forEach(function(td){if(td.classList.contains('_tbEx'))return;td.onclick=function(){if(window._tbFxDragged)return;if(td.parentNode&&td.parentNode.classList&&td.parentNode.classList.contains('_tbTit'))return;try{var prev=root.querySelector('td._tbSelC');if(prev){prev.classList.remove('_tbSelC');prev.style.outline=''}}catch(_e){}td.classList.add('_tbSelC');td.style.outline='2px solid #FFD37A';td.style.outlineOffset='-2px';var tr=td.parentNode;window._tbSel={fila:Array.prototype.indexOf.call(tr.parentNode.children,tr),col:Array.prototype.indexOf.call(tr.children,td)-1,colspan:tr.children.length-1};window._tbSelKey={rk:tr.getAttribute('data-rk')||'',k:keys9[window._tbSel.col]||''};try{_tbFxMuestra(root,doc,td)}catch(_e2){}}});
