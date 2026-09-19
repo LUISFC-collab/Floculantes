@@ -1343,6 +1343,7 @@ function _rtOnCambio(tabla,_fila){
     try{if(window._crTar)window._crTar={};
         if(window._crAl)window._crAl={};window._crCacheT=0;window._pgUniv=null;window._ctAct=undefined;window._hhCache=null;window._crEnT=null;try{if(typeof _ctRefresca==='function')_ctRefresca()}catch(_er9){}   /* las fechas viven aqui */
         try{window._crHechoMemo=null}catch(_eh){}
+        try{window._crCalH2={}}catch(_ek){}   /* el calendario del .xer, por si se recargo el archivo */
         /* la hoja de alcance abierta: sus mapas de actividades se rehacen con
            lo que llego y se repinta (antes seguia con los de antes) */
         try{var cx9=window._crCtx;if(cx9&&document.getElementById('_crAlcOv')){_crMapasDe(cx9).then(function(t9){try{if(_crH2)_crH2.tar=t9}catch(_e1){}try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(_e2){}}).catch(function(){})}}catch(_ea){}
@@ -4012,18 +4013,23 @@ var T_PLAN='cron_plan_create_230826';
 /* la semana del año a la que pertenece una fecha, con la MISMA rejilla del
    semanal: la S27 cierra el jueves de serial 46205 y de ahi de siete en siete */
 function _crSemNum(iso){
-  var d=Math.round((Date.parse(iso+'T00:00:00Z')-Date.UTC(1899,11,30))/864e5);
+  var d=Math.round((Date.parse(String(iso).slice(0,10)+'T00:00:00Z')-Date.UTC(1899,11,30))/864e5);
   return 27+Math.ceil((d-46205)/7)}
 function _crSemSerial(n){return 46205+(n-27)*7}
 function _crSemISO(ser){return new Date(Date.UTC(1899,11,30)+ser*864e5).toISOString().slice(0,10)}
-function _crSemDe(tar){
-  var d0='',d1='';
+function _crSemDe(tar,conRem,hasta){
+  var d0='',d1='',d1r='';
   tar.forEach(function(t){
     if(t.ini&&(!d0||t.ini<d0))d0=t.ini;
     if(t.fin&&(!d1||t.fin>d1))d1=t.fin;
-    /* el remanente de P6 (reend) puede caer despues del fin planificado: sin
-       esa semana sus HH no caen en ninguna columna y la curva no llega al 100 % */
-    if(t.fin_rem&&(!d1||t.fin_rem>d1))d1=t.fin_rem});
+    var fr=String(t.fin_rem||'').slice(0,10);if(fr&&(!d1r||fr>d1r))d1r=fr});
+  /* solo para la curva (conRem): el remanente de P6 (reend) o el fin que la
+     propia curva calcula (hasta) pueden caer despues del fin planificado: sin
+     esas semanas sus HH no caen en ninguna columna y la curva no llega al
+     100 %. Con tope de un anno mas alla del fin, por si viniera un fin
+     disparatado. La hoja 2 sigue con su rejilla de siempre. */
+  if(conRem&&d1){var h9=String(hasta||'').slice(0,10);if(h9&&h9>d1r)d1r=h9;
+    if(d1r&&d1r>d1){var tope=_crDeSerial(_crASerial(d1)+366);d1=(d1r<tope)?d1r:tope}}
   if(!d0||!d1)return [];
   var a=_crSemNum(d0)-1,b=_crSemNum(d1),out=[];   /* una semana antes: el arranque en cero */
   for(var n=a;n<=b;n++){
@@ -5523,16 +5529,25 @@ function _crCurvaReal(u,semanas,filas){
    Complete: hhR = 0, todo su hh en el tramo real. NotStart: todo al remanente.
    Devuelve el MISMO objeto que _crCurva (porSem en HH, pesoTot = HH del
    universo) para que barras, % y el plan congelado sigan igual. */
-function _crCurvaRep(c,tar,u,semanas,filas,C){
+function _crCurvaRep(c,tar,u,semanas,filas,C,alc){
   try{
     if(!semanas||!semanas.length)return null;
     var dd=String((c&&c.fecha_datos)||'').slice(0,10);
     if(!dd)return null;
+    /* fecha de datos la trae TODO .xer (al cargar cae en plan_start_date):
+       esto solo es una reprogramacion si el archivo trae avance o remanente,
+       la misma prueba que _crTramosDe (conAv). Un LB0 sigue lineal. */
+    tar=(tar||[]).filter(function(t9){return t9&&!t9.eliminado});
+    if(!tar.some(function(t9){return (Number(t9.hh_real)||0)>0||!!t9.ini_rem||!!t9.ini_real}))return null;
     if(!C)C=(window._crCalH2||{})[c.cron_id]||null;
     var lab=function(iso){if(C)return _crXerCalLab(C,iso);var w=new Date(iso+'T00:00:00Z').getUTCDay();return w!==0&&w!==6};
-    var corte=C?_crXerCalAnt(C,dd):_crDeSerial(_crASerial(dd)-1);
-    if(!corte||corte>=dd)corte=_crDeSerial(_crASerial(dd)-1);
+    /* el corte: el dia habil anterior a la fecha de datos (sin calendario,
+       lunes a viernes); nunca a mas de un mes */
+    var ant9=function(){var x=_crDeSerial(_crASerial(dd)-1);for(var k9=0;k9<7&&!lab(x);k9++)x=_crDeSerial(_crASerial(x)-1);return x};
+    var corte=C?_crXerCalAnt(C,dd):ant9();
+    if(!corte||corte>=dd||(_crASerial(dd)-_crASerial(corte))>31)corte=ant9();
     var porId={};(filas||[]).forEach(function(r){if(r&&r.id)porId[r.id]=r});
+    var _mF={},frac=function(id,iso){var k=id+'|'+iso,v=_mF[k];if(v!=null)return v;v=Math.max(0,Math.min(1,Number(_crFracHechaAt(porId[id],iso))||0));_mF[k]=v;return v};
     var rp=_crReparto(tar);
     var hhUni=0;for(var k in u.items)hhUni+=(Number(u.items[k])||0);
     if(!(hhUni>0))return null;
@@ -5547,41 +5562,52 @@ function _crCurvaRep(c,tar,u,semanas,filas,C){
     var prev=0;
     for(var s=0;s<semanas.length;s++){
       var hasta=(semanas[s].fin<corte)?semanas[s].fin:corte,g=0;
-      for(var it in u.items)g+=(Number(u.items[it])||0)*_crFracHechaAt(porId[it],hasta);
+      for(var it in u.items)g+=(Number(u.items[it])||0)*frac(it,hasta);
       if(g<prev)g=prev;
       porSem[s]+=(g-prev);prev=g;
       if(semanas[s].fin>=corte)break}
-    var ganTot=prev,remTot=0,sinFechas=0;
+    /* la fecha de datos por detras de toda la rejilla: lo ganado entre el fin
+       de la rejilla y el corte se pliega en la ultima columna (el remanente ya
+       se mide en el corte; si no, el total no llega al universo) */
+    if(semanas[ult].fin<corte){var gF=0;for(var itF in u.items)gF+=(Number(u.items[itF])||0)*frac(itF,corte);if(gF>prev){porSem[ult]+=(gF-prev);prev=gF}}
+    var ganTot=prev,remTot=0,sinFechas=0,finMax='';
     /* 2) EL REMANENTE de cada actividad, por dia laboral entre restart y reend */
     tar.forEach(function(t){
       if(!t||t.eliminado)return;
       var cod=String(t.task_code||''),hhT=0,hhA=0;
-      (t.items||[]).forEach(function(i){if(u.items[i]==null)return;var h=(Number(u.items[i])||0)/_crVeces(rp,i);if(!(h>0))return;hhT+=h;hhA+=h*_crFracHechaAt(porId[i],corte)});
+      /* lo ganado se consume en orden entre las actividades que comparten
+         partida (_crGanadas), como en la hoja 2 y en el .xer */
+      (t.items||[]).forEach(function(i){if(u.items[i]==null)return;var hi=Number(u.items[i])||0,h=hi/_crVeces(rp,i);if(!(h>0))return;hhT+=h;hhA+=_crGanadas(rp,i,cod,hi,frac(i,corte))});
       var hhR=Math.max(0,hhT-hhA);
       if(!(hhR>1e-9))return;
-      var ir=String(t.ini_rem||'').slice(0,10)||String(t.ini||'').slice(0,10)||dd;
+      /* sin restart del archivo: las fechas efectivas de la actividad (el alcance manda) */
+      var fT=null;try{fT=alc?_crFechaTarea(t,alc):null}catch(_ef){fT=null}
+      var iniT=String((fT&&fT.ini)||t.ini||'').slice(0,10),finT=String((fT&&fT.fin)||t.fin||'').slice(0,10);
+      var ir=String(t.ini_rem||'').slice(0,10)||iniT||dd;
       if(ir<dd)ir=dd;
       if(C)ir=_crXerCalSnap(C,ir,false);
       var fr=String(t.fin_rem||'').slice(0,10);
       if(!fr||fr<ir){
         /* sin reinicio/fin del archivo: la regla del remanente, como el .xer */
         sinFechas++;
-        var ini=String(t.ini||ir).slice(0,10),fin=String(t.fin||ini).slice(0,10);
+        var ini=iniT||ir,fin=finT||ini;
         if(C){ini=_crXerCalSnap(C,ini,false);fin=_crXerCalSnap(C,fin,true);if(_crASerial(fin)<_crASerial(ini))fin=ini}
         var dias=C?_crXerCalCuenta(C,ini,fin):_crXerDias(ini,fin);
         var rC=0;try{rC=_cnDe(c.cron_id,cod)||0}catch(_e1){rC=0}
         var A9=_crRemAlc(t.items,porId);
         var R9=_crRemDe({hhT:hhT,hhA:hhA,hhR:hhR,dias:dias,rC:rC,alcance:A9.alcance,pct:(A9.pct==null)?Math.max(0,Math.min(100,Number(t.pct)||0)):A9.pct});
-        if(C){var hpd=(C.hpd>0)?C.hpd:10;fr=_crXerCalFinHoras(C,ir,Math.round(R9.rd*hpd*100)/100,_crXerCalAbre(C,ir)).iso}
-        else fr=_crDeSerial(_crASerial(ir)+Math.max(0,Math.ceil(R9.rd)-1));
+        var rd9=Math.min(5000,Math.max(0,Number(R9.rd)||0));   /* el mismo tope del .xer */
+        if(C){var hpd=(C.hpd>0)?C.hpd:10;fr=_crXerCalFinHoras(C,ir,Math.round(rd9*hpd*100)/100,_crXerCalAbre(C,ir)).iso}
+        else fr=_crDeSerial(_crASerial(ir)+Math.max(0,Math.ceil(rd9)-1));
         if(!fr||fr<ir)fr=ir}
+      if(fr>finMax)finMax=fr;
       var a=_crASerial(ir),b=_crASerial(fr);if(b<a)b=a;if(b-a>20000)b=a+20000;
       var dl=[];for(var d=a;d<=b;d++){var f=_crDeSerial(d);if(lab(f))dl.push(f)}
       if(!dl.length)dl=[ir];
       var pd=hhR/dl.length;dl.forEach(function(f){pon(f,pd)});remTot+=hhR});
     var acum=[],cc=0;
-    for(var s2=0;s2<semanas.length;s2++){cc+=porSem[s2];acum.push(cc/hhUni)}
-    return {porSem:porSem,acum:acum,pesoTot:hhUni,conHH:true,hhUniverso:u.hh,rep:true,dataDate:dd,corte:corte,ganado:Math.round(ganTot*100)/100,remanente:Math.round(remTot*100)/100,sinFechas:sinFechas}}
+    for(var s2=0;s2<semanas.length;s2++){cc+=porSem[s2];acum.push(Math.min(1,cc/hhUni))}
+    return {porSem:porSem,acum:acum,pesoTot:hhUni,conHH:true,hhUniverso:u.hh,rep:true,dataDate:dd,corte:corte,finMax:finMax,ganado:Math.round(ganTot*100)/100,remanente:Math.round(remTot*100)/100,sinFechas:sinFechas}}
   catch(e){return null}}
 /* Congela la curva como PLAN del cronograma. Queda en su tabla, con lapida,
    trigger de updated_at, replica full y tiempo real. */
@@ -5633,7 +5659,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     var it2={},hh2=0,n2=0;
     for(var _k in uTodo.items)if(espDe[_k]===esp){it2[_k]=uTodo.items[_k];hh2+=it2[_k];n2++}
     u={items:it2,hh:Math.round(hh2*100)/100,n:n2}}
-  var sem=_crSemDe(tar);
+  var sem=_crSemDe(tar,true);   /* la curva si cubre el fin del remanente */
   var wbsBD=[];try{wbsBD=await _crWbsDe(c.cron_id)}catch(_ew){}
   var nomWbs={};wbsBD.forEach(function(w){nomWbs[w.ruta]=w.nombre});
   var grupoDe={},gsCron=[];
@@ -5649,7 +5675,12 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
      reparto lineal del plan; hasta el corte es lo ganado (la cuenta de la
      roja) y desde el corte el remanente por dia laboral entre restart y reend */
   if(String(c.fecha_datos||'')){try{var _Crep=null;try{_Crep=await _tbCalH2(c.cron_id)}catch(_ec){_Crep=null}
-    var _rep=_crCurvaRep(c,tar,u,sem,_filT,_Crep);if(_rep)cur=_rep}catch(_erp){}}
+    var _rep=_crCurvaRep(c,tar,u,sem,_filT,_Crep,alc);
+    /* el fin del remanente que la propia curva calcula puede quedar fuera de
+       la rejilla: se amplia y se vuelve a contar, que si no se apila al final */
+    if(_rep&&_rep.finMax&&sem.length&&_rep.finMax>sem[sem.length-1].fin){var sem2=_crSemDe(tar,true,_rep.finMax);
+      if(sem2.length>sem.length){sem=sem2;cur=_crCurva(tramos,u.hh,sem,tramos.map(function(x){return x.peso}));_rep=_crCurvaRep(c,tar,u,sem,_filT,_Crep,alc)}}
+    if(_rep)cur=_rep}catch(_erp){}}
   /* de que es el trabajo de cada semana, por especialidad */
   var porSemEsp=sem.map(function(){return {}}),espOrden=[];
   (function(){
@@ -5854,6 +5885,10 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
       var pr=cur.acum[iHoy],re=real.acum[iHoy],d=re-pr;
       var col=d>=0?'#9FE8B0':'#F0A3A3';
       var hoyTxt='';
+      /* en una REPROGRAMACION la azul ES lo ganado hasta el corte: antes del
+         corte programado y real son el mismo numero y la resta no dice nada */
+      if(cur.rep&&cur.corte&&sem[iHoy]&&sem[iHoy].fin<=cur.corte)
+        hoyTxt+='<br><span style="font-weight:400;color:#E8C9A0;font-size:11px">Reprogramaci\u00f3n con fecha de datos '+esc(cur.dataDate||'')+': hasta el corte ('+esc(cur.corte||'')+') la curva programada <b>es</b> lo ganado, por eso no hay diferencia; el atraso o adelanto se lee desde la semana siguiente al corte. El nivel (partidas, tareas, agrupaciones, WBS) no cambia esta curva.</span>';
       if(realHoy&&Math.abs(realHoy.v-re)>0.0005)
         hoyTxt='<br><span style="color:#F0A3A3">Hoy ('+esc(hoy)+') el real ya va en <b>'+
           (realHoy.v*100).toFixed(2)+'%</b> — entre el jueves y hoy se cargó avance.</span>';
@@ -5882,7 +5917,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
         '<text x="'+xh.toFixed(1)+'" y="'+(yh+15).toFixed(1)+'" fill="#F0A3A3" font-size="9.5" font-weight="800" text-anchor="middle">HOY '+
         (realHoy.v*100).toFixed(2)+'%</text>'})()+
     ptos+preal+pproy+etq+
-    '<text x="'+mx+'" y="'+(my-18)+'" fill="#7d8590" font-size="9">barras = % que toca hacer esa semana · números en blanco = programado acumulado</text>'+
+    '<text x="'+mx+'" y="'+(my-18)+'" fill="#7d8590" font-size="9">'+(cur.rep?('reprogramaci\u00f3n \u00b7 hasta '+esc(cur.corte||'')+' la azul es lo GANADO ('+_nMil2(cur.ganado)+' hh); desde ah\u00ed, el remanente ('+_nMil2(cur.remanente)+' hh) por d\u00eda laboral entre reinicio y fin'+(cur.sinFechas?(' \u00b7 '+cur.sinFechas+' actividad(es) sin reinicio/fin en el archivo: regla del remanente'):'')):'barras = % que toca hacer esa semana \u00b7 n\u00fameros en blanco = programado acumulado')+'</text>'+
     '<rect x="'+mx+'" y="'+(my-13)+'" width="16" height="2.5" fill="'+esc(c.color||'#2E86C1')+'"/>'+
     '<text x="'+(mx+20)+'" y="'+(my-9)+'" fill="#9db4d6" font-size="9">programado</text>'+
     (lproy?('<rect x="'+(mx+gw-168)+'" y="'+(my-13)+'" width="16" height="2.5" fill="#2ECC71"/>'+
@@ -16036,7 +16071,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919c3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260919c4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
