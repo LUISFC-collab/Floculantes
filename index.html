@@ -746,6 +746,80 @@ html,body{overscroll-behavior-y:contain}
 <div class="toast" id="toast"></div>
 
 <script>
+/* ===== ALMACEN LOCAL COMPRIMIDO =====
+   localStorage da ~5 MB por ORIGEN, y este origen (luisfc-collab.github.io) lo
+   comparten Floculantes, el parte de obra de Water Transition (wtt4_*) y el
+   Almacen (almacen_*). Cuando se llena, la app ya no puede guardar ("memoria
+   del equipo llena"). Aqui las claves obf4_* grandes se guardan comprimidas
+   (LZW sobre los bytes UTF-8, un codigo de 15 bits por unidad UTF-16, fuera
+   del rango de los surrogates), de forma transparente: setItem comprime y
+   getItem descomprime; el resto de la app no cambia. Las claves de las otras
+   apps no se tocan. */
+(function(){
+  if(typeof Storage==='undefined'||!window.localStorage)return;
+  var MARCA=String.fromCharCode(1)+'LZ1',MIN=4096,PFX='obf4_';
+  var enc=(typeof TextEncoder!=='undefined')?new TextEncoder():null,dec=(typeof TextDecoder!=='undefined')?new TextDecoder():null;
+  if(!enc||!dec)return;
+  var MAXC=32768,CLR=256,BASE=0x0800;   /* codigos 0..32767 -> unidades 0x0800..0x87FF (sin surrogates) */
+  var H=String.fromCharCode(0xD800),HF=String.fromCharCode(0xDBFF),L=String.fromCharCode(0xDC00),LF=String.fromCharCode(0xDFFF);
+  var SOLO=new RegExp('['+H+'-'+HF+'](?!['+L+'-'+LF+'])|(^|[^'+H+'-'+HF+'])['+L+'-'+LF+']');
+  function comprime(s){
+    if(SOLO.test(s))throw new Error('LZ1: surrogate suelto');   /* UTF-8 no lo conserva: se guarda en claro */
+    var b=enc.encode(s),n=b.length,out=[],dict=new Map(),next=CLR+1,w=-1;
+    /* la cadena actual se representa por su codigo (w) y se extiende byte a byte */
+    for(var i=0;i<n;i++){var c=b[i];
+      if(w<0){w=c;continue}
+      var k=w*256+c,e=dict.get(k);
+      if(e!==undefined){w=e;continue}
+      out.push(String.fromCharCode(w+BASE));
+      if(next<MAXC){dict.set(k,next++)}
+      else{out.push(String.fromCharCode(CLR+BASE));dict=new Map();next=CLR+1}
+      w=c}
+    if(w>=0)out.push(String.fromCharCode(w+BASE));
+    return MARCA+n+';'+out.join('')}
+  function descomprime(t){
+    if(t.indexOf(MARCA)!==0)return t;
+    var p=t.indexOf(';',MARCA.length),n=parseInt(t.slice(MARCA.length,p),10)||0,cs=t.slice(p+1);
+    var out=new Uint8Array(n),o=0;
+    var tab=[],next=CLR+1,prev=null;   /* tab[codigo] = Uint8Array de bytes */
+    for(var q=0;q<256;q++)tab[q]=new Uint8Array([q]);
+    for(var i=0;i<cs.length;i++){var code=cs.charCodeAt(i)-BASE;
+      if(code===CLR){tab.length=256;next=CLR+1;prev=null;continue}
+      var ent;
+      if(code<tab.length&&tab[code])ent=tab[code];
+      else if(code===next&&prev){ent=new Uint8Array(prev.length+1);ent.set(prev);ent[prev.length]=prev[0]}
+      else throw new Error('LZ1: codigo invalido '+code);
+      out.set(ent,o);o+=ent.length;
+      if(prev&&next<MAXC){var nw=new Uint8Array(prev.length+1);nw.set(prev);nw[prev.length]=ent[0];tab[next++]=nw}
+      prev=ent}
+    if(o!==n)throw new Error('LZ1: largo '+o+' de '+n);
+    return dec.decode(out)}
+  var memo={};   /* por clave: {raw, txt} para no descomprimir dos veces lo mismo */
+  var P=Storage.prototype,oGet=P.getItem,oSet=P.setItem,oRem=P.removeItem;
+  P.getItem=function(k){var v=oGet.call(this,k);
+    if(this===window.localStorage&&typeof v==='string'&&v.charCodeAt(0)===1&&v.indexOf(MARCA)===0){
+      var m=memo[k];if(m&&m.raw===v)return m.txt;
+      try{var t=descomprime(v);memo[k]={raw:v,txt:t};return t}catch(e){return null}}
+    return v};
+  P.setItem=function(k,v){
+    if(this===window.localStorage&&typeof k==='string'&&k.indexOf(PFX)===0){var s=String(v);
+      if(s.length>MIN){try{var z=comprime(s);if(z.length<s.length){oSet.call(this,k,z);memo[k]={raw:z,txt:s};return}}catch(e){}}
+      delete memo[k]}
+    return oSet.call(this,k,v)};
+  P.removeItem=function(k){delete memo[k];return oRem.call(this,k)};
+  window._lzLocal={comprime:comprime,descomprime:descomprime,
+    /* una pasada: comprime lo grande que aun este en claro */
+    migra:function(){var n=0,antes=0,despues=0;try{
+      var Lk=[];for(var i=0;i<localStorage.length;i++)Lk.push(localStorage.key(i));
+      Lk.forEach(function(k){if(!k||k.indexOf(PFX)!==0)return;var v=oGet.call(localStorage,k);if(typeof v!=='string')return;
+        if(v.length<=MIN||v.indexOf(MARCA)===0)return;
+        try{var z=comprime(v);if(z.length<v.length){oSet.call(localStorage,k,z);memo[k]={raw:z,txt:v};n++;antes+=v.length;despues+=z.length}}catch(e){}})}catch(e){}
+      return {claves:n,antesKB:Math.round(antes/1024),despuesKB:Math.round(despues/1024)}},
+    uso:function(){var t=0;try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);t+=k.length+(oGet.call(localStorage,k)||'').length}}catch(e){}return t}};
+  /* respaldos de migraciones ya hechas que nadie lee: fuera */
+  try{['obf4_apus_backup_dedupe_180926'].forEach(function(k){if(oGet.call(localStorage,k)!=null)oRem.call(localStorage,k)})}catch(e){}
+  try{window._lzMigra=window._lzLocal.migra()}catch(e){}
+})();
 const DATA={"proyecto": "Floculantes", "partidas": []};
 const UNITS=[{u:"m",l:"metro"},{u:"m²",l:"m. cuadrado"},{u:"m³",l:"m. cúbico"},{u:"und",l:"unidad"},{u:"kg",l:"kilo"},{u:"L",l:"litros"},{u:"glb",l:"global"},{u:"na",l:"no aporta avance"}];
 DATA._byId={};DATA.partidas.forEach(function(_p){DATA._byId[_p.id]=_p});
@@ -16086,7 +16160,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919c6';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260919c7';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -17141,7 +17215,7 @@ async function _diag(titulo){var ov=document.getElementById('_diagOv');if(ov)ov.
  var on=(typeof navigator!=='undefined')?navigator.onLine:true;push(on?'ok':'bad','Conexión a internet',on?'En línea':'Sin conexión — no se puede subir ni bajar (los cambios quedan guardados y suben al reconectar)');
  var cfgOk=(typeof sbReady==='function')?sbReady():!!(state.cfg&&state.cfg.supaKey);push(cfgOk?'ok':'bad','Configuración del servidor',cfgOk?'Clave y URL presentes':'Falta configurar el servidor');
  if(on&&cfgOk){var t0=Date.now();try{await sbSelect('dispositivos','select=device_id&limit=1');push('ok','Lectura del servidor','Respondió en '+(Date.now()-t0)+' ms');}catch(e){push('bad','Lectura del servidor','Error: '+((e&&e.message)||e),{txt:'Reintentar conexión ahora',fn:function(){try{checkClock()}catch(_e){}try{_srvPing()}catch(_e){}try{syncNow(true)}catch(_e){}setTimeout(function(){_diag()},1500)}});}}else{push('skip','Lectura del servidor','Omitido (sin conexión/config)');}
- try{var used=0;for(var _k in localStorage){if(Object.prototype.hasOwnProperty.call(localStorage,_k))used+=((localStorage.getItem(_k)||'').length+_k.length);}var usedKB=Math.round(used/1024);var quotaBad=false,quotaErr='';try{var big=new Array(300*1024).join('x');localStorage.setItem('__wtt_diagq__',big);localStorage.removeItem('__wtt_diagq__');}catch(qe){quotaBad=true;quotaErr=(qe&&qe.name)||'QuotaExceeded';}push(quotaBad?'bad':(usedKB>4200?'warn':'ok'),'Almacenamiento del equipo','Usado ≈ '+usedKB+' KB'+(quotaBad?(' · LLENO ('+quotaErr+'). Por esto NO se guardan ni suben fotos nuevas. Solución: subir lo pendiente y luego “Borrar caché y reiniciar”.'):(usedKB>4200?' · casi lleno — riesgo al agregar fotos':' · con espacio libre')),(quotaBad||usedKB>4200)?{txt:'Liberar espacio (borrar caché y recargar del servidor)',fn:function(){try{_debugReset()}catch(_e){}}}:null);}catch(e){push('warn','Almacenamiento del equipo','No se pudo medir: '+((e&&e.message)||e));}
+ try{var used=0;for(var _k in localStorage){if(Object.prototype.hasOwnProperty.call(localStorage,_k))used+=((Storage.prototype.getItem.call(localStorage,_k)||'').length+_k.length);}   /* lo que ocupa de verdad (comprimido) */var usedKB=Math.round(used/1024);var _porApp={};try{for(var _k2 in localStorage){if(!Object.prototype.hasOwnProperty.call(localStorage,_k2))continue;var _px=(_k2.indexOf('obf4_')===0)?'esta app':((_k2.indexOf('wtt4_')===0)?'Water Transition':((_k2.indexOf('almacen')===0)?'Almacén':'otras'));_porApp[_px]=(_porApp[_px]||0)+((Storage.prototype.getItem.call(localStorage,_k2)||'').length+_k2.length)}}catch(_e2){}var quotaBad=false,quotaErr='';try{var big=new Array(300*1024).join('x');localStorage.setItem('__wtt_diagq__',big);localStorage.removeItem('__wtt_diagq__');}catch(qe){quotaBad=true;quotaErr=(qe&&qe.name)||'QuotaExceeded';}push(quotaBad?'bad':(usedKB>4200?'warn':'ok'),'Almacenamiento del equipo','Usado ≈ '+usedKB+' KB de ≈5 MB que el navegador da a TODO el sitio luisfc-collab.github.io ('+Object.keys(_porApp).map(function(k){return k+' '+Math.round(_porApp[k]/1024)+' KB'}).join(' · ')+')'+(quotaBad?(' · LLENO ('+quotaErr+'). Por esto NO se guardan ni suben fotos nuevas. Solución: subir lo pendiente y luego “Borrar caché y reiniciar”.'):(usedKB>4200?' · casi lleno — riesgo al agregar fotos':' · con espacio libre')),(quotaBad||usedKB>4200)?{txt:'Liberar espacio (borrar caché y recargar del servidor)',fn:function(){try{_debugReset()}catch(_e){}}}:null);}catch(e){push('warn','Almacenamiento del equipo','No se pudo medir: '+((e&&e.message)||e));}
  if(on&&cfgOk){try{var c=document.createElement('canvas');c.width=8;c.height=8;var cx=c.getContext('2d');cx.fillStyle='#3366cc';cx.fillRect(0,0,8,8);var durl=c.toDataURL('image/jpeg',0.5);var tp=safeName(DATA.proyecto)+'/__diag__/test_'+(typeof deviceId==='function'?deviceId():'dev')+'.jpg';var up=await uploadFoto(tp,durl);if(up&&up.ok){push('ok','Prueba de subida de foto','Una foto de prueba subió correctamente al servidor');try{await fetch(sbBase()+'/storage/v1/object/'+FOTO_BUCKET+'/'+fotoEncPath(tp),{method:'DELETE',headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}});}catch(e){}}else{push('bad','Prueba de subida de foto','El servidor RECHAZÓ la foto de prueba (bucket "'+FOTO_BUCKET+'" o permisos). Este sería el motivo por el que no suben fotos.',{txt:'Reintentar y limpiar marcas de subida',fn:function(){try{localStorage.removeItem('obf4_sent')}catch(_e){}try{syncNow(true)}catch(_e){}setTimeout(function(){_diag()},1600)}});}}catch(e){push('bad','Prueba de subida de foto','Error al subir: '+((e&&e.message)||e),{txt:'Reintentar y limpiar marcas de subida',fn:function(){try{localStorage.removeItem('obf4_sent')}catch(_e){}try{syncNow(true)}catch(_e){}setTimeout(function(){_diag()},1600)}});}}else{push('skip','Prueba de subida de foto','Omitido (sin conexión/config)');}
  var pend=(typeof _pendAll==='function')?_pendAll():((typeof pendingCount==='function')?pendingCount():0);push(pend>0?'warn':'ok','Cambios por subir',pend>0?(pend+' pendiente(s) — toca la barra ✓ y “Sincronizar ahora”'):'Nada pendiente, todo subido',pend>0?{txt:'Subir TODO ahora',fn:function(){try{if(typeof startUploadWindow==='function')startUploadWindow();else syncNow(true)}catch(_e){}setTimeout(function(){_diag()},2200)}}:null);
  var np=(state.partes||[]).length;var nf=0;(state.partes||[]).forEach(function(p){nf+=((p.fotos||[]).length)});push('ok','Datos guardados en el equipo',np+' metrado(s) · '+nf+' foto(s) en memoria local');
