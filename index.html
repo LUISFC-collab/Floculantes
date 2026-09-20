@@ -16188,7 +16188,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b10';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -19053,63 +19053,83 @@ function _rxEstAlc(est){
 function _rxKA(q,d){return (q.semN?('S'+q.semN+'|'):'')+q.cod+'§'+d.pid+'|'+(d.fid||'')}
 function _rxRegsDe(regs,d){return (regs||[]).filter(function(x){if(String(x.partida_id||'')!==String(d.pid))return false;var f=String(x.fase_id||'');return (!f&&!d.fid)||f===String(d.fid||'')||(!f&&!!d.fid&&false)})}
 function _rxFdma(v){v=String(v||'');return /^\d{4}-\d{2}-\d{2}/.test(v)?(v.slice(8,10)+'/'+v.slice(5,7)):''}
-/* la tira de contadores de la cabecera de la actividad */
-function _rxResumenHTML(q,regs){try{var det=q.det||[],n=det.length,no=0,ok=0,emp=0,np=0;
-  det.forEach(function(d){if(d.est==='NO'||d.est==='RETRO')no++;else if(d.est==='OK')ok++;else if(d.est==='EMP')emp++;else np++});
-  var cul=(q.ap&&q.ap.culpa&&q.ap.culpa[0])?q.ap.culpa[0]:null;
-  return '<span style="flex-basis:100%;font-size:10px;color:#9db4d6;line-height:1.4">'+n+' alcance'+(n===1?'':'s')+
-    (no?(' · <b style="color:#FFB4A8">'+no+' no cumplid'+(no===1?'o':'os')+'</b>'):'')+(ok?(' · <b style="color:#9FE8B0">'+ok+' cumplid'+(ok===1?'o':'os')+'</b>'):'')+
-    (emp?(' · <b style="color:#F5D08A">'+emp+' sin programar con avance</b>'):'')+(np?(' · '+np+' sin programar'):'')+
-    ((regs&&regs.length)?(' · <b style="color:#9FE8B0">✓ '+regs.length+' restricci'+(regs.length===1?'ón':'ones')+'</b>'):'')+
-    (cul?(' · <span style="color:#FFB4A8">falló por '+esc(cul.pid)+(cul.parte?(' ('+esc(String(cul.parte).toUpperCase())+')'):'')+': faltan '+_nMil2(cul.falta)+' hh de '+_nMil2(cul.prog)+'</span>'):'')+
+/* ===== v2 =================================================================
+   La FILA MINIMA de un alcance: chip de estado, codigo + nombre, una sola
+   linea de cifras, el mas (una restriccion de ESE alcance) y el contador de
+   restricciones, que despliega sus tarjetas. Las cifras finas van en el
+   detalle plegado (admin) y al supervisor solo le salen las fechas.
+   Clases de estilo: las pone la hoja _rxCss (rxRow, rxEst, rxNom, rxCif,
+   rxMas, rxBadge, rxSeg, rxSub, rxDet).
+   ========================================================================= */
+function _rxOrdEst(e){return (e==='NO'||e==='RETRO')?0:((e==='OK')?1:((e==='EMP')?2:3))}
+function _rxOrdDet(a,b){var oa=_rxOrdEst(a.est),ob=_rxOrdEst(b.est);if(oa!==ob)return oa-ob;
+  if(String(a.pid)!==String(b.pid))return String(a.pid)<String(b.pid)?-1:1;
+  return String(a.parte||'')<String(b.parte||'')?-1:1}
+/* la clave de una actividad segun de donde sale: lista / cumplidas / EMP */
+function _rxKQ(q,src){return (src==='K')?('OK|'+q.cod):((src==='E')?('EMP|'+q.cod):((q.semN?('S'+q.semN+'|'):'')+q.cod))}
+/* el chip de estado: [clase, icono, texto] */
+function _rxEstChip(est){
+  if(est==='OK')return ['ok','✓','cumplida'];
+  if(est==='NO')return ['no','●','no cumplida'];
+  if(est==='EMP')return ['emp','⚡','avanzó sin programar'];
+  if(est==='RETRO')return ['retro','⟲','retrocedió'];
+  return ['ocu','·','sin programar']}
+function _rxEsAdm(){try{return ((typeof esAdminReal==='function')&&esAdminReal())||((typeof esAdmin==='function')&&esAdmin())}catch(e){return false}}
+/* la tira de contadores de la cabecera de la actividad (vista Agrupadas) */
+function _rxResumenHTML(q,regs){try{var det=q.det||[],n=det.length,no=0,ok=0;
+  det.forEach(function(d){if(d.est==='NO'||d.est==='RETRO')no++;else if(d.est==='OK')ok++});
+  var R=(regs||[]).length;
+  return '<span class="rxCif">'+n+' alcance'+(n===1?'':'s')+
+    (no?(' · <b style="color:#FFB4A8">'+no+' no cumplido'+(no===1?'':'s')+'</b>'):'')+
+    (ok?(' · <b style="color:#9FE8B0">'+ok+' cumplido'+(ok===1?'':'s')+'</b>'):'')+
+    (R?(' · <b style="color:#9FE8B0">'+R+' restricci'+(R===1?'ón':'ones')+'</b>'):'')+
     '</span>'}catch(e){return ''}}
 /* una fila de alcance */
-function _rxFilaAlcanceHTML(q,d,regs,i){try{
-  var k=_rxKA(q,d),ab=!!window._rxNoAbre[k];
+function _rxFilaAlcanceHTML(q,d,regs,i,src){try{
+  var k=_rxKA(q,d),abR=!!window._rxNoAbre[k],abI=!!window._rxNoAbre['I|'+k];
+  var esAd=_rxEsAdm();
+  var st=_rxEstChip(d.est),mios=_rxRegsDe(regs,d);
   var kk=d.pid+'|'+(d.fid||'');var fa=(q.ap&&q.ap.filas)?q.ap.filas[kk]:null;
-  var pz=fa?fa.pesa:null;var tot=Number(d.tot)||0;
-  var pp=fa?fa.prog:0,hp=fa?fa.hecho:0,fp=fa?fa.falta:0;
-  var st=_rxEstAlc(d.est),mios=_rxRegsDe(regs,d);
-  var fx=d.d1?(_rxFdma(d.d1)+((d.d2&&d.d2!==d.d1)?('→'+_rxFdma(d.d2)):'')+' · '+d.nd+' d'):'no programada en la ventana';
   var pend=_rxDeAlc(d.pid,d.fid||'').filter(function(x){return x.estado!=='LIBERADA'&&mios.indexOf(x)<0}).length;
-  var btnMas='<button class="_rxAneA" data-i="'+i+'" data-k="'+_rxAt(k)+'" data-pid="'+_rxAt(d.pid)+'" data-fid="'+_rxAt(d.fid||'')+'" data-parte="'+_rxAt(d.parte||'')+'" title="Restricción de este alcance (un toque)" style="background:#1E7A46;color:#fff;border:0;border-radius:7px;min-width:36px;min-height:30px;padding:2px 9px;font-weight:900;cursor:pointer">➕</button>';
-  return '<div style="border-top:1px solid #16202e">'+
-    '<div class="_rxAlcCab" data-k="'+_rxAt(k)+'" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 10px;cursor:pointer;background:'+st[2]+'">'+
-      '<b class="_rxIrAct" data-pid="'+_rxAt(d.pid)+'" title="Ir a su tarjeta en la lista" style="color:#8ECBF5;font-size:11px;text-decoration:underline;text-decoration-style:dotted">'+esc(d.pid)+'</b>'+
-      (d.parte?('<b style="color:#C7A3E8;font-size:10px">('+esc(String(d.parte).toUpperCase())+')</b>'):'')+
-      '<span style="flex:1 1 130px;min-width:0;font-size:10.5px;color:#cfe3ff;overflow-wrap:anywhere">'+esc(_rxNomPid(d.pid))+'</span>'+
-      '<span style="font-size:9.5px;font-weight:800;color:'+st[1]+';white-space:nowrap">'+st[0]+'</span>'+
-      (mios.length?('<span style="font-size:9.5px;font-weight:800;color:#9FE8B0;background:#14261d;border:1px solid #1d3a2a;border-radius:7px;padding:1px 7px">✓ '+mios.length+'</span>'):'')+
-      (pend?('<span class="_rxPendA" data-i="'+i+'" data-pid="'+_rxAt(d.pid)+'" data-fid="'+_rxAt(d.fid||'')+'" title="Pendientes de este alcance de otras semanas: incluirlas aquí" style="font-size:9.5px;font-weight:800;color:#E8C9A0;background:#2a2314;border:1px solid #4a3c1d;border-radius:7px;padding:1px 7px;cursor:pointer">↺ '+pend+'</span>'):'')+
-      btnMas+
-      '<button class="_rxIr" data-pid="'+_rxAt(d.pid)+'" title="Ir a su tarjeta" style="background:#1c2440;color:#A9C0FF;border:1px solid #33447a;border-radius:7px;min-height:30px;padding:1px 7px;font-size:10px;cursor:pointer">↦</button>'+
-      '<span class="_rxFlAlc" style="color:#7d8590;font-size:10px">'+(ab?'▴':'▾')+'</span>'+
-      '<div style="flex-basis:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:2px 8px;font-size:10px;color:#7d8590;line-height:1.35">'+
-        '<span title="Programado por la base en la ventana: '+esc(fx)+'">prog <b style="color:#E8C9A0">'+_nMil2(d.prog)+'</b> '+pp+'%</span>'+
-        '<span>hecho <b style="color:#9FE8B0">'+_nMil2(d.hecho)+'</b> '+hp+'%</span>'+
-        '<span>falta <b style="color:#FFB4A8">'+fp+'%</b> de '+_nMil2(d.tot)+' '+esc(d.und)+'</span>'+
-        '<span>pesa <b style="color:#B9C7DD">'+(pz!=null?pz:0)+'%</b>'+(fa?(' · '+_nMil2(fa.hhP)+' hh prog · '+_nMil2(fa.hhH)+' hh hecho'):'')+'</span>'+
-        (fa?('<span>curva <b style="color:#9FE8B0">'+(Number(fa.ya)||0).toFixed(2)+'%</b> <b style="color:#E8C9A0">+'+(Number(fa.mas)||0).toFixed(2)+'%</b></span>'):'')+
-        '<span style="color:#9db4d6">'+esc(fx)+'</span>'+
-      '</div></div>'+
-    '<div class="_rxAlcDet" style="display:'+(ab?'block':'none')+';background:#0b1220;padding:'+(mios.length?'6px 8px':'0')+'">'+
-      (mios.length?(mios.map(_rxCard).join('')+'<div style="padding:2px 0 6px"><button class="_rxAneA" data-i="'+i+'" data-k="'+_rxAt(k)+'" data-pid="'+_rxAt(d.pid)+'" data-fid="'+_rxAt(d.fid||'')+'" data-parte="'+_rxAt(d.parte||'')+'" style="background:#1c2440;color:#9db4d6;border:1px solid #33415c;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer">➕ Otra de este alcance</button></div>'):'')+
+  var fx=d.d1?('programado del '+_rxFdma(d.d1)+' al '+_rxFdma(d.d2||d.d1)+' ('+(Number(d.nd)||1)+' d)'):'sin fechas programadas en la semana';
+  var dat=' data-i="'+i+'" data-src="'+_rxAt(src||'L')+'" data-k="'+_rxAt(k)+'" data-pid="'+_rxAt(d.pid)+'" data-fid="'+_rxAt(d.fid||'')+'" data-parte="'+_rxAt(d.parte||'')+'"';
+  var fino=esAd?('prog <b style="color:#E8C9A0">'+(fa?fa.prog:0)+'%</b> · hecho <b style="color:#9FE8B0">'+(fa?fa.hecho:0)+'%</b> · falta <b style="color:#FFB4A8">'+(fa?fa.falta:0)+'%</b>'+
+      ((fa&&fa.pesa!=null)?(' · pesa <b style="color:#B9C7DD">'+fa.pesa+'%</b>'):'')+
+      (fa?(' · curva <b style="color:#9FE8B0">'+(Number(fa.ya)||0).toFixed(2)+'%</b> <b style="color:#E8C9A0">+'+(Number(fa.mas)||0).toFixed(2)+'%</b>'):'')+
+      (fa?(' · '+_nMil2(fa.hhP)+' hh programadas · '+_nMil2(fa.hhH)+' hh hechas'):'')+
+      '<br>'+esc(fx)):esc(fx);
+  return '<div class="rxRowW">'+
+    '<div class="rxRow _rxAlcCab" data-k="'+_rxAt(k)+'" title="Ver el detalle" style="cursor:pointer">'+
+      '<span class="rxEst '+st[0]+'" title="'+_rxAt(st[2])+'">'+st[1]+'</span>'+
+      '<span class="rxNom">'+
+        '<b class="_rxIrAct" data-pid="'+_rxAt(d.pid)+'" title="Ir a su tarjeta en la lista" style="color:#8ECBF5;text-decoration:underline;text-decoration-style:dotted;cursor:pointer">'+esc(d.pid)+'</b> '+
+        (d.parte?('<b style="color:#C7A3E8">('+esc(String(d.parte).toUpperCase())+')</b> '):'')+
+        esc(_rxNomPid(d.pid))+
+      '</span>'+
+      '<span class="rxCif">hecho <b style="color:#9FE8B0">'+_nMil2(d.hecho)+'</b> de '+_nMil2(d.tot)+' '+esc(d.und)+' · programado <b style="color:#E8C9A0">'+_nMil2(d.prog)+'</b></span>'+
+      (mios.length?('<span class="rxBadge _rxBadgeR" data-k="'+_rxAt(k)+'" title="Sus restricciones: abrir o cerrar" style="cursor:pointer">'+(abR?'▴':'▾')+' '+mios.length+'</span>'):'')+
+      (pend?('<span class="rxBadge _rxPendA"'+dat+' title="Pendientes de este alcance de otras semanas: incluirlas aquí" style="color:#E8C9A0;cursor:pointer">↺ '+pend+'</span>'):'')+
+      '<button class="rxMas _rxAneA"'+dat+' title="Restricción de este alcance (un toque)">➕</button>'+
+      '<button class="_rxIr" data-pid="'+_rxAt(d.pid)+'" title="Ir a su tarjeta" style="background:#1c2440;color:#A9C0FF;border:1px solid #33447a;border-radius:8px;min-height:28px;padding:1px 7px;font-size:11px;cursor:pointer">↦</button>'+
+      '<span class="_rxFlAlc rxSub" title="Detalle">'+(abI?'▴':'ⓘ')+'</span>'+
+    '</div>'+
+    '<div class="rxDet _rxAlcInfo" style="display:'+(abI?'block':'none')+'">'+fino+'</div>'+
+    '<div class="_rxAlcDet" style="display:'+(abR?'block':'none')+';background:#0b1220;padding:'+(mios.length?'6px 8px':'0')+'">'+
+      (mios.length?(mios.map(_rxCard).join('')+'<div style="padding:2px 0 6px"><button class="_rxAneA"'+dat+' style="background:#1c2440;color:#9db4d6;border:1px solid #33415c;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:800;cursor:pointer">➕ Otra de este alcance</button></div>'):'')+
     '</div></div>'}catch(e){return ''}}
-/* el cuerpo de la actividad: sus alcances ordenados (no cumplidas, EMP, sin programar, cumplidas) y las fichas sin alcance conocido */
-function _rxAlcanceHTML(q,i,regs){try{
-  var det=(q.det||[]).slice();
-  var ord={NO:0,RETRO:0,EMP:1,NP:2,OK:3};
-  det.sort(function(a,b){var oa=(ord[a.est]==null?2:ord[a.est]),ob=(ord[b.est]==null?2:ord[b.est]);if(oa!==ob)return oa-ob;return a.pid<b.pid?-1:a.pid>b.pid?1:(String(a.parte)<String(b.parte)?-1:1)});
+/* el cuerpo de una actividad (vista Agrupadas): sus filas de alcance */
+function _rxAlcanceHTML(q,i,regs,src){try{
+  var det=(q.det||[]).slice();det.sort(_rxOrdDet);
   var vis={};det.forEach(function(d){vis[d.pid+'|'+(d.fid||'')]=1});
-  /* fichas cuyo alcance no esta en el detalle (heredadas, o de una partida sin HH): salen aparte */
+  /* fichas cuyo alcance no esta en el detalle (heredadas, o de una partida sin HH) */
   var sueltas=(regs||[]).filter(function(x){var f=String(x.fase_id||'');return !vis[String(x.partida_id||'')+'|'+f]&&!(vis[String(x.partida_id||'')+'|']&&!f)});
-  var kA=(q.semN?('S'+q.semN+'|'):'')+q.cod;
-  var todo=det.every(function(d){return !!window._rxNoAbre[_rxKA(q,d)]});
-  return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 10px;font-size:10.5px;color:#9db4d6;background:#0f1726">'+
-      '<span>'+det.length+' alcance'+(det.length===1?'':'s')+' · el ➕ de cada fila abre su restricción</span>'+
-      '<button class="_rxAlcTodo" data-cod="'+_rxAt(kA)+'" data-abre="'+(todo?'0':'1')+'" style="margin-left:auto;background:#1c2440;color:#9db4d6;border:1px solid #33415c;border-radius:7px;padding:3px 9px;font-size:10px;font-weight:800;cursor:pointer">'+(todo?'▴ plegar todo':'▾ desplegar todo')+'</button></div>'+
-    det.map(function(d){return _rxFilaAlcanceHTML(q,d,regs,i)}).join('')+
-    (sueltas.length?('<div style="padding:6px 10px;font-size:10px;color:#E8C9A0;border-top:1px solid #16202e">Restricciones sin alcance en el detalle ('+sueltas.length+')</div>'+sueltas.map(_rxCard).join('')):'')}catch(e){return ''}}
+  var kA=_rxKQ(q,src);
+  var todo=det.length&&det.every(function(d){return !!window._rxNoAbre['I|'+_rxKA(q,d)]});
+  return '<div class="rxSub" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 10px;background:#0f1726">'+
+      '<span>'+det.length+' alcance'+(det.length===1?'':'s')+'</span>'+
+      '<button class="_rxAlcTodo" data-cod="'+_rxAt(kA)+'" data-abre="'+(todo?'0':'1')+'" style="margin-left:auto;background:#1c2440;color:#9db4d6;border:1px solid #33415c;border-radius:7px;padding:3px 9px;font-size:11px;font-weight:800;cursor:pointer">'+(todo?'▴ plegar el detalle':'▾ ver el detalle')+'</button></div>'+
+    det.map(function(d){return _rxFilaAlcanceHTML(q,d,regs,i,src)}).join('')+
+    (sueltas.length?('<div class="rxSub" style="padding:6px 10px;color:#E8C9A0">Restricciones sin alcance en el detalle ('+sueltas.length+')</div>'+sueltas.map(_rxCard).join('')):'')}catch(e){return ''}}
 /* el alcance completo de una actividad para elegir (hoja inferior): sus filas del detalle */
 function _rxElegirAlcUI(q,semN,alTerminar){
   var ya=document.getElementById('_rxAlcOv');if(ya)ya.remove();
@@ -19437,16 +19457,72 @@ function _rxNoPinta(r){
   try{
     window._rxNoAbre=window._rxNoAbre||{};
     window._rxNoR=r;
-    /* el admin en modo admin tambien ve las OCULTAS, atenuadas, para poder
+    try{if(typeof _rxCssOn==='function')_rxCssOn()}catch(e){}
+    var esAdX=_rxEsAdm();
+    var esAdM=false;try{esAdM=(typeof esAdmin==='function')&&esAdmin()}catch(e){}
+    /* el admin en modo admin tambien ve las OCULTAS, al final, para poder
        volver a marcarlas; el PPC se calcula con las visibles */
     if(!r.prox&&!r._comb){r._comb=true;r._vis=r.lista.slice();
-      var esAdV=false;try{esAdV=(typeof esAdmin==='function')&&esAdmin()}catch(e){}
-      if(esAdV&&r.ocultas&&r.ocultas.length)r.lista=r.lista.concat(r.ocultas.map(function(q){q._oculta=true;return q}))}
+      if(esAdM&&r.ocultas&&r.ocultas.length)r.lista=r.lista.concat(r.ocultas.map(function(q){q._oculta=true;return q}))}
+    var vista='alc';try{vista=String(localStorage.getItem('obf4_rx_vista_alc')||'alc')}catch(e){}
+    if(vista!=='agr')vista='alc';
+    var detAb=false;try{detAb=(localStorage.getItem('obf4_rx_det')==='1')}catch(e){}
     var fut=_rxFuturas();window._rxFutR=fut;
     var h='';
-    /* la base de comparacion: el admin la fija con el desplegable y para
-       todos rige la misma; el supervisor ve cual es */
-    (function(){
+    /* el bloque de cifras del admin (PPC, curva, cuadre, programado), integro */
+    var _detBloque=function(r){var h='';
+      var nNo=(r._vis||r.lista).length,nOk=(r.cumplidas||[]).length,nEmp=(r.emp||[]).length,nTot=nNo+nOk;
+      var nOcu=(r.ocultas||[]).length;
+      /* las hh programadas que se quitaron por las actividades ocultas: no
+         cuentan en el PPC, ni en la Tabla 3, ni en la Tabla R */
+      var _ocuPHH=Number(r.curva&&r.curva.ocuProgHH)||0;
+      var _ocuPTx=(_ocuPHH>0.005)?(' · ocultas: se quitan '+_nMil2(_ocuPHH)+' hh programadas (no cuentan en la Tabla 3 ni en la Tabla R)'):'';
+      var ppc=nTot?(nOk/nTot*100):0;
+      var _rot=(r.cierre?('AL CIERRE DE LA SEMANA '+r.sem):('SEMANA '+r.sem))+(r.semFija?' (fijada por el admin)':'');
+      h+='<div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;margin:4px 0 10px">'+
+        '<div style="background:'+(ppc>=80?'#0f2a1c':(ppc>=50?'#2a2314':'#2a1418'))+';border:1px solid '+(ppc>=80?'#1E7A46':(ppc>=50?'#7A4B00':'#8A2018'))+';border-radius:12px;padding:10px 16px;min-width:150px">'+
+          '<div style="font-size:10px;font-weight:800;letter-spacing:.06em;color:#9db4d6">PPC \u00b7 '+_rot+'</div>'+
+          '<div style="font-size:26px;font-weight:900;color:#fff;line-height:1.1">'+ppc.toFixed(2)+'%</div>'+
+          '<div style="font-size:10.5px;color:#9db4d6">'+nOk+' cumplida(s) de '+nTot+' programada(s)'+((r.curva&&r.curva.alcProg)?('<br>alcances: <b style="color:#cfe3ff">'+(Number(r.curva.ppcAlc)||0).toFixed(2)+'%</b> ('+r.curva.alcOk+' de '+r.curva.alcProg+')'+((r.curva.ppcHH!=null)?(' \u00b7 por HH <b style="color:#cfe3ff">'+(Number(r.curva.ppcHH)||0).toFixed(2)+'%</b>'):'')):'')+'</div>'+
+          (r.curva?('<div style="font-size:10.5px;font-weight:800;color:#9db4d6;margin-top:4px" title="Puntos de la curva general en la semana, solo de las actividades programadas (no cumplidas + cumplidas): Programado = Hecho + Restante \u00b7 Hecho es la suma de lo que ya aport\u00f3 cada tarjeta (avance real de la semana) \u00b7 Restante es la suma de los +x% (lo que falta de lo programado). Las EMP avanzaron sin estar programadas y van aparte">'+(r.curva.real!=null?('<span title="La curva general, con la misma medida que el gr\u00e1fico: el real al cierre de la semana anterior m\u00e1s lo hecho EN la semana (todo el cronograma) da el real al cierre de esta semana">Curva: cierre S'+r.curva.semAnt+' <b style="color:#cfe3ff">'+(Number(r.curva.realAnt)||0).toFixed(2)+'%</b> + hecho en la semana <b style="color:#9FE8B0">'+(Number(r.curva.hechoSem)||0).toFixed(2)+'%</b> = real S'+r.sem+' <b style="color:#cfe3ff">'+(Number(r.curva.real)||0).toFixed(2)+'%</b></span>'+
+          '<br><span title="Restante: la suma de los \u00e1mbar (+x%) de las tarjetas, lo que a\u00fan falta de lo programado al cierre. Real al cierre + restante = a d\u00f3nde llega la curva al cierre de la semana (la proyecci\u00f3n)">+ restante <b style="color:#E8C9A0">'+(Number(r.curva.resta)||0).toFixed(2)+'%</b> = llega a <b style="color:#cfe3ff">'+(Number(r.curva.llega)||0).toFixed(2)+'%</b></span>'):'')+
+          '<br><span style="font-weight:700;color:#7d8590" title="El restante por grupo de tarjetas">restante: no cumplidas <b style="color:#E8C9A0">'+(Number(r.curva.nocMas)||0).toFixed(2)+'%</b> \u00b7 cumplidas <b style="color:#E8C9A0">'+(Number(r.curva.cumMas)||0).toFixed(2)+'%</b></span>'+
+          '<br><span style="font-weight:700;color:#7d8590;margin-top:3px;display:inline-block" title="Lo que suman las tarjetas programadas (no cumplidas + cumplidas) EN LA SEMANA: sus verdes = lo que ya aportaron a la curva en la semana; sus \u00e1mbar = lo que les falta de lo programado; la suma = lo que habr\u00edan aportado en la semana si cumpl\u00edan">Programadas, en la semana: aportan <b style="color:#9FE8B0">'+(Number(r.curva.hecho)||0).toFixed(2)+'%</b> \u00b7 les falta <b style="color:#E8C9A0">'+(Number(r.curva.resta)||0).toFixed(2)+'%</b> \u2192 habr\u00edan aportado <b style="color:#cfe3ff">'+(Number(r.curva.prog)||0).toFixed(2)+'%</b> si cumpl\u00edan</span>'+
+          (r.curva.real!=null?('<br><span style="font-weight:700;color:#7d8590;margin-top:3px;display:inline-block" title="El cuadre con la Tabla 2 del cronograma: lo hecho en la semana en TODO el universo, partida por partida, se reparte entre las que cumplieron, las que no, las que avanzaron sin estar programadas, las ocultas al PPC y los retrocesos (partes corregidos). Suma exacta.">Cuadre con la Tabla 2: hecho en la semana <b style="color:#9FE8B0">'+(Number(r.curva.hechoSem)||0).toFixed(2)+'%</b> ('+_nMil2(Number(r.curva.hechoHH)||0)+' hh)'+(r.curva.bkPct?(' = cumplidas '+(Number(r.curva.bkPct.cum)||0).toFixed(2)+'% + no cumplidas '+(Number(r.curva.bkPct.noc)||0).toFixed(2)+'% + sin programar '+(Number(r.curva.bkPct.emp)||0).toFixed(2)+'% + ocultas '+(Number(r.curva.bkPct.ocu)||0).toFixed(2)+'%'+((Math.abs(Number(r.curva.bkPct.retro)||0)>0.004)?(' + retrocesos '+(Number(r.curva.bkPct.retro)||0).toFixed(2)+'%'):'')+((Math.abs(Number(r.curva.resid)||0)>0.005)?(' \u00b7 sin cuadrar '+_nMil2(Number(r.curva.resid)||0)+' hh'):'')):(' = programadas '+(Number(r.curva.hecho)||0).toFixed(2)+'% + EMP '+(Number(r.curva.emp)||0).toFixed(2)+'% + ocultas '+(Number(r.curva.ocuYa)||0).toFixed(2)+'% + otros '+(Number(r.curva.otros)||0).toFixed(2)+'%'))+_ocuPTx+'</span>'):'')+
+          (r.curva.t3HH!=null?('<br><span style="font-weight:700;color:#7d8590;margin-top:3px;display:inline-block" title="Lo programado en la semana seg\u00fan la base elegida: en las actividades programadas visibles y en TODO el universo (es la columna de esa semana en la Tabla 3 de la misma fuente)">Programado en la semana ('+_crXerEsc(String((r.base&&r.base.nombre)||''))+'): <b style="color:#E8C9A0">'+(Number(r.curva.cal)||0).toFixed(2)+'%</b> ('+_nMil2(Number(r.curva.calHH)||0)+' hh en las programadas) \u00b7 todo el universo <b style="color:#E8C9A0">'+(Number(r.curva.t3Pct)||0).toFixed(2)+'%</b> ('+_nMil2(Number(r.curva.t3HH)||0)+' hh = Tabla 3 '+_crXerEsc(String(r.curva.t3Fuente||''))+' S'+r.sem+')'+_ocuPTx+'</span>'):'')+
+          ((Number(r.curva.emp)||0)>0?('<br><span style="font-weight:700;color:#7d8590" title="Avanzaron en la semana sin estar programadas: es hecho (verde) que ya est\u00e1 dentro de lo hecho en la semana">EMP: aportaron en la semana <b style="color:#9FE8B0">'+(Number(r.curva.emp)||0).toFixed(2)+'%</b> sin estar programadas</span>'):'')+'</div>'):'')+
+        '</div>'+
+        '<div style="flex:1;min-width:220px;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">'+
+          '<div style="background:#12314a;border:1px solid #2a5a8a;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#8ECBF5">\u2714 CUMPLIDAS</div><div style="font-size:20px;font-weight:900;color:#BFE3FF">'+nOk+'</div></div>'+
+          '<div style="background:#2a1418;border:1px solid #6a2a2a;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#FFB4A8">\u26d4 NO CUMPLIDAS</div><div style="font-size:20px;font-weight:900;color:#FFD9D4">'+nNo+'</div></div>'+
+          '<div style="background:#101d2e;border:1px solid #24344f;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#9db4d6">\u25a4 PROGRAMADAS</div><div style="font-size:20px;font-weight:900;color:#cfe3ff">'+nTot+'</div></div>'+
+          '<div style="background:#3a2a12;border:1px solid #7a5a1d;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#F5D08A">\u26a1 EMP</div><div style="font-size:20px;font-weight:900;color:#FFE7B3">'+nEmp+'</div><div style="font-size:9px;color:#c9a96a">avanzadas sin programar</div></div>'+
+        '</div></div>';
+      return h};
+    /* ---- CABECERA MINIMA: la semana que rige y el PPC, para todos ---- */
+    var nNoA=((r._vis||r.lista)||[]).length,nOkA=(r.cumplidas||[]).length,nEmpA=(r.emp||[]).length,nTotA=nNoA+nOkA;
+    var ocuN=(r.ocultas||[]).length,cvH=r.curva||{};
+    var ppcL='';
+    if(!r.prox){
+      if(cvH.alcProg)ppcL='PPC '+(Number(cvH.ppcAlc)||0).toFixed(2)+' % · '+cvH.alcOk+' de '+cvH.alcProg+' alcances programados cumplidos';
+      else ppcL='PPC '+(nTotA?(nOkA/nTotA*100):0).toFixed(2)+' % · '+nOkA+' de '+nTotA+' actividades programadas cumplidas'}
+    h+='<div style="background:#101d2e;border:1px solid #1d2b40;border-radius:10px;padding:8px 10px;margin-bottom:8px">'+
+      '<div style="font-size:12.5px;font-weight:800;color:#cfe3ff">'+esc(_wkLbl(r.sem))+(r.semFija?' <span class="rxSub">(fijada por el admin)</span>':'')+'</div>'+
+      (r.prox?('<div class="rxSub">Próximas 3 semanas: S'+(r.sem+1)+' a S'+(r.sem+3)+'</div>')
+             :('<div style="font-size:12px;font-weight:800;color:#8ECBF5;margin-top:2px">'+esc(ppcL)+'</div>'+
+               '<div class="rxSub">'+nNoA+' no cumplida'+(nNoA===1?'':'s')+' · '+nOkA+' cumplida'+(nOkA===1?'':'s')+' · '+nEmpA+' avanzó sin programar'+((esAdX&&ocuN)?(' · '+ocuN+' oculta'+(ocuN===1?'':'s')):'')+'</div>'))+
+      '</div>';
+    /* ---- el conmutador Alcance | Agrupadas y los botones del admin ---- */
+    h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'+
+      '<div class="rxSeg">'+
+        '<button class="_rxVistaB'+(vista==='alc'?' on':'')+'" data-v="alc" title="Una fila por partida o apartado" style="'+(vista==='alc'?'background:#1B5E8A;color:#fff':'')+'">Alcance</button>'+
+        '<button class="_rxVistaB'+(vista==='agr'?' on':'')+'" data-v="agr" title="Una tarjeta por actividad" style="'+(vista==='agr'?'background:#1B5E8A;color:#fff':'')+'">Agrupadas</button>'+
+      '</div>'+
+      (esAdX?('<button id="_rxTablaR" title="Programado según la base elegida contra lo hecho, por semana" style="background:#243b55;color:#cfe3ff;border:0;border-radius:9px;padding:7px 11px;font-size:11.5px;font-weight:800;cursor:pointer">📊 Tabla R</button>'+
+              '<button id="_rxDetBtn" title="Las cifras finas de la semana" style="background:#1c2440;color:#9db4d6;border:1px solid #33415c;border-radius:9px;padding:7px 11px;font-size:11.5px;font-weight:800;cursor:pointer">Detalle '+(detAb?'▴':'▾')+'</button>'):'')+
+      '</div>';
+    if(esAdX){
+      (function(){
       var esAdR=false;try{esAdR=((typeof esAdminReal==='function')&&esAdminReal())||((typeof esAdmin==='function')&&esAdmin())}catch(e){}
       var _kB=(r&&r.prox)?'rx_base_prox':'rx_base_comparar';
       var baseSel='';try{baseSel=String(_ajGet(_kB,'')||'')}catch(e){}
@@ -19486,147 +19562,86 @@ function _rxNoPinta(r){
         (esAdR?('<select id="_rxSemSel" style="flex:1;min-width:180px;background:#0b1220;color:#cfe3ff;border:1px solid #24344f;border-radius:7px;padding:6px 8px;font-size:12px;font-family:inherit">'+opsS+'</select>')
               :('<b style="font-size:11.5px;color:#cfe3ff">'+(semSel?esc(_wkLbl(Number(semSel))):('Autom\u00e1tica \u00b7 la \u00faltima semana cerrada (S'+sCur+')'))+'</b><span style="font-size:10px;color:#7d8590">(lo fija el admin)</span>'))+
         '</div>'})();
-      h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:-2px 0 8px"><button id="_rxTablaR" title="Programado seg\u00fan la base elegida contra hecho (Tabla 2), por semana, hasta la semana de cierre y las 3 siguientes; se abre como las Tablas 2 y 3" style="background:#243b55;color:#cfe3ff;border:0;border-radius:9px;padding:8px 12px;font-weight:800;cursor:pointer">\ud83d\udcca Tabla R \u00b7 programado vs hecho por semana</button></div>';
-    if(r.prox){
-      h+='<div style="font-size:11px;color:#E8C9A0;font-weight:800;margin-bottom:7px">PR\u00d3XIMAS 3 SEMANAS \u00b7 S'+(r.sem+1)+' a S'+(r.sem+3)+' \u00b7 a partir de la semana '+r.sem+(r.semFija?' (fijada por el admin)':' (en curso)')+' \u00b7 '+r.lista.length+' actividad(es) programada(s) \u2014 el \u2795 anexa con su semana y abre su ficha</div>'+
-        ''}
-    else{
-      /* la cabecera PPC: cumplidas sobre programadas (cumplidas + no
-         cumplidas), con el resumen y las EMP */
-      var nNo=(r._vis||r.lista).length,nOk=(r.cumplidas||[]).length,nEmp=(r.emp||[]).length,nTot=nNo+nOk;
-      var nOcu=(r.ocultas||[]).length;
-      /* las hh programadas que se quitaron por las actividades ocultas: no
-         cuentan en el PPC, ni en la Tabla 3, ni en la Tabla R */
-      var _ocuPHH=Number(r.curva&&r.curva.ocuProgHH)||0;
-      var _ocuPTx=(_ocuPHH>0.005)?(' · ocultas: se quitan '+_nMil2(_ocuPHH)+' hh programadas (no cuentan en la Tabla 3 ni en la Tabla R)'):'';
-      var ppc=nTot?(nOk/nTot*100):0;
-      var _rot=(r.cierre?('AL CIERRE DE LA SEMANA '+r.sem):('SEMANA '+r.sem))+(r.semFija?' (fijada por el admin)':'');
-      h+='<div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;margin:4px 0 10px">'+
-        '<div style="background:'+(ppc>=80?'#0f2a1c':(ppc>=50?'#2a2314':'#2a1418'))+';border:1px solid '+(ppc>=80?'#1E7A46':(ppc>=50?'#7A4B00':'#8A2018'))+';border-radius:12px;padding:10px 16px;min-width:150px">'+
-          '<div style="font-size:10px;font-weight:800;letter-spacing:.06em;color:#9db4d6">PPC \u00b7 '+_rot+'</div>'+
-          '<div style="font-size:26px;font-weight:900;color:#fff;line-height:1.1">'+ppc.toFixed(2)+'%</div>'+
-          '<div style="font-size:10.5px;color:#9db4d6">'+nOk+' cumplida(s) de '+nTot+' programada(s)'+((r.curva&&r.curva.alcProg)?('<br>alcances: <b style="color:#cfe3ff">'+(Number(r.curva.ppcAlc)||0).toFixed(2)+'%</b> ('+r.curva.alcOk+' de '+r.curva.alcProg+')'+((r.curva.ppcHH!=null)?(' \u00b7 por HH <b style="color:#cfe3ff">'+(Number(r.curva.ppcHH)||0).toFixed(2)+'%</b>'):'')):'')+'</div>'+
-          (r.curva?('<div style="font-size:10.5px;font-weight:800;color:#9db4d6;margin-top:4px" title="Puntos de la curva general en la semana, solo de las actividades programadas (no cumplidas + cumplidas): Programado = Hecho + Restante \u00b7 Hecho es la suma de lo que ya aport\u00f3 cada tarjeta (avance real de la semana) \u00b7 Restante es la suma de los +x% (lo que falta de lo programado). Las EMP avanzaron sin estar programadas y van aparte">'+(r.curva.real!=null?('<span title="La curva general, con la misma medida que el gr\u00e1fico: el real al cierre de la semana anterior m\u00e1s lo hecho EN la semana (todo el cronograma) da el real al cierre de esta semana">Curva: cierre S'+r.curva.semAnt+' <b style="color:#cfe3ff">'+(Number(r.curva.realAnt)||0).toFixed(2)+'%</b> + hecho en la semana <b style="color:#9FE8B0">'+(Number(r.curva.hechoSem)||0).toFixed(2)+'%</b> = real S'+r.sem+' <b style="color:#cfe3ff">'+(Number(r.curva.real)||0).toFixed(2)+'%</b></span>'+
-          '<br><span title="Restante: la suma de los \u00e1mbar (+x%) de las tarjetas, lo que a\u00fan falta de lo programado al cierre. Real al cierre + restante = a d\u00f3nde llega la curva al cierre de la semana (la proyecci\u00f3n)">+ restante <b style="color:#E8C9A0">'+(Number(r.curva.resta)||0).toFixed(2)+'%</b> = llega a <b style="color:#cfe3ff">'+(Number(r.curva.llega)||0).toFixed(2)+'%</b></span>'):'')+
-          '<br><span style="font-weight:700;color:#7d8590" title="El restante por grupo de tarjetas">restante: no cumplidas <b style="color:#E8C9A0">'+(Number(r.curva.nocMas)||0).toFixed(2)+'%</b> \u00b7 cumplidas <b style="color:#E8C9A0">'+(Number(r.curva.cumMas)||0).toFixed(2)+'%</b></span>'+
-          '<br><span style="font-weight:700;color:#7d8590;margin-top:3px;display:inline-block" title="Lo que suman las tarjetas programadas (no cumplidas + cumplidas) EN LA SEMANA: sus verdes = lo que ya aportaron a la curva en la semana; sus \u00e1mbar = lo que les falta de lo programado; la suma = lo que habr\u00edan aportado en la semana si cumpl\u00edan">Programadas, en la semana: aportan <b style="color:#9FE8B0">'+(Number(r.curva.hecho)||0).toFixed(2)+'%</b> \u00b7 les falta <b style="color:#E8C9A0">'+(Number(r.curva.resta)||0).toFixed(2)+'%</b> \u2192 habr\u00edan aportado <b style="color:#cfe3ff">'+(Number(r.curva.prog)||0).toFixed(2)+'%</b> si cumpl\u00edan</span>'+
-          (r.curva.real!=null?('<br><span style="font-weight:700;color:#7d8590;margin-top:3px;display:inline-block" title="El cuadre con la Tabla 2 del cronograma: lo hecho en la semana en TODO el universo, partida por partida, se reparte entre las que cumplieron, las que no, las que avanzaron sin estar programadas, las ocultas al PPC y los retrocesos (partes corregidos). Suma exacta.">Cuadre con la Tabla 2: hecho en la semana <b style="color:#9FE8B0">'+(Number(r.curva.hechoSem)||0).toFixed(2)+'%</b> ('+_nMil2(Number(r.curva.hechoHH)||0)+' hh)'+(r.curva.bkPct?(' = cumplidas '+(Number(r.curva.bkPct.cum)||0).toFixed(2)+'% + no cumplidas '+(Number(r.curva.bkPct.noc)||0).toFixed(2)+'% + sin programar '+(Number(r.curva.bkPct.emp)||0).toFixed(2)+'% + ocultas '+(Number(r.curva.bkPct.ocu)||0).toFixed(2)+'%'+((Math.abs(Number(r.curva.bkPct.retro)||0)>0.004)?(' + retrocesos '+(Number(r.curva.bkPct.retro)||0).toFixed(2)+'%'):'')+((Math.abs(Number(r.curva.resid)||0)>0.005)?(' \u00b7 sin cuadrar '+_nMil2(Number(r.curva.resid)||0)+' hh'):'')):(' = programadas '+(Number(r.curva.hecho)||0).toFixed(2)+'% + EMP '+(Number(r.curva.emp)||0).toFixed(2)+'% + ocultas '+(Number(r.curva.ocuYa)||0).toFixed(2)+'% + otros '+(Number(r.curva.otros)||0).toFixed(2)+'%'))+_ocuPTx+'</span>'):'')+
-          (r.curva.t3HH!=null?('<br><span style="font-weight:700;color:#7d8590;margin-top:3px;display:inline-block" title="Lo programado en la semana seg\u00fan la base elegida: en las actividades programadas visibles y en TODO el universo (es la columna de esa semana en la Tabla 3 de la misma fuente)">Programado en la semana ('+_crXerEsc(String((r.base&&r.base.nombre)||''))+'): <b style="color:#E8C9A0">'+(Number(r.curva.cal)||0).toFixed(2)+'%</b> ('+_nMil2(Number(r.curva.calHH)||0)+' hh en las programadas) \u00b7 todo el universo <b style="color:#E8C9A0">'+(Number(r.curva.t3Pct)||0).toFixed(2)+'%</b> ('+_nMil2(Number(r.curva.t3HH)||0)+' hh = Tabla 3 '+_crXerEsc(String(r.curva.t3Fuente||''))+' S'+r.sem+')'+_ocuPTx+'</span>'):'')+
-          ((Number(r.curva.emp)||0)>0?('<br><span style="font-weight:700;color:#7d8590" title="Avanzaron en la semana sin estar programadas: es hecho (verde) que ya est\u00e1 dentro de lo hecho en la semana">EMP: aportaron en la semana <b style="color:#9FE8B0">'+(Number(r.curva.emp)||0).toFixed(2)+'%</b> sin estar programadas</span>'):'')+'</div>'):'')+
-        '</div>'+
-        '<div style="flex:1;min-width:220px;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">'+
-          '<div style="background:#12314a;border:1px solid #2a5a8a;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#8ECBF5">\u2714 CUMPLIDAS</div><div style="font-size:20px;font-weight:900;color:#BFE3FF">'+nOk+'</div></div>'+
-          '<div style="background:#2a1418;border:1px solid #6a2a2a;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#FFB4A8">\u26d4 NO CUMPLIDAS</div><div style="font-size:20px;font-weight:900;color:#FFD9D4">'+nNo+'</div></div>'+
-          '<div style="background:#101d2e;border:1px solid #24344f;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#9db4d6">\u25a4 PROGRAMADAS</div><div style="font-size:20px;font-weight:900;color:#cfe3ff">'+nTot+'</div></div>'+
-          '<div style="background:#3a2a12;border:1px solid #7a5a1d;border-radius:10px;padding:8px 10px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#F5D08A">\u26a1 EMP</div><div style="font-size:20px;font-weight:900;color:#FFE7B3">'+nEmp+'</div><div style="font-size:9px;color:#c9a96a">avanzadas sin programar</div></div>'+
-        '</div></div>';
-      if(!nNo)h+='<div style="color:#9FE8B0;font-weight:700;padding:6px 0">\u2713 '+(r.cierre?('Al cierre de la semana '+r.sem):('Semana '+r.sem))+': sin actividades NO cumplidas</div>';
-      else h+='<div style="font-size:11px;color:#FFB4A8;font-weight:800;letter-spacing:.05em;margin:10px 0 6px;display:flex;align-items:center;gap:8px">\u26d4 NO CUMPLIDAS '+_rot+' ('+nNo+')<span style="font-weight:600;color:#7d8590">el \u2795 anexa y abre su ficha</span></div>';
-      if(nOcu&&(typeof esAdmin==='function')&&esAdmin())h+='<div style="font-size:10.5px;color:#9db4d6;margin:-2px 0 6px">'+nOcu+' oculta(s) a los supervisores y fuera del PPC \u2014 salen atenuadas abajo; m\u00e1rcalas \u201cvisible\u201d para devolverlas</div>'}
-    h+=
-      (function(){
-      var esAdX=false;try{esAdX=((typeof esAdminReal==='function')&&esAdminReal())||((typeof esAdmin==='function')&&esAdmin())}catch(e){}
-      var _item=function(q,i){
-        /* TODAS las restricciones de la actividad en ESA semana (las suyas y
-           las incluidas); puede tener varias */
+      h+='<div id="_rxDetBox" style="display:'+(detAb?'block':'none')+'">'+(r.prox?'':_detBloque(r))+'</div>'}
+    else if(window._rxBaseFalta)h+='<div style="background:#2a1414;border:1px solid #5A2A2A;border-radius:9px;padding:7px 10px;margin-bottom:8px;font-size:11.5px;font-weight:800;color:#FFB4A8">La base que eligió el admin todavía se está bajando: los números aún no son comparables.</div>';
+    /* ---- utilidades de pintado ---- */
+    var tit=function(txt,col){return '<div style="font-size:11px;font-weight:800;letter-spacing:.05em;margin:12px 0 5px;color:'+col+'">'+esc(txt)+'</div>'};
+    var vacio=function(txt){return '<div class="rxSub" style="padding:8px 2px">'+esc(txt)+'</div>'};
+    /* las filas de alcance de un conjunto de actividades, ordenadas por estado */
+    var planasDe=function(QS){var F=[];
+      QS.forEach(function(t){var q=t[0];if(!q||q._oculta)return;
         var regs=_rxDeActSemTodas(q.cod,q.items,q.semN||r.sem);
-        var reg=regs.length?regs[regs.length-1]:null;
-        var abierto=!!window._rxNoAbre[(q.semN?('S'+q.semN+'|'):'')+q.cod];
-        var det=_rxAlcanceHTML(q,i,regs)+_rxPartidasHTML(q);
-        return '<div style="border:1px solid '+(reg?'#1d3a2a':(r.prox?'#33415c':'#6a2a2a'))+';border-radius:10px;margin-bottom:7px;overflow:hidden">'+
-          '<div class="_rxNoCab" data-cod="'+_rxAt((q.semN?('S'+q.semN+'|'):'')+q.cod)+'" style="display:flex;gap:8px;align-items:center;padding:9px 10px;cursor:pointer;background:'+(r.prox?'#0f1726':(q._oculta?'#1a1418':'#2a1418'))+';flex-wrap:wrap'+(q._oculta?';opacity:.62':'')+'">'+
-            '<b style="color:#8ECBF5;font-size:12px">'+esc(q.cod)+'</b>'+
-            (reg?((esAdX&&regs.length===1)?'<button class="_rxNoDel" data-rid="'+_rxAt(reg.rid)+'" title="Borrar su registro (solo el admin)" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:7px;padding:3px 9px;font-weight:900;cursor:pointer">\u2715</button>':'')
-                :'<button class="_rxAne" data-i="'+i+'" title="Anexar y ponerle su restricci\u00f3n" style="background:#1E7A46;color:#fff;border:0;border-radius:7px;padding:3px 10px;font-weight:900;cursor:pointer">\u2795</button>')+
-            '<span style="flex:1;min-width:150px;font-size:12px;overflow-wrap:anywhere">'+(function(){var ap=q.apart||_rxApartados(q.items,q.cron,q.cod);return ap?('<span style="color:#C7A3E8;font-weight:800">'+esc(ap)+'</span>'):''})()+esc(q.nom)+'</span>'+
-            /* el admin en modo admin: visible para los supervisores (y dentro del PPC) */
-            ((esAdX&&!r.prox)?('<label class="_rxVisL" title="Marcada: la ven los supervisores y entra al PPC. Desmarcada: se oculta, se quita lo programado de esta actividad en la semana (no cuenta en el PPC, la Tabla 3 ni la Tabla R ni en el libro)" style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;color:'+(q._oculta?'#FFB4A8':'#9FE8B0')+';background:#101d2e;border:1px solid #24344f;border-radius:7px;padding:2px 7px;cursor:pointer;white-space:nowrap"><input type="checkbox" class="_rxVis" data-cod="'+_rxAt(q.cod)+'" data-sem="'+(q.semN||r.sem)+'"'+(q._oculta?'':' checked')+' style="margin:0">'+(q._oculta?'oculta \u00b7 fuera del PPC':'visible')+'</label>'):'')+
-
-            (reg?'<span style="font-size:10px;font-weight:800;color:#9FE8B0;background:#14261d;border:1px solid #1d3a2a;border-radius:7px;padding:2px 7px">\u2713 '+(regs.length>1?(regs.length+' restricciones'):'anexada')+'</span>':'')+
-                        '<span style="font-size:10.5px;color:#E8C9A0;font-weight:800;white-space:nowrap;text-align:right;line-height:1.35">prog '+q.prog+'% \u00b7 hecho '+q.hecho+'% \u00b7 falta '+_rxFaltaPct(q)+'%'+_rxAporteMini(q)+'</span>'+
-'<span class="_rxFlecha" style="color:#7d8590">'+(abierto?'\u25b4':'\u25be')+'</span>'+
-            _rxResumenHTML(q,regs)+
-          '</div>'+
-          '<div class="_rxNoDet" style="display:'+(abierto?'block':'none')+';background:#0b1220;padding:'+(reg?'8px':'0')+'">'+det+'</div>'+
-        '</div>'};
-      /* el WBS de dos niveles: la ESPECIALIDAD es el primer nivel y las
-         actividades el segundo; el admin ve todos los grupos y el
-         supervisor solo el suyo. La actividad se agrupa por la
-         especialidad dominante de sus partidas. */
-      var cat9={};try{_crPartidas().forEach(function(p9){cat9[p9.id]=p9})}catch(e){}
-      var esAd9=false;try{esAd9=((typeof esAdminReal==='function')&&esAdminReal())||((typeof esAdmin==='function')&&esAdmin())}catch(e){}
-      var mi9=(state.user&&state.user.disc)||'';
-      var espDe=function(q){var cnt={},top='(sin especialidad)',mx=0;
-        (q.items||[]).forEach(function(pid){var e9=(cat9[pid]&&cat9[pid].esp)||'';if(!e9)return;
-          cnt[e9]=(cnt[e9]||0)+1;if(cnt[e9]>mx){mx=cnt[e9];top=e9}});
-        return top};
-      /* los grupos WBS de un conjunto de actividades (indices en r.lista) */
-      /* compartido: las tres especialidades ven y editan todo */
-      var grupos=function(idxs){var gr={},go=[];
-      idxs.forEach(function(i){var q=r.lista[i],e9=espDe(q);
-        if(!gr[e9]){gr[e9]=[];go.push(e9)}gr[e9].push([q,i])});
+        (q.det||[]).forEach(function(d){F.push([q,d,regs,t[1],t[2]])})});
+      F.sort(function(a,b){return _rxOrdDet(a[1],b[1])});return F};
+    var pintaPlanas=function(F){return F.map(function(x){return _rxFilaAlcanceHTML(x[0],x[1],x[2],x[3],x[4])}).join('')};
+    /* la tarjeta de una actividad (vista Agrupadas) */
+    var _item=function(q,i,src){
+      var regs=_rxDeActSemTodas(q.cod,q.items,q.semN||r.sem);
+      var reg=regs.length?regs[regs.length-1]:null;
+      var kA=_rxKQ(q,src),ab=!!window._rxNoAbre[kA];
+      var stq=_rxEstChip(q._oculta?'NP':((src==='K')?'OK':((src==='E')?'EMP':(r.prox?'NP':'NO'))));
+      var ap=q.apart||_rxApartados(q.items,q.cron,q.cod);
+      return '<div style="border:1px solid '+(regs.length?'#1d3a2a':'#1d2b40')+';border-radius:10px;margin-bottom:6px;overflow:hidden">'+
+        '<div class="rxRow _rxNoCab" data-cod="'+_rxAt(kA)+'" style="cursor:pointer;background:#101d2e;border-bottom:0'+(q._oculta?';opacity:.62':'')+'">'+
+          '<span class="rxEst '+stq[0]+'" title="'+_rxAt(stq[2])+'">'+stq[1]+'</span>'+
+          '<span class="rxNom"><b style="color:#8ECBF5">'+esc(q.cod)+'</b> '+(ap?('<b style="color:#C7A3E8">'+esc(ap)+'</b>'):'')+esc(q.nom)+'</span>'+
+          _rxResumenHTML(q,regs)+
+          ((esAdX&&!r.prox)?('<label class="_rxVisL" title="Marcada: la ven los supervisores y entra al PPC. Desmarcada: se oculta, se quita lo programado de esta actividad en la semana (no cuenta en el PPC, la Tabla 3 ni la Tabla R ni en el libro)" style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;color:'+(q._oculta?'#FFB4A8':'#9FE8B0')+';background:#0b1220;border:1px solid #24344f;border-radius:7px;padding:2px 7px;cursor:pointer;white-space:nowrap"><input type="checkbox" class="_rxVis" data-cod="'+_rxAt(q.cod)+'" data-sem="'+(q.semN||r.sem)+'"'+(q._oculta?'':' checked')+' style="margin:0">'+(q._oculta?'oculta':'visible')+'</label>'):'')+
+          ((reg&&esAdX&&regs.length===1)?('<button class="_rxNoDel" data-rid="'+_rxAt(reg.rid)+'" title="Borrar su registro (solo el admin)" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:8px;min-height:28px;padding:1px 8px;font-weight:900;cursor:pointer">✕</button>'):'')+
+          '<button class="rxMas _rxAne" data-i="'+i+'" data-src="'+_rxAt(src||'L')+'" title="Nueva restricción: elige el alcance">➕</button>'+
+          '<span class="_rxFlecha rxSub">'+(ab?'▴':'▾')+'</span>'+
+        '</div>'+
+        '<div class="_rxNoDet" style="display:'+(ab?'block':'none')+';background:#0b1220">'+_rxAlcanceHTML(q,i,regs,src)+(esAdX?_rxPartidasHTML(q):'')+'</div>'+
+      '</div>'};
+    /* el WBS de un nivel: la especialidad dominante de la actividad */
+    var cat9={};try{_crPartidas().forEach(function(p9){cat9[p9.id]=p9})}catch(e){}
+    var espDe=function(q){var cnt={},top='(sin especialidad)',mx=0;
+      (q.items||[]).forEach(function(pid){var e9=(cat9[pid]&&cat9[pid].esp)||'';if(!e9)return;
+        cnt[e9]=(cnt[e9]||0)+1;if(cnt[e9]>mx){mx=cnt[e9];top=e9}});
+      return top};
+    var gruposDe=function(pares){var gr={},go=[];
+      pares.forEach(function(p){if(!p[0])return;var e9=espDe(p[0]);if(!gr[e9]){gr[e9]=[];go.push(e9)}gr[e9].push(p)});
       return go.map(function(e9){
-        return '<div style="background:#1B2B45;border:1px solid #33447a;border-left:3px solid #4A6EA8;color:#A9C0FF;border-radius:8px;padding:6px 10px;font-weight:800;font-size:11px;letter-spacing:.05em;margin:10px 0 6px;display:flex;align-items:center;gap:8px">'+
-          esc(String(e9).toUpperCase())+
-          '<span style="margin-left:auto;background:rgba(255,255,255,.08);border-radius:20px;padding:1px 9px;font-size:10.5px">'+gr[e9].length+'</span></div>'+
-          gr[e9].map(function(par){return _item(par[0],par[1])}).join('')}).join('')};
-      if(r.prox)return (r.semanas||[]).map(function(w){
+        return '<div style="background:#101d2e;border:1px solid #24344f;border-left:3px solid #4A6EA8;color:#A9C0FF;border-radius:8px;padding:5px 10px;font-weight:800;font-size:11px;letter-spacing:.05em;margin:10px 0 5px;display:flex;align-items:center;gap:8px">'+
+          esc(String(e9).toUpperCase())+'<span style="margin-left:auto;background:rgba(255,255,255,.08);border-radius:20px;padding:1px 9px;font-size:10.5px">'+gr[e9].length+'</span></div>'+
+          gr[e9].map(function(p){return _item(p[0],p[1],p[2])}).join('')}).join('')};
+    /* ---- CUERPO ---- */
+    var parL=[],parK=[],parE=[],parO=[];
+    (r.lista||[]).forEach(function(q,i){(q._oculta?parO:parL).push([q,i,'L'])});
+    (r.cumplidas||[]).forEach(function(q,i){parK.push([q,i,'K'])});
+    (r.emp||[]).forEach(function(q,i){parE.push([q,i,'E'])});
+    var ocuAlc=0;(r.ocultas||[]).forEach(function(q){ocuAlc+=((q.det||[]).length)});
+    if(r.prox){
+      h+=(r.semanas||[]).map(function(w){
         var _ocuWHH=Number(w.ocuProgHH)||0;
-        var _ocuWTx=(_ocuWHH>0.005)?(' · ocultas: se quitan '+_nMil2(_ocuWHH)+' hh programadas (no cuentan en la Tabla 3 ni en la Tabla R)'):'';
-        return '<div style="background:#2a1f3d;border:1px solid #5b3a8a;border-left:4px solid #C7A3E8;color:#E6D6FF;border-radius:8px;padding:7px 10px;font-weight:800;font-size:11.5px;letter-spacing:.05em;margin:12px 0 6px;display:flex;align-items:center;gap:8px">'+
-          esc(_wkLbl(w.n)).toUpperCase()+
-          '<span style="margin-left:auto;font-weight:700;color:#E8C9A0;font-size:10.5px" title="Programado en la semana: la suma de las tarjetas de abajo y la columna de esa semana en la Tabla 3 de la misma fuente (todo el universo)">'+_nMil2(Number(w.hhVin)||0)+' hh programadas'+((w.hhUni>0)?(' \u00b7 '+((Number(w.hhVin)||0)/w.hhUni*100).toFixed(2)+'%'):'')+((w.hhT3!=null)?(' &nbsp;|&nbsp; Tabla 3 '+_crXerEsc(String(w.fuente||''))+': '+_nMil2(Number(w.hhT3)||0)+' hh'+((w.hhUni>0)?(' \u00b7 '+((Number(w.hhT3)||0)/w.hhUni*100).toFixed(2)+'%'):'')):'')+_ocuWTx+'</span>'+
-          '<span style="background:rgba(255,255,255,.08);border-radius:20px;padding:1px 9px;font-size:10.5px">'+w.idx.length+'</span></div>'+
-          (w.idx.length?grupos(w.idx):'<div style="color:#7d8590;padding:4px 10px 8px;font-size:11.5px">Sin actividades programadas esa semana</div>')}).join('');
-      return grupos(r.lista.map(function(_q,i){return i}))})();
-    /* las CUMPLIDAS de la semana, aparte y en azul */
-    if(!r.prox&&r.cumplidas&&r.cumplidas.length){
-      var catK={};try{_crPartidas().forEach(function(p9){catK[p9.id]=p9})}catch(e){}
-      var espK=function(q){var cnt={},top='(sin especialidad)',mx=0;
-        (q.items||[]).forEach(function(pid){var e9=(catK[pid]&&catK[pid].esp)||'';if(!e9)return;
-          cnt[e9]=(cnt[e9]||0)+1;if(cnt[e9]>mx){mx=cnt[e9];top=e9}});
-        return top};
-      var grK={},goK=[];
-      r.cumplidas.forEach(function(q){var e9=espK(q);if(!grK[e9]){grK[e9]=[];goK.push(e9)}grK[e9].push(q)});
-      h+='<div style="font-size:11px;color:#8ECBF5;font-weight:800;letter-spacing:.05em;margin:16px 0 6px;display:flex;align-items:center;gap:8px">\u2714 CUMPLIDAS '+(r.cierre?('AL CIERRE DE LA SEMANA '+r.sem):('DE LA SEMANA '+r.sem))+' ('+r.cumplidas.length+')<span style="font-weight:600;color:#7d8590">programadas y con lo hecho a la par o por encima, sin restante en ninguna de sus partidas</span></div>'+
-        goK.map(function(e9){
-          return '<div style="background:#12314a;border:1px solid #2a5a8a;border-left:3px solid #4FA3E0;color:#BFE3FF;border-radius:8px;padding:6px 10px;font-weight:800;font-size:11px;letter-spacing:.05em;margin:10px 0 6px;display:flex;align-items:center;gap:8px">'+
-            esc(String(e9).toUpperCase())+'<span style="margin-left:auto;background:rgba(255,255,255,.08);border-radius:20px;padding:1px 9px;font-size:10.5px">'+grK[e9].length+'</span></div>'+
-            grK[e9].map(function(q){var kk='OK|'+q.cod,ab=!!window._rxNoAbre[kk];
-              return '<div style="border:1px solid #2a5a8a;border-radius:10px;margin-bottom:7px;overflow:hidden">'+
-                '<div class="_rxNoCab" data-cod="'+_rxAt(kk)+'" style="display:flex;gap:8px;align-items:center;padding:9px 10px;cursor:pointer;background:#0f2a44;flex-wrap:wrap">'+
-                  '<b style="color:#8ECBF5;font-size:12px">'+esc(q.cod)+'</b>'+
-                  '<span style="font-size:10px;font-weight:800;color:#BFE3FF;background:#164a73;border:1px solid #2a5a8a;border-radius:7px;padding:2px 7px">\u2714 cumplida</span>'+
-                  '<span style="flex:1;min-width:150px;font-size:12px;color:#DCEBFF;overflow-wrap:anywhere">'+(q.apart?('<span style="color:#9fd0ff;font-weight:800">'+esc(q.apart)+'</span>'):'')+esc(q.nom)+'</span>'+
-                  '<span style="font-size:10.5px;color:#BFE3FF;font-weight:800;white-space:nowrap;text-align:right;line-height:1.35">prog '+q.prog+'% \u00b7 hecho '+q.hecho+'% \u00b7 falta '+_rxFaltaPct(q)+'%'+_rxAporteMini(q)+'</span>'+
-                  '<span class="_rxFlecha" style="color:#7fb3d9">'+(ab?'\u25b4':'\u25be')+'</span>'+_rxDetHTML(q)+
-                '</div>'+
-                '<div class="_rxNoDet" style="display:'+(ab?'block':'none')+';background:#0b1a2b;padding:0">'+_rxPartidasHTML(q)+'</div>'+
-              '</div>'}).join('')}).join('')}
-    /* las EMP: avanzadas sin estar programadas, en ambar */
-    if(!r.prox&&r.emp&&r.emp.length){
-      var catE={};try{_crPartidas().forEach(function(p9){catE[p9.id]=p9})}catch(e){}
-      var espE=function(q){var cnt={},top='(sin especialidad)',mx=0;
-        (q.items||[]).forEach(function(pid){var e9=(catE[pid]&&catE[pid].esp)||'';if(!e9)return;
-          cnt[e9]=(cnt[e9]||0)+1;if(cnt[e9]>mx){mx=cnt[e9];top=e9}});
-        return top};
-      var grE={},goE=[];
-      r.emp.forEach(function(q){var e9=espE(q);if(!grE[e9]){grE[e9]=[];goE.push(e9)}grE[e9].push(q)});
-      h+='<div style="font-size:11px;color:#F5D08A;font-weight:800;letter-spacing:.05em;margin:16px 0 6px;display:flex;align-items:center;gap:8px">\u26a1 EMP \u00b7 AVANZADAS SIN ESTAR PROGRAMADAS '+(r.cierre?('AL CIERRE DE LA SEMANA '+r.sem):('EN LA SEMANA '+r.sem))+' ('+r.emp.length+')<span style="font-weight:600;color:#7d8590">no estaban en el programa y aun as\u00ed avanzaron</span></div>'+
-        goE.map(function(e9){
-          return '<div style="background:#3a2a12;border:1px solid #7a5a1d;border-left:3px solid #E0A44B;color:#FFE7B3;border-radius:8px;padding:6px 10px;font-weight:800;font-size:11px;letter-spacing:.05em;margin:10px 0 6px;display:flex;align-items:center;gap:8px">'+
-            esc(String(e9).toUpperCase())+'<span style="margin-left:auto;background:rgba(255,255,255,.08);border-radius:20px;padding:1px 9px;font-size:10.5px">'+grE[e9].length+'</span></div>'+
-            grE[e9].map(function(q){var kk='EMP|'+q.cod,ab=!!window._rxNoAbre[kk];
-              return '<div style="border:1px solid #7a5a1d;border-radius:10px;margin-bottom:7px;overflow:hidden">'+
-                '<div class="_rxNoCab" data-cod="'+_rxAt(kk)+'" style="display:flex;gap:8px;align-items:center;padding:9px 10px;cursor:pointer;background:#2e2110;flex-wrap:wrap">'+
-                  '<b style="color:#F5D08A;font-size:12px">'+esc(q.cod)+'</b>'+
-                  '<span style="font-size:10px;font-weight:800;color:#FFE7B3;background:#4a3a14;border:1px solid #7a5a1d;border-radius:7px;padding:2px 7px">\u26a1 EMP</span>'+
-                  '<span style="flex:1;min-width:150px;font-size:12px;color:#FFF1D6;overflow-wrap:anywhere">'+esc(q.nom)+'</span>'+
-                  '<span style="font-size:10.5px;color:#F5D08A;font-weight:800;white-space:nowrap;text-align:right;line-height:1.35">prog 0% \u00b7 hecho '+q.hecho+'% \u00b7 falta '+_rxFaltaPct(q)+'%'+_rxAporteMini(q)+'</span>'+
-                  '<span class="_rxFlecha" style="color:#c9a96a">'+(ab?'\u25b4':'\u25be')+'</span>'+_rxDetHTML(q)+
-                '</div>'+
-                '<div class="_rxNoDet" style="display:'+(ab?'block':'none')+';background:#1d1609;padding:0">'+_rxPartidasHTML(q)+'</div>'+
-              '</div>'}).join('')}).join('')}
+        var _ocuWTx=(_ocuWHH>0.005)?(' · ocultas: se quitan '+_nMil2(_ocuWHH)+' hh programadas'):'';
+        var pares=(w.idx||[]).map(function(i){return [r.lista[i],i,'L']});
+        return '<div style="background:#101d2e;border:1px solid #24344f;border-left:3px solid #C7A3E8;color:#E6D6FF;border-radius:8px;padding:6px 10px;font-weight:800;font-size:11.5px;margin:12px 0 5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+          esc(_wkLbl(w.n))+
+          '<span style="margin-left:auto;font-weight:700;color:#E8C9A0;font-size:10.5px">'+_nMil2(Number(w.hhVin)||0)+' hh programadas'+((w.hhUni>0)?(' · '+((Number(w.hhVin)||0)/w.hhUni*100).toFixed(2)+'%'):'')+_ocuWTx+'</span>'+
+          '<span style="background:rgba(255,255,255,.08);border-radius:20px;padding:1px 9px;font-size:10.5px">'+(w.idx||[]).length+'</span></div>'+
+          ((w.idx&&w.idx.length)?((vista==='alc')?pintaPlanas(planasDe(pares)):gruposDe(pares))
+                                :vacio('Sin actividades programadas esa semana'))}).join('')}
+    else if(vista==='alc'){
+      /* una sola lista de alcances, ordenada por estado: no cumplidos,
+         cumplidos, los que avanzaron sin programar y el resto */
+      var F=planasDe(parL.concat(parK,parE)),cNo=0,cOk=0,cEm=0;
+      F.forEach(function(x){var o=_rxOrdEst(x[1].est);if(o===0)cNo++;else if(o===1)cOk++;else if(o===2)cEm++});
+      h+='<div style="font-size:11px;font-weight:800;letter-spacing:.05em;margin:12px 0 5px;color:#cfe3ff">ALCANCES DE LA SEMANA ('+F.length+')'+
+        '<span class="rxSub" style="font-weight:600"> &nbsp;'+cNo+' no cumplido'+(cNo===1?'':'s')+' · '+cOk+' cumplido'+(cOk===1?'':'s')+(cEm?(' · '+cEm+' avanzó sin programar'):'')+'</span></div>'+
+        (F.length?pintaPlanas(F):vacio('Sin alcances en la semana'))}
+    else{
+      h+=tit('NO CUMPLIDAS ('+parL.length+')','#FFB4A8')+(parL.length?gruposDe(parL):vacio('Sin actividades no cumplidas en la semana'));
+      if(parK.length)h+=tit('CUMPLIDAS ('+parK.length+')','#9FE8B0')+gruposDe(parK);
+      if(parE.length)h+=tit('AVANZARON SIN ESTAR PROGRAMADAS ('+parE.length+')','#FFD37A')+gruposDe(parE)}
+    /* las ocultas del admin, al final y plegadas */
+    if(!r.prox&&parO.length){
+      var abO=!!window._rxNoAbre.OCU;
+      h+='<div id="_rxOcuCab" class="rxSub" style="display:flex;gap:8px;align-items:center;margin:14px 0 5px;cursor:pointer;color:#7d8590;font-weight:800;letter-spacing:.05em">'+
+        'OCULTAS ('+parO.length+')<span style="font-weight:600">no cuentan en el PPC ni en lo programado de la semana</span>'+
+        '<span class="_rxFlecha" style="margin-left:auto">'+(abO?'▴':'▾')+'</span></div>'+
+        '<div id="_rxOcuBox" style="display:'+(abO?'block':'none')+'">'+parO.map(function(p){return _item(p[0],p[1],'L')}).join('')+'</div>'}
+    else if(!r.prox&&ocuAlc&&vista==='alc')h+='<div class="rxSub" style="padding:8px 2px">'+ocuAlc+' alcance'+(ocuAlc===1?'':'s')+' oculto'+(ocuAlc===1?'':'s')+' por el admin</div>';
     if(fut.length)
       h+='<div style="font-size:11px;color:#C7A3E8;font-weight:800;letter-spacing:.05em;margin:12px 0 6px">🔮 RESTRICCIONES FUTURAS ('+fut.length+') — también se anexan</div>'+
         fut.map(function(q,j){
@@ -19653,12 +19668,31 @@ function _rxNoPinta(r){
     cont.innerHTML=h;
     _rxCardBind(cont);
     try{if(window._rxFocoRid){var elF=cont.querySelector('._rxCam[data-rid="'+_rxAt(window._rxFocoRid)+'"][data-campo="descripcion"]');window._rxFocoRid='';if(elF){elF.scrollIntoView({block:'center'});elF.focus()}}}catch(e){}
+    /* la actividad de un boton: de la lista, de las cumplidas o de las EMP */
+    var _qDe=function(b){try{var s9=b.getAttribute('data-src')||'L',i9=+b.getAttribute('data-i');
+      var A9=(s9==='K')?(window._rxNoR.cumplidas||[]):((s9==='E')?(window._rxNoR.emp||[]):(window._rxNoR.lista||[]));
+      return A9[i9]||null}catch(e){return null}};
+    /* el conmutador Alcance | Agrupadas: solo repinta */
+    cont.querySelectorAll('._rxVistaB').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();
+      try{localStorage.setItem('obf4_rx_vista_alc',b.getAttribute('data-v')||'alc')}catch(e){}
+      _rxNoPinta(window._rxNoR)}});
+    /* el Detalle del admin */
+    var bDet=document.getElementById('_rxDetBtn');
+    if(bDet)bDet.onclick=function(ev){ev.stopPropagation();var cx=document.getElementById('_rxDetBox');if(!cx)return;
+      var ab=cx.style.display!=='none';cx.style.display=ab?'none':'block';
+      try{localStorage.setItem('obf4_rx_det',ab?'0':'1')}catch(e){}
+      bDet.textContent='Detalle '+(ab?'▾':'▴')};
+    /* las ocultas */
+    var bOcu=document.getElementById('_rxOcuCab');
+    if(bOcu)bOcu.onclick=function(){var cx=document.getElementById('_rxOcuBox');if(!cx)return;
+      var ab=cx.style.display!=='none';cx.style.display=ab?'none':'block';window._rxNoAbre.OCU=!ab;
+      var f9=bOcu.querySelector('._rxFlecha');if(f9)f9.textContent=ab?'▾':'▴'};
     /* la parte del APU que programa la actividad: se guarda en el reparto
        del cronograma (Supabase, realtime); solo el admin en modo admin */
     cont.querySelectorAll('._rxFaseSel').forEach(function(sl){sl.onclick=function(ev){ev.stopPropagation()};sl.onchange=function(ev){ev.stopPropagation();
       if(!((typeof esAdmin==='function')&&esAdmin())){toast('Solo el administrador, en modo admin');return}
       var det=sl.closest('._rxNoDet');var cab=det&&det.previousElementSibling;var cod=(cab&&cab.getAttribute('data-cod'))||'';
-      cod=cod.replace(/^S\d+\|/,'');
+      cod=cod.split('|').pop();
       var pid=sl.getAttribute('data-pid'),cron=(window._rxNoR&&window._rxNoR.cron)||'';
       if(!cod||!cron)return;
       var cfg=_cpDe(cron,pid)||{modo:'orden',primero:'',fases:{}};var fz=Object.assign({},cfg.fases||{});
@@ -19666,28 +19700,35 @@ function _rxNoPinta(r){
       _cpSet(cron,pid,cfg.modo,cfg.primero,fz);
       toast(sl.value?('\ud83e\udde9 '+cod+' programa la parte "'+sl.options[sl.selectedIndex].text+'" de '+pid):(cod+' vuelve a toda la partida '+pid));
       window._rxNoR=null;window._rxNoHuella=null;_rxNoLlena()}});
-    /* otra restriccion mas para la misma actividad y semana */
-    /* plegar/desplegar una fila de alcance sin repintar */
+    /* el detalle de una fila de alcance: sin repintar */
     cont.querySelectorAll('._rxAlcCab').forEach(function(c){c.onclick=function(ev){
-      var t=ev.target;while(t&&t!==c){if(t.classList&&(t.classList.contains('_rxAneA')||t.classList.contains('_rxIr')||t.classList.contains('_rxIrAct')||t.classList.contains('_rxPendA')))return;t=t.parentNode}
-      var k=c.getAttribute('data-k');window._rxNoAbre[k]=!window._rxNoAbre[k];
-      var d=c.parentNode.querySelector('._rxAlcDet');if(d)d.style.display=window._rxNoAbre[k]?'block':'none';
-      var f=c.querySelector('._rxFlAlc');if(f)f.textContent=window._rxNoAbre[k]?'\u25b4':'\u25be'}});
+      var t=ev.target;while(t&&t!==c){if(t.classList&&(t.classList.contains('_rxAneA')||t.classList.contains('_rxIr')||t.classList.contains('_rxIrAct')||t.classList.contains('_rxPendA')||t.classList.contains('_rxBadgeR')))return;t=t.parentNode}
+      var k='I|'+c.getAttribute('data-k');window._rxNoAbre[k]=!window._rxNoAbre[k];
+      var d=c.parentNode.querySelector('._rxAlcInfo');if(d)d.style.display=window._rxNoAbre[k]?'block':'none';
+      var f=c.querySelector('._rxFlAlc');if(f)f.textContent=window._rxNoAbre[k]?'▴':'ⓘ'}});
     cont.querySelectorAll('._rxAlcTodo').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();
-      var abre=b.getAttribute('data-abre')==='1';var caja=b.parentNode.parentNode;
-      caja.querySelectorAll('._rxAlcCab').forEach(function(c){var k=c.getAttribute('data-k');window._rxNoAbre[k]=abre;var d=c.parentNode.querySelector('._rxAlcDet');if(d)d.style.display=abre?'block':'none';var f=c.querySelector('._rxFlAlc');if(f)f.textContent=abre?'\u25b4':'\u25be'});
-      b.setAttribute('data-abre',abre?'0':'1');b.textContent=abre?'\u25b4 plegar todo':'\u25be desplegar todo'}});
-    /* el + de un alcance: UN toque crea la restriccion de esa partida/apartado y abre su ficha */
+      var abre=b.getAttribute('data-abre')==='1';var caja=(b.closest?b.closest('._rxNoDet'):null)||b.parentNode.parentNode;
+      caja.querySelectorAll('._rxAlcCab').forEach(function(c){var k='I|'+c.getAttribute('data-k');window._rxNoAbre[k]=abre;
+        var d=c.parentNode.querySelector('._rxAlcInfo');if(d)d.style.display=abre?'block':'none';
+        var f=c.querySelector('._rxFlAlc');if(f)f.textContent=abre?'▴':'ⓘ'});
+      b.setAttribute('data-abre',abre?'0':'1');b.textContent=abre?'▴ plegar el detalle':'▾ ver el detalle'}});
+    /* el contador de restricciones: despliega sus tarjetas */
+    cont.querySelectorAll('._rxBadgeR').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();
+      var k=b.getAttribute('data-k');window._rxNoAbre[k]=!window._rxNoAbre[k];
+      var fila=b.parentNode.parentNode;var d=fila.querySelector('._rxAlcDet');
+      if(d)d.style.display=window._rxNoAbre[k]?'block':'none';
+      b.textContent=(window._rxNoAbre[k]?'▴':'▾')+' '+(b.textContent.replace(/[^0-9]/g,'')||'')}});
+    /* el mas de un alcance: UN toque crea la restriccion de esa partida/apartado y abre su ficha */
     cont.querySelectorAll('._rxAneA').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();
-      var q=window._rxNoR.lista[+b.getAttribute('data-i')];if(!q)return;var sN=q.semN||window._rxNoR.sem;
+      var q=_qDe(b);if(!q)return;var sN=q.semN||window._rxNoR.sem;
       var rid=_rxAnexaAlc({pid:b.getAttribute('data-pid'),fid:b.getAttribute('data-fid')||'',parte:b.getAttribute('data-parte')||''},q,sN);
-      window._rxNoAbre[(q.semN?('S'+q.semN+'|'):'')+q.cod]=true;window._rxNoAbre[b.getAttribute('data-k')]=true;window._rxFocoRid=rid;
+      window._rxNoAbre[_rxKQ(q,b.getAttribute('data-src')||'L')]=true;window._rxNoAbre[b.getAttribute('data-k')]=true;window._rxFocoRid=rid;
       _rxNoLlena();
       setTimeout(function(){try{var el=document.querySelector('._rxCam[data-rid="'+rid+'"][data-campo="descripcion"]');if(el){el.scrollIntoView({block:'center'});el.focus()}}catch(e){}},700)}});
     /* pendientes de otras semanas de ese alcance: incluirlas en esta */
     cont.querySelectorAll('._rxPendA').forEach(function(b){b.onclick=function(ev){ev.stopPropagation();
-      var q=window._rxNoR.lista[+b.getAttribute('data-i')];if(!q)return;var sN=q.semN||window._rxNoR.sem;
-      _rxElegirUI(q,sN,function(){window._rxNoAbre[(q.semN?('S'+q.semN+'|'):'')+q.cod]=true;_rxNoLlena()},b.getAttribute('data-pid'),b.getAttribute('data-fid')||'')}});
+      var q=_qDe(b);if(!q)return;var sN=q.semN||window._rxNoR.sem;
+      _rxElegirUI(q,sN,function(){window._rxNoAbre[_rxKQ(q,b.getAttribute('data-src')||'L')]=true;_rxNoLlena()},b.getAttribute('data-pid'),b.getAttribute('data-fid')||'')}});
     cont.querySelectorAll('._rxOtra').forEach(function(b){
       b.onclick=function(ev){ev.stopPropagation();
         var q=window._rxNoR.lista[+b.getAttribute('data-i')];
@@ -19717,20 +19758,23 @@ function _rxNoPinta(r){
     cont.querySelectorAll('._rxNoCab').forEach(function(c){
       c.onclick=function(ev){
         var t=ev.target;
-        while(t&&t!==c){if(t.classList&&(t.classList.contains('_rxAne')||t.classList.contains('_rxNoDel')||t.classList.contains('_rxVisL')||t.classList.contains('_rxVis')||t.classList.contains('_rxAneA')||t.classList.contains('_rxPendA')||t.classList.contains('_rxAlcTodo')))return;t=t.parentNode}
+        while(t&&t!==c){if(t.classList&&(t.classList.contains('_rxAne')||t.classList.contains('_rxNoDel')||t.classList.contains('_rxVisL')||t.classList.contains('_rxVis')||t.classList.contains('_rxAneA')||t.classList.contains('_rxPendA')||t.classList.contains('_rxAlcTodo')||t.classList.contains('_rxBadgeR')))return;t=t.parentNode}
         var cod=c.getAttribute('data-cod');
         window._rxNoAbre[cod]=!window._rxNoAbre[cod];
         var det=c.parentNode.querySelector('._rxNoDet');
-        det.style.display=window._rxNoAbre[cod]?'block':'none';
+        if(det)det.style.display=window._rxNoAbre[cod]?'block':'none';
         var fl=c.querySelector('._rxFlecha');
-        if(fl)fl.textContent=window._rxNoAbre[cod]?'\u25b4':'\u25be'}});
+        if(fl)fl.textContent=window._rxNoAbre[cod]?'▴':'▾'}});
     cont.querySelectorAll('._rxAne').forEach(function(b){
       b.onclick=function(ev){ev.stopPropagation();
-        var q=window._rxNoR.lista[+b.getAttribute('data-i')];
+        var q=_qDe(b);if(!q)return;
         var sN=q.semN||window._rxNoR.sem;
         /* el alcance: si la actividad tiene uno solo se crea directo; si no, se elige */
         _rxElegirAlcUI(q,sN,function(){
-          window._rxNoAbre[(q.semN?('S'+q.semN+'|'):'')+q.cod]=true;
+          window._rxNoAbre[_rxKQ(q,b.getAttribute('data-src')||'L')]=true;
+          /* la fila del alcance recien anexado queda abierta, con su ficha a la vista */
+          try{var x9=_rxAll()[window._rxFocoRid||''];
+            if(x9)window._rxNoAbre[_rxKA(q,{pid:x9.partida_id,fid:x9.fase_id||''})]=true}catch(e){}
           _rxNoLlena()})}});
     cont.querySelectorAll('._rxNoDel').forEach(function(b){
       b.onclick=function(ev){ev.stopPropagation();
