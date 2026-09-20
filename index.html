@@ -16164,7 +16164,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919d2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260919d3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -33315,7 +33315,288 @@ function _crXerFechas(lineas,modelo){
     lineas.length=0;
     for(i=0;i<res.length;i++)lineas.push(res[i])}
 
+  /* la red corrida a la fecha de datos: como el F9 de P6 */
+  try{_crXerCorrer(lineas,modelo,out)}catch(_ecr){out.avisos.push('no se pudo correr la red: '+((_ecr&&_ecr.message)||_ecr))}
   return out}
+
+/* ============================================================================
+   CORRER LA RED (el F9 del aplicativo) y PERIODOS FINANCIEROS
+   ----------------------------------------------------------------------------
+   Pedido del usuario (19/09/2026): el .xer tiene que salir "corrido" a la
+   fecha de datos, como lo deja P6 despues de F9, y con el avance real de cada
+   semana (lo que ensena la Tabla 2) guardado como periodos financieros.
+
+   _crXerCorrer   pasada hacia delante y hacia atras por TASKPRED con el
+                  calendario de cada actividad, la fecha de datos como piso,
+                  retained logic o progress override segun SCHEDOPTIONS y el
+                  calendario del lag segun sched_calendar_on_relationship_lag.
+                  Escribe restart/reend, early_*, late_*, rem_late_*, target_*
+                  de las no iniciadas y los dos flotantes.
+   _crXerGanadoSem lo GANADO por actividad y por semana (viernes a jueves,
+                  el corte del reporte) hasta el corte, con la misma cuenta de
+                  la curva roja y de la Tabla 2 (_crFracHechaAt + _crGanadas).
+   _crXerPeriodos escribe FINDATES (una fila por semana), TRSRCFIN (HH y costo
+                  real por asignacion y periodo) y TASKFIN (por actividad);
+                  cada serie se cuadra al centimo con act_work_qty / act_reg_qty
+                  y act_this_per_* queda en 0 (todo el real esta en periodos
+                  cerrados). PROJECT.last_fin_dates_id = el ultimo periodo.
+   ============================================================================ */
+var _XTAB=String.fromCharCode(9);
+function _crXerPt(s){s=String(s||'');var m=/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/.exec(s);if(m)return {iso:m[1],hora:m[2]};var d=s.slice(0,10);if(/^\d{4}-\d{2}-\d{2}$/.test(d))return {iso:d,hora:'07:00'};return null}
+function _crXerPk(p){return p?(p.iso+' '+p.hora):''}
+function _crXerPmax(a,b){if(!a)return b;if(!b)return a;return (_crXerPk(b)>_crXerPk(a))?b:a}
+function _crXerPmin(a,b){if(!a)return b;if(!b)return a;return (_crXerPk(b)<_crXerPk(a))?b:a}
+/* un punto como INICIO de trabajo en el calendario C: dia habil y dentro de la jornada */
+function _crXerPIni(C,p){
+  if(!p)return p;var iso=p.iso,hora=p.hora;
+  if(!_crXerCalLab(C,iso)){iso=_crXerCalSnap(C,iso,false);return {iso:iso,hora:_crXerCalAbre(C,iso)}}
+  var hd=_crXerCalHorasDia(C,iso),pas=_crXerCalPasadas(C,iso,hora);
+  if(pas>=hd-1e-9){iso=_crXerCalSig(C,iso);return {iso:iso,hora:_crXerCalAbre(C,iso)}}
+  return {iso:iso,hora:_crXerCalHoraDe(C,iso,pas)}}
+/* un punto como FIN de trabajo: dia habil y no antes de la entrada */
+function _crXerPFin(C,p){
+  if(!p)return p;var iso=p.iso,hora=p.hora;
+  if(!_crXerCalLab(C,iso)){iso=_crXerCalSnap(C,iso,true);return {iso:iso,hora:_crXerCalCierra(C,iso)}}
+  var pas=_crXerCalPasadas(C,iso,hora);
+  if(pas<=1e-9){iso=_crXerCalAnt(C,iso);return {iso:iso,hora:_crXerCalCierra(C,iso)}}
+  return {iso:iso,hora:_crXerCalHoraDe(C,iso,pas)}}
+function _crXerPAdd(C,p,H){H=Number(H)||0;if(!p)return p;if(H<=1e-9)return p;var q=_crXerPIni(C,p);var r=_crXerCalFinHoras(C,q.iso,H,q.hora);return {iso:r.iso,hora:r.hora}}
+function _crXerPSub(C,p,H){H=Number(H)||0;if(!p)return p;
+  var q=_crXerPFin(C,p),iso=q.iso,hora=q.hora;
+  var rest=H,d=_crASerial(iso),k=0;if(d==='')return p;
+  var pas=_crXerCalPasadas(C,iso,hora);
+  if(rest<=pas+1e-9)return {iso:iso,hora:_crXerCalHoraDe(C,iso,Math.max(0,pas-rest))};
+  rest-=pas;
+  while(k<20000){d--;k++;var f=_crDeSerial(d),hd=_crXerCalHorasDia(C,f);if(!(hd>1e-9))continue;
+    if(rest<=hd+1e-9)return {iso:f,hora:_crXerCalHoraDe(C,f,hd-rest)};rest-=hd}
+  return {iso:_crDeSerial(d),hora:_crXerCalAbre(C,_crDeSerial(d))}}
+/* horas de jornada entre dos puntos (negativo si b es anterior a a) */
+function _crXerPHoras(C,a,b){
+  if(!a||!b)return 0;
+  if(_crXerPk(b)<_crXerPk(a))return -_crXerPHoras(C,b,a);
+  var da=_crASerial(a.iso),db=_crASerial(b.iso);if(da===''||db==='')return 0;
+  var pa=_crXerCalPasadas(C,a.iso,a.hora),pb=_crXerCalPasadas(C,b.iso,b.hora);
+  if(da===db)return Math.round((pb-pa)*100)/100;
+  var h=_crXerCalHorasDia(C,a.iso)-pa;
+  for(var d=da+1;d<db;d++)h+=_crXerCalHorasDia(C,_crDeSerial(d));
+  h+=pb;return Math.round(h*100)/100}
+/* sumar horas de reloj (calendario de 24 h) */
+function _crXerP24(p,H){
+  var t=Date.parse(p.iso+'T'+p.hora+':00Z');if(!isFinite(t))return p;
+  var d=new Date(t+(Number(H)||0)*3600e3);
+  var hh=d.getUTCHours(),mi=d.getUTCMinutes();
+  return {iso:d.toISOString().slice(0,10),hora:(hh<10?'0':'')+hh+':'+(mi<10?'0':'')+mi}}
+
+function _crXerCorrer(lineas,modelo,out){
+  var res={n:0,movidas:0,ciclos:0,fin:'',logica:'',detalle:[]};
+  out.corrido=res;
+  var T=_crXerTablas(lineas),TA=T.TASK,TP=T.TASKPRED;
+  if(!TA||!TA.cs.length)return res;
+  var DD=_crXerDD(lineas,modelo);
+  var P0={iso:DD.piso.iso,hora:DD.piso.hora};
+  var SO=(T.SCHEDOPTIONS&&T.SCHEDOPTIONS.filas[0])?T.SCHEDOPTIONS.filas[0].o:{};
+  var override=String(SO.sched_progress_override||'N').trim()==='Y';
+  var lagCal=String(SO.sched_calendar_on_relationship_lag||'');
+  res.logica=override?'progress override':'retained logic';
+  var N={},lista=[];
+  TA.filas.forEach(function(fi){
+    var o=fi.o,tt=String(o.task_type||'TT_Task').trim();
+    if(tt==='TT_LOE'||tt==='TT_WBS')return;
+    var st=String(o.status_code||'TK_NotStart').trim();
+    var n={id:String(o.task_id),fi:fi,o:o,tt:tt,st:st,cod:_crTx(o.task_code),
+      C:_crXerCalendario(lineas,o.clndr_id),
+      rem:(st==='TK_Complete')?0:Math.max(0,Number(o.remain_drtn_hr_cnt)||0),
+      preds:[],succs:[],ind:0};
+    if(tt==='TT_Mile'||tt==='TT_FinMile')n.rem=0;
+    n.aS=_crXerPt(o.act_start_date);n.aF=_crXerPt(o.act_end_date);
+    N[n.id]=n;lista.push(n)});
+  if(TP&&TP.cs.length)TP.filas.forEach(function(f){
+    var s=N[String(f.o.task_id)],p=N[String(f.o.pred_task_id)];
+    if(!s||!p||s===p)return;
+    var tipo=String(f.o.pred_type||'PR_FS').replace(/^PR_/,'').toUpperCase(),lag=Number(f.o.lag_hr_cnt)||0;
+    var Cl=(/predecessor/i.test(lagCal))?p.C:((/24/.test(lagCal))?null:s.C);
+    var r={s:s,p:p,tipo:tipo,lag:lag,Cl:Cl};
+    s.preds.push(r);p.succs.push(r)});
+  var addL=function(Cl,pt,lag){
+    if(!pt)return pt;lag=Number(lag)||0;if(!(Math.abs(lag)>1e-9))return pt;
+    if(!Cl)return _crXerP24(pt,lag);
+    return (lag>0)?_crXerPAdd(Cl,pt,lag):_crXerPSub(Cl,pt,-lag)};
+  /* orden topologico */
+  lista.forEach(function(n){n.ind=n.preds.length});
+  var cola=lista.filter(function(n){return n.ind===0}),orden=[],vis={};
+  while(cola.length){var n0=cola.shift();if(vis[n0.id])continue;vis[n0.id]=1;orden.push(n0);
+    n0.succs.forEach(function(r){r.s.ind--;if(r.s.ind===0)cola.push(r.s)})}
+  var enCiclo=lista.filter(function(n){return !vis[n.id]});
+  res.ciclos=enCiclo.length;
+  if(enCiclo.length)out.avisos.push('la red tiene un bucle: '+enCiclo.slice(0,8).map(function(n){return n.cod}).join(', ')+(enCiclo.length>8?'...':'')+' quedan sin correr (P6 tampoco las programa)');
+  /* ---- hacia delante ---- */
+  orden.forEach(function(n){
+    if(n.st==='TK_Complete'){n.S=n.aS;n.F=n.aF||n.aS;n.ES=n.S;n.EF=n.F;return}
+    var base=_crXerPIni(n.C,P0),ini=base,finC=null;
+    n.preds.forEach(function(r){
+      var p=r.p;
+      var pS=(p.st==='TK_NotStart')?p.ES:(p.aS||p.ES),pF=p.EF;
+      if(!pS&&!pF)return;
+      if(r.tipo==='FS'){if(pF)ini=_crXerPmax(ini,addL(r.Cl,pF,r.lag))}
+      else if(r.tipo==='SS'){if(pS)ini=_crXerPmax(ini,addL(r.Cl,pS,r.lag))}
+      else if(r.tipo==='FF'){if(pF)finC=_crXerPmax(finC,addL(r.Cl,pF,r.lag))}
+      else if(r.tipo==='SF'){if(pS)finC=_crXerPmax(finC,addL(r.Cl,pS,r.lag))}});
+    if(n.st==='TK_Active'&&override)ini=base;
+    var ES=_crXerPIni(n.C,ini);
+    /* una FF/SF manda sobre el fin: con duracion fija el inicio se corre */
+    if(finC){var f7=_crXerPFin(n.C,finC);var s7=_crXerPIni(n.C,_crXerPSub(n.C,f7,n.rem));if(_crXerPk(s7)>_crXerPk(ES))ES=s7}
+    var EF=(n.rem>0)?_crXerPAdd(n.C,ES,n.rem):ES;
+    n.ES=ES;n.EF=EF;n.S=(n.st==='TK_Active'&&n.aS)?n.aS:ES;n.F=EF});
+  /* ---- hacia atras ---- */
+  var finP=null;
+  lista.forEach(function(n){if(n.st!=='TK_Complete'&&n.EF)finP=_crXerPmax(finP,n.EF)});
+  if(!finP)finP=P0;
+  res.fin=_crXerFec(finP.iso,finP.hora);
+  for(var q=orden.length-1;q>=0;q--){
+    var n=orden[q];if(n.st==='TK_Complete')continue;
+    var LF=null;
+    n.succs.forEach(function(r){
+      var s=r.s;if(s.st==='TK_Complete'||!s.LS||!s.LF)return;
+      var c9=null;
+      if(r.tipo==='FS')c9=addL(r.Cl,s.LS,-r.lag);
+      else if(r.tipo==='FF')c9=addL(r.Cl,s.LF,-r.lag);
+      else if(r.tipo==='SS'){var ls=addL(r.Cl,s.LS,-r.lag);c9=(n.rem>0)?_crXerPAdd(n.C,ls,n.rem):ls}
+      else if(r.tipo==='SF'){var lf=addL(r.Cl,s.LF,-r.lag);c9=(n.rem>0)?_crXerPAdd(n.C,lf,n.rem):lf}
+      if(c9)LF=_crXerPmin(LF,c9)});
+    if(!LF)LF=finP;
+    if(_crXerPk(LF)<_crXerPk(n.EF))LF=n.EF;   /* sin restricciones no hay flotante negativo */
+    n.LF=_crXerPFin(n.C,LF);
+    n.LS=(n.rem>0)?_crXerPSub(n.C,n.LF,n.rem):n.LF;
+    n.TF=Math.max(0,_crXerPHoras(n.C,n.EF,n.LF));
+    var ff=null;
+    n.succs.forEach(function(r){
+      var s=r.s;if(s.st==='TK_Complete'||!s.ES)return;var h=null;
+      if(r.tipo==='FS')h=_crXerPHoras(n.C,addL(r.Cl,n.EF,r.lag),s.ES);
+      else if(r.tipo==='SS')h=_crXerPHoras(n.C,addL(r.Cl,n.S||n.ES,r.lag),s.ES);
+      else if(r.tipo==='FF')h=_crXerPHoras(n.C,addL(r.Cl,n.EF,r.lag),s.EF);
+      else if(r.tipo==='SF')h=_crXerPHoras(n.C,addL(r.Cl,n.S||n.ES,r.lag),s.EF);
+      if(h!=null&&(ff==null||h<ff))ff=h});
+    n.FF=(ff==null)?n.TF:Math.max(0,Math.min(ff,n.TF))}
+  /* ---- escribir ---- */
+  var CAMPOS=['target_start_date','target_end_date','restart_date','reend_date','rem_late_start_date','rem_late_end_date'];
+  orden.forEach(function(n){
+    if(n.st==='TK_Complete'||!n.ES||!n.EF||!n.LS||!n.LF)return;
+    var fi=n.fi,toca=false;
+    var pw=function(campo,val){var j=TA.col[campo];if(j==null)return;var s=String(val==null?'':val);if(fi.v[j]!==s){fi.v[j]=s;toca=true}};
+    var rs0=String(fi.o.restart_date||'').slice(0,16),re0=String(fi.o.reend_date||'').slice(0,16);
+    var esF=_crXerFec(n.ES.iso,n.ES.hora),efF=_crXerFec(n.EF.iso,n.EF.hora);
+    var lsF=_crXerFec(n.LS.iso,n.LS.hora),lfF=_crXerFec(n.LF.iso,n.LF.hora);
+    pw('restart_date',esF);pw('reend_date',efF);
+    pw('early_start_date',esF);pw('early_end_date',efF);
+    pw('rem_late_start_date',lsF);pw('rem_late_end_date',lfF);pw('late_end_date',lfF);
+    if(n.st==='TK_NotStart'){pw('target_start_date',esF);pw('target_end_date',efF);pw('late_start_date',lsF)}
+    else{pw('target_end_date',efF);pw('late_start_date',n.aS?_crXerFec(n.aS.iso,n.aS.hora):lsF)}
+    pw('total_float_hr_cnt',_crXerNum(n.TF));pw('free_float_hr_cnt',_crXerNum(n.FF));
+    res.n++;
+    if(esF.slice(0,16)!==rs0||efF.slice(0,16)!==re0){res.movidas++;
+      if(res.detalle.length<300)res.detalle.push(n.cod+': '+rs0.slice(0,10)+' -> '+esF.slice(0,10)+((efF.slice(0,10)!==re0.slice(0,10))?(' (fin '+re0.slice(0,10)+' -> '+efF.slice(0,10)+')'):''))}
+    if(toca)lineas[fi.i]='%R'+_XTAB+fi.v.join(_XTAB)});
+  /* las asignaciones siguen a su tarea */
+  var TR=T.TASKRSRC;
+  if(TR&&TR.cs.length){
+    var porT={};TA.filas.forEach(function(f){porT[String(f.o.task_id)]=f});
+    TR.filas.forEach(function(x){
+      var fi=porT[String(x.o.task_id)];if(!fi)return;var ch=false;
+      CAMPOS.forEach(function(k){var j=TA.col[k],jj=TR.col[k];if(j==null||jj==null)return;var v=String(fi.v[j]==null?'':fi.v[j]);if(x.v[jj]!==v){x.v[jj]=v;ch=true}});
+      if(ch)lineas[x.i]='%R'+_XTAB+x.v.join(_XTAB)})}
+  return res}
+
+/* lo ganado por actividad y por semana (viernes a jueves) hasta el corte */
+async function _crXerGanadoSem(c,corte){
+  corte=String(corte||'').slice(0,10);
+  var tar=((await _crTareas(c.cron_id))||[]).filter(function(t){return t&&!t.eliminado});
+  var alc=await _crAlc(c.cron_id),u=_crUniverso(c.cron_id,alc);
+  var filas=((await _crTablaDatos(c))||{}).filas||[],P={};
+  filas.forEach(function(r){if(r&&r.id)P[r.id]=r});
+  var rp=_crReparto(tar);
+  var _mF={},frac=function(id,iso){var k=id+'|'+iso,v=_mF[k];if(v!=null)return v;v=Math.max(0,Math.min(1,Number(_crFracHechaAt(P[id],iso))||0));_mF[k]=v;return v};
+  var min='';
+  for(var id in u.items){try{var ev=(typeof _t23Eventos==='function')?_t23Eventos(id):[];if(ev.length&&(!min||ev[0]<min))min=ev[0]}catch(_e){}}
+  if(!min||!corte||min>corte)return {per:[],W:{}};
+  var s0=_crASerial(min);if(s0==='')return {per:[],W:{}};
+  var d0=new Date(min+'T00:00:00Z').getUTCDay(),back=(d0-5+7)%7;
+  var a=_crDeSerial(s0-back),per=[],k=0;
+  while(a<=corte&&k<400){k++;var fin=_crDeSerial(_crASerial(a)+6);if(fin>corte)fin=corte;per.push({ini:a,fin:fin});a=_crDeSerial(_crASerial(fin)+1)}
+  var W={};
+  tar.forEach(function(t){
+    var cod=String(t.task_code||'');if(!cod)return;
+    var prev=0,ser=[];
+    per.forEach(function(p){
+      var g=0;
+      (t.items||[]).forEach(function(i){var hi=Number(u.items[i])||0;if(!(hi>0))return;g+=_crGanadas(rp,i,cod,hi,frac(i,p.fin))});
+      if(g<prev)g=prev;ser.push(g-prev);prev=g});
+    W[cod]=ser});
+  return {per:per,W:W}}
+
+function _crXerPeriodos(lineas,modelo,G){
+  var res={n:0,tareas:0,asig:0,hh:0,desde:'',hasta:'',avisos:[]};
+  if(!G||!G.per||!G.per.length)return res;
+  var T=_crXerTablas(lineas),TA=T.TASK,TR=T.TASKRSRC,PR=T.PROJECT;
+  if(!TA||!TA.cs.length)return res;
+  if(T.FINDATES||T.TRSRCFIN||T.TASKFIN){res.avisos.push('el archivo ya traia periodos financieros: se conservan y no se anaden los de la Tabla 2');return res}
+  var r2=function(x){return Math.round((Number(x)||0)*100)/100};
+  var per=G.per,W=G.W||{};
+  var nom=function(p){var s='';try{s='S'+_crSemNum(p.fin)+' '}catch(_e){s=''}var f=function(iso){return iso.slice(8,10)+'/'+iso.slice(5,7)};return s+f(p.ini)+'-'+f(p.fin)+'/'+p.fin.slice(0,4)};
+  var ftId=String((T.FINTMPL&&T.FINTMPL.filas[0]&&T.FINTMPL.filas[0].o.fintmpl_id)||'');
+  var csF=['fin_dates_id','fin_dates_name','start_date','end_date'];if(ftId)csF.push('fintmpl_id');
+  var filF=[];
+  per.forEach(function(p,i){var v=[String(i+1),_crXerVal(nom(p),30),p.ini+' 00:00',p.fin+' 23:59'];if(ftId)v.push(ftId);filF.push('%R'+_XTAB+v.join(_XTAB))});
+  var csR=['fin_dates_id','taskrsrc_id','task_id','proj_id','act_qty','act_cost'];
+  var csT=['fin_dates_id','task_id','proj_id','act_work_qty','act_equip_qty','act_mat_cost','act_work_cost','act_equip_cost','act_expense_cost','bcwp','bcws','perfm_work_qty','sched_work_qty'];
+  var filR=[],filT=[];
+  var asigDe={};if(TR&&TR.cs.length)TR.filas.forEach(function(x){(asigDe[String(x.o.task_id)]=asigDe[String(x.o.task_id)]||[]).push(x)});
+  TA.filas.forEach(function(fi){
+    var o=fi.o,cod=_crTx(o.task_code);
+    var A=Number(o.act_work_qty)||0;if(!(A>0.005))return;
+    var ser=(W[cod]||[]).slice(),s=0;ser.forEach(function(v){s+=v});
+    var q;
+    if(s>1e-9)q=per.map(function(p,i){return (Number(ser[i])||0)/s*A});
+    else{q=per.map(function(){return 0});q[q.length-1]=A}
+    var acc=0,last=-1;q=q.map(function(v,i){var x=r2(v);if(x>0)last=i;acc+=x;return x});
+    if(last>=0)q[last]=r2(q[last]+(A-acc));else q[q.length-1]=r2(A);
+    var lab=(asigDe[String(o.task_id)]||[]).filter(function(x){return (Number(x.o.act_reg_qty)||0)>0.005});
+    var sumA=0;lab.forEach(function(x){sumA+=Number(x.o.act_reg_qty)||0});
+    var costoP=per.map(function(){return 0});
+    lab.forEach(function(x){
+      var qa=Number(x.o.act_reg_qty)||0,ca=Number(x.o.act_reg_cost)||0,sh=(sumA>0)?(qa/sumA):(1/lab.length);
+      var accQ=0,lastQ=-1;
+      var qq=q.map(function(v,i){var y=r2(v*sh);if(y>0)lastQ=i;accQ+=y;return y});
+      if(lastQ>=0)qq[lastQ]=r2(qq[lastQ]+(qa-accQ));
+      var cc=qq.map(function(v){return r2((qa>0)?(v/qa*ca):0)}),accC=0;cc.forEach(function(v){accC+=v});
+      if(lastQ>=0)cc[lastQ]=r2(cc[lastQ]+(ca-accC));
+      qq.forEach(function(v,i){
+        if(!(Math.abs(v)>0.005)&&!(Math.abs(cc[i])>0.005))return;
+        filR.push('%R'+_XTAB+[String(i+1),String(x.o.taskrsrc_id),String(o.task_id),String(o.proj_id||x.o.proj_id||''),_crXer2(v),(Number(cc[i])||0).toFixed(4)].join(_XTAB));
+        costoP[i]+=cc[i]});
+      var jq=TR.col.act_this_per_qty,jc=TR.col.act_this_per_cost,ch=false;
+      if(jq!=null&&x.v[jq]!=='0'){x.v[jq]='0';ch=true}
+      if(jc!=null&&x.v[jc]!=='0'){x.v[jc]='0';ch=true}
+      if(ch)lineas[x.i]='%R'+_XTAB+x.v.join(_XTAB);
+      res.asig++});
+    q.forEach(function(v,i){
+      if(!(Math.abs(v)>0.005))return;
+      filT.push('%R'+_XTAB+[String(i+1),String(o.task_id),String(o.proj_id||''),_crXer2(v),'0','0',(Number(costoP[i])||0).toFixed(4),'0','0','0','0','0','0'].join(_XTAB));
+      res.hh+=v});
+    res.tareas++});
+  if(!filT.length)return res;
+  var bloqueF=['%T'+_XTAB+'FINDATES','%F'+_XTAB+csF.join(_XTAB)].concat(filF);
+  var bloqueR=['%T'+_XTAB+'TRSRCFIN','%F'+_XTAB+csR.join(_XTAB)].concat(filR);
+  var bloqueT=['%T'+_XTAB+'TASKFIN','%F'+_XTAB+csT.join(_XTAB)].concat(filT);
+  var pos1=(T.FINTMPL&&T.FINTMPL.ultima!=null)?T.FINTMPL.ultima:((T.CURRTYPE&&T.CURRTYPE.ultima!=null)?T.CURRTYPE.ultima:0);
+  var pos2=(TR&&TR.cs.length&&TR.ultima!=null)?TR.ultima:TA.ultima;
+  var ins=[{i:pos2+1,f:((TR&&TR.cs.length&&filR.length)?bloqueR:[]).concat(bloqueT)},{i:pos1+1,f:bloqueF}];
+  ins.sort(function(a,b){return b.i-a.i});
+  ins.forEach(function(z){Array.prototype.splice.apply(lineas,[z.i,0].concat(z.f))});
+  /* PROJECT: el ultimo periodo cerrado (los indices de linea cambiaron: se relee) */
+  try{var T2=_crXerTablas(lineas),P2=T2.PROJECT;
+    if(P2&&P2.filas.length&&P2.col.last_fin_dates_id!=null)P2.filas.forEach(function(f){f.v[P2.col.last_fin_dates_id]=String(per.length);lineas[f.i]='%R'+_XTAB+f.v.join(_XTAB)})}catch(_e2){}
+  res.n=per.length;res.desde=per[0].ini;res.hasta=per[per.length-1].fin;res.hh=r2(res.hh);
+  return res}
 
 function _crXerAlgo(o){for(var k in o){if(Object.prototype.hasOwnProperty.call(o,k))return true}return false}
 
@@ -33909,11 +34190,16 @@ async function _crXerArma(c,opt){
 
   /* --- 4. cantidades, estados, reales, remanentes, altas y bajas --- */
   di('4/8 Escribiendo HH, costo, estados, actividades y WBS…');
+  /* lo ganado por actividad y por semana (Tabla 2) hasta el corte, para los periodos financieros */
+  var G=null;if(modo==='rep'){try{G=await _crXerGanadoSem(c,corte)}catch(_eg){G=null;try{console.warn('periodos .xer:',_eg)}catch(_e9){}}}
   var esc9=await _crXerEscribe(lineas,modelo);
 
   /* --- 5. calendario real, fechas y predecesoras --- */
   di('5/8 Calendario real, fechas, duraciones y predecesoras…');
   var fe=_crXerFechas(lineas,modelo);
+  /* --- 5b. periodos financieros: el real de cada semana, como la Tabla 2 --- */
+  var per={n:0};try{per=_crXerPeriodos(lineas,modelo,G)}catch(_ep){per={n:0,error:String((_ep&&_ep.message)||_ep)};fe.avisos.push('no se pudieron escribir los periodos financieros: '+per.error)}
+  if(per.avisos&&per.avisos.length)fe.avisos=(fe.avisos||[]).concat(per.avisos);
   fe.cstrLib=_cstr0.n;fe.cstrLibL=_cstr0.L;
 
   /* --- 6. cabecera del proyecto y del archivo --- */
@@ -33938,7 +34224,7 @@ async function _crXerArma(c,opt){
 
   var tot=_crXerTotales(lineas);
   var r={txt:lineas.join('\r\n'),nombre:cab.nombre,modelo:modelo,val:val,aud:aud,
-    esc:esc9,fe:fe,cab:cab,ref:ref,tot:tot,c:c,modo:modo,mm:mm,corte:corte,sem:sem};
+    esc:esc9,fe:fe,per:per,cab:cab,ref:ref,tot:tot,c:c,modo:modo,mm:mm,corte:corte,sem:sem};
   try{window._crXerUltimo=r}catch(_e){}
   return r}
 
@@ -34043,6 +34329,10 @@ function _crXerMensaje(r,modo,mm){
     ' · avance hasta el corte <b>'+_crXerEsc(r.corte||'')+'</b>'+
     (fe.calendario?(' · calendario <b>'+_crXerEsc(fe.calendario)+'</b>'):'')+
     ((r.cab&&r.cab.projShort)?(' · entra a P6 como <b>'+_crXerEsc(r.cab.projShort)+'</b>'):''));
+  if(fe.corrido){var cr9=fe.corrido;
+    lin(claro,'Red corrida a la fecha de datos, como el F9 de P6 ('+_crXerEsc(cr9.logica||'')+'): <b>'+(cr9.n||0)+'</b> actividades programadas, <b>'+(cr9.movidas||0)+'</b> movidas por sus predecesoras'+(cr9.fin?(' · fin del proyecto <b>'+_crXerEsc(String(cr9.fin).slice(0,10))+'</b>'):'')+(cr9.ciclos?(' · <b>'+cr9.ciclos+' en bucle</b>'):''));
+    if(cr9.movidas&&cr9.detalle&&cr9.detalle.length)lin(claro,'<span style="opacity:.85;font-size:11px">'+_crXerEsc(cr9.detalle.slice(0,80).join(' · '))+(cr9.detalle.length>80?' ...':'')+'</span>')}
+  if(r.per&&r.per.n)lin(claro,'Periodos financieros: <b>'+r.per.n+'</b> semanas ('+_crXerEsc(r.per.desde)+' → '+_crXerEsc(r.per.hasta)+') con las HH reales de cada semana, las de la Tabla 2: <b>'+_nMil2(r.per.hh)+' hh</b> en '+r.per.tareas+' actividades. En P6 se ven poniendo la escala de tiempo en periodos financieros (Actual Units)');
 
   /* --- relaciones --- */
   lin(claro,'Relaciones: <b>'+(fe.rel_new||0)+'</b> nuevas · <b>'+(fe.rel_act||0)+'</b> cambiadas · <b>'+(fe.rel_del||0)+'</b> quitadas'+
@@ -34255,6 +34545,10 @@ function _crXerMenuUI(b,c,o){
   var menu=document.createElement('div');menu.id='_crXerMenu';
   menu.style.cssText='position:fixed;z-index:2147483600;background:#101d2e;border:1px solid #33447a;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px;box-shadow:0 8px 24px rgba(0,0,0,.55);max-width:470px';
   var rb=b.getBoundingClientRect();
+  /* el corte del avance: por defecto el ultimo jueves (el del reporte); se recuerda el ultimo elegido */
+  var hoyM=(typeof todayISO==='function')?todayISO():'';
+  var corteDef=String(window._crXerCorteUlt||'').slice(0,10);
+  if(!corteDef&&hoyM){try{var sdM=_crASerial(hoyM),dwM=new Date(hoyM+'T00:00:00Z').getUTCDay();corteDef=_crDeSerial(sdM-((dwM-4+7)%7))}catch(_ec){corteDef=hoyM}}
   menu.style.left=Math.max(8,Math.min(rb.left,window.innerWidth-490))+'px';
   menu.style.top=(rb.bottom+6)+'px';
   var bt=function(m,mm,col,tit,desc){
@@ -34263,6 +34557,9 @@ function _crXerMenuUI(b,c,o){
   var remB=function(v,txt){var on=(_crXerRemPref()===v);return '<button data-rem="'+v+'" style="background:'+(on?'#1B5E8A':'#151c28')+';color:'+(on?'#fff':'#9db4d6')+';border:1px solid '+(on?'#8ECBF5':'#24344f')+';border-radius:8px;padding:5px 8px;cursor:pointer;font-family:inherit;font-size:10.5px;font-weight:'+(on?'800':'600')+'">'+txt+'</button>'};
   menu.innerHTML='<b style="font-size:11px;color:#8ECBF5;letter-spacing:.04em">\u00bfQU\u00c9 .XER QUIERES?</b>'+
     '<div id="_crXerRemFila" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:#cfe3ff;padding:2px 0 4px;border-bottom:1px solid #24344f"><span style="font-weight:800;color:#8ECBF5">Remanente:</span>'+remB('hh','\u23f1 por HH y rendimiento de la actividad (hoja 2)')+remB('tabla','\ud83d\udcca por las duraciones de la tabla (Rendimiento APP)')+'</div>'+
+    '<div id="_crXerCorteFila" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:#cfe3ff;padding:2px 0 4px;border-bottom:1px solid #24344f"><span style="font-weight:800;color:#8ECBF5">Corte del avance:</span>'+
+    '<input type="date" id="_crXerCorte" value="'+corteDef+'" style="background:#151c28;color:#cfe3ff;border:1px solid #8ECBF5;border-radius:6px;padding:3px 6px;font-family:inherit;font-size:11px">'+
+    '<span style="color:#9db4d6">avance hasta ese día inclusive; la fecha de datos es el hábil siguiente y el archivo sale corrido a ella (sin F9)</span></div>'+
     bt('tal',0,'#4a2f7a','📄 Tal cual está · normal',
       'HH y costo <b>forecast</b> de la tabla, fechas, duraciones y predecesoras del aplicativo, y el calendario real del archivo. '+
       '<b>Conserva</b> los avances y la fecha de datos que trae el .xer y su mismo Project ID: P6 te ofrecerá ACTUALIZAR el proyecto que ya tienes.')+
@@ -34286,10 +34583,11 @@ function _crXerMenuUI(b,c,o){
     x.onclick=async function(ev){
       ev.stopPropagation();
       var m=x.getAttribute('data-m'),mm=x.getAttribute('data-mm')==='1';
+      var o2=o;try{var inC=document.getElementById('_crXerCorte'),cv=inC&&String(inC.value||'').slice(0,10);if(cv&&/^\d{4}-\d{2}-\d{2}$/.test(cv)){window._crXerCorteUlt=cv;o2={};for(var kk in o)o2[kk]=o[kk];o2.corte=cv}}catch(_ei){o2=o}
       cierra();
       if(m==='no')return;
       if(b)b.disabled=true;
-      try{await _crXerDescarga(c,m,mm,o)}
+      try{await _crXerDescarga(c,m,mm,o2)}
       catch(e){_crXerPinta('<div style="color:#FFB4A8;font-weight:800">✖ '+
         _crXerEsc((typeof _crPorQue==='function')?_crPorQue(e):((e&&e.message)||e))+'</div>')}
       if(b)b.disabled=false}})(xs[i])}
