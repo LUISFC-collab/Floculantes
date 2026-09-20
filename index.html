@@ -16182,7 +16182,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -19370,10 +19370,15 @@ function _rpUI(id){try{
    toca el ajuste del proyecto -ese sigue en el panel de control y manda en el
    resto del aplicativo-: aqui solo cambia lo que uno ve para programar. */
 function _pgBaseProy(){return !!_ppfGet('baseProy',false)}
+/* el universo del cronograma ya cargado por _pgUnivListo (sincrono), o null */
+function _pgUnivU(){try{var U=window._pgUniv;if(U&&U.u&&U.u.hh>0&&U.filas&&(Date.now()-U.t)<300000&&(U.sig||'')===(window._ctSig||''))return U.u}catch(e){}return null}
 function _pgPeso(p){try{
   if(!p||!p.id)return 0;
-  var mio=(typeof _hhDe==='function')?Number(_hhDe(p))||0:0;
+  /* con cronograma ACTUAL el peso es sobre las HH del alcance (las de las Tablas 1, 2 y 3); sin el, el catalogo */
+  var U9=_pgUnivU();
+  var mio=U9?(Number(U9.items[p.id])||0):((typeof _hhDe==='function')?Number(_hhDe(p))||0:0);
   if(!(mio>0))return 0;
+  if(U9)return mio/U9.hh*100;
   var proy=_pgBaseProy(),d=p.esp||'';
   var k=proy?'__PROY__':('esp:'+d);
   if(!window._pgPesoTot)window._pgPesoTot={};
@@ -19483,13 +19488,14 @@ function renderProgSelect(){try{window._pgPesoTot=null}catch(_e){}var wrap=$('pr
    quiere ver primero y conviene distinguirlo de un vistazo */
 try{if(_ppfGet('enMarchaArriba',false)&&_pgEnMarcha(p))color='#1E7A46'}catch(_ev){}
 var _pw='';try{
-  if(typeof _hhDe==='function'&&_hhDe(p)>0){
+  var _U9=(typeof _pgUnivU==='function')?_pgUnivU():null,_hh9=_U9?(Number(_U9.items[p.id])||0):((typeof _hhDe==='function')?(Number(_hhDe(p))||0):0);
+  if(_hh9>0){
     var _pv=_pgPeso(p);
-    var _pb=_pgBaseProy();
-    _pw='<div title="Terminada al 100% aporta este porcentaje '+(_pb?'al avance de TODO el proyecto':'al avance de su especialidad')+
-      ' ('+(Math.round(_hhDe(p)*100)/100)+' hh)" style="font-size:10.5px;background:rgba(255,255,255,.22);'+
+    var _pb=_U9?true:_pgBaseProy();
+    _pw='<div title="Terminada al 100% aporta este porcentaje '+(_U9?('al avance del cronograma '+String(window._pgUniv.cid)+' ('+_nMil2(_U9.hh)+' hh del alcance)'):(_pb?'al avance de TODO el proyecto':'al avance de su especialidad'))+
+      ' ('+(Math.round(_hh9*100)/100)+' hh)" style="font-size:10.5px;background:rgba(255,255,255,.22);'+
       'border-radius:6px;padding:2px 7px;margin-top:4px;margin-left:5px;display:inline-block">'+
-      'vale '+_hhPct(_pv)+' <span style="opacity:.8">'+(_pb?'de las 3 especialidades':'de la especialidad')+'</span></div>'}
+      'vale '+_hhPct(_pv)+' <span style="opacity:.8">'+(_U9?'del alcance del cronograma':(_pb?'de las 3 especialidades':'de la especialidad'))+'</span></div>'}
 }catch(_epw){}
 return '<div class="pgitem" data-id="'+esc(p.id)+'" style="background:'+color+';color:#fff;border-radius:10px;padding:9px 11px;margin-bottom:6px;cursor:pointer">'+'<button class="_pgRend" data-id="'+esc(p.id)+'" title="'+
       ((typeof _rpDe==='function'&&_rpDe(p.id)!=null)
@@ -22735,8 +22741,8 @@ function _t23SerieReal(r,m,per,hhBase,ctx,fracFn,tope){
    TABLA 3: HH proyectadas por partida y por DIA (mapa id -> {iso: hh}) y por
    actividad (cod -> {iso: hh}), con la regla de la curva azul
    --------------------------------------------------------------------------- */
-function _t23ProyDia(c,tar,u,filas,alc,C,fuente){
-  var _ck='py|'+String((c&&c.cron_id)||'')+'|'+(fuente||'curva')+'|'+_t23Gen()+'|'+String(window._ctSig||'')+'|'+String(((window._crTar||{})[(c&&c.cron_id)]||[]).length)+'|'+String((window._crAlT||{})[(c&&c.cron_id)]||0)+'|'+Math.round(Number(u&&u.hh)||0);
+function _t23ProyDia(c,tar,u,filas,alc,C,fuente,corte){
+  var _ck='py|'+String((c&&c.cron_id)||'')+'|'+(fuente||'curva')+'|'+String(corte==null?'':corte)+'|'+_t23Gen()+'|'+String(window._ctSig||'')+'|'+String(((window._crTar||{})[(c&&c.cron_id)]||[]).length)+'|'+String((window._crAlT||{})[(c&&c.cron_id)]||0)+'|'+Math.round(Number(u&&u.hh)||0);
   var _My=window._t23MemoPy||(window._t23MemoPy={});if(_My[_ck])return _My[_ck];
   var porId={};(filas||[]).forEach(function(r){if(r&&r.id)porId[r.id]=r});
   var M={},MT={},info={ganado:0,remanente:0,sinFecha:0,sinProg:0,corte:'',rep:false,fuente:fuente||'curva'};
@@ -22763,21 +22769,45 @@ function _t23ProyDia(c,tar,u,filas,alc,C,fuente){
         prevF=fA})}
     return tot};
   if(fuente==='cal'){
-    /* CALENDARIO: lo ganado hasta hoy + lo programado desde hoy (pantalla Cronograma) */
-    info.ganado=ganadoHasta(hoy);info.corte=hoy;
-    try{var R=(typeof _crProyFilas==='function')?_crProyFilas(u,hoy,''):null;var cub={},remId={};
-      /* el saldo de cada partida con la MISMA regla que lo ganado (fisico sobre el
-         forecast): las filas del calendario se escalan a ese saldo */
-      if(R&&R.hayFila){var sumRem={};Object.keys(R.filaDe).forEach(function(key){var f=R.filaDe[key],id=(typeof _pgBaseId==='function')?_pgBaseId(key.split('|')[0]):key.split('|')[0];sumRem[id]=(sumRem[id]||0)+Math.max(0,(1-(f.done||0))*f.w)});
-        Object.keys(R.filaDe).forEach(function(key){var f=R.filaDe[key],id=(typeof _pgBaseId==='function')?_pgBaseId(key.split('|')[0]):key.split('|')[0];
-        var hU=Number(u.items[id])||0,saldo=hU*(1-frac(id,hoy));var fac=(sumRem[id]>1e-9)?(saldo/sumRem[id]):1;
-        var rem=Math.max(0,(1-(f.done||0))*f.w)*fac,queda=rem;cub[id]=(cub[id]||0)+rem;
-        var dias={};for(var d in f.days)dias[d]=1;for(var d2 in (f.daysT||{}))dias[d2]=1;
-        Object.keys(dias).sort().forEach(function(d){if(d<hoy)return;var cuota=((f.days[d]||0)*(1-(f.done||0)))+((f.daysT||{})[d]||0);var add=Math.min(cuota*f.w,queda);if(!(add>1e-12))return;queda-=add;ponI(id,d,add);info.remanente+=add;
-          var lista=(rp&&rp._orden&&rp._orden[id])||[];if(!lista.length)lista=tar.filter(function(t){return (t.items||[]).indexOf(id)>=0}).map(function(t){return t.task_code});var n=lista.length||1;lista.forEach(function(cod){ponT(cod,d,add/n)})});
-        info.sinProg+=queda})}
-      /* lo que no esta en el calendario es SIN PROGRAMAR: asi ganado + programado + sin programar = HH del alcance */
-      for(var idU in u.items){var hU2=Number(u.items[idU])||0;if(!(hU2>0))continue;var pend=hU2*(1-frac(idU,hoy))-(cub[idU]||0);if(pend>1e-9)info.sinProg+=pend}}catch(e){}
+    /* CALENDARIO: la MISMA cuenta que _pgCalcPct (pantalla Cronograma), atribuida
+       por partida (ponI) y por actividad (ponT). Base = lo ganado al CIERRE
+       ANTERIOR (antD, segun el dia de corte de la tabla); desde el inicio de la
+       semana en curso (semIni) se reparte lo PROGRAMADO aunque esos dias ya
+       hayan pasado: con corte jueves, el viernes 18 ya cuenta como programado
+       (pedido del usuario, 20/09/2026). Antes se cortaba en hoy y los dias ya
+       pasados de la semana en curso no iban a ninguna columna. */
+    var W9=(corte==null||corte==='')?4:Number(corte);if(!(W9>=0&&W9<=6))W9=4;
+    var sH=_crASerial(hoy),finC=sH+((W9-_t23Dow(sH)+7)%7);
+    var antD=_crDeSerial(finC-7),semIni=_crDeSerial(finC-6),semFin=_crDeSerial(finC);
+    info.ganado=ganadoHasta(antD);info.corte=antD;info.semIni=semIni;info.semFin=semFin;
+    try{var R=(typeof _crProyFilas==='function')?_crProyFilas(u,hoy,antD):null;var cub={};
+      if(R&&R.hayFila){
+        /* el saldo AL CIERRE de cada partida, con la misma regla que lo ganado
+           (fisico sobre el forecast): las filas del calendario se escalan a ese saldo */
+        var sumRem={},esc={},fls=[],dias={};
+        Object.keys(R.filaDe).forEach(function(key){var f=R.filaDe[key];
+          f._id=(typeof _pgBaseId==='function')?_pgBaseId(key.split('|')[0]):key.split('|')[0];
+          f.usedCal=0;fls.push(f);
+          sumRem[f._id]=(sumRem[f._id]||0)+Math.max(0,(1-(f.doneAnt||0))*f.w);
+          for(var k in f.days)if(k>=semIni)dias[k]=1;
+          for(var k2 in (f.daysT||{}))if(k2>=semIni)dias[k2]=1});
+        Object.keys(sumRem).forEach(function(id){var hU=Number(u.items[id])||0;
+          var saldo=hU*(1-frac(id,antD));esc[id]=(sumRem[id]>1e-9)?(saldo/sumRem[id]):1});
+        Object.keys(dias).sort().forEach(function(d){
+          fls.forEach(function(f){
+            var fac=(d<=semFin)?(1-(f.doneAnt||0)):(1-f.done);
+            var c=((f.days[d]||0)*Math.max(0,fac)+((f.daysT||{})[d]||0))*f.w;
+            var tope=Math.max(0,(1-(f.doneAnt||0))*f.w-(f.usedCal||0));if(c>tope)c=tope;
+            if(!(c>1e-12))return;f.usedCal+=c;
+            var id=f._id,add=c*((esc[id]==null)?1:esc[id]);if(!(add>1e-12))return;
+            cub[id]=(cub[id]||0)+add;ponI(id,d,add);info.remanente+=add;
+            var lista=(rp&&rp._orden&&rp._orden[id])||[];
+            if(!lista.length)lista=tar.filter(function(t){return (t.items||[]).indexOf(id)>=0}).map(function(t){return t.task_code});
+            var n=lista.length||1;lista.forEach(function(cod){ponT(cod,d,add/n)})})});
+        fls.forEach(function(f){f.usedCal=0})}
+      /* lo que falta AL CIERRE y no esta programado: ganado + programado + sin programar = HH del alcance */
+      for(var idU in u.items){var hU2=Number(u.items[idU])||0;if(!(hU2>0))continue;
+        var pend=hU2*(1-frac(idU,antD))-(cub[idU]||0);if(pend>1e-9)info.sinProg+=pend}}catch(e){}
     return (_My[_ck]={M:M,MT:MT,info:info})}
   if(conAv){
     /* REPROGRAMACION: el mismo corte y el mismo remanente que _crCurvaRep */
@@ -22851,7 +22881,7 @@ async function _t23Datos(c,o){
   tar.forEach(function(t){(t.items||[]).forEach(function(i){if(u.items[i]==null)return;var f=_crFechaItem(t,alc,i);if(f.ini&&(!d0||f.ini<d0))d0=f.ini;if(f.fin&&(!d1||f.fin>d1))d1=f.fin});
     var fr=String(t.fin_rem||'').slice(0,10);if(fr&&(!d1||fr>d1))d1=fr});
   var proy=null;
-  if(n===3){proy=_t23ProyDia(c,tar,u,filas,alc,C,o.fuente==='cal'?'cal':'curva');
+  if(n===3){proy=_t23ProyDia(c,tar,u,filas,alc,C,o.fuente==='cal'?'cal':'curva',o.corte);
     for(var id in proy.M)for(var iso in proy.M[id]){if(!d0||iso<d0)d0=iso;if(!d1||iso>d1)d1=iso}}
   else{for(var id2 in u.items){var ev=_t23Eventos(id2);if(ev.length&&(!d0||ev[0]<d0))d0=ev[0]}
     if(!d1||d1>hoy)d1=hoy;if(d0&&d0>hoy)d0=hoy}
@@ -24647,7 +24677,7 @@ function _ctGuardar(row,sinPush){var t=(typeof nowSrv==='function'?nowSrv():Date
   _ctAll()[String(row.cron_id)]=row;_ctSaveLocal();
   if(!sinPush){try{_ctPushPronto()}catch(e){}}
   _ctRefresca()}
-function _ctRefresca(){try{window._hhCache=null;window._pgUniv=null}catch(e){}
+function _ctRefresca(){try{window._hhCache=null;window._pgUniv=null;window._pgPesoTot=null}catch(e){}
   /* un solo repintado por rafaga de cambios (cada boton guardaba y repintaba todo tres veces) */
   try{if(window._ctRfT)clearTimeout(window._ctRfT);window._ctRfT=setTimeout(function(){window._ctRfT=null;if(window._ctRfIn)return;window._ctRfIn=1;try{_ctRefrescaYa()}catch(e){}window._ctRfIn=0},250)}catch(e){}}
 function _ctRefrescaYa(){try{window._crHechoMemo=null}catch(e){}try{window._hhCache=null;window._pgPesoTot=null;window._crNT={};window._crHu=window._crHu||{};window._crCatIx=null;window._crEnT=null}catch(e){}
@@ -26171,33 +26201,49 @@ function _pgAvanceEsp(){try{
 /* el universo del cronograma para el calendario (el de la curva flotante o
    el ACTUAL), con el catalogo del servidor: se carga aparte y se repinta */
 async function _pgUnivListo(){try{
-  var cid=String((typeof _ajGet==='function'?_ajGet('curva_cron',''):'')||'');
+  /* el cronograma ACTUAL manda (es el de las tarjetas, la curva y el analisis de
+     restricciones); el de la curva flotante solo si no hay ACTUAL */
+  var cid='';try{var _a0=(typeof _ctActiva==='function')?_ctActiva():null;if(_a0&&_a0.cron_id)cid=String(_a0.cron_id)}catch(_e0){cid=''}
+  if(!cid)cid=String((typeof _ajGet==='function'?_ajGet('curva_cron',''):'')||'');
   var L=((await _crPull())||[]).filter(function(c){return !c.eliminado});
   if(!cid||!L.filter(function(z){return z.cron_id===cid}).length){var cc=null;try{var _a9=(typeof _ctActiva==='function')?_ctActiva():null;if(_a9)cc=L.filter(function(z){return String(z.cron_id)===String(_a9.cron_id)})[0]||null}catch(e){}if(!cc)L.forEach(function(z){if(String(z.tipo||'').toUpperCase()==='ACTUAL')cc=z});cid=cc?cc.cron_id:(L.length?L[L.length-1].cron_id:'')}
   if(!cid)return null;
   await _crCatOk();await _crTareas(cid);var alc=await _crAlc(cid);
   var u=_crUniverso(cid,alc);if(!u||!(u.hh>0))return null;
-  window._pgUniv={cid:cid,u:u,t:Date.now(),sig:(window._ctSig||'')};return window._pgUniv}catch(e){return null}}
+  /* las filas de la Tabla 1 (alcance): con ellas el calendario mide lo hecho
+     EXACTAMENTE como la Tabla 2 (_crFracHechaAt: % fisico, sin contar el saldo
+     retirado como hecho); antes usaba pctOfAt envuelta y daba 33.06 % donde la
+     Tabla 2 daba 31.63 % */
+  var PF={};try{var c9=L.filter(function(z){return String(z.cron_id)===String(cid)})[0]||null;if(c9){var D9=await _crTablaDatos(c9);(D9.filas||[]).forEach(function(r){if(r&&r.id)PF[r.id]=r});if(D9.u&&D9.u.hh>0)u=D9.u}}catch(_e9){}
+  window._pgUniv={cid:cid,u:u,filas:PF,t:Date.now(),sig:(window._ctSig||'')};return window._pgUniv}catch(e){return null}}
 function _pgCalcPct(){try{
   var dia={},porD={};
   var P=_pgProg();
   /* con el universo del cronograma: base = real al cierre anterior, y desde
      el inicio de la semana en curso cada dia suma su cuota programada (el
      saldo del cierre anterior repartido en sus dias; un tramo su cantidad) */
-  var UV=(window._pgUniv&&(Date.now()-window._pgUniv.t)<300000&&(window._pgUniv.sig||'')===(window._ctSig||''))?window._pgUniv.u:null;
+  var UV=(window._pgUniv&&window._pgUniv.filas&&(Date.now()-window._pgUniv.t)<300000&&(window._pgUniv.sig||'')===(window._ctSig||''))?window._pgUniv.u:null;
+  var PF=(UV&&window._pgUniv.filas)||null;
+  var fracT=function(id,iso){try{var r=PF&&PF[id];return r?Math.max(0,Math.min(1,Number(_crFracHechaAt(r,iso))||0)):0}catch(_e){return 0}};
   if(!UV){if(!window._pgUnivPend){window._pgUnivPend=1;_pgUnivListo().then(function(x){window._pgUnivPend=0;try{if(x&&typeof renderCal==='function'&&$('scrProg')&&!$('scrProg').classList.contains('hidden'))renderCal()}catch(e){}},function(){window._pgUnivPend=0})}}
   else{try{
     var hoy=todayISO();var nS=27+Math.floor((_crASerial(hoy)-46199)/7);var semIni=_wkISO(_wkSem(nS).ini),semFin=_wkISO(_wkSem(nS).fin);
     var antD=_crDeSerial(_crASerial(semIni)-1);
     var R9=_crProyFilas(UV,hoy,antD);
     var vivas={};(DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id)vivas[p.id]=p});
-    var base=0;Object.keys(UV.items).forEach(function(i9){var p=vivas[i9];if(!p)return;var d=0;try{var pf=(typeof _fzPctAt==='function')?_fzPctAt(i9,antD):null;d=(pf!=null)?(Number(pf)||0):(Number(pctOfAt(p,antD))||0)}catch(e){d=0}base+=UV.items[i9]*Math.max(0,Math.min(1,d/100))});base=base/UV.hh*100;
+    /* la base: lo ganado al cierre anterior con la cuenta de la Tabla 2 */
+    var base=0;Object.keys(UV.items).forEach(function(i9){var h9=Number(UV.items[i9])||0;if(!(h9>0))return;base+=h9*fracT(i9,antD)});base=base/UV.hh*100;
     var acum={},t=base;
-    if(R9&&R9.hayFila){var filas=Object.keys(R9.filaDe).map(function(k){return R9.filaDe[k]});
+    if(R9&&R9.hayFila){var filas=Object.keys(R9.filaDe).map(function(k){var f0=R9.filaDe[k];f0._id=(typeof _pgBaseId==='function')?_pgBaseId(k.split('|')[0]):k.split('|')[0];return f0});
+      /* cada fila del calendario se escala al saldo FISICO de su partida al cierre
+         anterior (la misma regla que la Tabla 3 fuente calendario): el saldo
+         de _crProyFilas sale de pctOfAt envuelta y viene inflado */
+      var sumRem9={},esc9={};filas.forEach(function(f){sumRem9[f._id]=(sumRem9[f._id]||0)+Math.max(0,(1-(f.doneAnt||0))*f.w)});
+      Object.keys(sumRem9).forEach(function(id){var hU=Number(UV.items[id])||0;var saldo=hU*(1-fracT(id,antD));esc9[id]=(sumRem9[id]>1e-9)?(saldo/sumRem9[id]):1});
       var dias={};filas.forEach(function(f){for(var k in f.days)if(k>=semIni)dias[k]=1;for(var k2 in (f.daysT||{}))if(k2>=semIni)dias[k2]=1});
       Object.keys(dias).sort().forEach(function(d){var suma=0;porD[d]=porD[d]||{};
         filas.forEach(function(f){var fac=(d<=semFin)?(1-(f.doneAnt||0)):(1-f.done);var c=((f.days[d]||0)*Math.max(0,fac)+((f.daysT||{})[d]||0))*f.w;
-          var tope=Math.max(0,(1-(f.doneAnt||0))*f.w-(f.usedCal||0));if(c>tope)c=tope;if(!(c>0))return;f.usedCal=(f.usedCal||0)+c;suma+=c;
+          var tope=Math.max(0,(1-(f.doneAnt||0))*f.w-(f.usedCal||0));if(c>tope)c=tope;if(!(c>0))return;f.usedCal=(f.usedCal||0)+c;c=c*((esc9[f._id]==null)?1:esc9[f._id]);if(!(c>0))return;suma+=c;
           var dd=f.disc||'\u2014';porD[d][dd]=(porD[d][dd]||0)+c/UV.hh*100});
         var v=suma/UV.hh*100;dia[d]=v;t+=v;acum[d]=t});
       filas.forEach(function(f){f.usedCal=0})}
