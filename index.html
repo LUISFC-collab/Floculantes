@@ -16182,7 +16182,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920a3';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920a4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -18369,6 +18369,16 @@ async function _rxNoCumplidas(opc){
   try{await _crTareas(_ccR.cron_id)}catch(_e3){}
   var u9=null,rp9=null;
   if(bkSnap){try{u9=_crUniverso(_ccR.cron_id,alcR);rp9=_crReparto(tar)}catch(_e1){bkSnap=null}}
+  /* las filas de la Tabla 1 del cronograma ACTUAL: con ellas lo HECHO se mide
+     EXACTAMENTE como las Tablas 2 y 3 (_crFracHechaAt: % fisico sobre el
+     metrado forecast, sin contar el saldo retirado como hecho). Antes pctOfAt
+     envuelta daba real 33.06 % donde la Tabla 2 daba 31.63 % (20/09/2026). */
+  var _DR=null,_filR={};try{_DR=await _crTablaDatos(_ccR);((_DR&&_DR.filas)||[]).forEach(function(z){if(z&&z.id)_filR[z.id]=z})}catch(_edr){_DR=null}
+  if(_DR&&_DR.u&&_DR.u.hh>0){u9=_DR.u;if(!rp9){try{rp9=_crReparto(tar)}catch(_e7){rp9=null}}}
+  /* la Tabla 3 de la misma fuente (calendario o curva), para contrastar lo programado por semana */
+  var _T3=null,_T3per={};try{_T3=await _t23Datos(_ccR,{n:3,per:'sem',corte:4,vista:'alc',fuente:(baseId0==='cal')?'cal':'curva',noLab:true});
+    (_T3.filas||[]).forEach(function(r){if(r.nosum)return;for(var k in (r.p||{}))_T3per[k]=(_T3per[k]||0)+r.p[k]})}catch(_et3){_T3=null}
+  var _t3Sem=function(fin){var v=_T3per['p_'+String(fin||'').slice(0,10)];return (v==null)?null:Math.round(v*100)/100};
   /* la VENTANA que manda: con respaldo, desde la semana de su primer dia
      programado hasta el CIERRE de la semana de su ultimo dia (hoy la 36;
      la otra semana, con su respaldo nuevo, la 37; y asi); sin respaldo, la
@@ -18447,7 +18457,7 @@ async function _rxNoCumplidas(opc){
   var apDe=function(cod,pg,ac,i1,f1){try{
     var uW=u9||_crUniverso(_ccR.cron_id,alcR),rpW=rp9||_crReparto(tar);
     if(!uW||!(uW.hh>0))return null;
-    var hhA=0;(itemsDe[cod]||[]).forEach(function(i9){if(uW.items[i9]==null)return;hhA+=(Number(uW.items[i9])||0)/_crVeces(rpW,i9)});
+    var hhA=0;(itemsDe[cod]||[]).forEach(function(i9){if(uW.items[i9]==null)return;hhA+=_crGanadas(rpW,i9,cod,Number(uW.items[i9])||0,1)});
     var peso=hhA/uW.hh;if(!(peso>0))return null;
     /* de la SEMANA: lo que ya puso en la curva con lo hecho en la semana,
        lo que suma si cumple lo programado, y a donde llega la semana; el
@@ -18464,18 +18474,25 @@ async function _rxNoCumplidas(opc){
        solo lo hecho desde ese piso */
     var i0=i1?_crDeSerial(_crASerial(i1)-1):'';
     var doneDe=function(i9,fid,d){try{if(!d)return 0;
-      if(fid){var fz9=_fzDe(i9),x9=((fz9&&fz9.fases)||[]).filter(function(z){return z.id===fid})[0];return x9?Math.max(0,Math.min(1,(Number(_fzPctParteAt(i9,x9,d))||0)/100)):0}
+      var rF=_filR[i9];
+      if(fid){var fz9=_fzDe(i9),x9=((fz9&&fz9.fases)||[]).filter(function(z){return z.id===fid})[0];if(!x9)return 0;
+        /* la parte: sus movimientos sobre su metrado forecast, como la fila de la Tabla (casada por nombre) */
+        if(rF&&rF.partes&&rF.partes.length){var q9=rF.partes.filter(function(q){return String(q.pert||'')===String(x9.nombre||'')})[0];
+          if(q9){var mF9=Number(q9.metF)||0;if(!(mF9>0))return 0;var av9=0;try{av9=Number(_fzAvanceAt(x9,d,_fzFechasDe(i9)))||0}catch(_e){av9=0}return Math.max(0,Math.min(1,av9/mF9))}}
+        return Math.max(0,Math.min(1,(Number(_fzPctParteAt(i9,x9,d))||0)/100))}
+      /* la partida: la fraccion hecha FISICA de su fila (Tablas 2 y 3) */
+      if(rF)return Math.max(0,Math.min(1,Number(_crFracHechaAt(rF,d))||0));
       var pf9=(typeof _fzPctAt==='function')?_fzPctAt(i9,d):null;if(pf9!=null)return Math.max(0,Math.min(1,(Number(pf9)||0)/100));
       var p9=(DATA._byId&&DATA._byId[i9])||((state.nuevas||[]).filter(function(n){return n&&n.id===i9})[0]);
-      return p9?Math.max(0,Math.min(1,(Number(pctOfAt(p9,d))||0)/100)):0}catch(e){return 0}};
+      return p9?Math.max(0,Math.min(1,(Number((typeof _pctAtBaseFz==='function'?_pctAtBaseFz:pctOfAt)(p9,d))||0)/100)):0}catch(e){return 0}};
     var yaHH=0,pesos={};
-    (itemsDe[cod]||[]).forEach(function(i9){if(uW.items[i9]==null)return;var wI=(Number(uW.items[i9])||0)/_crVeces(rpW,i9);if(!(wI>0))return;
+    (itemsDe[cod]||[]).forEach(function(i9){if(uW.items[i9]==null)return;var wI=_crGanadas(rpW,i9,cod,Number(uW.items[i9])||0,1);if(!(wI>0))return;
       var sgs=bkSnap?segsDe(cod,i9):[];var fids={},entera=!sgs.length;sgs.forEach(function(sg){if(sg.fid)fids[sg.fid]=1;else entera=true});
       var ks=Object.keys(fids);
       /* cuanto pesa cada apartado en la actividad (HH): la partida entera o cada parte */
       pesos[i9]=wI;try{((_fzDe(i9)||{}).fases||[]).forEach(function(x){pesos[i9+'|'+x.id]=wI*pesoDe(i9,x.id)})}catch(_e){}
       if(ks.length&&!entera)ks.forEach(function(fid){yaHH+=wI*pesoDe(i9,fid)*Math.max(0,doneDe(i9,fid,f1)-doneDe(i9,fid,i0))});
-      else yaHH+=wI*Math.max(0,doneDe(i9,'',f1)-doneDe(i9,'',i0))});
+      else{var hi9=Number(uW.items[i9])||0;yaHH+=Math.max(0,_crGanadas(rpW,i9,cod,hi9,doneDe(i9,'',f1))-_crGanadas(rpW,i9,cod,hi9,doneDe(i9,'',i0)))}});
     if(hhA>0)Object.keys(pesos).forEach(function(k){pesos[k]=Math.round(pesos[k]/hhA*1000)/10});
     var ya=yaHH/uW.hh,mas=peso*Math.max(0,pgS-acS);
     /* el restante como lo mide la proyeccion de la curva: por partida, parte
@@ -18485,7 +18502,7 @@ async function _rxNoCumplidas(opc){
     var _pendRel=0,_pgP=null;   /* lo que le falta al cierre sobre las HH de la actividad; y lo programado con la misma suma que las filas */
     var grp={};   /* por apartado (partida entera o parte): w, cal, done, pend */
     if(bkSnap){try{var pend=0;
-      (itemsDe[cod]||[]).forEach(function(i9){if(uW.items[i9]==null)return;var wI=(Number(uW.items[i9])||0)/_crVeces(rpW,i9);if(!(wI>0))return;
+      (itemsDe[cod]||[]).forEach(function(i9){if(uW.items[i9]==null)return;var wI=_crGanadas(rpW,i9,cod,Number(uW.items[i9])||0,1);if(!(wI>0))return;
         var fz9=(typeof _fzDe==='function')?_fzDe(i9):null,fases9=(fz9&&fz9.fases)||[];
         var p9=(DATA._byId&&DATA._byId[i9])||((state.nuevas||[]).filter(function(n){return n&&n.id===i9})[0])||null;
         /* por apartado (partida entera o parte): la cuota programada hasta el
@@ -18513,7 +18530,7 @@ async function _rxNoCumplidas(opc){
       var yaR=Math.round(g.w*g.done/uW.hh*10000)/100,masR=Math.round(g.pend/uW.hh*10000)/100;
       filasAp[k]={pesa:Math.round(g.w/hhA*1000)/10,prog:Math.round(g.cal/g.w*1000)/10,hecho:Math.round(g.done*1000)/10,falta:Math.round(g.pend/g.w*1000)/10,ya:yaR,mas:masR,llega:Math.round((yaR+masR)*100)/100}})}catch(_e9){}
     var r4=function(x){return Math.round(x*10000)/100};
-    return {peso:r4(peso),ya:r4(ya),mas:r4(mas),llega:r4(ya+mas),acum:r4(peso*acT),pendRel:_pendRel,faltaPct:Math.round(_pendRel*1000)/10,acP:(hhA>0?yaHH/hhA:null),pgP:_pgP,pesos:pesos,filas:filasAp,hh:Math.round(hhA*100)/100,hhT:uW.hh}}catch(e){return null}};
+    return {peso:r4(peso),ya:r4(ya),mas:r4(mas),llega:r4(ya+mas),acum:r4(peso*acT),pendRel:_pendRel,faltaPct:Math.round(_pendRel*1000)/10,acP:(hhA>0?yaHH/hhA:null),pgP:_pgP,pesos:pesos,filas:filasAp,hh:Math.round(hhA*100)/100,hhT:uW.hh,calHH:Math.round((_cal9||0)*100)/100}}catch(e){return null}};
   /* las partes programadas en la ventana, por partida: {pid:[faseId,...]} */
   var partesDe=function(cod,i1,f1){var out={};if(!bkSnap)return out;
     (itemsDe[cod]||[]).forEach(function(i9){var ids=[];
@@ -18575,7 +18592,8 @@ async function _rxNoCumplidas(opc){
         if(fP.ap&&fP.ap.pgP!=null)fP.prog=Math.round(Math.max(0,Math.min(1,fP.ap.pgP))*1000)/10;if(fP.ap&&fP.ap.acP!=null)fP.hecho=Math.round(Math.max(0,Math.min(1,fP.ap.acP))*1000)/10;
         if(!(fP.prog>1e-9))return;lst.push(fP)});
       lst.sort(ordena);
-      semanas.push({n:n9,ini:iN,fin:fN,idx:lst.map(function(q){return listaP.push(q)-1})})}
+      var hhV9=0;lst.forEach(function(q){hhV9+=(q.ap&&q.ap.calHH)||0});
+      semanas.push({n:n9,ini:iN,fin:fN,idx:lst.map(function(q){return listaP.push(q)-1}),hhVin:Math.round(hhV9*100)/100,hhT3:_t3Sem(fN),hhUni:(u9&&u9.hh)||0,fuente:(baseId0==='cal')?'calendario':'curva'})}
     return {sem:semV,cron:cc.cron_id,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId0,nombre:baseCron?('Plan del cronograma '+baseCron.cron_id):((bkSel&&bkSel.nombre)||'')},prox:true,semanas:semanas,lista:listaP}}
   var lista=[],cumplidas=[],emp=[];
   cods.forEach(function(cod){
@@ -18595,25 +18613,35 @@ async function _rxNoCumplidas(opc){
   lista.sort(ordena);cumplidas.sort(ordena);emp.sort(ordena);
   /* las que el admin oculto a los supervisores: fuera de la lista y del PPC */
   var ocultas=[];lista=lista.filter(function(q){if(_pvVisible(semV,q.cod))return true;ocultas.push(q);return false});
+  cumplidas=cumplidas.filter(function(q){if(_pvVisible(semV,q.cod))return true;ocultas.push(q);return false});
+  emp=emp.filter(function(q){if(_pvVisible(semV,q.cod))return true;ocultas.push(q);return false});
   /* la CURVA general en la semana: puntos programados segun la base entre
      el cierre anterior y este cierre (solo las visibles) y puntos hechos
      con el avance real de la semana (con las EMP) */
   /* Programado = Hecho + Restante: la suma de lo que ya aporto cada tarjeta
      mas la suma de sus "+x%" (lo que falta de lo programado), tal cual se ven */
-  var cv={prog:0,hecho:0,resta:0,noc:0,cum:0,emp:0,nocYa:0,nocMas:0,cumYa:0,cumMas:0};try{
+  var cv={prog:0,hecho:0,resta:0,noc:0,cum:0,emp:0,nocYa:0,nocMas:0,cumYa:0,cumMas:0,ocuYa:0,ocuMas:0,calHH:0};try{
     var r2=function(x){return Math.round(x*100)/100};
     lista.forEach(function(q){if(!q.ap)return;cv.nocYa+=q.ap.ya;cv.nocMas+=q.ap.mas});
     cumplidas.forEach(function(q){if(!q.ap)return;cv.cumYa+=q.ap.ya;cv.cumMas+=q.ap.mas});
     emp.forEach(function(q){if(q.ap)cv.emp+=q.ap.ya});   /* avanzaron sin estar programadas: aparte */
-    cv.nocYa=r2(cv.nocYa);cv.nocMas=r2(cv.nocMas);cv.cumYa=r2(cv.cumYa);cv.cumMas=r2(cv.cumMas);cv.emp=r2(cv.emp);
+    ocultas.forEach(function(q){if(!q.ap)return;cv.ocuYa+=q.ap.ya;cv.ocuMas+=q.ap.mas});
+    lista.concat(cumplidas).forEach(function(q){if(q.ap)cv.calHH+=(q.ap.calHH||0)});
+    cv.nocYa=r2(cv.nocYa);cv.nocMas=r2(cv.nocMas);cv.cumYa=r2(cv.cumYa);cv.cumMas=r2(cv.cumMas);cv.emp=r2(cv.emp);cv.ocuYa=r2(cv.ocuYa);cv.ocuMas=r2(cv.ocuMas);cv.calHH=r2(cv.calHH);
     cv.noc=r2(cv.nocYa+cv.nocMas);cv.cum=r2(cv.cumYa+cv.cumMas);cv.hecho=r2(cv.nocYa+cv.cumYa);cv.resta=r2(cv.nocMas+cv.cumMas);cv.prog=r2(cv.hecho+cv.resta);
     /* la comprobacion con la curva: el real de TODO el universo al cierre
        (misma medida que la curva) mas el restante = a donde llega la curva */
     /* el REAL se mide sobre el universo del cronograma ACTUAL aunque la base elegida sea el plan de otro */
     try{var uR=u9||_crUniverso(_ccR.cron_id,alcR);if(uR&&uR.hh>0){
-      var realA=function(dia){var ptsR=0;Object.keys(uR.items).forEach(function(i9){var d=0;try{var pf=(typeof _fzPctAt==='function')?_fzPctAt(i9,dia):null;if(pf!=null)d=Number(pf)||0;else{var p9=(DATA._byId&&DATA._byId[i9])||((state.nuevas||[]).filter(function(n){return n&&n.id===i9})[0]);d=p9?(Number(pctOfAt(p9,dia))||0):0}}catch(e){d=0}ptsR+=(Number(uR.items[i9])||0)*Math.max(0,Math.min(1,d/100))});return ptsR/uR.hh*100};
+      /* el REAL con la cuenta de la Tabla 2: cada partida del universo por su
+         fraccion hecha fisica (_crFracHechaAt sobre su fila de la Tabla 1) */
+      var realA=function(dia){var ptsR=0;Object.keys(uR.items).forEach(function(i9){var d=0;try{var rF=_filR[i9];if(rF)d=Math.max(0,Math.min(1,Number(_crFracHechaAt(rF,dia))||0));else{var p9=(DATA._byId&&DATA._byId[i9])||((state.nuevas||[]).filter(function(n){return n&&n.id===i9})[0]);d=p9?Math.max(0,Math.min(1,(Number((typeof _pctAtBaseFz==='function'?_pctAtBaseFz:pctOfAt)(p9,dia))||0)/100)):0}}catch(e){d=0}ptsR+=(Number(uR.items[i9])||0)*d});return ptsR/uR.hh*100};
       var antD=_crDeSerial(_crASerial(fin2)-7);   /* el cierre de la semana anterior */
-      cv.real=r2(realA(fin2));cv.realAnt=r2(realA(antD));cv.hechoSem=r2(cv.real-cv.realAnt);cv.semAnt=semV-1;cv.llega=r2(cv.real+cv.resta)}}catch(_er){}
+      cv.real=r2(realA(fin2));cv.realAnt=r2(realA(antD));cv.hechoSem=r2(cv.real-cv.realAnt);cv.semAnt=semV-1;cv.llega=r2(cv.real+cv.resta);
+      /* el cuadre con la Tabla 2: hecho en la semana = programadas + EMP + ocultas + otros */
+      cv.otros=r2(cv.hechoSem-cv.hecho-cv.emp-cv.ocuYa);
+      cv.hhUni=uR.hh;cv.cal=r2(cv.calHH/uR.hh*100);cv.hechoHH=r2(cv.hechoSem/100*uR.hh);
+      cv.t3HH=_t3Sem(fin2);cv.t3Pct=(cv.t3HH==null)?null:r2(cv.t3HH/uR.hh*100);cv.t3Fuente=(baseId0==='cal')?'calendario':'curva'}}catch(_er){}
     /* una partida fuera del alcance del cronograma no cuenta en nada */
 }catch(_ec){}
   return {sem:semV,cron:cc.cron_id,semFija:!!sFij,cierre:!!bkSnap,base:{id:baseId0,nombre:baseCron?('Plan del cronograma '+baseCron.cron_id):((bkSel&&bkSel.nombre)||'')},lista:lista,ocultas:ocultas,cumplidas:cumplidas,emp:emp,curva:cv}}
@@ -19045,7 +19073,9 @@ function _rxNoPinta(r){
           (r.curva?('<div style="font-size:10.5px;font-weight:800;color:#9db4d6;margin-top:4px" title="Puntos de la curva general en la semana, solo de las actividades programadas (no cumplidas + cumplidas): Programado = Hecho + Restante \u00b7 Hecho es la suma de lo que ya aport\u00f3 cada tarjeta (avance real de la semana) \u00b7 Restante es la suma de los +x% (lo que falta de lo programado). Las EMP avanzaron sin estar programadas y van aparte">'+(r.curva.real!=null?('<span title="La curva general, con la misma medida que el gr\u00e1fico: el real al cierre de la semana anterior m\u00e1s lo hecho EN la semana (todo el cronograma) da el real al cierre de esta semana">Curva: cierre S'+r.curva.semAnt+' <b style="color:#cfe3ff">'+(Number(r.curva.realAnt)||0).toFixed(2)+'%</b> + hecho en la semana <b style="color:#9FE8B0">'+(Number(r.curva.hechoSem)||0).toFixed(2)+'%</b> = real S'+r.sem+' <b style="color:#cfe3ff">'+(Number(r.curva.real)||0).toFixed(2)+'%</b></span>'+
           '<br><span title="Restante: la suma de los \u00e1mbar (+x%) de las tarjetas, lo que a\u00fan falta de lo programado al cierre. Real al cierre + restante = a d\u00f3nde llega la curva al cierre de la semana (la proyecci\u00f3n)">+ restante <b style="color:#E8C9A0">'+(Number(r.curva.resta)||0).toFixed(2)+'%</b> = llega a <b style="color:#cfe3ff">'+(Number(r.curva.llega)||0).toFixed(2)+'%</b></span>'):'')+
           '<br><span style="font-weight:700;color:#7d8590" title="El restante por grupo de tarjetas">restante: no cumplidas <b style="color:#E8C9A0">'+(Number(r.curva.nocMas)||0).toFixed(2)+'%</b> \u00b7 cumplidas <b style="color:#E8C9A0">'+(Number(r.curva.cumMas)||0).toFixed(2)+'%</b></span>'+
-          '<br><span style="font-weight:700;color:#7d8590;margin-top:3px;display:inline-block" title="Lo que suman las tarjetas programadas (no cumplidas + cumplidas), acumulado al cierre: sus verdes = lo que ya aportaron a la curva; sus celestes = a lo que llegan si cumplen">Programadas, acumulado al cierre: aportan <b style="color:#9FE8B0">'+(Number(r.curva.hecho)||0).toFixed(2)+'%</b> \u00b7 llegan a <b style="color:#cfe3ff">'+(Number(r.curva.prog)||0).toFixed(2)+'%</b> si cumplen</span>'+
+          '<br><span style="font-weight:700;color:#7d8590;margin-top:3px;display:inline-block" title="Lo que suman las tarjetas programadas (no cumplidas + cumplidas) EN LA SEMANA: sus verdes = lo que ya aportaron a la curva en la semana; sus \u00e1mbar = lo que les falta de lo programado; la suma = lo que habr\u00edan aportado en la semana si cumpl\u00edan">Programadas, en la semana: aportan <b style="color:#9FE8B0">'+(Number(r.curva.hecho)||0).toFixed(2)+'%</b> \u00b7 les falta <b style="color:#E8C9A0">'+(Number(r.curva.resta)||0).toFixed(2)+'%</b> \u2192 habr\u00edan aportado <b style="color:#cfe3ff">'+(Number(r.curva.prog)||0).toFixed(2)+'%</b> si cumpl\u00edan</span>'+
+          (r.curva.real!=null?('<br><span style="font-weight:700;color:#7d8590;margin-top:3px;display:inline-block" title="El cuadre con la Tabla 2 del cronograma: lo hecho en la semana en TODO el universo se reparte entre las programadas visibles, las que avanzaron sin programar (EMP), las ocultas al PPC y el resto (apartados no programados de actividades programadas, retrocesos)">Cuadre con la Tabla 2: hecho en la semana <b style="color:#9FE8B0">'+(Number(r.curva.hechoSem)||0).toFixed(2)+'%</b> ('+_nMil2(Number(r.curva.hechoHH)||0)+' hh) = programadas '+(Number(r.curva.hecho)||0).toFixed(2)+'% + EMP '+(Number(r.curva.emp)||0).toFixed(2)+'% + ocultas '+(Number(r.curva.ocuYa)||0).toFixed(2)+'% + otros '+(Number(r.curva.otros)||0).toFixed(2)+'%</span>'):'')+
+          (r.curva.t3HH!=null?('<br><span style="font-weight:700;color:#7d8590;margin-top:3px;display:inline-block" title="Lo programado en la semana seg\u00fan la base elegida (HH de las tarjetas programadas) y la columna de esa semana en la Tabla 3 de la misma fuente (todo el universo)">Programado en la semana: <b style="color:#E8C9A0">'+(Number(r.curva.cal)||0).toFixed(2)+'%</b> ('+_nMil2(Number(r.curva.calHH)||0)+' hh de las programadas) \u00b7 Tabla 3 '+_crXerEsc(String(r.curva.t3Fuente||''))+' S'+r.sem+': <b style="color:#E8C9A0">'+(Number(r.curva.t3Pct)||0).toFixed(2)+'%</b> ('+_nMil2(Number(r.curva.t3HH)||0)+' hh, todo el universo)</span>'):'')+
           ((Number(r.curva.emp)||0)>0?('<br><span style="font-weight:700;color:#7d8590" title="Avanzaron en la semana sin estar programadas: es hecho (verde) que ya est\u00e1 dentro de lo hecho en la semana">EMP: aportaron en la semana <b style="color:#9FE8B0">'+(Number(r.curva.emp)||0).toFixed(2)+'%</b> sin estar programadas</span>'):'')+'</div>'):'')+
         '</div>'+
         '<div style="flex:1;min-width:220px;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">'+
@@ -19112,7 +19142,8 @@ function _rxNoPinta(r){
       if(r.prox)return (r.semanas||[]).map(function(w){
         return '<div style="background:#2a1f3d;border:1px solid #5b3a8a;border-left:4px solid #C7A3E8;color:#E6D6FF;border-radius:8px;padding:7px 10px;font-weight:800;font-size:11.5px;letter-spacing:.05em;margin:12px 0 6px;display:flex;align-items:center;gap:8px">'+
           esc(_wkLbl(w.n)).toUpperCase()+
-          '<span style="margin-left:auto;background:rgba(255,255,255,.08);border-radius:20px;padding:1px 9px;font-size:10.5px">'+w.idx.length+'</span></div>'+
+          '<span style="margin-left:auto;font-weight:700;color:#E8C9A0;font-size:10.5px" title="Programado en la semana: la suma de las tarjetas de abajo y la columna de esa semana en la Tabla 3 de la misma fuente (todo el universo)">'+_nMil2(Number(w.hhVin)||0)+' hh programadas'+((w.hhUni>0)?(' \u00b7 '+((Number(w.hhVin)||0)/w.hhUni*100).toFixed(2)+'%'):'')+((w.hhT3!=null)?(' &nbsp;|&nbsp; Tabla 3 '+_crXerEsc(String(w.fuente||''))+': '+_nMil2(Number(w.hhT3)||0)+' hh'+((w.hhUni>0)?(' \u00b7 '+((Number(w.hhT3)||0)/w.hhUni*100).toFixed(2)+'%'):'')):'')+'</span>'+
+          '<span style="background:rgba(255,255,255,.08);border-radius:20px;padding:1px 9px;font-size:10.5px">'+w.idx.length+'</span></div>'+
           (w.idx.length?grupos(w.idx):'<div style="color:#7d8590;padding:4px 10px 8px;font-size:11.5px">Sin actividades programadas esa semana</div>')}).join('');
       return grupos(r.lista.map(function(_q,i){return i}))})();
     /* las CUMPLIDAS de la semana, aparte y en azul */
