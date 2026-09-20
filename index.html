@@ -16164,7 +16164,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919d8';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260919d9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -22804,6 +22804,15 @@ function _t23ProyDia(c,tar,u,filas,alc,C,fuente){
    o = {n:2|3, per:'sem'|'dia', corte:0..6, vista:'alc'|'agr', fuente:'curva'|'cal', noLab:true}
    --------------------------------------------------------------------------- */
 async function _t23Datos(c,o){
+  /* los memos (eventos y proyeccion) se tiran solos cuando cambian los partes,
+     los metrados o los borrados, venga el cambio de donde venga (parte guardado
+     o borrado en esta pestana, tiempo real, aprobaciones): una Tabla 2 abierta
+     seguia ensenando 32.67 % cuando la curva y las demas pestanas ya daban 31.63 % */
+  try{var _sp=(typeof state!=='undefined'&&state.partes)||[],_ts=0;
+    for(var _q=0;_q<_sp.length;_q++){var _z=_sp[_q];if(!_z)continue;_ts+=((Number(_z.ts)||0)%1e9)+(Number(_z.cant)||0)+(Number(_z.hh)||0)+(Number(_z.pctGlb)||0)+(String(_z.fecha||'').length)}
+    var _mt=(typeof state!=='undefined'&&state.meta)||{},_tm=0;for(var _k in _mt){var _y=_mt[_k];if(_y)_tm+=((Number(_y.ts)||0)%1e9)+(Number(_y.total)||0)}
+    var _sg=_sp.length+'|'+_ts+'|'+(((typeof state!=='undefined'&&state.delpartes)||[]).length)+'|'+_tm;
+    if(window._t23SigP!==_sg){window._t23SigP=_sg;_t23Tira()}}catch(_es){}
   o=o||{};var n=(o.n===3)?3:2;
   var D=await _crTablaDatos(c);var u=D.u||{items:{},hh:0};
   var tar=await _crTareas(c.cron_id),alc=await _crAlc(c.cron_id);
