@@ -16164,7 +16164,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919d10';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21938,13 +21938,19 @@ function _tbAplicaFijas(root){try{var cfg=_tbCfg(),tb=root.querySelector('table'
      columnas fijas por los que se veia pasar lo de abajo. Y una sombra de
      1 px del color del borde a la izquierda de cada celda fija tapa
      cualquier resto */
-  var left=nW;for(var ci=0;ci<nFz;ci++){var w=ths[ci].getBoundingClientRect().width;var lx=left;try{var rx=ths[ci].getBoundingClientRect().left-tbL;if(isFinite(rx)&&rx>=0)lx=rx}catch(_e2){}
+  /* la posicion NATURAL de cada columna fija se mide con su cabecera SIN sticky:
+     medida con la tabla ya desplazada, una cabecera pegada devuelve posicion +
+     scrollLeft y las columnas fijas y el pie saltaban a la derecha (bug del 20/09/2026) */
+  var _nat=[];try{var _oldP=[];for(var q1=0;q1<nFz;q1++){_oldP.push(ths[q1].style.position);ths[q1].style.position='static'}
+    for(var q2=0;q2<nFz;q2++)_nat.push(ths[q2].getBoundingClientRect().left-tbL);
+    for(var q3=0;q3<nFz;q3++)ths[q3].style.position=_oldP[q3]}catch(_en){_nat=[]}
+  var left=nW;for(var ci=0;ci<nFz;ci++){var w=ths[ci].getBoundingClientRect().width;var lx=left;try{var rx=(_nat[ci]!=null&&isFinite(_nat[ci]))?_nat[ci]:(ths[ci].getBoundingClientRect().left-tbL);if(isFinite(rx)&&rx>=0)lx=rx}catch(_e2){}
     rows.forEach(function(tr){var td=celdaDe(tr,ci);if(!td)return;var esTh=(td.tagName==='TH'),esLet=!!(tr.classList&&tr.classList.contains('_tbLet'));td.style.position='sticky';td.style.left=lx+'px';td.style.zIndex=esTh?'6':(esLet?'7':'3');if(!esTh&&!td.style.background)td.style.background=(tr.style.background||'#0b1220');td.style.boxShadow='-1px 0 0 #223049'+((ci===nFz-1)?', 2px 0 0 #3a5a8a':'')});left+=w}
   /* la fila TOTAL: sus celdas dentro de la zona inmovilizada quedan fijas a
      la izquierda (ademas de abajo) y las sumas que se desplazan pasan por
      debajo de ellas, no por encima */
   if(nFz){try{var tf9=tb.querySelector('tfoot tr');if(tf9){var c9=0;Array.prototype.forEach.call(tf9.children,function(td){if(td.classList&&td.classList.contains('_tbEx'))return;var span=parseInt(td.getAttribute('colspan'),10)||1;
-      if(c9<nFz){var lx9=0;try{lx9=ths[c9].getBoundingClientRect().left-tbL}catch(_e){lx9=0}td.style.position='sticky';td.style.left=lx9+'px';td.style.zIndex='5';td.style.boxShadow='-1px 0 0 #223049'+((c9+span>=nFz)?', 2px 0 0 #3a5a8a':'')}
+      if(c9<nFz){var lx9=0;try{lx9=(_nat[c9]!=null&&isFinite(_nat[c9]))?_nat[c9]:(ths[c9].getBoundingClientRect().left-tbL)}catch(_e){lx9=0}td.style.position='sticky';td.style.left=lx9+'px';td.style.zIndex='5';td.style.boxShadow='-1px 0 0 #223049'+((c9+span>=nFz)?', 2px 0 0 #3a5a8a':'')}
       c9+=span})}}catch(_e9){}}
   var nFr=(cfg.fija&&cfg.fija.fila>0)?Number(cfg.fija.fila):0;
   if(nFr){var top=tb.tHead?tb.tHead.offsetHeight:0;var body=tb.tBodies[0];var brs=body?Array.prototype.slice.call(body.rows).slice(0,nFr):[];
@@ -22953,13 +22959,19 @@ function _tqAplicaFijas(root){try{var cfg=_tqCfg(),tb=root.querySelector('table'
      columnas fijas por los que se veia pasar lo de abajo. Y una sombra de
      1 px del color del borde a la izquierda de cada celda fija tapa
      cualquier resto */
-  var left=nW;for(var ci=0;ci<nFz;ci++){var w=ths[ci].getBoundingClientRect().width;var lx=left;try{var rx=ths[ci].getBoundingClientRect().left-tbL;if(isFinite(rx)&&rx>=0)lx=rx}catch(_e2){}
+  /* la posicion NATURAL de cada columna fija se mide con su cabecera SIN sticky:
+     medida con la tabla ya desplazada, una cabecera pegada devuelve posicion +
+     scrollLeft y las columnas fijas y el pie saltaban a la derecha (bug del 20/09/2026) */
+  var _nat=[];try{var _oldP=[];for(var q1=0;q1<nFz;q1++){_oldP.push(ths[q1].style.position);ths[q1].style.position='static'}
+    for(var q2=0;q2<nFz;q2++)_nat.push(ths[q2].getBoundingClientRect().left-tbL);
+    for(var q3=0;q3<nFz;q3++)ths[q3].style.position=_oldP[q3]}catch(_en){_nat=[]}
+  var left=nW;for(var ci=0;ci<nFz;ci++){var w=ths[ci].getBoundingClientRect().width;var lx=left;try{var rx=(_nat[ci]!=null&&isFinite(_nat[ci]))?_nat[ci]:(ths[ci].getBoundingClientRect().left-tbL);if(isFinite(rx)&&rx>=0)lx=rx}catch(_e2){}
     rows.forEach(function(tr){var td=celdaDe(tr,ci);if(!td)return;var esTh=(td.tagName==='TH'),esLet=!!(tr.classList&&tr.classList.contains('_tqLet'));td.style.position='sticky';td.style.left=lx+'px';td.style.zIndex=esTh?'6':(esLet?'7':'3');if(!esTh&&!td.style.background)td.style.background=(tr.style.background||'#0b1220');td.style.boxShadow='-1px 0 0 #223049'+((ci===nFz-1)?', 2px 0 0 #3a5a8a':'')});left+=w}
   /* la fila TOTAL: sus celdas dentro de la zona inmovilizada quedan fijas a
      la izquierda (ademas de abajo) y las sumas que se desplazan pasan por
      debajo de ellas, no por encima */
   if(nFz){try{Array.prototype.forEach.call(tb.querySelectorAll('tfoot tr'),function(tf9){var c9=0;Array.prototype.forEach.call(tf9.children,function(td){if(td.classList&&td.classList.contains('_tqEx'))return;var span=parseInt(td.getAttribute('colspan'),10)||1;
-      if(c9<nFz){var lx9=0;try{lx9=ths[c9].getBoundingClientRect().left-tbL}catch(_e){lx9=0}td.style.position='sticky';td.style.left=lx9+'px';td.style.zIndex='5';td.style.boxShadow='-1px 0 0 #223049'+((c9+span>=nFz)?', 2px 0 0 #3a5a8a':'')}
+      if(c9<nFz){var lx9=0;try{lx9=(_nat[c9]!=null&&isFinite(_nat[c9]))?_nat[c9]:(ths[c9].getBoundingClientRect().left-tbL)}catch(_e){lx9=0}td.style.position='sticky';td.style.left=lx9+'px';td.style.zIndex='5';td.style.boxShadow='-1px 0 0 #223049'+((c9+span>=nFz)?', 2px 0 0 #3a5a8a':'')}
       c9+=span})})}catch(_e9){}}
   /* las filas del pie (TOTAL, %, % acumulado) se apilan desde abajo */
   try{var tfR=Array.prototype.slice.call(tb.querySelectorAll('tfoot tr')),acc=0;for(var i9=tfR.length-1;i9>=0;i9--){var hg=tfR[i9].offsetHeight;Array.prototype.forEach.call(tfR[i9].children,function(td9){if(td9.style.position==='sticky'||(td9.classList&&td9.classList.contains('_tqEx')))td9.style.bottom=acc+'px'});acc+=hg}}catch(_eb){}
@@ -23780,13 +23792,19 @@ function _tvAplicaFijas(root){try{var cfg=_tvCfg(),tb=root.querySelector('table'
      columnas fijas por los que se veia pasar lo de abajo. Y una sombra de
      1 px del color del borde a la izquierda de cada celda fija tapa
      cualquier resto */
-  var left=nW;for(var ci=0;ci<nFz;ci++){var w=ths[ci].getBoundingClientRect().width;var lx=left;try{var rx=ths[ci].getBoundingClientRect().left-tbL;if(isFinite(rx)&&rx>=0)lx=rx}catch(_e2){}
+  /* la posicion NATURAL de cada columna fija se mide con su cabecera SIN sticky:
+     medida con la tabla ya desplazada, una cabecera pegada devuelve posicion +
+     scrollLeft y las columnas fijas y el pie saltaban a la derecha (bug del 20/09/2026) */
+  var _nat=[];try{var _oldP=[];for(var q1=0;q1<nFz;q1++){_oldP.push(ths[q1].style.position);ths[q1].style.position='static'}
+    for(var q2=0;q2<nFz;q2++)_nat.push(ths[q2].getBoundingClientRect().left-tbL);
+    for(var q3=0;q3<nFz;q3++)ths[q3].style.position=_oldP[q3]}catch(_en){_nat=[]}
+  var left=nW;for(var ci=0;ci<nFz;ci++){var w=ths[ci].getBoundingClientRect().width;var lx=left;try{var rx=(_nat[ci]!=null&&isFinite(_nat[ci]))?_nat[ci]:(ths[ci].getBoundingClientRect().left-tbL);if(isFinite(rx)&&rx>=0)lx=rx}catch(_e2){}
     rows.forEach(function(tr){var td=celdaDe(tr,ci);if(!td)return;var esTh=(td.tagName==='TH'),esLet=!!(tr.classList&&tr.classList.contains('_tvLet'));td.style.position='sticky';td.style.left=lx+'px';td.style.zIndex=esTh?'6':(esLet?'7':'3');if(!esTh&&!td.style.background)td.style.background=(tr.style.background||'#0b1220');td.style.boxShadow='-1px 0 0 #223049'+((ci===nFz-1)?', 2px 0 0 #3a5a8a':'')});left+=w}
   /* la fila TOTAL: sus celdas dentro de la zona inmovilizada quedan fijas a
      la izquierda (ademas de abajo) y las sumas que se desplazan pasan por
      debajo de ellas, no por encima */
   if(nFz){try{Array.prototype.forEach.call(tb.querySelectorAll('tfoot tr'),function(tf9){var c9=0;Array.prototype.forEach.call(tf9.children,function(td){if(td.classList&&td.classList.contains('_tvEx'))return;var span=parseInt(td.getAttribute('colspan'),10)||1;
-      if(c9<nFz){var lx9=0;try{lx9=ths[c9].getBoundingClientRect().left-tbL}catch(_e){lx9=0}td.style.position='sticky';td.style.left=lx9+'px';td.style.zIndex='5';td.style.boxShadow='-1px 0 0 #223049'+((c9+span>=nFz)?', 2px 0 0 #3a5a8a':'')}
+      if(c9<nFz){var lx9=0;try{lx9=(_nat[c9]!=null&&isFinite(_nat[c9]))?_nat[c9]:(ths[c9].getBoundingClientRect().left-tbL)}catch(_e){lx9=0}td.style.position='sticky';td.style.left=lx9+'px';td.style.zIndex='5';td.style.boxShadow='-1px 0 0 #223049'+((c9+span>=nFz)?', 2px 0 0 #3a5a8a':'')}
       c9+=span})})}catch(_e9){}}
   /* las filas del pie (TOTAL, %, % acumulado) se apilan desde abajo */
   try{var tfR=Array.prototype.slice.call(tb.querySelectorAll('tfoot tr')),acc=0;for(var i9=tfR.length-1;i9>=0;i9--){var hg=tfR[i9].offsetHeight;Array.prototype.forEach.call(tfR[i9].children,function(td9){if(td9.style.position==='sticky'||(td9.classList&&td9.classList.contains('_tvEx')))td9.style.bottom=acc+'px'});acc+=hg}}catch(_eb){}
