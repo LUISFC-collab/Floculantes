@@ -15438,7 +15438,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b4';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b5';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -24380,7 +24380,7 @@ function _txFxCalc(a,op,b){if(a==null||a===''||b==null||b==='')return null;var x
 /* una linea de la tabla con las columnas de formula cambiada recalculadas */
 function _txFxAplica(m){try{_TX_COLS.forEach(function(cl){var k=cl[0];if(!_txFxCambiada(k))return;var F=_txFxDe(k);m[k]=_txFxCalc(m[F[0]],F[1],m[F[2]])})}catch(e){}return m}
 function _txFxSimb(op){return op==='*'?'\u00d7':(op==='/'?'\u00f7':(op==='-'?'\u2212':'+'))}
-var _TX_FIJAS=[['num','N\u00b0'],['pert','Pertenece'],['id','Item'],['nom','Partida'],['esp','Esp.'],['tareas','Tarea(s)'],['und','Und'],['met','Metrado contractual'],['hhC','HH contractual'],['suma','Suma de HH']];
+var _TX_FIJAS=[['num','N\u00b0'],['pert','Pertenece'],['id','Item'],['nom','Partida'],['esp','Esp.'],['tareas','Tarea(s)'],['und','Und'],['met','Metrado contractual'],['hhC','HH contractual'],['suma','Suma HH hecho']];
 var _TX_COLS=_TX_FIJAS.slice();
 function _txEsPer(k){return /^(p|pr|hc)_\d{4}-\d{2}-\d{2}$/.test(String(k||''))}
 function _txPerDe(k){return (window._txPerMap||{})[k]||null}
@@ -25170,7 +25170,7 @@ async function _crTablaRUI(c){
 /* ---- lo propio de las tablas por periodo ---- */
 function _txOpc(){var cfg=_txCfg();return {n:4,per:'sem',corte:4,vista:(cfg.vista==='agr')?'agr':'alc',noLab:true,base:_progFuenteId(false),semFin:_rxSemRige(),prox:cfg.prox!==false}}
 async function _txDatos(c){return await _t23DatosR(c,_txOpc())}
-function _txInfoTxt(D){try{var o=D.info||{},per=D.per||[];var t=((o.baseNombre?('Base: '+o.baseNombre+' · cierre S'+o.semFin+' · '):'')+D.u.n+' partidas cuentan \u00b7 '+_nMil2(D.u.hh)+' hh \u00b7 '+per.length+(o.per==='dia'?' d\u00edas':' semanas'));
+function _txInfoTxt(D){try{var o=D.info||{},per=D.per||[];var t=((o.baseNombre?('Base: '+o.baseNombre+' · cierre S'+o.semFin+' · '):'')+D.u.n+' partidas cuentan \u00b7 '+_nMil2(D.u.hh)+' hh \u00b7 '+Math.round(per.length/2)+' semanas (programado | hecho)');
   if(per.length)t+=' \u00b7 '+per[0].ini+' \u2192 '+per[per.length-1].fin;
   if(per.tope)t+=' \u00b7 \u26a0 recortado al tope de '+per.tope+(o.per==='dia'?' d\u00edas':' semanas')+': lo posterior se acumula en la \u00faltima columna';
   if(o.proy){if(o.proy.rep)t+=' \u00b7 reprogramaci\u00f3n: ganado '+_nMil2(o.proy.ganado)+' hh hasta '+o.proy.corte+' + remanente '+_nMil2(o.proy.remanente)+' hh';
