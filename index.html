@@ -16188,7 +16188,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b11';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b12';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -19120,7 +19120,7 @@ function _rxFilaAlcanceHTML(q,d,regs,i,src){try{
     '</div></div>'}catch(e){return ''}}
 /* el cuerpo de una actividad (vista Agrupadas): sus filas de alcance */
 function _rxAlcanceHTML(q,i,regs,src){try{
-  var det=(q.det||[]).slice();det.sort(_rxOrdDet);
+  var det=(q.det||[]).filter(function(d){return !(d.est==='NP'&&!((Number(d.prog)||0)>1e-9||(Number(d.hecho)||0)>1e-9))});det.sort(_rxOrdDet);
   var vis={};det.forEach(function(d){vis[d.pid+'|'+(d.fid||'')]=1});
   /* fichas cuyo alcance no esta en el detalle (heredadas, o de una partida sin HH) */
   var sueltas=(regs||[]).filter(function(x){var f=String(x.fase_id||'');return !vis[String(x.partida_id||'')+'|'+f]&&!(vis[String(x.partida_id||'')+'|']&&!f)});
@@ -19586,7 +19586,7 @@ function _rxNoPinta(r){
       return '<div style="border:1px solid '+(regs.length?'#1d3a2a':'#1d2b40')+';border-radius:10px;margin-bottom:6px;overflow:hidden">'+
         '<div class="rxRow _rxNoCab" data-cod="'+_rxAt(kA)+'" style="cursor:pointer;background:#101d2e;border-bottom:0'+(q._oculta?';opacity:.62':'')+'">'+
           '<span class="rxEst '+stq[0]+'" title="'+_rxAt(stq[2])+'">'+stq[1]+'</span>'+
-          '<span class="rxNom"><b style="color:#8ECBF5">'+esc(q.cod)+'</b> '+(ap?('<b style="color:#C7A3E8">('+esc(ap)+')</b> '):'')+esc(q.nom)+'</span>'+
+          '<span class="rxNom"><b style="color:#8ECBF5">'+esc(q.cod)+'</b> '+(function(){var apT=Array.isArray(ap)?ap.filter(Boolean).join(', '):String(ap||'');return apT?('<b style="color:#C7A3E8">('+esc(apT)+')</b> '):''})()+esc(q.nom)+'</span>'+
           _rxResumenHTML(q,regs)+
           ((esAdX&&!r.prox)?('<label class="_rxVisL" title="Marcada: la ven los supervisores y entra al PPC. Desmarcada: se oculta, se quita lo programado de esta actividad en la semana (no cuenta en el PPC, la Tabla 3 ni la Tabla R ni en el libro)" style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;color:'+(q._oculta?'#FFB4A8':'#9FE8B0')+';background:#0b1220;border:1px solid #24344f;border-radius:7px;padding:2px 7px;cursor:pointer;white-space:nowrap"><input type="checkbox" class="_rxVis" data-cod="'+_rxAt(q.cod)+'" data-sem="'+(q.semN||r.sem)+'"'+(q._oculta?'':' checked')+' style="margin:0">'+(q._oculta?'oculta':'visible')+'</label>'):'')+
           ((reg&&esAdX&&regs.length===1)?('<button class="_rxNoDel" data-rid="'+_rxAt(reg.rid)+'" title="Borrar su registro (solo el admin)" style="background:#2a1c1c;color:#FFB4A8;border:1px solid #4a2a2a;border-radius:8px;min-height:28px;padding:1px 8px;font-weight:900;cursor:pointer">✕</button>'):'')+
