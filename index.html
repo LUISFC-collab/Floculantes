@@ -796,18 +796,36 @@ html,body{overscroll-behavior-y:contain}
     return dec.decode(out)}
   var memo={};   /* por clave: {raw, txt} para no descomprimir dos veces lo mismo */
   var P=Storage.prototype,oGet=P.getItem,oSet=P.setItem,oRem=P.removeItem;
-  P.getItem=function(k){var v=oGet.call(this,k);
+  /* ESCRITURA DIFERIDA (20/09/2026): comprimir 200-350 KB tarda 30-50 ms y una
+     sola accion (programar una actividad) escribe cambios, sent, prog y tumbas
+     varias veces seguidas; la pantalla se sentia lenta. Lo grande se guarda en
+     memoria y se comprime y escribe de golpe 400 ms despues (o al ocultar /
+     cerrar la pestana), una sola vez por clave. Las lecturas ven lo pendiente. */
+  var pend={},pT=null,avisoT=0;
+  function lleno(e){try{if(Date.now()-avisoT>20000){avisoT=Date.now();if(typeof toast==='function')toast('⚠ Memoria del equipo llena: libera espacio (diagnóstico) o sincroniza. Lo último queda en memoria hasta que haya sitio')}}catch(_e){}}
+  function flush(){if(pT){clearTimeout(pT);pT=null}
+    var ks=Object.keys(pend);for(var i=0;i<ks.length;i++){var k=ks[i],s=pend[k];delete pend[k];
+      try{var z=comprime(s);if(z.length<s.length){oSet.call(localStorage,k,z);memo[k]={raw:z,txt:s};continue}}catch(e){}
+      try{oSet.call(localStorage,k,s);delete memo[k]}catch(e2){pend[k]=s;lleno(e2)}}}
+  function programa(){if(!pT)pT=setTimeout(flush,400)}
+  try{window.addEventListener('pagehide',flush);window.addEventListener('beforeunload',flush);
+    document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')flush()})}catch(e){}
+  P.getItem=function(k){if(this===window.localStorage&&pend[k]!=null)return pend[k];
+    var v=oGet.call(this,k);
     if(this===window.localStorage&&typeof v==='string'&&v.charCodeAt(0)===1&&v.indexOf(MARCA)===0){
       var m=memo[k];if(m&&m.raw===v)return m.txt;
       try{var t=descomprime(v);memo[k]={raw:v,txt:t};return t}catch(e){return null}}
     return v};
   P.setItem=function(k,v){
     if(this===window.localStorage&&typeof k==='string'&&k.indexOf(PFX)===0){var s=String(v);
-      if(s.length>MIN){try{var z=comprime(s);if(z.length<s.length){oSet.call(this,k,z);memo[k]={raw:z,txt:s};return}}catch(e){}}
-      delete memo[k]}
+      if(s.length>MIN){
+        var m0=memo[k];if(m0&&m0.raw&&m0.txt===s&&pend[k]==null)return;   /* ya esta guardado tal cual */
+        pend[k]=s;programa();return}
+      delete pend[k];delete memo[k]}
     return oSet.call(this,k,v)};
-  P.removeItem=function(k){delete memo[k];return oRem.call(this,k)};
-  window._lzLocal={comprime:comprime,descomprime:descomprime,rawGet:function(k){return oGet.call(localStorage,k)},
+  P.removeItem=function(k){delete memo[k];delete pend[k];return oRem.call(this,k)};
+  window._lzLocal={comprime:comprime,descomprime:descomprime,rawGet:function(k){return oGet.call(localStorage,k)},flush:flush,
+    pendientes:function(){return Object.keys(pend)},
     /* una pasada: comprime lo grande que aun este en claro */
     migra:function(){var n=0,antes=0,despues=0;try{
       var Lk=[];for(var i=0;i<localStorage.length;i++)Lk.push(localStorage.key(i));
@@ -815,7 +833,7 @@ html,body{overscroll-behavior-y:contain}
         if(v.length<=MIN||v.indexOf(MARCA)===0)return;
         try{var z=comprime(v);if(z.length<v.length){oSet.call(localStorage,k,z);memo[k]={raw:z,txt:v};n++;antes+=v.length;despues+=z.length}}catch(e){}})}catch(e){}
       return {claves:n,antesKB:Math.round(antes/1024),despuesKB:Math.round(despues/1024)}},
-    uso:function(){var t=0;try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);t+=k.length+(oGet.call(localStorage,k)||'').length}}catch(e){}return t}};
+    uso:function(){try{flush()}catch(_e){}var t=0;try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);t+=k.length+(oGet.call(localStorage,k)||'').length}}catch(e){}return t}};
   /* respaldos de migraciones ya hechas que nadie lee: fuera */
   try{['obf4_apus_backup_dedupe_180926'].forEach(function(k){if(oGet.call(localStorage,k)!=null)oRem.call(localStorage,k)})}catch(e){}
   try{window._lzMigra=window._lzLocal.migra()}catch(e){}
@@ -16164,7 +16182,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920a1';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920a2';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
