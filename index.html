@@ -16164,7 +16164,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260919d9';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260919d10';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -33555,8 +33555,8 @@ function _crXerCorrer(lineas,modelo,out){
   return res}
 
 /* lo ganado por actividad y por semana (viernes a jueves) hasta el corte */
-async function _crXerGanadoSem(c,corte){
-  corte=String(corte||'').slice(0,10);
+async function _crXerGanadoSem(c,corte,modo){
+  corte=String(corte||'').slice(0,10);modo=(modo==='dia')?'dia':'sem';
   var tar=((await _crTareas(c.cron_id))||[]).filter(function(t){return t&&!t.eliminado});
   var alc=await _crAlc(c.cron_id),u=_crUniverso(c.cron_id,alc);
   var filas=((await _crTablaDatos(c))||{}).filas||[],P={};
@@ -33567,9 +33567,14 @@ async function _crXerGanadoSem(c,corte){
   for(var id in u.items){try{var ev=(typeof _t23Eventos==='function')?_t23Eventos(id):[];if(ev.length&&(!min||ev[0]<min))min=ev[0]}catch(_e){}}
   if(!min||!corte||min>corte)return {per:[],W:{}};
   var s0=_crASerial(min);if(s0==='')return {per:[],W:{}};
-  var d0=new Date(min+'T00:00:00Z').getUTCDay(),back=(d0-5+7)%7;
-  var a=_crDeSerial(s0-back),per=[],k=0;
-  while(a<=corte&&k<400){k++;var fin=_crDeSerial(_crASerial(a)+6);if(fin>corte)fin=corte;per.push({ini:a,fin:fin});a=_crDeSerial(_crASerial(fin)+1)}
+  var per=[],k=0;
+  if(modo==='dia'){
+    /* DIA A DIA: un periodo por cada dia natural desde el primer parte hasta el corte */
+    var a1=min;while(a1<=corte&&k<2000){k++;per.push({ini:a1,fin:a1});a1=_crDeSerial(_crASerial(a1)+1)}}
+  else{
+    var d0=new Date(min+'T00:00:00Z').getUTCDay(),back=(d0-5+7)%7;
+    var a=_crDeSerial(s0-back);
+    while(a<=corte&&k<400){k++;var fin=_crDeSerial(_crASerial(a)+6);if(fin>corte)fin=corte;per.push({ini:a,fin:fin});a=_crDeSerial(_crASerial(fin)+1)}}
   var W={};
   tar.forEach(function(t){
     var cod=String(t.task_code||'');if(!cod)return;
@@ -33579,7 +33584,7 @@ async function _crXerGanadoSem(c,corte){
       (t.items||[]).forEach(function(i){var hi=Number(u.items[i])||0;if(!(hi>0))return;g+=_crGanadas(rp,i,cod,hi,frac(i,p.fin))});
       if(g<prev)g=prev;ser.push(g-prev);prev=g});
     W[cod]=ser});
-  return {per:per,W:W}}
+  return {per:per,W:W,modo:modo}}
 
 function _crXerPeriodos(lineas,modelo,G){
   var res={n:0,tareas:0,asig:0,hh:0,desde:'',hasta:'',avisos:[]};
@@ -33589,7 +33594,7 @@ function _crXerPeriodos(lineas,modelo,G){
   if(T.FINDATES||T.TRSRCFIN||T.TASKFIN){res.avisos.push('el archivo ya traia periodos financieros: se conservan y no se anaden los de la Tabla 2');return res}
   var r2=function(x){return Math.round((Number(x)||0)*100)/100};
   var per=G.per,W=G.W||{};
-  var nom=function(p){var s='';try{s='S'+_crSemNum(p.fin)+' '}catch(_e){s=''}var f=function(iso){return iso.slice(8,10)+'/'+iso.slice(5,7)};return s+f(p.ini)+'-'+f(p.fin)+'/'+p.fin.slice(0,4)};
+  var nom=function(p){var f=function(iso){return iso.slice(8,10)+'/'+iso.slice(5,7)};if(p.ini===p.fin)return 'D '+f(p.fin)+'/'+p.fin.slice(0,4);var s='';try{s='S'+_crSemNum(p.fin)+' '}catch(_e){s=''}return s+f(p.ini)+'-'+f(p.fin)+'/'+p.fin.slice(0,4)};
   var ftId=String((T.FINTMPL&&T.FINTMPL.filas[0]&&T.FINTMPL.filas[0].o.fintmpl_id)||'');
   var csF=['fin_dates_id','fin_dates_name','start_date','end_date'];if(ftId)csF.push('fintmpl_id');
   var filF=[];
@@ -33643,7 +33648,7 @@ function _crXerPeriodos(lineas,modelo,G){
   /* PROJECT: el ultimo periodo cerrado (los indices de linea cambiaron: se relee) */
   try{var T2=_crXerTablas(lineas),P2=T2.PROJECT;
     if(P2&&P2.filas.length&&P2.col.last_fin_dates_id!=null)P2.filas.forEach(function(f){f.v[P2.col.last_fin_dates_id]=String(per.length);lineas[f.i]='%R'+_XTAB+f.v.join(_XTAB)})}catch(_e2){}
-  res.n=per.length;res.desde=per[0].ini;res.hasta=per[per.length-1].fin;res.hh=r2(res.hh);
+  res.n=per.length;res.desde=per[0].ini;res.hasta=per[per.length-1].fin;res.hh=r2(res.hh);res.modo=G.modo||'sem';
   return res}
 
 function _crXerAlgo(o){for(var k in o){if(Object.prototype.hasOwnProperty.call(o,k))return true}return false}
@@ -34239,7 +34244,7 @@ async function _crXerArma(c,opt){
   /* --- 4. cantidades, estados, reales, remanentes, altas y bajas --- */
   di('4/8 Escribiendo HH, costo, estados, actividades y WBS…');
   /* lo ganado por actividad y por semana (Tabla 2) hasta el corte, para los periodos financieros */
-  var G=null;if(modo==='rep'){try{G=await _crXerGanadoSem(c,corte)}catch(_eg){G=null;try{console.warn('periodos .xer:',_eg)}catch(_e9){}}}
+  var G=null;if(modo==='rep'){try{G=await _crXerGanadoSem(c,corte,opt.per)}catch(_eg){G=null;try{console.warn('periodos .xer:',_eg)}catch(_e9){}}}
   var esc9=await _crXerEscribe(lineas,modelo);
 
   /* --- 5. calendario real, fechas y predecesoras --- */
@@ -34380,7 +34385,7 @@ function _crXerMensaje(r,modo,mm){
   if(fe.corrido){var cr9=fe.corrido;
     lin(claro,'Red corrida a la fecha de datos, como el F9 de P6 ('+_crXerEsc(cr9.logica||'')+'): <b>'+(cr9.n||0)+'</b> actividades programadas, <b>'+(cr9.movidas||0)+'</b> movidas por sus predecesoras'+(cr9.fin?(' · fin del proyecto <b>'+_crXerEsc(String(cr9.fin).slice(0,10))+'</b>'):'')+(cr9.ciclos?(' · <b>'+cr9.ciclos+' en bucle</b>'):''));
     if(cr9.movidas&&cr9.detalle&&cr9.detalle.length)lin(claro,'<span style="opacity:.85;font-size:11px">'+_crXerEsc(cr9.detalle.slice(0,80).join(' · '))+(cr9.detalle.length>80?' ...':'')+'</span>')}
-  if(r.per&&r.per.n)lin(claro,'Periodos financieros: <b>'+r.per.n+'</b> semanas ('+_crXerEsc(r.per.desde)+' → '+_crXerEsc(r.per.hasta)+') con las HH reales de cada semana, las de la Tabla 2: <b>'+_nMil2(r.per.hh)+' hh</b> en '+r.per.tareas+' actividades. En P6: Ver → Escala de tiempo → intervalo <b>Periodo financiero</b>, y la columna <b>Actual Units</b> (acumulada) da semana a semana lo de la Tabla 2. Con la escala por semanas o días P6 reparte el real en línea recta entre el inicio real y la fecha de datos y NO coincide con la Tabla 2: eso no se puede cambiar desde el archivo');
+  if(r.per&&r.per.n)lin(claro,'Periodos financieros: <b>'+r.per.n+'</b> '+(r.per.modo==='dia'?'días (uno por día natural)':'semanas')+' ('+_crXerEsc(r.per.desde)+' → '+_crXerEsc(r.per.hasta)+') con las HH reales de cada '+(r.per.modo==='dia'?'día, según las fechas de los partes':'semana, las de la Tabla 2')+': <b>'+_nMil2(r.per.hh)+' hh</b> en '+r.per.tareas+' actividades. En P6: Ver → Escala de tiempo → intervalo <b>Periodo financiero</b>, y la columna <b>Actual Units</b> (acumulada) da semana a semana lo de la Tabla 2. Con la escala por semanas o días P6 reparte el real en línea recta entre el inicio real y la fecha de datos y NO coincide con la Tabla 2: eso no se puede cambiar desde el archivo');
 
   /* --- relaciones --- */
   lin(claro,'Relaciones: <b>'+(fe.rel_new||0)+'</b> nuevas · <b>'+(fe.rel_act||0)+'</b> cambiadas · <b>'+(fe.rel_del||0)+'</b> quitadas'+
@@ -34556,7 +34561,7 @@ async function _crXerDescarga(c,modo,mm,o){
   var hoy=(typeof todayISO==='function')?todayISO():'';
   var corte=o.corte||hoy;
   var sem=(o.sem!=null)?Number(o.sem)||0:((modo==='rep')?_crXerSemReporte(corte):0);
-  var r=await _crXerArma(c,{modo:modo,mm:mm,corte:corte,sem:sem,alcLive:o.alcLive||null,aviso:aviso,rem:(o.rem||_crXerRemPref())});
+  var r=await _crXerArma(c,{modo:modo,mm:mm,corte:corte,sem:sem,alcLive:o.alcLive||null,aviso:aviso,rem:(o.rem||_crXerRemPref()),per:(o.per||_crXerPerPref())});
   var html=_crXerMensaje(r,modo,mm);
   if(!r.val.ok){pinta(html);return r}
   var blob=new Blob([_crBytes(r.txt)],{type:'application/octet-stream'});
@@ -34587,6 +34592,9 @@ function _crXerSemReporte(iso){
    se recuerda en la configuracion del usuario (tabla_config, realtime) */
 function _crXerRemPref(){try{return (_tbCfg().xerRem==='tabla')?'tabla':'hh'}catch(e){return 'hh'}}
 function _crXerRemSet(v){try{var cfg=_tbCfg();cfg.xerRem=(v==='tabla')?'tabla':'hh';_tbCfgSave(cfg)}catch(e){}}
+/* los periodos financieros del .xer: por semana (el corte del jueves, como la Tabla 2) o dia a dia (la corrida diaria segun las fechas reales de los partes) */
+function _crXerPerPref(){try{return (_tbCfg().xerPer==='dia')?'dia':'sem'}catch(e){return 'sem'}}
+function _crXerPerSet(v){try{var cfg=_tbCfg();cfg.xerPer=(v==='dia')?'dia':'sem';_tbCfgSave(cfg)}catch(e){}}
 function _crXerMenuUI(b,c,o){
   o=o||{};
   var old=document.getElementById('_crXerMenu');if(old){old.remove();return}
@@ -34602,9 +34610,11 @@ function _crXerMenuUI(b,c,o){
   var bt=function(m,mm,col,tit,desc){
     return '<button data-m="'+m+'" data-mm="'+(mm?'1':'0')+'" style="background:'+col+';color:#fff;border:0;border-radius:8px;padding:8px 10px;text-align:left;cursor:pointer;font-family:inherit">'+
       '<b style="font-size:12px">'+tit+'</b><br><span style="font-size:10.5px;opacity:.92;white-space:normal">'+desc+'</span></button>'};
+  var perB=function(v,txt){var on=(_crXerPerPref()===v);return '<button data-per="'+v+'" style="background:'+(on?'#1B5E8A':'#151c28')+';color:'+(on?'#fff':'#9db4d6')+';border:1px solid '+(on?'#8ECBF5':'#24344f')+';border-radius:8px;padding:5px 8px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:'+(on?'800':'600')+'">'+txt+'</button>'};
   var remB=function(v,txt){var on=(_crXerRemPref()===v);return '<button data-rem="'+v+'" style="background:'+(on?'#1B5E8A':'#151c28')+';color:'+(on?'#fff':'#9db4d6')+';border:1px solid '+(on?'#8ECBF5':'#24344f')+';border-radius:8px;padding:5px 8px;cursor:pointer;font-family:inherit;font-size:10.5px;font-weight:'+(on?'800':'600')+'">'+txt+'</button>'};
   menu.innerHTML='<b style="font-size:11px;color:#8ECBF5;letter-spacing:.04em">\u00bfQU\u00c9 .XER QUIERES?</b>'+
     '<div id="_crXerRemFila" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:#cfe3ff;padding:2px 0 4px;border-bottom:1px solid #24344f"><span style="font-weight:800;color:#8ECBF5">Remanente:</span>'+remB('hh','\u23f1 por HH y rendimiento de la actividad (hoja 2)')+remB('tabla','\ud83d\udcca por las duraciones de la tabla (Rendimiento APP)')+'</div>'+
+    '<div id="_crXerPerFila" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:#cfe3ff;padding:2px 0 4px;border-bottom:1px solid #24344f"><span style="font-weight:800;color:#8ECBF5">Periodos financieros (real por fecha):</span>'+perB('sem','por semana (corte jueves, como la Tabla 2)')+perB('dia','día a día')+'</div>'+
     '<div id="_crXerCorteFila" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:#cfe3ff;padding:2px 0 4px;border-bottom:1px solid #24344f"><span style="font-weight:800;color:#8ECBF5">Corte del avance:</span>'+
     '<input type="date" id="_crXerCorte" value="'+corteDef+'" style="background:#151c28;color:#cfe3ff;border:1px solid #8ECBF5;border-radius:6px;padding:3px 6px;font-family:inherit;font-size:11px">'+
     '<span style="color:#9db4d6">avance hasta ese día inclusive; la fecha de datos es el hábil siguiente y el archivo sale corrido a ella (sin F9)</span></div>'+
@@ -34626,6 +34636,9 @@ function _crXerMenuUI(b,c,o){
   var rs=menu.querySelectorAll('button[data-rem]');
   for(var j=0;j<rs.length;j++)(function(x){x.onclick=function(ev){ev.stopPropagation();_crXerRemSet(x.getAttribute('data-rem'));
     for(var q=0;q<rs.length;q++){var on=(rs[q].getAttribute('data-rem')===_crXerRemPref());rs[q].style.background=on?'#1B5E8A':'#151c28';rs[q].style.color=on?'#fff':'#9db4d6';rs[q].style.borderColor=on?'#8ECBF5':'#24344f';rs[q].style.fontWeight=on?'800':'600'}}})(rs[j]);
+  var ps=menu.querySelectorAll('button[data-per]');
+  for(var j2=0;j2<ps.length;j2++)(function(x){x.onclick=function(ev){ev.stopPropagation();_crXerPerSet(x.getAttribute('data-per'));
+    for(var q=0;q<ps.length;q++){var on=(ps[q].getAttribute('data-per')===_crXerPerPref());ps[q].style.background=on?'#1B5E8A':'#151c28';ps[q].style.color=on?'#fff':'#9db4d6';ps[q].style.borderColor=on?'#8ECBF5':'#24344f';ps[q].style.fontWeight=on?'800':'600'}}})(ps[j2]);
   var xs=menu.querySelectorAll('button[data-m]');
   for(var i=0;i<xs.length;i++)(function(x){
     x.onclick=async function(ev){
