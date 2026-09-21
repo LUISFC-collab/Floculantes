@@ -14385,7 +14385,11 @@ var _WK_GENS=[
   {id:'B.001',
    nombre:'B.001 — desde las Tablas 1, 2, 3 y R',
    desc:'La data sale de la Tabla del alcance y de las Tablas 2, 3 y R. Lo que no exista en el aplicativo va VACIO y se anota en la hoja Notas de la generación.',
-   fn:'_wkBLibroApp'}];
+   fn:'_wkBLibroApp'},
+  {id:'C.001',
+   nombre:'C.001 — igual a la A, con el % real como la Tabla 2',
+   desc:'El mismo libro de la A.001 (mismas hojas, misma data), pero el % real de cada partida se mide como las Tablas 1 y 2 (% físico sobre el metrado forecast, sin contar el saldo retirado como hecho): 31.63 % donde la A dice 33.8 %.',
+   fn:'_wkCLibroApp'}];
 var _WK_GEN_DEF='A.001';              /* hasta que B.001 este validada */
 var _WK_GEN_KEY='obf4_wk_gen';
 function _wkGenDe(id){for(var i=0;i<_WK_GENS.length;i++)if(_WK_GENS[i].id===id)return _WK_GENS[i];return null}
@@ -19780,6 +19784,18 @@ async function _wgPctT2(cronId,fecha){var L=(await _crPull()).filter(function(c)
   var D=await _crTablaDatosMemo(c);var u=D.u||{items:{},hh:0};var P={};(D.filas||[]).forEach(function(r){if(r&&r.id)P[r.id]=r});var g=0;
   Object.keys(u.items||{}).forEach(function(id){var hh=Number(u.items[id])||0;if(!(hh>0)||!P[id])return;g+=hh*Math.max(0,Math.min(1,Number(_crFracHechaAt(P[id],fecha))||0))});
   return {pct:(u.hh>0)?g/u.hh:0,hhT:Math.round(u.hh*100)/100,gan:Math.round(g*100)/100}}
+/* ---- Generacion C.001: la A.001 tal cual, con el % real medido como las Tablas ----
+   Solo cambia la medida del avance por partida: mientras se arma el libro, pctOfAt (la
+   vara vieja, que cuenta el saldo retirado como hecho y divide por el metrado de la app)
+   se sustituye por _crFracHechaAt sobre la fila de la Tabla 1 del cronograma espina
+   (la misma cuenta de la Tabla 2, la curva y el analisis). Al terminar se restaura. */
+async function _wkCLibroApp(semN,corte,ids){
+  var orig=pctOfAt,mapa={};
+  try{var L=(await _crPull()).filter(function(c){return !c.eliminado&&ids.indexOf(c.cron_id)>=0});
+    var esp=L[L.length-1];if(esp){var D=await _crTablaDatosMemo(esp);(D.filas||[]).forEach(function(r){if(r&&r.id)mapa[r.id]=r})}
+    pctOfAt=function(p,iso){var r=p&&mapa[p.id];if(!r)return orig.apply(this,arguments);var f=Number(_crFracHechaAt(r,iso))||0;return Math.max(0,Math.min(100,f*100))};
+    var LB=await _wkLibroApp(semN,corte,ids);try{LB.info=LB.info||{};LB.info.gen='C.001'}catch(e){}return LB}
+  finally{pctOfAt=orig}}
 function _wkExcel(){
   if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return}
   if(typeof DecompressionStream==='undefined'||typeof CompressionStream==='undefined'){
@@ -21615,7 +21631,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b32';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b33';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
