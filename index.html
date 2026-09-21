@@ -1354,6 +1354,7 @@ function _rtOnCambio(tabla,_fila){
   if(tabla==='prefs_prog_create_260826'){
     try{if(typeof _ppfPull==='function')_ppfPull()}catch(e){}return}
   if(tabla==='programacion'){
+    var _apl=false;try{_apl=(typeof _pgAplicaRT==='function')&&_pgAplicaRT(_fila)}catch(e){}
     try{_rtSyncSoon()}catch(e){}
     setTimeout(function(){try{
       var sp=$('scrProg');
@@ -1362,7 +1363,7 @@ function _rtOnCambio(tabla,_fila){
         if(typeof renderCal==='function')renderCal()}
       if(typeof _pgCurvaRefresca==='function')_pgCurvaRefresca();_t23Repinta();
       if($('scrList')&&!$('scrList').classList.contains('hidden')&&typeof renderList==='function')renderList()
-    }catch(e){}},1200);
+    }catch(e){}},_apl?60:1200);
     return}
   if(tabla==='restricciones_partida'||tabla==='restricciones_generales'||
      tabla==='interf_log'||tabla==='dias_habilitados'||tabla==='pendientes'){
@@ -21695,7 +21696,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b43';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b44';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -23477,7 +23478,28 @@ function _pgProg(){var base=(window._bkcSrc&&window._bkcSrc.prog)||state.prog||{
 function _pgLanes(){try{var prog=(typeof _pgProg==='function')?_pgProg():state.prog;var cc=(typeof _cronoCuadGet==='function')?_cronoCuadGet():{grupos:[],asig:{}};var asig=cc.asig||{};var acts=Object.keys(prog||{}).map(function(id){return prog[id]}).filter(function(p){return p&&p.disc===progDisc&&!(!window._bkcSrc&&state.progDel&&state.progDel[p.partida_id])&&!(!window._bkcSrc&&typeof tombHas==='function'&&tombHas('partida',p.partida_id))&&!(!_pgEsParte(p.partida_id)&&_pgTieneParte(p.partida_id))});acts.forEach(function(p){p.__d=occupiedDays(p.start,p.dias||1)});var order=(cc.grupos||[]).map(function(g){return g.id}).concat(['']);var laneOf={},base=0;order.forEach(function(gid){var ga=acts.filter(function(p){return (asig[_pgBaseId(p.partida_id)]||'')===gid});ga.sort(function(a,b){return (String(a.start||'').localeCompare(String(b.start||'')))||(((b.dias||1)-(a.dias||1)))||(((a.orden||0)-(b.orden||0)))||(String(a.partida_id)<String(b.partida_id)?-1:1)});var lanes=[],localMax=-1;ga.forEach(function(p){var L=0;for(;;L++){lanes[L]=lanes[L]||{};var clash=(p.__d||[]).some(function(d){return lanes[L][d]});if(!clash){(p.__d||[]).forEach(function(d){lanes[L][d]=1});laneOf[p.partida_id]=base+L;if(L>localMax)localMax=L;break}if(L>80)break}});base+=(localMax+1)});return laneOf}catch(e){return {}}}
 function _pgAlignLanes(){try{var cal=$('progCal');if(!cal)return;var cells=Array.prototype.slice.call(cal.querySelectorAll('.cday'));var laneMax={};var per=[];cells.forEach(function(cell){var items=Array.prototype.slice.call(cell.children).filter(function(el){return el.classList&&(el.classList.contains('cdtask')||el.classList.contains('_ccLane'))});items.forEach(function(el){el.style.minHeight=''});per.push(items)});per.forEach(function(items){items.forEach(function(el,li){var h=el.offsetHeight;if(!laneMax[li]||h>laneMax[li])laneMax[li]=h})});per.forEach(function(items){items.forEach(function(el,li){el.style.minHeight=(laneMax[li]||0)+'px'})})}catch(e){}}
 function _pgActColorMap(){var arr=Object.keys(_pgProg()).map(function(id){return _pgProg()[id]}).filter(function(x){return x&&x.disc===progDisc&&!(!window._bkcSrc&&typeof tombHas==='function'&&tombHas('partida',x.partida_id))});arr.sort(function(a,b){return a.start<b.start?-1:(a.start>b.start?1:(((a.orden||0)-(b.orden||0))||(String(a.partida_id)<String(b.partida_id)?-1:1)))});var m={},i=0;arr.forEach(function(x){var _kb=_pgBaseId(x.partida_id);if(m[_kb]===undefined)m[_kb]=i++});return m}
-function _pgDayColor(i){var P=['#1E9E4C','#FF8A00','#9B59B6','#00B8D9','#E84393','#D4B106','#FF5252','#7ED321','#00CFFF','#A0522D'];return P[i%P.length]}function progSave(){store.set(KPR,state.prog);
+function _pgDayColor(i){var P=['#1E9E4C','#FF8A00','#9B59B6','#00B8D9','#E84393','#D4B106','#FF5252','#7ED321','#00CFFF','#A0522D'];return P[i%P.length]}/* la programacion se sube en cuanto cambia (antes esperaba al ciclo de 3 s): asi el
+   otro equipo la recibe por tiempo real casi al momento */
+function _pgPushSoon(){try{clearTimeout(window._pgPushT)}catch(e){}window._pgPushT=setTimeout(function(){window._pgPushT=null;try{if(!(state.user&&sbReady()&&navigator.onLine))return;if(typeof _pushSolo==='function'&&!syncing)_pushSolo();else if(typeof syncNow==='function')syncNow(true)}catch(e){}},250)}
+/* el aviso de tiempo real de programacion trae la fila: se aplica al calendario en el
+   acto (misma regla que la bajada: gana el ts mas nuevo; las lapidas locales mandan)
+   sin esperar la bajada completa (~9 s). Un DELETE ajeno quita la fila salvo que la
+   haya puesto este equipo hace menos de 2 min y aun no la haya subido. */
+function _pgAplicaRT(f){try{var rec=(f&&f.record&&Object.keys(f.record).length)?f.record:null,old=(f&&f.old_record)||null;
+  if(!state.prog)state.prog={};var cambio=false;
+  if(rec){var id=String(rec.partida_id||'');if(!id)return false;if(rec.proyecto&&DATA&&DATA.proyecto&&String(rec.proyecto)!==String(DATA.proyecto))return false;
+    var ts=Number(rec.ts)||0,loc=state.prog[id];if(loc&&Number(loc.ts)>ts)return false;
+    var dT=Number(state.progDel&&state.progDel[id])||0;if(dT&&!(ts>dT))return false;
+    var row={partida_id:id,codigo:rec.codigo,nombre:rec.partida_nombre,disc:rec.disciplina,start:rec.start_date,dias:Number(rec.dias),orden:(rec.orden!=null?Number(rec.orden):0),cell_at:(rec.cell_at!=null?Number(rec.cell_at):null),cant:(rec.cantidad!=null?Number(rec.cantidad):null),ts:ts};
+    if(loc&&loc.start===row.start&&Number(loc.dias)===row.dias&&(loc.cant==null?null:Number(loc.cant))===row.cant&&Number(loc.orden||0)===row.orden&&loc.disc===row.disc)return false;
+    state.prog[id]=row;cambio=true;
+    if(dT){delete state.progDel[id];try{if(typeof tombClr==='function')tombClr('programacion',id)}catch(e){}}}
+  else if(old&&old.partida_id){var id2=String(old.partida_id),loc2=state.prog[id2];if(!loc2)return false;
+    if(loc2._lo&&(Date.now()-Number(loc2.ts))<120000)return false;
+    delete state.prog[id2];cambio=true}
+  if(cambio){var pp=_pulling;_pulling=true;try{store.set(KPR,state.prog)}finally{_pulling=pp}}
+  return cambio}catch(e){return false}}
+function progSave(){store.set(KPR,state.prog);try{_pgPushSoon()}catch(e){}
  try{if(typeof _pgCurvaRefresca==='function')_pgCurvaRefresca();_t23Repinta()}catch(e){}
  /* el empujon al servidor, con un respiro: sin esto la programacion se
     quedaba en este equipo hasta la siguiente pasada del sync y la otra
