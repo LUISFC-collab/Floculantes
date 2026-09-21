@@ -18614,6 +18614,11 @@ async function _wkBLibroApp(semN,corte,ids,opc){
     return LB}
   finally{
     try{if(typeof window!=='undefined')window._crPlanFuenteOverride=null;try{if(typeof _wgCandado==='function')_wgCandado(false)}catch(_ec9){}}catch(_ef){}}}
+/* la vista previa del dialogo mide como la Tabla 2: % fisico (_crFracHechaAt) ponderado por las HH del alcance */
+async function _wgPctT2(cronId,fecha){var L=(await _crPull()).filter(function(c){return !c.eliminado});var c=L.filter(function(z){return String(z.cron_id)===String(cronId)})[0];if(!c)throw new Error('sin cronograma');
+  var D=await _crTablaDatosMemo(c);var u=D.u||{items:{},hh:0};var P={};(D.filas||[]).forEach(function(r){if(r&&r.id)P[r.id]=r});var g=0;
+  Object.keys(u.items||{}).forEach(function(id){var hh=Number(u.items[id])||0;if(!(hh>0)||!P[id])return;g+=hh*Math.max(0,Math.min(1,Number(_crFracHechaAt(P[id],fecha))||0))});
+  return {pct:(u.hh>0)?g/u.hh:0,hhT:Math.round(u.hh*100)/100,gan:Math.round(g*100)/100}}
 function _wkExcel(){
   if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return}
   if(typeof DecompressionStream==='undefined'||typeof CompressionStream==='undefined'){
@@ -18712,8 +18717,8 @@ function _wkExcel(){
     var marc=[].slice.call(document.querySelectorAll('._wkCk:checked')).map(function(k){return k.value});
     if(marc.length&&typeof _wkPctCron==='function'){
       var esp=marc[marc.length-1];
-      Promise.all([_wkPctCron(esp,corte2),_wkPctCron(esp,hoy2)]).then(function(r){
-        pinta(r[0],r[1],'Medido sobre las '+r[0].hhT+' hh del alcance de '+esp+'.')}).catch(function(){
+      Promise.all([_wgPctT2(esp,corte2),_wgPctT2(esp,hoy2)]).then(function(r){
+        pinta(r[0],r[1],'Medido como la Tabla 2: % físico sobre las '+_nMil2(r[0].hhT)+' hh del alcance de '+esp+' ('+_nMil2(r[1].gan)+' hh ganadas hasta hoy).')}).catch(function(){
         pinta(_wkPctApp(_wkAcum(corte2),!topar2),_wkPctApp(_wkAcum(hoy2),!topar2),'')})}
     else pinta(_wkPctApp(_wkAcum(corte2),!topar2),_wkPctApp(_wkAcum(hoy2),!topar2),'Medido sobre todas las partidas de la app.');
   }catch(_e){}};
@@ -20449,7 +20454,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b28';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b29';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
