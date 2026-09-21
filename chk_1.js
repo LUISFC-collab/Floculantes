@@ -20948,7 +20948,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b38';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b39';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28430,10 +28430,12 @@ function _t23Firma(D){try{var f=[];(D.filas||[]).forEach(function(r){f.push(r.id
    de la Tabla 2), 'con' contractual, 'mm' mayor metrado. Lo ejecutado es siempre el de la
    Tabla 2 (fraccion fisica x metrado forecast); cambia el denominador. Deja en la linea
    hhGan (HH ganadas) y hhBase (HH de la base) para el % ponderado de subtotales y TOTAL. */
-function _t23PctBase(m,frac,baseK){var f=Math.max(0,Math.min(1,Number(frac)||0));var hh=Number(m.hh)||0,mF=Number(m.metF)||0;
+function _t23PctBase(m,frac,baseK,cuenta){var f=Math.max(0,Math.min(1,Number(frac)||0));var hh=Number(m.hh)||0,mF=Number(m.metF)||0;
   var mB=(baseK==='con')?(Number(m.met)||0):((baseK==='mm')?(Number(m.metM)||0):mF);if(!(mB>0))mB=mF;
   var hB=(baseK==='con')?(Number(m.hhC)||0):((baseK==='mm')?(Number(m.hhM)||0):hh);if(!(hB>0))hB=hh;
-  m.hhGan=f*hh;m.hhBase=hB;m.pctAv=(mB>0&&mF>0)?(100*f*mF/mB):(100*f)}
+  /* solo las lineas que cuentan en el alcance (HH > 0 en el universo) pesan en el % de
+     subtotales y TOTAL: una partida fuera o apagada tiene HH contractuales pero no avanza */
+  m.hhGan=f*hh;m.hhBase=(cuenta===false)?0:hB;m.pctAv=(mB>0&&mF>0)?(100*f*mF/mB):(100*f)}
 async function _t23Datos(c,o){
   /* los memos (eventos y proyeccion) se tiran solos cuando cambian los partes,
      los metrados o los borrados, venga el cambio de donde venga (parte guardado
@@ -28482,8 +28484,8 @@ async function _t23Datos(c,o){
            linea "Resto de la partida", como en la Tabla 3 */
         ponP(r,_t23SerieReal(r,null,per,uniM?(Number(r.metF)||0):(Number(r.hh)||0),ctx,_t23FracLinea,''));
         /* % de avance a hoy: la partida con la cuenta de la Tabla 2 (_crFracHechaAt) y cada apartado con la de su linea */
-        _t23PctBase(r,_t23FracLinea(r,null,hoy,ctx),baseK);
-        (r.partes||[]).forEach(function(q){_t23PctBase(q,_t23FracLinea(r,q,hoy,ctx),baseK)})}
+        var cta9=(Number(u.items[r.id])>0);_t23PctBase(r,_t23FracLinea(r,null,hoy,ctx),baseK,cta9);
+        (r.partes||[]).forEach(function(q){_t23PctBase(q,_t23FracLinea(r,q,hoy,ctx),baseK,cta9)})}
       else{var mapa=(proy.M||{})[r.id]||{};var serie=_t23Agrega(mapa,per);ponP(r,serie);
         if(r.partes&&r.partes.length){var tot=0;r.partes.forEach(function(q){tot+=Number(q.hh)||0});var hR=Number(r.hh)||0;
           var base=(hR>0&&tot<=hR+1e-9)?hR:tot;r.partes.forEach(function(q){var sh=(base>0)?((Number(q.hh)||0)/base):0;ponP(q,serie.map(function(v){return v*sh}))})}}
@@ -28499,7 +28501,7 @@ async function _t23Datos(c,o){
           var evAll={};items.forEach(function(i){_t23Eventos(i).forEach(function(f){evAll[f]=1})});var ev=Object.keys(evAll).sort();
           var prevG=0,e=0;for(var j=0;j<per.length;j++){var fin=per[j].fin,hay=(j===0);while(e<ev.length&&ev[e]<=fin){hay=true;e++}var g=hay?gan(fin):prevG;serie[j]=g-prevG;prevG=g}}
         /* % de avance de la actividad a hoy: sus HH ganadas entre sus HH del alcance */
-        var hB9=0;items.forEach(function(i){var v9=_crVeces(rp,i),r9=porId[i];var b9=(baseK==='con')?(Number(r9.hhC)||0):((baseK==='mm')?(Number(r9.hhM)||0):0);if(!(b9>0))b9=Number(u.items[i])||0;hB9+=b9/v9});
+        var hB9=0;items.forEach(function(i){if(!(Number(u.items[i])>0))return;var v9=_crVeces(rp,i),r9=porId[i];var b9=(baseK==='con')?(Number(r9.hhC)||0):((baseK==='mm')?(Number(r9.hhM)||0):0);if(!(b9>0))b9=Number(u.items[i])||0;hB9+=b9/v9});
         fila.hhGan=items.length?gan(hoy):0;fila.hhBase=hB9;fila.pctAv=(hB9>0&&items.length)?(100*fila.hhGan/hB9):null;
         /* en metrado: la actividad suma el metrado ejecutado de sus partidas solo si
            todas comparten unidad; si mezclan unidades, en blanco */
