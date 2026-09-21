@@ -15441,7 +15441,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b16';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b17';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -18609,6 +18609,13 @@ function _rxUI(vista){
   try{if(semT>0&&typeof _wkLbl==='function')_sub=_wkLbl(semT)}catch(e){}
   if(vista==='prox')_sub=_sub+' · próximas S'+(semT+1)+' a S'+(semT+3);
   _rxCssOn();
+  /* pellizco con dos dedos (celular): acerca/aleja el contenido del panel; el viewport de la app no deja el zoom nativo */
+  try{if(!ov._rxPinch){ov._rxPinch=1;var _pd0=0,_pz0=1,_ptg=null;
+    var _pzGet=function(){var z=Number(localStorage.getItem('obf4_rx_zoom'))||1;return (z>=0.5&&z<=1.5)?z:1};
+    var _pdist=function(t){var dx=t[0].clientX-t[1].clientX,dy=t[0].clientY-t[1].clientY;return Math.sqrt(dx*dx+dy*dy)};
+    ov.addEventListener('touchstart',function(e){if(e.touches.length===2){_pd0=_pdist(e.touches);_pz0=_pzGet();_ptg=document.getElementById('_rxNoLista')||ov.firstElementChild}},{passive:true});
+    ov.addEventListener('touchmove',function(e){if(e.touches.length===2&&_pd0>0&&_ptg){var z=_pz0*_pdist(e.touches)/_pd0;if(z<0.5)z=0.5;if(z>1.5)z=1.5;z=Math.round(z*100)/100;_ptg.style.zoom=z;ov._rxZ=z;if(e.cancelable)e.preventDefault()}},{passive:false});
+    ov.addEventListener('touchend',function(e){if(_pd0>0&&e.touches.length<2){_pd0=0;try{if(ov._rxZ){var zz=Math.round(ov._rxZ*10)/10;localStorage.setItem('obf4_rx_zoom',String(zz));if(_ptg)_ptg.style.zoom=zz}}catch(_e){}}},{passive:true})}}catch(e){}
   ov.innerHTML='<div style="max-width:980px;margin:0 auto">'+
     '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
       '<b style="font-size:15px;color:#fff">Restricciones</b>'+
