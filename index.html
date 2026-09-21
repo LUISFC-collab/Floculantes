@@ -17490,7 +17490,10 @@ function _wkB3PonCol(xml,col,mapa,st){
 function _wkB3SinCache(xml){
   return _wkB3Txt(xml).replace(/<c ([^>]*[^\/>])>([\s\S]*?)<\/c>/g,function(t,at,dentro){
     if(dentro.indexOf('<f')<0)return t;
-    return '<c '+at.replace(/\s+t="(?:str|e|b|n)"/,'')+'>'+dentro.replace(/<v>[\s\S]*?<\/v>/g,'')+'</c>'})}
+    /* el <v> del libro guia llega tambien como <v xml:space="preserve"> y,
+       alguna vez, autocerrado: los tres tienen que caer */
+    return '<c '+at.replace(/\s+t="(?:str|e|b|n)"/,'')+'>'+
+      dentro.replace(/<v(?:\s[^>]*)?>[\s\S]*?<\/v>|<v(?:\s[^>]*)?\/>/g,'')+'</c>'})}
 /* el hilo de comentarios de un registro, del mas viejo al mas nuevo */
 function _wkB3Coms(reg){var L=[];
   try{if(typeof _rxComs==='function')L=_rxComs(reg)||[]}catch(e){L=[]}
@@ -17784,7 +17787,7 @@ function _wkB3WLACab(P){
   var pon=function(r,cs,alto){
     filas.push('<row r="'+r+'"'+(alto?(' ht="'+alto+'" customHeight="1"'):'')+'>'+cs.join('')+'</row>')};
   pon(1,[_wkB3CelT('D',1,_wkB3Txt(P.proy),P.st.tit)],26);
-  pon(2,[_wkB3CelT('D',2,'Reporte semanal · SEMANA '+P.semN+' · Generación B.001 · '+_wkB3Txt(P.hoja),P.st.sub)],18);
+  pon(2,[_wkB3CelT('D',2,'Reporte semanal · SEMANA '+P.semN+' · Generación B.001 · '+_wkB3Txt(P.hoja)+(P.vista?(' · '+_wkB3Txt(P.vista)):''),P.st.sub)],18);
   pon(3,[_wkCelE('D',3,'Corte '+_wkB3Txt(P.corte)+' · '+_wkB3Txt(P.etiq)+
     ' · cronograma del análisis '+_wkB3Txt(P.cronRx)+' · espina '+_wkB3Txt(P.espina)+
     ' · base '+_wkB3Txt(P.base)+' · PPC ('+_wkB3Txt(P.ppcDef)+')',true,P.st.sub)],18);
@@ -17819,10 +17822,50 @@ function _wkB3WLACab(P){
    opc (TODO explicito, nada implicito):
      {hoja:'PPC', idx:[0,1], vis:[38], semRx:[38], drawing:false, tab:'FFFFFF00'}
    ===================================================================== */
+/* ---------------------------------------------------------------------
+   LOS TRES MODOS con los que B5 pide esta misma hoja. El grano es siempre
+   el mismo (una fila por ALCANCE bajo su ACTIVIDAD) y la fuente tambien
+   (motor + Tabla R); lo que cambia es QUE LINEAS se escriben, QUE SEMANAS
+   se ven y DE QUE SEMANAS salen las restricciones. Es lo que A.001 hacia
+   con _wkHoja3WLA: PARA 3WLA sin opciones, PPC con {idx:[0,1],sem1} y
+   3WLA con {idx:[2,3],lmn,sig3}.
+
+     'base'      -> PARA 3WLA   la hoja entera: las 3 lineas y las 4 semanas.
+                    Va OCULTA en el libro y es a la que apuntan las formulas.
+     'ppc'       -> PPC         el cumplimiento de la semana del reporte:
+                    PROG. SEM. ANT. + ACTUAL y solo la columna de semN.
+     'lookahead' -> 3WLA        las TRES semanas siguientes: ACTUAL (de donde
+                    se parte) + PROG. SEM. SIG., y las restricciones de
+                    semN+1..semN+3, no las de la semana ya cerrada.
+
+   Sin `modo` se comporta como antes ('base'). Y lo que el llamador ponga a
+   mano (hoja, idx, vis, semRx) MANDA sobre el modo: el modo solo rellena
+   lo que falta. */
+function _wkB3Modo(opc,semN){
+  opc=opc||{};semN=Number(semN)||0;
+  var M={
+    base:{hoja:'PARA 3WLA',idx:[0,1,2],vis:[semN,semN+1,semN+2,semN+3],
+          semRx:[semN],rotulo:'base completa (3 líneas · 4 semanas)'},
+    ppc:{hoja:'PPC',idx:[0,1],vis:[semN],
+          semRx:[semN],rotulo:'cumplimiento de la semana'},
+    lookahead:{hoja:'3WLA',idx:[1,2],vis:[semN,semN+1,semN+2,semN+3],
+          semRx:[semN+1,semN+2,semN+3],rotulo:'lookahead de las 3 semanas siguientes'}};
+  var modo=_wkB3Txt(opc.modo)||'base';
+  if(!M[modo])modo='base';
+  var d=M[modo],o={},k;
+  for(k in opc)if(Object.prototype.hasOwnProperty.call(opc,k))o[k]=opc[k];
+  o.modo=modo;
+  if(o.hoja==null||o.hoja==='')o.hoja=d.hoja;
+  if(!(o.idx&&o.idx.length))o.idx=d.idx.slice();
+  if(!(o.vis&&o.vis.length))o.vis=d.vis.slice();
+  if(!(o.semRx&&o.semRx.length))o.semRx=d.semRx.slice();
+  if(o.rotulo==null||o.rotulo==='')o.rotulo=d.rotulo;
+  return o}
 function _wkB3WLA(CTX,bl,base,opc){
-  opc=opc||{};
   var semN=Number(CTX&&CTX.semN)||0;
+  opc=_wkB3Modo(opc,semN);
   var hoja=_wkB3Txt(opc.hoja||'PARA 3WLA');
+  var vista=_wkB3Txt(opc.rotulo||'');
   var D=_wkB3WLAFilas(CTX,bl,opc);
   var SEMS=D.sems;
   var LIN=['PROG. SEM. ANT.','ACTUAL','PROG. SEM. SIG.'];
@@ -17883,7 +17926,7 @@ function _wkB3WLA(CTX,bl,base,opc){
   var RHHA='$'+cHHA+'$'+r0+':$'+cHHA+'$'+nFin;
   /* ------------------------------------------------------- la cabecera */
   var etiqK='';try{etiqK=_wkB3Txt(CTX&&CTX.K&&CTX.K.etiq)}catch(e){etiqK=''}
-  var Pc={semN:semN,hoja:hoja,SEMS:SEMS,BLQ:BLQ,COLS:COLS,ROT:ROT,st:st,tinta:tinta,
+  var Pc={semN:semN,hoja:hoja,vista:vista,SEMS:SEMS,BLQ:BLQ,COLS:COLS,ROT:ROT,st:st,tinta:tinta,
     FINDE:FINDE,FINDEB:FINDEB,PLOMO:PLOMO,PLOMOB:PLOMOB,colU:cHHA,
     proy:_wkB3Txt((typeof _WKPROY!=='undefined'?_WKPROY:'')||(bl&&bl.nombre)),
     corte:_wkB3Txt(CTX&&CTX.K&&CTX.K.corte),etiq:etiqK,
@@ -18085,7 +18128,7 @@ function _wkB3WLA(CTX,bl,base,opc){
     '(quedan con las celdas VACÍAS, no en cero)');
   return {xml:xml,filas:nFilas,r0:r0,nFin:nFin,ini:r0,fin:nFin,
     SEMS:SEMS,BLQ:BLQ,VIS:VIS,corte:_wkB3Txt(CTX&&CTX.K&&CTX.K.corte),
-    hoja:hoja,lineas:LINEAS,K0:K0,censo:C,
+    hoja:hoja,modo:_wkB3Txt(opc.modo||'base'),vista:vista,lineas:LINEAS,K0:K0,censo:C,
     colDe:{qps:cQPS,cod:cCOD,nom:cNOM,und:cUND,metF:cMF,metP:cMP,metH:cMH,hhP:cHP,
       hhH:cHH,hhF:cHF,peso:cPESO,cump:cCUM,desc:cDESC,acc:cACC,razon:cRAZ,quien:cQUI,
       fechas:cFEC,estado:cEST,filtro:cFIL,linea:cLIN,nivel:cNIV,status:cSTA,hh:cHHA,
@@ -21572,7 +21615,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b31';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b32';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
