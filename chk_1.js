@@ -15441,7 +15441,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b17';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b18';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -21561,6 +21561,111 @@ function _hhApagadas(){try{var a=(typeof _ctActiva==='function')?_ctActiva():nul
    remanente y su exportacion. Tabla cron_reparto: como se reparte el AVANCE
    de una partida entre sus actividades (dividir / completar primero una).
    Las dos con realtime, trigger de updated_at y tumbas. ===== */
+/* ===== FILTROS DE COLUMNA (como en Excel), comunes a las Tablas 1, 2, 3 y R
+   El filtro de una columna guarda lo EXCLUIDO ({ex:{'<texto>':1}}): asi los
+   valores que llegan nuevos por tiempo real se ven por defecto, igual que en
+   Excel con "(Seleccionar todo)" marcado. Vive en cfg.filtros de cada tabla,
+   o sea en el equipo y en Supabase (tabla_config), con realtime. */
+function _fltNumTxt(s){s=String(s==null?'':s).replace(/[ ,']/g,'');if(!/^[-+]?(\d+(\.\d+)?|\.\d+)$/.test(s))return null;var n=Number(s);return isFinite(n)?n:null}
+/* texto canonico de un valor de celda: vacio -> (vacias); numero (o cadena
+   numerica) -> dos decimales (0 -> 0.00); booleano -> si/no; el resto, su texto */
+function _fltTxt(v){
+  if(v==null)return '(vacias)';
+  if(typeof v==='boolean')return v?'si':'no';
+  if(typeof v==='number')return isFinite(v)?_nMil2(v):'(vacias)';
+  var t=String(v).replace(/^\s+|\s+$/g,'');
+  if(t==='')return '(vacias)';
+  var n=_fltNumTxt(t);if(n!=null)return _nMil2(n);
+  return t}
+function _fltPasa(filtros,k,v){return !filtros||!filtros[k]||!filtros[k].ex||!filtros[k].ex[_fltTxt(v)]}
+function _fltActivo(filtros,k){try{var f=filtros&&filtros[k];if(!f||!f.ex)return false;for(var x in f.ex)if(f.ex[x])return true}catch(e){}return false}
+function _fltIcono(k,activo){return '<span class="_fltBtn" data-k="'+k+'" title="Filtrar esta columna (como en Excel)" style="margin-left:2px;cursor:pointer;font-size:11px;'+(activo?'color:#FFD37A;opacity:1':'opacity:.45')+'">⏷</span>'}
+function _fltAtr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+/* orden de la lista: (vacias) primero, luego los numeros de menor a mayor y
+   despues el texto alfabetico */
+function _fltOrdena(a,b){var V='(vacias)';
+  if(a.txt===V)return (b.txt===V)?0:-1;if(b.txt===V)return 1;
+  var x=_fltNumTxt(a.txt),y=_fltNumTxt(b.txt);
+  if(x!=null&&y!=null)return (x<y?-1:(x>y?1:0));
+  if(x!=null)return -1;if(y!=null)return 1;
+  try{return a.txt.localeCompare(b.txt,'es')}catch(e){}
+  return a.txt<b.txt?-1:(a.txt>b.txt?1:0)}
+/* los valores distintos de una columna con su conteo, sobre las lineas que
+   pasan TODOS los filtros MENOS el de esa columna (como en Excel) */
+function _fltValores(lineas,k,valorDe,filtros){
+  var otros=[];try{for(var kk in (filtros||{}))if(kk!==k&&_fltActivo(filtros,kk))otros.push(kk)}catch(e){}
+  var by={},out=[];
+  (lineas||[]).forEach(function(m){
+    for(var i=0;i<otros.length;i++){if(!_fltPasa(filtros,otros[i],valorDe(m,otros[i])))return}
+    var t=_fltTxt(valorDe(m,k)),c=by['#'+t];
+    if(c)c.n++;else{c={txt:t,n:1};by['#'+t]=c;out.push(c)}});
+  out.sort(_fltOrdena);return out}
+/* la ventana del filtro, pegada al icono. `doc` puede ser el documento de la
+   ventana propia de la tabla (la sacada del navegador): todo se crea ahi. */
+function _fltAbre(doc,anchor,k,valores,filtros,onChange){
+  doc=doc||document;
+  try{var vj=doc.getElementById('_fltPop');if(vj){var mk=vj.getAttribute('data-k');vj.remove();if(mk===k)return null}}catch(e0){}
+  filtros=filtros||{};
+  var ex=(filtros[k]&&filtros[k].ex)||{};
+  var pop=doc.createElement('div');pop.id='_fltPop';pop.setAttribute('data-k',k);
+  pop.style.cssText='position:fixed;z-index:2147483647;background:#0d1117;border:1px solid #1d3550;border-radius:10px;padding:8px;font-size:12px;color:#cfe3ff;box-shadow:0 12px 34px rgba(0,0,0,.55);min-width:240px;max-width:520px';
+  var bst='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:5px 9px;font-weight:800;cursor:pointer;font-size:12px';
+  var h='<div style="font-weight:800;color:#8ECBF5;margin-bottom:5px">Filtro de columna</div>'+
+    '<input class="_fltQ" placeholder="Buscar en la lista" style="width:100%;box-sizing:border-box;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:8px;padding:4px 7px;font-size:12px;margin-bottom:5px">'+
+    '<label class="_fltAll" style="display:block;padding:2px 3px;margin-bottom:3px;border-bottom:1px solid #1d3550;cursor:pointer;font-weight:800;white-space:nowrap"><input type="checkbox" class="_fltTodo"> (Seleccionar todo)</label>'+
+    '<div class="_fltLista" style="max-height:44vh;overflow:auto;padding-right:2px">';
+  (valores||[]).forEach(function(v){h+='<label class="_fltIt" data-t="'+_fltAtr(v.txt)+'" style="display:block;padding:1px 3px;cursor:pointer;white-space:nowrap"><input type="checkbox" class="_fltCb"'+(ex[v.txt]?'':' checked')+'> '+_fltAtr(v.txt)+' <span style="color:#7d8590">('+v.n+')</span></label>'});
+  if(!(valores&&valores.length))h+='<div style="color:#7d8590;padding:3px">sin valores</div>';
+  h+='</div><div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap"><button class="_fltOk" style="'+bst+'">Aceptar</button><button class="_fltNo" style="'+bst+'">Limpiar filtro</button><button class="_fltCl" style="'+bst+'">Cerrar</button></div>';
+  pop.innerHTML=h;doc.body.appendChild(pop);
+  /* pegada al icono y dentro de la ventana */
+  try{var r=anchor.getBoundingClientRect(),vw=((doc.defaultView||window).innerWidth)||900,vh=((doc.defaultView||window).innerHeight)||600;
+    var pw=pop.offsetWidth||260,ph=pop.offsetHeight||320;
+    pop.style.left=Math.max(4,Math.min(r.left,vw-pw-6))+'px';
+    pop.style.top=Math.max(4,Math.min(r.bottom+4,vh-ph-6))+'px'}catch(e1){pop.style.left='20px';pop.style.top='20px'}
+  var items=function(){return Array.prototype.slice.call(pop.querySelectorAll('._fltIt'))};
+  var cbDe=function(l){return l.querySelector('._fltCb')};
+  var todo=pop.querySelector('._fltTodo');
+  var pintaTodo=function(){var vs=items().filter(function(l){return l.style.display!=='none'}),n=0;
+    vs.forEach(function(l){if(cbDe(l).checked)n++});
+    todo.checked=(vs.length>0&&n===vs.length);todo.indeterminate=(n>0&&n<vs.length)};
+  pintaTodo();
+  todo.onclick=function(e){e.stopPropagation()};
+  todo.onchange=function(){var v=todo.checked;items().forEach(function(l){if(l.style.display!=='none')cbDe(l).checked=v});pintaTodo()};
+  items().forEach(function(l){var c=cbDe(l);c.onclick=function(e){e.stopPropagation()};c.onchange=pintaTodo});
+  var q=pop.querySelector('._fltQ');
+  q.onclick=function(e){e.stopPropagation()};
+  q.onkeydown=function(e){e.stopPropagation()};
+  q.oninput=function(){var t=String(q.value||'').toLowerCase();
+    items().forEach(function(l){var x=String(l.getAttribute('data-t')||'').toLowerCase();l.style.display=(!t||x.indexOf(t)>=0)?'':'none'});pintaTodo()};
+  pop.onclick=function(e){e.stopPropagation()};
+  pop.onmousedown=function(e){e.stopPropagation()};
+  pop.querySelector('._fltCl').onclick=function(e){e.stopPropagation();try{pop.remove()}catch(_e){}};
+  pop.querySelector('._fltNo').onclick=function(e){e.stopPropagation();
+    try{delete filtros[k]}catch(_e){filtros[k]=null}
+    try{pop.remove()}catch(_e2){}try{onChange(filtros)}catch(_e3){}};
+  pop.querySelector('._fltOk').onclick=function(e){e.stopPropagation();
+    var ex2={},n=0;items().forEach(function(l){if(!cbDe(l).checked){ex2[l.getAttribute('data-t')]=1;n++}});
+    if(n)filtros[k]={ex:ex2};else{try{delete filtros[k]}catch(_e){filtros[k]=null}}
+    try{pop.remove()}catch(_e2){}try{onChange(filtros)}catch(_e3){}};
+  /* se cierra al hacer clic fuera; el oyente se registra UNA sola vez por
+     documento (tambien en la ventana propia de la tabla) */
+  if(!doc._fltFueraBound){doc._fltFueraBound=true;
+    doc.addEventListener('click',function(ev){try{var p=doc.getElementById('_fltPop');if(!p)return;
+      var t=ev.target;if(!t)return;if(p===t||p.contains(t))return;
+      if(t.closest&&t.closest('._fltBtn'))return;   /* el propio icono lo abre y lo cierra */
+      p.remove()}catch(_e){}},true)}
+  return pop}
+/* engancha los iconos de filtro de una tabla ya pintada */
+function _fltBind(doc,root,leerFiltros,valoresDe,guardar){try{doc=doc||document;
+  Array.prototype.forEach.call(root.querySelectorAll('._fltBtn'),function(b){
+    b.onmousedown=function(e){e.stopPropagation()};
+    b.ondblclick=function(e){e.stopPropagation();e.preventDefault()};
+    b.onclick=function(e){e.stopPropagation();e.preventDefault();
+      var k=b.getAttribute('data-k'),F={},V=[];
+      try{F=leerFiltros()||{}}catch(_e){F={}}
+      try{V=valoresDe(k)||[]}catch(_e2){V=[]}
+      _fltAbre(doc,b,k,V,F,guardar)}})}catch(e){}}
 /* ===== TABLA DEL ALCANCE (tipo Excel) en ventana flotante =====
    Todo lo que cuenta en un cronograma, fila por partida y agrupado por
    sistema, con la MISMA regla de HH que la tarjeta y la curva. Se repinta
@@ -21793,7 +21898,7 @@ function _tbCfg(){var raw=null;try{raw=localStorage.getItem('obf4_tabla_cols')}c
   if(window._tbCfgMem&&window._tbCfgMem.str===raw)return window._tbCfgMem.obj;   /* sin JSON.parse en cada celda */
   var c=null;try{c=JSON.parse(raw||'null')}catch(e){c=null}
   if(!(c&&c.orden))c={orden:_TB_COLS.map(function(x){return x[0]})};
-  c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};
+  c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};c.filtros=c.filtros||{};
   /* una vez: las columnas nuevas de la primera version salen del orden
      guardado para irse al final del cuadro */
   if(!c.finMig){c.finMig=1;['metR','metRF','rend','dur'].forEach(function(k){var i=(c.orden||[]).indexOf(k);if(i>=0)c.orden.splice(i,1)})}
@@ -21872,8 +21977,12 @@ function _tbMarca(html,qq){if(!qq)return html;var partes=String(html==null?'':ht
     while((k=n.indexOf(qq,pos))>=0){out+=seg.slice(pos,k)+'<mark style="background:#FFD54F;color:#111;border-radius:2px;padding:0 1px">'+seg.slice(k,k+qq.length)+'</mark>';pos=k+qq.length}
     partes[i]=out+seg.slice(pos)}
   return partes.join('')}
+/* el valor de una celda para el filtro: el MISMO que se pinta (las lineas ya
+   vienen recalculadas si el usuario cambio la formula de la columna) */
+function _tbFltVal(m,k){return m[k]}
 function _crTablaHTML(D,q,ord){
   window._tbLineas={};   /* las lineas pintadas, por clave de fila: las lee el exportador a Excel */
+  window._tbLineasTodas=[];window._tbFltTxt='';   /* TODAS las lineas (ya con el buscador, aun sin filtros): de ellas sale la lista de valores del filtro */
   window._tbUltimo={D:D,q:q,ord:ord};   /* lo ultimo pintado, para que el exportador pueda repintarlo entero */
   var F=D.filas.slice();var qq=_tbNorm(q||'').replace(/^\s+|\s+$/g,'');   /* sin tildes ni mayusculas */
   /* solo las filas cuyas PROPIAS celdas coinciden: el titulo WBS (sistema) no
@@ -21898,7 +22007,7 @@ function _crTablaHTML(D,q,ord){
   var porSis={},orden=[];F.forEach(function(r){if(!porSis[r.sis]){porSis[r.sis]=[];orden.push(r.sis)}porSis[r.sis].push(r)});
   var colEst={'Activa':'#9FE8B0','Activo':'#9FE8B0','Fuera':'#FFB4A8','HH apagadas':'#E8C9A0','Apagado':'#E8C9A0','Sin tarea':'#F0A3A3','Sin HH':'#9db4d6','L\u00e1pida':'#7d8590','Saldo retirado':'#E8C9A0','Todo el saldo retirado':'#E8C9A0','Cerrado':'#8DD6ED','Metrado ampliado':'#B7CDE8'};
   var _aj=_tbAjusta();
-  var _cfgT=_tbCfg(),_fzk={};var _tbVisible=function(m){return true};   /* ya no se ocultan filas sueltas: los titulos WBS se pliegan */try{if(_cfgT.fija&&_cfgT.fija.col&&cols.some(function(c){return c[0]===_cfgT.fija.col})){for(var _i=0;_i<cols.length;_i++){_fzk[cols[_i][0]]=1;if(cols[_i][0]===_cfgT.fija.col)break}}}catch(e){}
+  var _cfgT=_tbCfg(),_fzk={};var _fltF=_cfgT.filtros||{},_fltKs=[],_fltN=0,_fltX=0;try{for(var _fk9 in _fltF){if(_fltActivo(_fltF,_fk9))_fltKs.push(_fk9)}}catch(_ef9){}var _tbVisible=function(m){for(var _i9=0;_i9<_fltKs.length;_i9++){if(!_fltPasa(_fltF,_fltKs[_i9],_tbFltVal(m,_fltKs[_i9])))return false}return true};   /* ya no se ocultan filas sueltas: los titulos WBS se pliegan */try{if(_cfgT.fija&&_cfgT.fija.col&&cols.some(function(c){return c[0]===_cfgT.fija.col})){for(var _i=0;_i<cols.length;_i++){_fzk[cols[_i][0]]=1;if(cols[_i][0]===_cfgT.fija.col)break}}}catch(e){}
   /* el ancho de cada columna se calcula UNA vez por repintado: _tbAnchoCss lee
      localStorage y hace JSON.parse, y se llamaba en CADA celda */
   var _ANCHO={};cols.forEach(function(cl){_ANCHO[cl[0]]=_tbAnchoCss(cl[0])});
@@ -21956,7 +22065,7 @@ function _crTablaHTML(D,q,ord){
   var H='<table style="border-collapse:separate;border-spacing:0;border-left:1px solid #223049;border-top:1px solid #223049;font-size:11.5px;min-width:100%"><thead><tr class="_tbLet">'+numCel('',7,'top:0;');
   cols.forEach(function(cl,i){H+='<td data-lk="'+cl[0]+'" title="Seleccionar la columna: Ctrl+C copia sus valores; en una columna con l\u00e1piz, Ctrl+V los pega en toda la columna" '+_EX+'position:sticky;top:0;z-index:5;height:18px;line-height:16px;box-sizing:border-box;cursor:pointer">'+_tbColL(i)+'</td>'});
   H+='</tr><tr>'+numCel('1',6,'top:18px;');
-  cols.forEach(function(cl){H+='<th class="_tbOrd" draggable="true" data-k="'+cl[0]+'" title="Arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:18px;background:#152436;color:#8ECBF5;border-right:1px solid #223049;border-bottom:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TB_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_tbAnchoCss(cl[0])+'">'+cl[1]+(_tbFxCambiada(cl[0])?' <span title="F\u00f3rmula cambiada por ti: '+_tbFxDe(cl[0]).join(' ')+'" style="color:#FFD27A;font-style:italic;font-weight:900">\u0192</span>':'')+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_tbPin" data-k="'+cl[0]+'" title="Inmovilizar las columnas hasta esta (como Excel); otro clic la suelta" style="margin-left:5px;cursor:pointer;font-size:11px;opacity:'+(_fzk[cl[0]]?'1':'.4')+'">📌</span><span class="_tbClr" data-k="'+cl[0]+'" title="Color de relleno de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;opacity:'+((_cfgT.colores&&_cfgT.colores[cl[0]])?'1':'.4')+'">🎨</span><span class="_tbFnt" data-k="'+cl[0]+'" title="Color de la fuente de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;font-weight:900;color:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])||'#8ECBF5')+';opacity:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])?'1':'.5')+'">A</span><span class="_tbRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
+  cols.forEach(function(cl){H+='<th class="_tbOrd" draggable="true" data-k="'+cl[0]+'" title="Arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:18px;background:#152436;color:#8ECBF5;border-right:1px solid #223049;border-bottom:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TB_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_tbAnchoCss(cl[0])+'">'+cl[1]+(_tbFxCambiada(cl[0])?' <span title="F\u00f3rmula cambiada por ti: '+_tbFxDe(cl[0]).join(' ')+'" style="color:#FFD27A;font-style:italic;font-weight:900">\u0192</span>':'')+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_tbPin" data-k="'+cl[0]+'" title="Inmovilizar las columnas hasta esta (como Excel); otro clic la suelta" style="margin-left:5px;cursor:pointer;font-size:11px;opacity:'+(_fzk[cl[0]]?'1':'.4')+'">📌</span><span class="_tbClr" data-k="'+cl[0]+'" title="Color de relleno de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;opacity:'+((_cfgT.colores&&_cfgT.colores[cl[0]])?'1':'.4')+'">🎨</span><span class="_tbFnt" data-k="'+cl[0]+'" title="Color de la fuente de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;font-weight:900;color:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])||'#8ECBF5')+';opacity:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])?'1':'.5')+'">A</span>'+((cl[0]==='num')?'':_fltIcono(cl[0],_fltActivo(_cfgT.filtros||{},cl[0])))+'<span class="_tbRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
   H+='</tr></thead><tbody>';
   var T={n:0,hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0,hhR:0,hhRF:0,costoR:0,costoRF:0},N=0;
   /* titulos de sistema y TOTAL: una sola celda combinada por tramo (sin lineas
@@ -22012,8 +22121,16 @@ function _crTablaHTML(D,q,ord){
   /* con formulas cambiadas por el usuario, cada linea se recalcula con ellas */
   var _hayFx=_TB_COLS.some(function(cl){return _tbFxCambiada(cl[0])});
   var vis0=vis;vis=function(r){var L0=vis0(r);if(!_hayFx)return L0;return L0.map(function(m){var c={};for(var k in m)c[k]=m[k];return _tbFxAplica(c)})};   /* sobre copias: la fila original de la tabla no se toca */
-  orden.forEach(function(sis){var L=porSis[sis];var S={hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0,hhR:0,hhRF:0,costoR:0,costoRF:0};
-    L.forEach(function(r){vis(r).filter(_tbVisible).forEach(function(m){S.hhC+=Number(m.hhC)||0;S.hh+=Number(m.hh)||0;S.costo+=Number(m.costo)||0;S.costoC+=Number(m.costoC)||0;S.dCosto+=Number(m.dCosto)||0;S.hhM+=Number(m.hhM)||0;S.costoM+=Number(m.costoM)||0;S.hhA+=Number(m.hhA)||0;S.costoA+=Number(m.costoA)||0;S.hhAM+=Number(m.hhAM)||0;S.costoAM+=Number(m.costoAM)||0;S.hhR+=Number(m.hhR)||0;S.hhRF+=Number(m.hhRF)||0;S.costoR+=Number(m.costoR)||0;S.costoRF+=Number(m.costoRF)||0});if(r.est==='Activa')S.act++});
+  /* FILTROS de columna: las lineas de cada partida se arman UNA sola vez; las
+     que no pasan el filtro ni se pintan ni suman, una partida sin lineas no
+     sale y un sistema o titulo WBS sin partidas tampoco. El subtotal, el
+     TOTAL y el pie salen de las lineas que quedan. */
+  orden.forEach(function(sis){var L0=porSis[sis],L=[],LV=[];
+    L0.forEach(function(r){var vv=vis(r);for(var _j9=0;_j9<vv.length;_j9++)window._tbLineasTodas.push(vv[_j9]);
+      var vf=vv.filter(_tbVisible);_fltN+=vv.length;_fltX+=vf.length;if(!vf.length)return;L.push(r);LV.push(vf)});
+    if(!L.length)return;
+    var S={hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0,hhR:0,hhRF:0,costoR:0,costoRF:0};
+    L.forEach(function(r,_i8){LV[_i8].forEach(function(m){S.hhC+=Number(m.hhC)||0;S.hh+=Number(m.hh)||0;S.costo+=Number(m.costo)||0;S.costoC+=Number(m.costoC)||0;S.dCosto+=Number(m.dCosto)||0;S.hhM+=Number(m.hhM)||0;S.costoM+=Number(m.costoM)||0;S.hhA+=Number(m.hhA)||0;S.costoA+=Number(m.costoA)||0;S.hhAM+=Number(m.hhAM)||0;S.costoAM+=Number(m.costoAM)||0;S.hhR+=Number(m.hhR)||0;S.hhRF+=Number(m.hhRF)||0;S.costoR+=Number(m.costoR)||0;S.costoRF+=Number(m.costoRF)||0});if(r.est==='Activa')S.act++});
     var kS=String(sis),cS=!!_pleg[kS];
     H+=tituloN(esc(sis)+' <span style="color:#7d8590;font-weight:600">· '+L.length+' partidas · '+S.act+' activas</span>',kS,0,cS);
     /* subtitulos WBS debajo del sistema: cuantas partidas y activas tiene cada uno */
@@ -22029,11 +22146,12 @@ function _crTablaHTML(D,q,ord){
         if(_pleg[keys[lv]])oc=true}
       prevK=keys;
       if(oc)return;
-      vis(r).filter(_tbVisible).forEach(function(m){var apag=(m.est!=='Activa'&&m.est!=='Activo'&&m.est!=='Metrado ampliado');
+      LV[i].forEach(function(m){var apag=(m.est!=='Activa'&&m.est!=='Activo'&&m.est!=='Metrado ampliado');
         var rk9=String(m.id||'')+'|'+String(m.pert||'')+'|'+(m._np||0);window._tbLineas[rk9]=m;
         _rn++;if(!_rnIni)_rnIni=_rn;_rnFin=_rn;
         H+='<tr data-rk="'+esc(rk9)+'" data-rn="'+_rn+'" style="background:'+bg+(apag?';color:#8a94a6':'')+'">'+numCel(_rn,4);cols.forEach(function(cl){H+=celda(m,cl[0],false,m._np?(N+'.'+m._np):N)});H+='</tr>'})});
     T.n+=L.length;T.hhC+=S.hhC;T.hh+=S.hh;T.costo+=S.costo;T.costoC+=S.costoC;T.dCosto+=S.dCosto;T.act+=S.act;T.hhM+=S.hhM;T.costoM+=S.costoM;T.hhA+=S.hhA;T.costoA+=S.costoA;T.hhAM+=S.hhAM;T.costoAM+=S.costoAM;T.hhR+=S.hhR;T.hhRF+=S.hhRF;T.costoR+=S.costoR;T.costoRF+=S.costoRF});
+  window._tbFltTxt=_fltKs.length?(' · filtrado: '+_fltX+' de '+_fltN+' filas'):'';
   T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);T.hhR=r2(T.hhR);T.hhRF=r2(T.hhRF);T.costoR=r2(T.costoR);T.costoRF=r2(T.costoRF);
   H+='</tbody><tfoot>'+subtot('TOTAL \u00b7 '+T.n+' partidas \u00b7 '+T.act+' activas',T,'#152436',900,true)+'</tfoot></table>';
   return H}
@@ -22056,6 +22174,18 @@ function _crTablaBind(root,ordRef,rerender){
       inp.oninput=inp.onchange=function(){var c2=_tbCfg();c2.fuentes=c2.fuentes||{};c2.fuentes[k]=inp.value;_tbCfgSave(c2);try{_tbAplicaFijas(root)}catch(_e){}};
       inp.onblur=function(){setTimeout(function(){try{inp.remove()}catch(_e){}rerender()},200)};inp.click()};
     b.ondblclick=function(e){e.stopPropagation();e.preventDefault();var k=b.getAttribute('data-k'),cfg=_tbCfg();if(cfg.fuentes)delete cfg.fuentes[k];_tbCfgSave(cfg);rerender()}});
+  /* filtro de columna (como en Excel): la lista de valores sale de las lineas de
+     ESTE repintado, ya con el buscador puesto y sin el filtro de la propia
+     columna; al aceptar se guarda en la configuracion (equipo + Supabase con
+     realtime) y la tabla se repinta */
+  try{_fltBind(doc,root,function(){return _tbCfg().filtros||{}},
+    function(k){return _fltValores(window._tbLineasTodas||[],k,_tbFltVal,_tbCfg().filtros||{})},
+    function(f){var c=_tbCfg();c.filtros=f;_tbCfgSave(c);rerender()})}catch(_ef8){}
+  /* cuantas filas quedan con el filtro puesto, al lado del texto de estado (en
+     su propio hueco: el de la barra lo reescriben el buscador y las columnas) */
+  try{var r8=doc.getElementById('_tbRes');if(r8&&r8.parentNode){var e8=doc.getElementById('_tbFltRes');
+    if(!e8){e8=doc.createElement('span');e8.id='_tbFltRes';e8.style.cssText='font-size:11px;color:#FFD37A;font-weight:800;margin-left:6px';r8.parentNode.insertBefore(e8,r8.nextSibling)}
+    e8.textContent=window._tbFltTxt||''}}catch(_e8){}
   /* titulos WBS plegables (clic): se recuerda por usuario con el resto de la configuracion */
   root.querySelectorAll('tr._tbTit').forEach(function(tr){tr.onclick=function(){var k=tr.getAttribute('data-wk'),cfg=_tbCfg();cfg.pleg=cfg.pleg||{};if(cfg.pleg[k])delete cfg.pleg[k];else cfg.pleg[k]=1;_tbCfgSave(cfg);rerender()}});
   /* expandir / contraer todos los desgloses: contraer pliega los sistemas (y
@@ -22234,7 +22364,7 @@ function _crTablaColsUI(doc,anchor,rerender){
   h+='<button id="_tbColsReset" style="grid-column:1/3;margin-top:4px;background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:5px 8px;font-weight:800;cursor:pointer">Restablecer orden y columnas</button>';
   pop.innerHTML=h;doc.body.appendChild(pop);
   pop.querySelectorAll('input[type=checkbox]').forEach(function(cb){cb.onchange=function(){var c2=_tbCfg();if(cb.checked)delete c2.ocultas[cb.getAttribute('data-k')];else c2.ocultas[cb.getAttribute('data-k')]=1;_tbCfgSave(c2);rerender()}});
-  pop.querySelector('#_tbColsReset').onclick=function(){_tbCfgSave({orden:_TB_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{}});pop.remove();rerender()}}
+  pop.querySelector('#_tbColsReset').onclick=function(){_tbCfgSave({orden:_TB_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{},filtros:{}});pop.remove();rerender()}}
 /* la ventana propia (fuera del navegador): un documento minimo con buscador,
    zoom, columnas, copiar y la tabla; se repinta desde la app con cada cambio */
 /* ---------------- Exportar a Excel el cuadro tal como se ve ----------------
@@ -22865,6 +22995,10 @@ var _TQ_FIJAS=[['num','N\u00b0'],['pert','Pertenece'],['id','Item'],['nom','Part
 var _TQ_COLS=_TQ_FIJAS.slice();
 function _tqEsPer(k){return /^p_\d{4}-\d{2}-\d{2}$/.test(String(k||''))}
 function _tqPerDe(k){return (window._tqPerMap||{})[k]||null}
+/* el valor que PINTA cada celda, para los filtros de columna tipo Excel:
+   periodos m.p[k] (0 incluido: sale como 0.00), la suma, y el resto m[k];
+   vacio o nulo lo convierte _fltTxt en '(vacias)' */
+function _tqFltValor(m,k){if(!m)return '';if(_tqEsPer(k))return (m.p&&m.p[k]!=null)?Number(m.p[k]):0;if(k==='suma')return Number(m.suma)||0;var v=m[k];return (v==null)?'':v}
 /* las columnas de esta pintada: las fijas y una por periodo (semana o dia) */
 function _tqColsDe(D){var per=(D&&D.per)||[];window._tqPerMap={};
   _TQ_COLS=_TQ_FIJAS.concat(per.map(function(p){window._tqPerMap[p.k]=p;
@@ -22883,7 +23017,7 @@ function _tqCfg(){var raw=null;try{raw=localStorage.getItem(_TQ_LS)}catch(e){}
   if(window._tqCfgMem&&window._tqCfgMem.str===raw)return window._tqCfgMem.obj;   /* sin JSON.parse en cada celda */
   var c=null;try{c=JSON.parse(raw||'null')}catch(e){c=null}
   if(!(c&&c.orden))c={orden:_TQ_COLS.map(function(x){return x[0]})};
-  c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};
+  c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};c.filtros=c.filtros||{};
   /* una vez: las columnas nuevas de la primera version salen del orden
      guardado para irse al final del cuadro */
   c.orden=(c.orden||[]).filter(function(k){return !_tqEsPer(k)});   /* las columnas de periodo nunca se guardan en el orden */
@@ -22994,7 +23128,15 @@ function _crTablaQHTML(D,q,ord){
   var porSis={},orden=[];F.forEach(function(r){if(!porSis[r.sis]){porSis[r.sis]=[];orden.push(r.sis)}porSis[r.sis].push(r)});
   var colEst={'Activa':'#9FE8B0','Activo':'#9FE8B0','Fuera':'#FFB4A8','HH apagadas':'#E8C9A0','Apagado':'#E8C9A0','Sin tarea':'#F0A3A3','Sin HH':'#9db4d6','L\u00e1pida':'#7d8590','Saldo retirado':'#E8C9A0','Todo el saldo retirado':'#E8C9A0','Cerrado':'#8DD6ED','Metrado ampliado':'#B7CDE8'};
   var _aj=_tqAjusta();
-  var _cfgT=_tqCfg(),_fzk={};var _tqVisible=function(m){return true};   /* ya no se ocultan filas sueltas: los titulos WBS se pliegan */try{if(_cfgT.fija&&_cfgT.fija.col&&cols.some(function(c){return c[0]===_cfgT.fija.col})){for(var _i=0;_i<cols.length;_i++){_fzk[cols[_i][0]]=1;if(cols[_i][0]===_cfgT.fija.col)break}}}catch(e){}
+  var _cfgT=_tqCfg(),_fzk={};
+  /* filtros de columna tipo Excel (modulo comun _flt*): la configuracion guarda
+     lo EXCLUIDO de cada columna, asi los valores nuevos que llegan por tiempo
+     real se ven por defecto */
+  var _fCfg=(_cfgT.filtros||{}),_fKs=[];for(var _fk9 in _fCfg){if(_fCfg[_fk9]&&_fCfg[_fk9].ex)_fKs.push(_fk9)}
+  var _fHay=!!(_fKs.length&&typeof _fltPasa==='function');
+  var _todas=(window._tqLineasTodas=[]);   /* TODAS las lineas tras el buscador y ANTES de los filtros: las lee el panel del filtro */
+  var _tqVisible=function(m){if(!_fHay)return true;for(var i9=0;i9<_fKs.length;i9++)if(!_fltPasa(_fCfg,_fKs[i9],_tqFltValor(m,_fKs[i9])))return false;return true};   /* ya no se ocultan filas sueltas: los titulos WBS se pliegan */
+  try{if(_cfgT.fija&&_cfgT.fija.col&&cols.some(function(c){return c[0]===_cfgT.fija.col})){for(var _i=0;_i<cols.length;_i++){_fzk[cols[_i][0]]=1;if(cols[_i][0]===_cfgT.fija.col)break}}}catch(e){}
   /* el ancho de cada columna se calcula UNA vez por repintado: _tqAnchoCss lee
      localStorage y hace JSON.parse, y se llamaba en CADA celda */
   var _ANCHO={};cols.forEach(function(cl){_ANCHO[cl[0]]=_tqAnchoCss(cl[0])});
@@ -23058,7 +23200,7 @@ function _crTablaQHTML(D,q,ord){
   var H='<table style="border-collapse:separate;border-spacing:0;border-left:1px solid #223049;border-top:1px solid #223049;font-size:11.5px;min-width:100%"><thead><tr class="_tqLet">'+numCel('',7,'top:0;');
   cols.forEach(function(cl,i){H+='<td data-lk="'+cl[0]+'" title="Seleccionar la columna: Ctrl+C copia sus valores; en una columna con l\u00e1piz, Ctrl+V los pega en toda la columna" '+_EX+'position:sticky;top:0;z-index:5;height:18px;line-height:16px;box-sizing:border-box;cursor:pointer">'+_tbColL(i)+'</td>'});
   H+='</tr><tr>'+numCel('1',6,'top:18px;');
-  cols.forEach(function(cl){H+='<th class="_tqOrd" draggable="true" data-k="'+cl[0]+'" title="Arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:18px;background:#152436;color:#8ECBF5;border-right:1px solid #223049;border-bottom:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TQ_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_tqAnchoCss(cl[0])+(_tqEsPer(cl[0])?'white-space:normal;text-align:center;line-height:1.15;min-width:72px;':'')+'">'+cl[1]+(_tqFxCambiada(cl[0])?' <span title="F\u00f3rmula cambiada por ti: '+_tqFxDe(cl[0]).join(' ')+'" style="color:#FFD27A;font-style:italic;font-weight:900">\u0192</span>':'')+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_tqPin" data-k="'+cl[0]+'" title="Inmovilizar las columnas hasta esta (como Excel); otro clic la suelta" style="margin-left:5px;cursor:pointer;font-size:11px;opacity:'+(_fzk[cl[0]]?'1':'.4')+'">📌</span><span class="_tqClr" data-k="'+cl[0]+'" title="Color de relleno de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;opacity:'+((_cfgT.colores&&_cfgT.colores[cl[0]])?'1':'.4')+'">🎨</span><span class="_tqFnt" data-k="'+cl[0]+'" title="Color de la fuente de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;font-weight:900;color:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])||'#8ECBF5')+';opacity:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])?'1':'.5')+'">A</span><span class="_tqRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
+  cols.forEach(function(cl){H+='<th class="_tqOrd" draggable="true" data-k="'+cl[0]+'" title="Arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:18px;background:#152436;color:#8ECBF5;border-right:1px solid #223049;border-bottom:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TQ_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_tqAnchoCss(cl[0])+(_tqEsPer(cl[0])?'white-space:normal;text-align:center;line-height:1.15;min-width:72px;':'')+'">'+cl[1]+(_tqFxCambiada(cl[0])?' <span title="F\u00f3rmula cambiada por ti: '+_tqFxDe(cl[0]).join(' ')+'" style="color:#FFD27A;font-style:italic;font-weight:900">\u0192</span>':'')+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_tqPin" data-k="'+cl[0]+'" title="Inmovilizar las columnas hasta esta (como Excel); otro clic la suelta" style="margin-left:5px;cursor:pointer;font-size:11px;opacity:'+(_fzk[cl[0]]?'1':'.4')+'">📌</span><span class="_tqClr" data-k="'+cl[0]+'" title="Color de relleno de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;opacity:'+((_cfgT.colores&&_cfgT.colores[cl[0]])?'1':'.4')+'">🎨</span><span class="_tqFnt" data-k="'+cl[0]+'" title="Color de la fuente de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;font-weight:900;color:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])||'#8ECBF5')+';opacity:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])?'1':'.5')+'">A</span>'+((cl[0]==='num')?'':_fltIcono(cl[0],_fltActivo(_cfgT.filtros,cl[0])))+'<span class="_tqRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
   H+='</tr></thead><tbody>';
   var T={n:0,hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0,hhR:0,hhRF:0,costoR:0,costoRF:0},N=0;
   /* titulos de sistema y TOTAL: una sola celda combinada por tramo (sin lineas
@@ -23117,8 +23259,12 @@ function _crTablaQHTML(D,q,ord){
   /* con formulas cambiadas por el usuario, cada linea se recalcula con ellas */
   var _hayFx=_TQ_COLS.some(function(cl){return _tqFxCambiada(cl[0])});
   var vis0=vis;vis=function(r){var L0=vis0(r);if(!_hayFx)return L0;return L0.map(function(m){var c={};for(var k in m)c[k]=m[k];return _tqFxAplica(c)})};   /* sobre copias: la fila original de la tabla no se toca */
-  orden.forEach(function(sis){var L=porSis[sis];var S={hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0,hhR:0,hhRF:0,costoR:0,costoRF:0};
-    L.forEach(function(r){vis(r).filter(_tqVisible).forEach(function(m){S.hhC+=Number(m.hhC)||0;S.hh+=Number(m.hh)||0;S.costo+=Number(m.costo)||0;S.costoC+=Number(m.costoC)||0;S.dCosto+=Number(m.dCosto)||0;S.hhM+=Number(m.hhM)||0;S.costoM+=Number(m.costoM)||0;S.hhA+=Number(m.hhA)||0;S.costoA+=Number(m.costoA)||0;S.hhAM+=Number(m.hhAM)||0;S.costoAM+=Number(m.costoAM)||0;S.hhR+=Number(m.hhR)||0;S.hhRF+=Number(m.hhRF)||0;S.costoR+=Number(m.costoR)||0;S.costoRF+=Number(m.costoRF)||0;_tqAcum(S,m)});if(r.est==='Activa')S.act++});
+  orden.forEach(function(sis){var L=porSis[sis],LV=L.map(function(r9){var v9=vis(r9);for(var j9=0;j9<v9.length;j9++)_todas.push(v9[j9]);return v9});
+    /* con filtros de columna: fuera las lineas que no pasan; un sistema sin
+       ninguna linea no pinta su titulo ni entra en el TOTAL */
+    if(_fHay){var kp9=[];for(var i9=0;i9<L.length;i9++)if(LV[i9].some(_tqVisible))kp9.push(i9);if(!kp9.length)return;L=kp9.map(function(x9){return L[x9]});LV=kp9.map(function(x9){return LV[x9]})}
+    var S={hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0,hhR:0,hhRF:0,costoR:0,costoRF:0};
+    L.forEach(function(r,ix9){LV[ix9].filter(_tqVisible).forEach(function(m){S.hhC+=Number(m.hhC)||0;S.hh+=Number(m.hh)||0;S.costo+=Number(m.costo)||0;S.costoC+=Number(m.costoC)||0;S.dCosto+=Number(m.dCosto)||0;S.hhM+=Number(m.hhM)||0;S.costoM+=Number(m.costoM)||0;S.hhA+=Number(m.hhA)||0;S.costoA+=Number(m.costoA)||0;S.hhAM+=Number(m.hhAM)||0;S.costoAM+=Number(m.costoAM)||0;S.hhR+=Number(m.hhR)||0;S.hhRF+=Number(m.hhRF)||0;S.costoR+=Number(m.costoR)||0;S.costoRF+=Number(m.costoRF)||0;_tqAcum(S,m)});if(r.est==='Activa')S.act++});
     var kS=String(sis),cS=!!_pleg[kS];
     H+=tituloN(esc(sis)+' <span style="color:#7d8590;font-weight:600">· '+L.length+' partidas · '+S.act+' activas</span>',kS,0,cS);
     /* subtitulos WBS debajo del sistema: cuantas partidas y activas tiene cada uno */
@@ -23134,16 +23280,20 @@ function _crTablaQHTML(D,q,ord){
         if(_pleg[keys[lv]])oc=true}
       prevK=keys;
       if(oc)return;
-      vis(r).filter(_tqVisible).forEach(function(m){var apag=(m.est!=='Activa'&&m.est!=='Activo'&&m.est!=='Metrado ampliado');
+      LV[i].filter(_tqVisible).forEach(function(m){var apag=(m.est!=='Activa'&&m.est!=='Activo'&&m.est!=='Metrado ampliado');
         var rk9=String(m.id||'')+'|'+String(m.pert||'')+'|'+(m._np||0);window._tqLineas[rk9]=m;
         _rn++;if(!_rnIni)_rnIni=_rn;_rnFin=_rn;
         H+='<tr data-rk="'+esc(rk9)+'" data-rn="'+_rn+'" style="background:'+bg+(apag?';color:#8a94a6':'')+'">'+numCel(_rn,4);cols.forEach(function(cl){H+=celda(m,cl[0],false,m._np?(N+'.'+m._np):N)});H+='</tr>'})});
     T.n+=L.length;T.hhC+=S.hhC;T.hh+=S.hh;T.costo+=S.costo;T.costoC+=S.costoC;T.dCosto+=S.dCosto;T.act+=S.act;T.hhM+=S.hhM;T.costoM+=S.costoM;T.hhA+=S.hhA;T.costoA+=S.costoA;T.hhAM+=S.hhAM;T.costoAM+=S.costoAM;T.hhR+=S.hhR;T.hhRF+=S.hhRF;T.costoR+=S.costoR;T.costoRF+=S.costoRF;for(var kq in S)if(_tqEsPer(kq)||kq==='suma')T[kq]=(T[kq]||0)+S[kq]});
   /* las partidas SIN AGRUPACION (vista agrupadas, o sin actividad en el alcance): al final, en rojo,
      informativas: no entran en el TOTAL ni en las SUMAS */
-  if(D.sueltas&&D.sueltas.length){_rn++;
-    H+='<tr data-rn="'+_rn+'" style="background:#3A1414"><td class="_tqEx" style="background:#3A1414;color:#FFB4A8;text-align:center;font-weight:800;font-size:10.5px;padding:1px 5px;border-right:1px solid #223049;border-bottom:1px solid #223049;user-select:none;position:sticky;left:0;z-index:4;min-width:22px">'+_rn+'</td><td colspan="'+cols.length+'" style="border-top:1px solid #5A2A2A;border-bottom:1px solid #5A2A2A;border-left:0;border-right:0;padding:4px 6px;font-weight:800;color:#FFB4A8;white-space:nowrap"><span style="position:sticky;left:36px;display:inline-block">\u26d4 SIN AGRUPACI\u00d3N \u00b7 '+D.sueltas.length+' partidas que no entran en ninguna actividad del cronograma \u00b7 solo informativas: NO suman en el TOTAL</span></td></tr>';
-    D.sueltas.forEach(function(m){if(qq&&_tqNorm(m.id+' '+m.nom+' '+m.tareas+' '+m.esp+' '+(m.und||'')).indexOf(qq)<0)return;_rn++;var rk9='NS|'+String(m.id||'')+'|0';window._tqLineas[rk9]=m;
+  /* las sueltas que de verdad se ven: buscador y filtros de columna. De
+     ellas salen el rotulo, su conteo y las filas (si no queda ninguna, el
+     rotulo rojo tampoco se pinta) */
+  var _SU9=(D.sueltas||[]).filter(function(m){if(qq&&_tqNorm(m.id+' '+m.nom+' '+m.tareas+' '+m.esp+' '+(m.und||'')).indexOf(qq)<0)return false;_todas.push(m);return _tqVisible(m)});
+  if(_SU9.length){_rn++;
+    H+='<tr data-rn="'+_rn+'" style="background:#3A1414"><td class="_tqEx" style="background:#3A1414;color:#FFB4A8;text-align:center;font-weight:800;font-size:10.5px;padding:1px 5px;border-right:1px solid #223049;border-bottom:1px solid #223049;user-select:none;position:sticky;left:0;z-index:4;min-width:22px">'+_rn+'</td><td colspan="'+cols.length+'" style="border-top:1px solid #5A2A2A;border-bottom:1px solid #5A2A2A;border-left:0;border-right:0;padding:4px 6px;font-weight:800;color:#FFB4A8;white-space:nowrap"><span style="position:sticky;left:36px;display:inline-block">\u26d4 SIN AGRUPACI\u00d3N \u00b7 '+_SU9.length+' partidas que no entran en ninguna actividad del cronograma \u00b7 solo informativas: NO suman en el TOTAL</span></td></tr>';
+    _SU9.forEach(function(m){_rn++;var rk9='NS|'+String(m.id||'')+'|0';window._tqLineas[rk9]=m;
       H+='<tr data-rk="'+esc(rk9)+'" data-rn="'+_rn+'" data-nosum="1" style="background:#3A1414;color:#FFD9D4">'+numCel(_rn,4);cols.forEach(function(cl){H+=celda(m,cl[0],false,'')});H+='</tr>'})}
   T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);T.hhR=r2(T.hhR);T.hhRF=r2(T.hhRF);T.costoR=r2(T.costoR);T.costoRF=r2(T.costoRF);
   /* % de cada periodo y % acumulado sobre las HH del alcance (el mismo denominador de la curva) */
@@ -23156,6 +23306,8 @@ function _crTablaQHTML(D,q,ord){
     if(!puesto)h+='<td style="'+ST+'border-bottom:1px solid #223049;padding:3px 6px;font-weight:700;color:#9FE8B0;font-size:10.5px;white-space:nowrap">'+lab+'</td>';
     return h+'</tr>'};
   H+='</tbody><tfoot>'+subtot('TOTAL \u00b7 '+T.n+' partidas \u00b7 '+T.act+' activas \u00b7 '+_nMil2(D.u&&D.u.hh)+' hh del alcance',T,'#152436',900,true)+_tqPieFila('% de cada periodo sobre las HH del alcance',T,'pct')+_tqPieFila('% acumulado (curva S)',T,'acum')+'</tfoot></table>';
+  /* cuantas lineas quedan de todas las que hay (lo dice el texto de estado) */
+  try{window._tqFltRes=_fHay?{vis:_todas.filter(_tqVisible).length,tot:_todas.length}:null}catch(_ef9){}
   return H}
 /* cabecera: ordenar con clic, mover arrastrando; boton Columnas para ocultar/mostrar */
 function _crTablaQBind(root,ordRef,rerender){
@@ -23176,6 +23328,9 @@ function _crTablaQBind(root,ordRef,rerender){
       inp.oninput=inp.onchange=function(){var c2=_tqCfg();c2.fuentes=c2.fuentes||{};c2.fuentes[k]=inp.value;_tqCfgSave(c2);try{_tqAplicaFijas(root)}catch(_e){}};
       inp.onblur=function(){setTimeout(function(){try{inp.remove()}catch(_e){}rerender()},200)};inp.click()};
     b.ondblclick=function(e){e.stopPropagation();e.preventDefault();var k=b.getAttribute('data-k'),cfg=_tqCfg();if(cfg.fuentes)delete cfg.fuentes[k];_tqCfgSave(cfg);rerender()}});
+  /* filtro de columna tipo Excel: el panel sale del icono de la cabecera y guarda
+     lo EXCLUIDO en cfg.filtros (equipo + Supabase, con realtime) */
+  try{if(typeof _fltBind==='function')_fltBind(doc,root,function(){return _tqCfg().filtros||{}},function(k){return _fltValores(window._tqLineasTodas||[],k,_tqFltValor,_tqCfg().filtros||{})},function(f){var c=_tqCfg();c.filtros=f;_tqCfgSave(c);rerender()})}catch(e){}
   /* titulos WBS plegables (clic): se recuerda por usuario con el resto de la configuracion */
   root.querySelectorAll('tr._tqTit').forEach(function(tr){tr.onclick=function(){var k=tr.getAttribute('data-wk'),cfg=_tqCfg();cfg.pleg=cfg.pleg||{};if(cfg.pleg[k])delete cfg.pleg[k];else cfg.pleg[k]=1;_tqCfgSave(cfg);rerender()}});
   /* expandir / contraer todos los desgloses: contraer pliega los sistemas (y
@@ -23356,7 +23511,7 @@ function _crTablaQColsUI(doc,anchor,rerender){
   h+='<button id="_tqColsReset" style="grid-column:1/3;margin-top:4px;background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:5px 8px;font-weight:800;cursor:pointer">Restablecer orden y columnas</button>';
   pop.innerHTML=h;doc.body.appendChild(pop);
   pop.querySelectorAll('input[type=checkbox]').forEach(function(cb){cb.onchange=function(){var c2=_tqCfg();if(cb.id==='_tqCeros'){c2.ceros=!!cb.checked;_tqCfgSave(c2);rerender();return}if(cb.checked)delete c2.ocultas[cb.getAttribute('data-k')];else c2.ocultas[cb.getAttribute('data-k')]=1;_tqCfgSave(c2);rerender()}});
-  pop.querySelector('#_tqColsReset').onclick=function(){var c0=_tqCfg();_tqCfgSave({per:c0.per,corte:c0.corte,vista:c0.vista,fuente:c0.fuente,noLab:c0.noLab,ceros:c0.ceros,ajustar:c0.ajustar,orden:_TQ_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{}});pop.remove();rerender()}}
+  pop.querySelector('#_tqColsReset').onclick=function(){var c0=_tqCfg();_tqCfgSave({per:c0.per,corte:c0.corte,vista:c0.vista,fuente:c0.fuente,noLab:c0.noLab,ceros:c0.ceros,ajustar:c0.ajustar,orden:_TQ_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{},filtros:{}});pop.remove();rerender()}}
 /* la ventana propia (fuera del navegador): un documento minimo con buscador,
    zoom, columnas, copiar y la tabla; se repinta desde la app con cada cambio */
 /* ---------------- Exportar a Excel el cuadro tal como se ve ----------------
@@ -23658,6 +23813,7 @@ function _tqInfoTxt(D){try{var o=D.info||{},per=D.per||[];var t=(D.u.n+' partida
     if(o.proy.fuente==='cal')t+=' \u00b7 calendario: '+_nMil2(o.proy.remanente)+' hh programadas'+(o.proy.sinProg>0.005?(' \u00b7 SIN PROGRAMAR '+_nMil2(o.proy.sinProg)+' hh'):'');
     if(o.proy.sinFecha>0.005)t+=' \u00b7 sin fecha '+_nMil2(o.proy.sinFecha)+' hh'}
   if(D.sueltas&&D.sueltas.length)t+=' \u00b7 '+D.sueltas.length+' sin agrupaci\u00f3n (en rojo, no suman)';
+  try{var f9=window._tqFltRes;if(f9)t+=' \u00b7 filtrado: '+f9.vis+' de '+f9.tot+' filas'}catch(_e9){}
   return t}catch(e){return ''}}
 function _tqBarraHTML(){var c=_tqCfg();var seg=function(id,ops,val){return '<span id="'+id+'" style="display:inline-flex;border:1px solid #1d3550;border-radius:8px;overflow:hidden">'+ops.map(function(o){var on=(o[0]===val);return '<button data-v="'+o[0]+'" title="'+o[2]+'" style="border-radius:0;background:'+(on?'#1B5E8A':'#182c42')+';color:'+(on?'#fff':'#9db4d6')+';padding:5px 9px;border:0;font-weight:800;cursor:pointer">'+o[1]+'</button>'}).join('')+'</span>'};
   var W=(c.corte!=null&&c.corte!=='')?Number(c.corte):4;
@@ -23716,7 +23872,7 @@ function _tvCfg(){var raw=null;try{raw=localStorage.getItem(_TV_LS)}catch(e){}
   if(window._tvCfgMem&&window._tvCfgMem.str===raw)return window._tvCfgMem.obj;   /* sin JSON.parse en cada celda */
   var c=null;try{c=JSON.parse(raw||'null')}catch(e){c=null}
   if(!(c&&c.orden))c={orden:_TV_COLS.map(function(x){return x[0]})};
-  c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};
+  c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};c.filtros=c.filtros||{};   /* filtros de columna tipo Excel: guardan lo EXCLUIDO ({ex:{...}}); _tvCfgSave NO les quita las claves de periodo p_... */
   /* una vez: las columnas nuevas de la primera version salen del orden
      guardado para irse al final del cuadro */
   c.orden=(c.orden||[]).filter(function(k){return !_tvEsPer(k)});   /* las columnas de periodo nunca se guardan en el orden */
@@ -23891,7 +24047,7 @@ function _crTablaVHTML(D,q,ord){
   var H='<table style="border-collapse:separate;border-spacing:0;border-left:1px solid #223049;border-top:1px solid #223049;font-size:11.5px;min-width:100%"><thead><tr class="_tvLet">'+numCel('',7,'top:0;');
   cols.forEach(function(cl,i){H+='<td data-lk="'+cl[0]+'" title="Seleccionar la columna: Ctrl+C copia sus valores; en una columna con l\u00e1piz, Ctrl+V los pega en toda la columna" '+_EX+'position:sticky;top:0;z-index:5;height:18px;line-height:16px;box-sizing:border-box;cursor:pointer">'+_tbColL(i)+'</td>'});
   H+='</tr><tr>'+numCel('1',6,'top:18px;');
-  cols.forEach(function(cl){H+='<th class="_tvOrd" draggable="true" data-k="'+cl[0]+'" title="Arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:18px;background:#152436;color:#8ECBF5;border-right:1px solid #223049;border-bottom:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TV_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_tvAnchoCss(cl[0])+(_tvEsPer(cl[0])?'white-space:normal;text-align:center;line-height:1.15;min-width:72px;':'')+'">'+cl[1]+(_tvFxCambiada(cl[0])?' <span title="F\u00f3rmula cambiada por ti: '+_tvFxDe(cl[0]).join(' ')+'" style="color:#FFD27A;font-style:italic;font-weight:900">\u0192</span>':'')+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_tvPin" data-k="'+cl[0]+'" title="Inmovilizar las columnas hasta esta (como Excel); otro clic la suelta" style="margin-left:5px;cursor:pointer;font-size:11px;opacity:'+(_fzk[cl[0]]?'1':'.4')+'">📌</span><span class="_tvClr" data-k="'+cl[0]+'" title="Color de relleno de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;opacity:'+((_cfgT.colores&&_cfgT.colores[cl[0]])?'1':'.4')+'">🎨</span><span class="_tvFnt" data-k="'+cl[0]+'" title="Color de la fuente de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;font-weight:900;color:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])||'#8ECBF5')+';opacity:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])?'1':'.5')+'">A</span><span class="_tvRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
+  cols.forEach(function(cl){H+='<th class="_tvOrd" draggable="true" data-k="'+cl[0]+'" title="Arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:18px;background:#152436;color:#8ECBF5;border-right:1px solid #223049;border-bottom:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TV_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_tvAnchoCss(cl[0])+(_tvEsPer(cl[0])?'white-space:normal;text-align:center;line-height:1.15;min-width:72px;':'')+'">'+cl[1]+(_tvFxCambiada(cl[0])?' <span title="F\u00f3rmula cambiada por ti: '+_tvFxDe(cl[0]).join(' ')+'" style="color:#FFD27A;font-style:italic;font-weight:900">\u0192</span>':'')+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_tvPin" data-k="'+cl[0]+'" title="Inmovilizar las columnas hasta esta (como Excel); otro clic la suelta" style="margin-left:5px;cursor:pointer;font-size:11px;opacity:'+(_fzk[cl[0]]?'1':'.4')+'">📌</span><span class="_tvClr" data-k="'+cl[0]+'" title="Color de relleno de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;opacity:'+((_cfgT.colores&&_cfgT.colores[cl[0]])?'1':'.4')+'">🎨</span><span class="_tvFnt" data-k="'+cl[0]+'" title="Color de la fuente de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;font-weight:900;color:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])||'#8ECBF5')+';opacity:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])?'1':'.5')+'">A</span>'+((cl[0]==='num')?'':_fltIcono(cl[0],_fltActivo(_cfgT.filtros,cl[0])))+'<span class="_tvRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
   H+='</tr></thead><tbody>';
   var T={n:0,hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0,hhR:0,hhRF:0,costoR:0,costoRF:0},N=0;
   /* titulos de sistema y TOTAL: una sola celda combinada por tramo (sin lineas
@@ -23950,6 +24106,27 @@ function _crTablaVHTML(D,q,ord){
   /* con formulas cambiadas por el usuario, cada linea se recalcula con ellas */
   var _hayFx=_TV_COLS.some(function(cl){return _tvFxCambiada(cl[0])});
   var vis0=vis;vis=function(r){var L0=vis0(r);if(!_hayFx)return L0;return L0.map(function(m){var c={};for(var k in m)c[k]=m[k];return _tvFxAplica(c)})};   /* sobre copias: la fila original de la tabla no se toca */
+  /* ===== filtros de columna (como en Excel; modulo comun _flt*) =====
+     valorDe: el MISMO valor que pinta la celda (los periodos de m.p, el resto
+     de m); la columna de numeros de fila (num) no se filtra. Las lineas de
+     esta pintada se guardan ANTES de los filtros y DESPUES del buscador q:
+     de ellas sale la lista de valores del menu de cada columna */
+  var _tvValorDe=function(m,k){if(!m)return null;if(_tvEsPer(k))return (m.p&&m.p[k]!=null)?Number(m.p[k]):0;if(k==='num')return null;return m[k]};
+  window._tvValorDe=_tvValorDe;
+  var _tvFlt=_cfgT.filtros||{},_tvFltKs=[];for(var _fk9 in _tvFlt)if(_fltActivo(_tvFlt,_fk9))_tvFltKs.push(_fk9);
+  var _tvPasaM=function(m){for(var i9=0;i9<_tvFltKs.length;i9++){var k9=_tvFltKs[i9];if(!_fltPasa(_tvFlt,k9,_tvValorDe(m,k9)))return false}return true};
+  var _tvTodas=[];F.forEach(function(r){vis(r).forEach(function(m){_tvTodas.push(m)})});
+  (D.sueltas||[]).forEach(function(m){if(qq&&_tvNorm(m.id+' '+m.nom+' '+m.tareas+' '+m.esp+' '+(m.und||'')).indexOf(qq)<0)return;_tvTodas.push(m)});
+  window._tvLineasTodas=_tvTodas;window._tvFiltN=_tvTodas.length;window._tvFiltX=_tvTodas.length;
+  if(_tvFltKs.length){window._tvFiltX=_tvTodas.filter(_tvPasaM).length;
+    /* las lineas que no pasan desaparecen del cuerpo Y de los subtotales, del
+       TOTAL y del pie (todos salen de vis(r).filter(_tvVisible)) */
+    _tvVisible=function(m){return _tvPasaM(m)};
+    /* una partida se queda si le queda alguna linea; los titulos de sistema y
+       WBS con 0 lineas no se pintan (se rehace el reparto por sistema) */
+    F=F.filter(function(r){return vis(r).some(_tvPasaM)});
+    porSis={};orden=[];F.forEach(function(r){if(!porSis[r.sis]){porSis[r.sis]=[];orden.push(r.sis)}porSis[r.sis].push(r)});
+    if(D.sueltas&&D.sueltas.length){var D9={};for(var kd9 in D)D9[kd9]=D[kd9];D9.sueltas=D.sueltas.filter(_tvPasaM);D=D9}}
   orden.forEach(function(sis){var L=porSis[sis];var S={hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0,hhR:0,hhRF:0,costoR:0,costoRF:0};
     L.forEach(function(r){vis(r).filter(_tvVisible).forEach(function(m){S.hhC+=Number(m.hhC)||0;S.hh+=Number(m.hh)||0;S.costo+=Number(m.costo)||0;S.costoC+=Number(m.costoC)||0;S.dCosto+=Number(m.dCosto)||0;S.hhM+=Number(m.hhM)||0;S.costoM+=Number(m.costoM)||0;S.hhA+=Number(m.hhA)||0;S.costoA+=Number(m.costoA)||0;S.hhAM+=Number(m.hhAM)||0;S.costoAM+=Number(m.costoAM)||0;S.hhR+=Number(m.hhR)||0;S.hhRF+=Number(m.hhRF)||0;S.costoR+=Number(m.costoR)||0;S.costoRF+=Number(m.costoRF)||0;_tvAcum(S,m)});if(r.est==='Activa')S.act++});
     var kS=String(sis),cS=!!_pleg[kS];
@@ -24011,6 +24188,12 @@ function _crTablaVBind(root,ordRef,rerender){
     b.ondblclick=function(e){e.stopPropagation();e.preventDefault();var k=b.getAttribute('data-k'),cfg=_tvCfg();if(cfg.fuentes)delete cfg.fuentes[k];_tvCfgSave(cfg);rerender()}});
   /* titulos WBS plegables (clic): se recuerda por usuario con el resto de la configuracion */
   root.querySelectorAll('tr._tvTit').forEach(function(tr){tr.onclick=function(){var k=tr.getAttribute('data-wk'),cfg=_tvCfg();cfg.pleg=cfg.pleg||{};if(cfg.pleg[k])delete cfg.pleg[k];else cfg.pleg[k]=1;_tvCfgSave(cfg);rerender()}});
+  /* filtro de columna (como en Excel): los valores salen de las lineas de esta
+     pintada sin el filtro de esa misma columna; lo elegido se guarda en la
+     configuracion del usuario (localStorage + Supabase, con realtime) */
+  try{_fltBind(doc,root,function(){return _tvCfg().filtros||{}},
+    function(k){return _fltValores(window._tvLineasTodas||[],k,(window._tvValorDe||function(m,k2){return m?m[k2]:null}),_tvCfg().filtros||{})},
+    function(f){var c=_tvCfg();c.filtros=f;_tvCfgSave(c);rerender()})}catch(_ef9){}
   /* expandir / contraer todos los desgloses: contraer pliega los sistemas (y
      con ellos sus subtitulos); expandir lo abre todo */
   try{var bE=doc.getElementById('_tvExp'),bC=doc.getElementById('_tvCon');
@@ -24189,7 +24372,7 @@ function _crTablaVColsUI(doc,anchor,rerender){
   h+='<button id="_tvColsReset" style="grid-column:1/3;margin-top:4px;background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:5px 8px;font-weight:800;cursor:pointer">Restablecer orden y columnas</button>';
   pop.innerHTML=h;doc.body.appendChild(pop);
   pop.querySelectorAll('input[type=checkbox]').forEach(function(cb){cb.onchange=function(){var c2=_tvCfg();if(cb.id==='_tvCeros'){c2.ceros=!!cb.checked;_tvCfgSave(c2);rerender();return}if(cb.checked)delete c2.ocultas[cb.getAttribute('data-k')];else c2.ocultas[cb.getAttribute('data-k')]=1;_tvCfgSave(c2);rerender()}});
-  pop.querySelector('#_tvColsReset').onclick=function(){var c0=_tvCfg();_tvCfgSave({per:c0.per,corte:c0.corte,vista:c0.vista,fuente:c0.fuente,noLab:c0.noLab,ceros:c0.ceros,ajustar:c0.ajustar,orden:_TV_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{}});pop.remove();rerender()}}
+  pop.querySelector('#_tvColsReset').onclick=function(){var c0=_tvCfg();_tvCfgSave({per:c0.per,corte:c0.corte,vista:c0.vista,fuente:c0.fuente,noLab:c0.noLab,ceros:c0.ceros,ajustar:c0.ajustar,orden:_TV_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{},filtros:{}});pop.remove();rerender()}}
 /* la ventana propia (fuera del navegador): un documento minimo con buscador,
    zoom, columnas, copiar y la tabla; se repinta desde la app con cada cambio */
 /* ---------------- Exportar a Excel el cuadro tal como se ve ----------------
@@ -24484,7 +24667,11 @@ async function _crTablaVUI(c){
 /* ---- lo propio de las tablas por periodo ---- */
 function _tvOpc(){var cfg=_tvCfg();return {n:_TV_N,per:(cfg.per==='dia')?'dia':'sem',corte:(cfg.corte!=null&&cfg.corte!=='')?Number(cfg.corte):4,vista:(cfg.vista==='agr')?'agr':'alc',fuente:(cfg.fuente==='cal')?'cal':'curva',noLab:cfg.noLab!==false}}
 async function _tvDatos(c){return await _t23Datos(c,_tvOpc())}
-function _tvInfoTxt(D){try{var o=D.info||{},per=D.per||[];var t=(D.u.n+' partidas cuentan \u00b7 '+_nMil2(D.u.hh)+' hh \u00b7 '+per.length+(o.per==='dia'?' d\u00edas':' semanas'));
+function _tvInfoTxt(D){var _t9='';try{_t9=_tvInfoTxt0(D)}catch(e){_t9=''}
+  try{var _f9=_tvCfg().filtros||{},_h9=false;for(var _k9 in _f9)if(_fltActivo(_f9,_k9)){_h9=true;break}
+    if(_h9)_t9+=' \u00b7 filtrado: '+(window._tvFiltX||0)+' de '+(window._tvFiltN||0)+' filas'}catch(e){}
+  return _t9}
+function _tvInfoTxt0(D){try{var o=D.info||{},per=D.per||[];var t=(D.u.n+' partidas cuentan \u00b7 '+_nMil2(D.u.hh)+' hh \u00b7 '+per.length+(o.per==='dia'?' d\u00edas':' semanas'));
   if(per.length)t+=' \u00b7 '+per[0].ini+' \u2192 '+per[per.length-1].fin;
   if(per.tope)t+=' \u00b7 \u26a0 recortado al tope de '+per.tope+(o.per==='dia'?' d\u00edas':' semanas')+': lo posterior se acumula en la \u00faltima columna';
   if(o.proy){if(o.proy.rep)t+=' \u00b7 reprogramaci\u00f3n: ganado '+_nMil2(o.proy.ganado)+' hh hasta '+o.proy.corte+' + remanente '+_nMil2(o.proy.remanente)+' hh';
@@ -24667,6 +24854,30 @@ var _TX_FIJAS=[['num','N\u00b0'],['pert','Pertenece'],['id','Item'],['nom','Part
 var _TX_HCVAC={nom:1,esp:1,tareas:1,und:1,met:1,hhC:1,hh:1,rxStatus:1,rxDesc:1,rxAcc:1,rxRazon:1,rxResp:1,rxFechas:1,rxEst:1};
 var _TX_COLS=_TX_FIJAS.slice();
 function _txEsPer(k){return /^p_\d{4}-\d{2}-\d{2}$/.test(String(k||''))}
+/* ---- filtros de columna tipo Excel: lo propio de la Tabla R ----
+   El modulo comun _flt* (ventana, iconos, listas) va antes de la Tabla 1;
+   aqui solo se le dice QUE es una fila y QUE valor tiene cada celda. */
+/* las filas de un alcance: dos consecutivas con el mismo id (programado y hecho) */
+function _txGrupos(A){var G=[],u=null;(A||[]).forEach(function(r){var kg=String((r&&r.id)||'');
+  if(u&&u.k===kg&&u.L.length<2){u.L.push(r);return}u={k:kg,L:[r]};G.push(u)});return G}
+/* el valor que PINTA la celda: los periodos salen de m.p, el resto de m */
+function _txValorDe(m,k){if(!m)return null;if(_txEsPer(k))return (m.p&&m.p[k]!=null)?Number(m.p[k]):0;
+  if(k==='suma')return Number(m.suma)||0;return m[k]}
+/* la fila HECHO no repite las columnas del alcance (Status, Restriccion, Metrado...):
+   para filtrar se toman las de su fila PROGRAMADO */
+function _txFilasG(g){var L=(g&&g.L)||[],pr=null;
+  for(var i=0;i<L.length;i++){if(L[i]&&L[i]._tipo!=='hc'){pr=L[i];break}}
+  return L.map(function(x){if(!x||!pr||x===pr||x._tipo!=='hc')return x;
+    var o={};for(var k in x)o[k]=x[k];for(var k2 in _TX_HCVAC)o[k2]=pr[k2];return o})}
+/* un alcance (su par programado/hecho y sus apartados) pasa un filtro si
+   CUALQUIERA de sus dos filas lo pasa: asi el par nunca se rompe */
+function _txPasaG(g,F){if(!F||typeof _fltPasa!=='function')return true;var L=_txFilasG(g);
+  for(var k in F){if(!F[k]||!F[k].ex)continue;var p=false;
+    for(var i=0;i<L.length;i++){if(_fltPasa(F,k,_txValorDe(L[i],k))){p=true;break}}
+    if(!p)return false}
+  return true}
+/* hay algun filtro puesto */
+function _txHayFlt(F){if(!F)return false;for(var k in F){if(F[k]&&F[k].ex){for(var z in F[k].ex)return true}}return false}
 /* el color de una fila por su tipo: programado (arena) o hecho (verde) */
 /* el color del STATUS de la semana de cierre: el de los chips del analisis */
 function _txColStatus(s){s=String(s||'');
@@ -24700,6 +24911,9 @@ function _txCfg(){var raw=null;try{raw=localStorage.getItem(_TX_LS)}catch(e){}
   var c=null;try{c=JSON.parse(raw||'null')}catch(e){c=null}
   if(!(c&&c.orden))c={orden:_TX_COLS.map(function(x){return x[0]})};
   c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};
+  /* los filtros de columna (como Excel): guardan lo EXCLUIDO por columna,
+     tambien en las columnas de periodo (_txCfgSave no las quita de aqui) */
+  c.filtros=c.filtros||{};
   /* una vez: las columnas nuevas de la primera version salen del orden
      guardado para irse al final del cuadro */
   c.orden=(c.orden||[]).filter(function(k){return !_txEsPer(k)});   /* las columnas de periodo nunca se guardan en el orden */
@@ -24790,12 +25004,25 @@ function _crTablaRHTML(D,q,ord){
   var qq=_txNorm(q||'').replace(/^\s+|\s+$/g,'');   /* sin tildes ni mayusculas */
   /* DOS filas por alcance (programado y hecho): van siempre juntas, se
      ordenan como una sola linea y cuentan como UNA partida */
-  var G=[],_ug=null;(D.filas||[]).forEach(function(r){var kg=String((r&&r.id)||'');
-    if(_ug&&_ug.k===kg&&_ug.L.length<2){_ug.L.push(r);return}_ug={k:kg,L:[r]};G.push(_ug)});
+  var G=_txGrupos(D.filas||[]);
   /* solo los alcances cuyas PROPIAS celdas coinciden: el titulo WBS (sistema) no
      arrastra a todo su grupo aunque lleve la palabra buscada */
   var _txTexto=function(r){return _txNorm(r.id+' '+r.nom+' '+r.tareas+' '+r.grupo+' '+r.est+' '+r.esp+' '+(r.und||'')+' '+(r.pert||'')+' '+(r.rxStatus||'')+' '+(r.rxDesc||'')+' '+(r.rxAcc||'')+' '+(r.rxRazon||'')+' '+(r.rxResp||'')+' '+(r.rxFechas||'')+' '+(r.rxEst||'')+' '+(r.partes||[]).map(function(x){return x.pert+' '+(x.est||'')+' '+(x.apOff||'')+' '+(x.ret||'')}).join(' '))};
   if(qq)G=G.filter(function(g){return g.L.some(function(r){return _txTexto(r).indexOf(qq)>=0})});
+  /* FILTROS DE COLUMNA (como en Excel): se aplican DESPUES del buscador y
+     ANTES de agrupar y sumar, asi los subtotales, el TOTAL y el pie salen
+     de las lineas que quedan y un titulo de sistema/WBS sin lineas no se
+     pinta. La unidad es el ALCANCE: sus dos filas van siempre juntas. */
+  var _F9=_txCfg().filtros||{};
+  var _GS9=_txGrupos(D.sueltas||[]);
+  if(qq)_GS9=_GS9.filter(function(g){return g.L.some(function(m){return _txNorm(m.id+' '+m.nom+' '+m.tareas+' '+m.esp+' '+(m.und||'')).indexOf(qq)>=0})});
+  /* las lineas de ESTA pintada, sin filtrar: de ellas sale la lista de
+     valores de cada columna (con lo de la fila PROGRAMADO ya resuelto) */
+  var _LT9=[];G.concat(_GS9).forEach(function(g){_txFilasG(g).forEach(function(m){_LT9.push(m)})});
+  window._txLineasTodas=_LT9;
+  G=G.filter(function(g){return _txPasaG(g,_F9)});_GS9=_GS9.filter(function(g){return _txPasaG(g,_F9)});
+  var _nF9=0;G.concat(_GS9).forEach(function(g){_nF9+=((g.L||[]).length)});
+  window._txFiltro={n:_nF9,N:_LT9.length,hay:_txHayFlt(_F9)};
   var cols=_txColsVis();
   /* como Excel: letra de cada columna visible y numero de fila (la cabecera
      es la 1, y cada titulo WBS, partida y el TOTAL suman una); con ellos se
@@ -24892,7 +25119,7 @@ function _crTablaRHTML(D,q,ord){
   var H='<table style="border-collapse:separate;border-spacing:0;border-left:1px solid #223049;border-top:1px solid #223049;font-size:11.5px;min-width:100%"><thead><tr class="_txLet">'+numCel('',7,'top:0;');
   cols.forEach(function(cl,i){H+='<td data-lk="'+cl[0]+'" title="Seleccionar la columna: Ctrl+C copia sus valores; en una columna con l\u00e1piz, Ctrl+V los pega en toda la columna" '+_EX+'position:sticky;top:0;z-index:5;height:18px;line-height:16px;box-sizing:border-box;cursor:pointer">'+_tbColL(i)+'</td>'});
   H+='</tr><tr>'+numCel('1',6,'top:18px;');
-  cols.forEach(function(cl){H+='<th class="_txOrd" draggable="true" data-k="'+cl[0]+'" title="Arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:18px;background:#152436;color:#8ECBF5;border-right:1px solid #223049;border-bottom:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TX_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_txAnchoCss(cl[0])+(_txEsPer(cl[0])?'white-space:normal;text-align:center;line-height:1.15;min-width:72px;':'')+'">'+cl[1]+(_txFxCambiada(cl[0])?' <span title="F\u00f3rmula cambiada por ti: '+_txFxDe(cl[0]).join(' ')+'" style="color:#FFD27A;font-style:italic;font-weight:900">\u0192</span>':'')+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_txPin" data-k="'+cl[0]+'" title="Inmovilizar las columnas hasta esta (como Excel); otro clic la suelta" style="margin-left:5px;cursor:pointer;font-size:11px;opacity:'+(_fzk[cl[0]]?'1':'.4')+'">📌</span><span class="_txClr" data-k="'+cl[0]+'" title="Color de relleno de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;opacity:'+((_cfgT.colores&&_cfgT.colores[cl[0]])?'1':'.4')+'">🎨</span><span class="_txFnt" data-k="'+cl[0]+'" title="Color de la fuente de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;font-weight:900;color:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])||'#8ECBF5')+';opacity:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])?'1':'.5')+'">A</span><span class="_txRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
+  cols.forEach(function(cl){H+='<th class="_txOrd" draggable="true" data-k="'+cl[0]+'" title="Arrastra para mover la columna \u00b7 borde derecho: ancho (doble clic restablece)" style="position:sticky;top:18px;background:#152436;color:#8ECBF5;border-right:1px solid #223049;border-bottom:1px solid #223049;padding:5px 14px 5px 6px;text-align:'+(_TX_NUM[cl[0]]?'right':'left')+';cursor:pointer;white-space:nowrap;z-index:2;user-select:none;overflow:hidden;text-overflow:ellipsis;'+_txAnchoCss(cl[0])+(_txEsPer(cl[0])?'white-space:normal;text-align:center;line-height:1.15;min-width:72px;':'')+'">'+cl[1]+(_txFxCambiada(cl[0])?' <span title="F\u00f3rmula cambiada por ti: '+_txFxDe(cl[0]).join(' ')+'" style="color:#FFD27A;font-style:italic;font-weight:900">\u0192</span>':'')+((ord&&ord.k===cl[0])?(ord.d>0?' \u25b2':' \u25bc'):'')+'<span class="_txPin" data-k="'+cl[0]+'" title="Inmovilizar las columnas hasta esta (como Excel); otro clic la suelta" style="margin-left:5px;cursor:pointer;font-size:11px;opacity:'+(_fzk[cl[0]]?'1':'.4')+'">📌</span><span class="_txClr" data-k="'+cl[0]+'" title="Color de relleno de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;opacity:'+((_cfgT.colores&&_cfgT.colores[cl[0]])?'1':'.4')+'">🎨</span><span class="_txFnt" data-k="'+cl[0]+'" title="Color de la fuente de la columna (doble clic: quitar)" style="margin-left:2px;cursor:pointer;font-size:11px;font-weight:900;color:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])||'#8ECBF5')+';opacity:'+((_cfgT.fuentes&&_cfgT.fuentes[cl[0]])?'1':'.5')+'">A</span>'+((cl[0]==='num'||typeof _fltIcono!=='function')?'':_fltIcono(cl[0],(typeof _fltActivo==='function')&&_fltActivo(_cfgT.filtros||{},cl[0])))+'<span class="_txRs" data-k="'+cl[0]+'" title="Arrastra para cambiar el ancho \u00b7 doble clic: ancho autom\u00e1tico" style="position:absolute;right:0;top:0;width:8px;height:100%;cursor:col-resize;border-right:2px solid #2b4162"></span></th>'});
   H+='</tr></thead><tbody>';
   var T={n:0,hhC:0,hh:0,costo:0,costoC:0,dCosto:0,act:0,hhM:0,costoM:0,hhA:0,costoA:0,hhAM:0,costoAM:0,hhR:0,hhRF:0,costoR:0,costoRF:0},TH={},N=0;
   /* titulos de sistema y TOTAL: una sola celda combinada por tramo (sin lineas
@@ -24997,9 +25224,10 @@ function _crTablaRHTML(D,q,ord){
     T.n+=L.length;T.hhC+=S.hhC;T.hh+=S.hh;T.costo+=S.costo;T.costoC+=S.costoC;T.dCosto+=S.dCosto;T.act+=S.act;T.hhM+=S.hhM;T.costoM+=S.costoM;T.hhA+=S.hhA;T.costoA+=S.costoA;T.hhAM+=S.hhAM;T.costoAM+=S.costoAM;T.hhR+=S.hhR;T.hhRF+=S.hhRF;T.costoR+=S.costoR;T.costoRF+=S.costoRF;for(var kq in S)if(_txEsPer(kq)||kq==='suma')T[kq]=(T[kq]||0)+S[kq];for(var kh in SH)if(_txEsPer(kh)||kh==='suma')TH[kh]=(TH[kh]||0)+SH[kh]});
   /* las partidas SIN AGRUPACION (vista agrupadas, o sin actividad en el alcance): al final, en rojo,
      informativas: no entran en el TOTAL ni en las SUMAS */
-  if(D.sueltas&&D.sueltas.length){_rn++;
-    H+='<tr data-rn="'+_rn+'" style="background:#3A1414"><td class="_txEx" style="background:#3A1414;color:#FFB4A8;text-align:center;font-weight:800;font-size:10.5px;padding:1px 5px;border-right:1px solid #223049;border-bottom:1px solid #223049;user-select:none;position:sticky;left:0;z-index:4;min-width:22px">'+_rn+'</td><td colspan="'+cols.length+'" style="border-top:1px solid #5A2A2A;border-bottom:1px solid #5A2A2A;border-left:0;border-right:0;padding:4px 6px;font-weight:800;color:#FFB4A8;white-space:nowrap"><span style="position:sticky;left:36px;display:inline-block">\u26d4 SIN AGRUPACI\u00d3N \u00b7 '+_txNPart(D.sueltas)+' partidas que no entran en ninguna actividad del cronograma \u00b7 solo informativas: NO suman en el TOTAL</span></td></tr>';
-    D.sueltas.forEach(function(m){if(qq&&_txNorm(m.id+' '+m.nom+' '+m.tareas+' '+m.esp+' '+(m.und||'')).indexOf(qq)<0)return;_rn++;var rk9='NS|'+String(m.id||'')+'|'+String(m._tipo||'')+'|0';window._txLineas[rk9]=m;
+  var _SU9=[];_GS9.forEach(function(g){(g.L||[]).forEach(function(m){_SU9.push(m)})});
+  if(_SU9.length){_rn++;
+    H+='<tr data-rn="'+_rn+'" style="background:#3A1414"><td class="_txEx" style="background:#3A1414;color:#FFB4A8;text-align:center;font-weight:800;font-size:10.5px;padding:1px 5px;border-right:1px solid #223049;border-bottom:1px solid #223049;user-select:none;position:sticky;left:0;z-index:4;min-width:22px">'+_rn+'</td><td colspan="'+cols.length+'" style="border-top:1px solid #5A2A2A;border-bottom:1px solid #5A2A2A;border-left:0;border-right:0;padding:4px 6px;font-weight:800;color:#FFB4A8;white-space:nowrap"><span style="position:sticky;left:36px;display:inline-block">\u26d4 SIN AGRUPACI\u00d3N \u00b7 '+_txNPart(_SU9)+' partidas que no entran en ninguna actividad del cronograma \u00b7 solo informativas: NO suman en el TOTAL</span></td></tr>';
+    _SU9.forEach(function(m){_rn++;var rk9='NS|'+String(m.id||'')+'|'+String(m._tipo||'')+'|0';window._txLineas[rk9]=m;
       H+='<tr data-rk="'+esc(rk9)+'" data-rn="'+_rn+'" data-nosum="1" data-tipo="'+esc(String(m._tipo||''))+'" style="background:#3A1414;color:#FFD9D4">'+numCel(_rn,4);cols.forEach(function(cl){H+=celda(m,cl[0],false,'')});H+='</tr>'})}
   T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);T.hhR=r2(T.hhR);T.hhRF=r2(T.hhRF);T.costoR=r2(T.costoR);T.costoRF=r2(T.costoRF);
   /* % de cada periodo y % acumulado sobre las HH del alcance (el mismo denominador de la curva) */
@@ -25041,6 +25269,15 @@ function _crTablaRBind(root,ordRef,rerender){
       inp.onblur=function(){setTimeout(function(){try{inp.remove()}catch(_e){}rerender()},200)};inp.click()};
     b.ondblclick=function(e){e.stopPropagation();e.preventDefault();var k=b.getAttribute('data-k'),cfg=_txCfg();if(cfg.fuentes)delete cfg.fuentes[k];_txCfgSave(cfg);rerender()}});
   /* titulos WBS plegables (clic): se recuerda por usuario con el resto de la configuracion */
+  /* filtro de columna tipo Excel: la lista de valores sale de las lineas de
+     ESTA pintada sin el filtro de esa columna, y lo elegido se guarda con el
+     resto de la configuracion (localStorage + Supabase, con tiempo real) */
+  try{if(typeof _fltBind==='function')_fltBind(doc,root,
+    function(){return _txCfg().filtros||{}},
+    function(k){return (typeof _fltValores==='function')?_fltValores(window._txLineasTodas||[],k,_txValorDe,_txCfg().filtros||{}):[]},
+    function(f){var c=_txCfg();c.filtros=f||{};_txCfgSave(c);rerender()})}catch(_ef9){}
+  /* el clic en el icono no arrastra la cabecera (igual que el pin y los colores) */
+  try{root.querySelectorAll('._fltBtn').forEach(function(b){b.onmousedown=function(e){e.stopPropagation()}})}catch(_ef8){}
   root.querySelectorAll('tr._txTit').forEach(function(tr){tr.onclick=function(){var k=tr.getAttribute('data-wk'),cfg=_txCfg();cfg.pleg=cfg.pleg||{};if(cfg.pleg[k])delete cfg.pleg[k];else cfg.pleg[k]=1;_txCfgSave(cfg);rerender()}});
   /* expandir / contraer todos los desgloses: contraer pliega los sistemas (y
      con ellos sus subtitulos); expandir lo abre todo */
@@ -25220,7 +25457,7 @@ function _crTablaRColsUI(doc,anchor,rerender){
   h+='<button id="_txColsReset" style="grid-column:1/3;margin-top:4px;background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:5px 8px;font-weight:800;cursor:pointer">Restablecer orden y columnas</button>';
   pop.innerHTML=h;doc.body.appendChild(pop);
   pop.querySelectorAll('input[type=checkbox]').forEach(function(cb){cb.onchange=function(){var c2=_txCfg();if(cb.id==='_txCeros'){c2.ceros=!!cb.checked;_txCfgSave(c2);rerender();return}if(cb.checked)delete c2.ocultas[cb.getAttribute('data-k')];else c2.ocultas[cb.getAttribute('data-k')]=1;_txCfgSave(c2);rerender()}});
-  pop.querySelector('#_txColsReset').onclick=function(){var c0=_txCfg();_txCfgSave({per:c0.per,corte:c0.corte,vista:c0.vista,fuente:c0.fuente,noLab:c0.noLab,ceros:c0.ceros,ajustar:c0.ajustar,orden:_TX_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{}});pop.remove();rerender()}}
+  pop.querySelector('#_txColsReset').onclick=function(){var c0=_txCfg();_txCfgSave({per:c0.per,corte:c0.corte,vista:c0.vista,fuente:c0.fuente,noLab:c0.noLab,ceros:c0.ceros,ajustar:c0.ajustar,orden:_TX_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{},filtros:{}});pop.remove();rerender()}}
 /* la ventana propia (fuera del navegador): un documento minimo con buscador,
    zoom, columnas, copiar y la tabla; se repinta desde la app con cada cambio */
 /* ---------------- Exportar a Excel el cuadro tal como se ve ----------------
@@ -25535,6 +25772,8 @@ function _txInfoTxt(D){try{var o=D.info||{},per=D.per||[];var t=((o.baseNombre?(
   if(o.proy){if(o.proy.rep)t+=' \u00b7 reprogramaci\u00f3n: ganado '+_nMil2(o.proy.ganado)+' hh hasta '+o.proy.corte+' + remanente '+_nMil2(o.proy.remanente)+' hh';
     if(o.proy.fuente==='cal')t+=' \u00b7 calendario: '+_nMil2(o.proy.remanente)+' hh programadas'+(o.proy.sinProg>0.005?(' \u00b7 SIN PROGRAMAR '+_nMil2(o.proy.sinProg)+' hh'):'');
     if(o.proy.sinFecha>0.005)t+=' \u00b7 sin fecha '+_nMil2(o.proy.sinFecha)+' hh'}
+  /* lo que dejan fuera los filtros de columna */
+  try{var _f9=window._txFiltro;if(_f9&&_f9.hay)t+=' \u00b7 filtrado: '+_f9.n+' de '+_f9.N+' filas'}catch(_ef9){}
   if(D.sueltas&&D.sueltas.length)t+=' \u00b7 '+_txNPart(D.sueltas)+' sin agrupaci\u00f3n (en rojo, no suman)';
   return t}catch(e){return ''}}
 function _txBarraHTML(){var c=_txCfg();var seg=function(id,ops,val){return '<span id="'+id+'" style="display:inline-flex;border:1px solid #1d3550;border-radius:8px;overflow:hidden">'+ops.map(function(o){var on=(o[0]===val);return '<button data-v="'+o[0]+'" title="'+o[2]+'" style="border-radius:0;background:'+(on?'#1B5E8A':'#182c42')+';color:'+(on?'#fff':'#9db4d6')+';padding:5px 9px;border:0;font-weight:800;cursor:pointer">'+o[1]+'</button>'}).join('')+'</span>'};
