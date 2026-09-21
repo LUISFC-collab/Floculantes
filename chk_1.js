@@ -13639,9 +13639,9 @@ var _WK_GENS=[
    nombre:'B.001 — desde las Tablas 1, 2, 3 y R',
    desc:'La data sale de la Tabla del alcance y de las Tablas 2, 3 y R. Lo que no exista en el aplicativo va VACIO y se anota en la hoja Notas de la generación.',
    fn:'_wkBLibroApp'},
-  {id:'C.002',
-   nombre:'C.002 — igual a la A, % real como la Tabla 2 y nombres de cronograma enteros',
-   desc:'El mismo libro de la A.001 (mismas hojas, misma data), pero (1) el % real de cada partida se mide como las Tablas 1 y 2 (31.63 % donde la A dice 33.8 %) y (2) los rótulos Prog. <cronograma> y la hoja P6-<cronograma> llevan el nombre entero del cronograma (LB1-FLOCULANTES), sin que la etiqueta de otro cronograma (LB1 = Forecast 20-08) se le meta por subcadena.',
+  {id:'C.003',
+   nombre:'C.003 — igual a la A, medida como las Tablas (% real, ACTUAL del PPC/3WLA) y nombres enteros',
+   desc:'El mismo libro de la A.001 (mismas hojas, misma data), con tres cambios: (1) el % real de cada partida se mide como las Tablas 1 y 2 (31.63 % donde la A dice 33.8 %); (2) la línea ACTUAL del PPC y del 3WLA (fila 9 semana, fila 11 acumulado) lleva las HH hechas por día de la Tabla 2, así el acumulado real es exactamente el de la Tabla 2 y el ACUMULADO del 3WLA arranca de él y suma lo programado en el calendario; (3) los rótulos Prog. <cronograma> y la hoja P6-<cronograma> llevan el nombre entero del cronograma.',
    fn:'_wkCLibroApp'}];
 var _WK_GEN_DEF='A.001';              /* hasta que B.001 este validada */
 var _WK_GEN_KEY='obf4_wk_gen';
@@ -19037,7 +19037,7 @@ async function _wgPctT2(cronId,fecha){var L=(await _crPull()).filter(function(c)
   var D=await _crTablaDatosMemo(c);var u=D.u||{items:{},hh:0};var P={};(D.filas||[]).forEach(function(r){if(r&&r.id)P[r.id]=r});var g=0;
   Object.keys(u.items||{}).forEach(function(id){var hh=Number(u.items[id])||0;if(!(hh>0)||!P[id])return;g+=hh*Math.max(0,Math.min(1,Number(_crFracHechaAt(P[id],fecha))||0))});
   return {pct:(u.hh>0)?g/u.hh:0,hhT:Math.round(u.hh*100)/100,gan:Math.round(g*100)/100}}
-/* ---- Generacion C.002: la A.001 tal cual, con dos cambios ----
+/* ---- Generacion C.003: la A.001 tal cual, con tres cambios (ver _wkCActualT2 abajo) ----
    (1) Mientras se arma el libro, pctOfAt (la vara vieja, que cuenta el saldo retirado
        como hecho y divide por el metrado de la app) se sustituye por _crFracHechaAt
        sobre la fila de la Tabla 1 del cronograma espina (la cuenta de la Tabla 2, la
@@ -19077,15 +19077,42 @@ if(!window._wkCPaqOrig){window._wkCPaqOrig=_wkPaqueteApp;
       try{window._wkCHojas=null;_crLista=function(){return []};return window._wkCPaqOrig.call(this,hojas,styles,ss,ocultas)}
       finally{_crLista=oL}}
     return window._wkCPaqOrig.apply(this,arguments)}}
+/* La linea ACTUAL del PPC / 3WLA, medida como la Tabla 2: por actividad, las HH
+   hechas cada dia (Tabla 2, vista agrupada, por dia) divididas entre las HH de la
+   actividad en el alcance (las mismas que la fila J de la hoja). Asi el acumulado
+   ponderado por HH de la fila 11 es exactamente el % de la Tabla 2 (31.63 % en S38).
+   Lo hecho antes de la rejilla va pegado al primer dia, como en la A. Un dia con
+   retroceso neto no cabe en la hoja (solo escribe positivos): se descuenta del
+   ultimo dia positivo anterior para que el total no cambie. */
+async function _wkCActualT2(R,cronId,corte){
+  if(!R||!R.actual)return;
+  var c=((await _crPull())||[]).filter(function(z){return z&&!z.eliminado&&String(z.cron_id)===String(cronId)})[0];if(!c)return;
+  var T2=await _t23Datos(c,{n:2,per:'dia',corte:4,vista:'agr',noLab:false});
+  var porCod={};(T2.filas||[]).forEach(function(f){if(f&&f.id&&!f._nosum)porCod[String(f.id)]=f});
+  var tar=((await _crTareas(cronId))||[]).filter(function(t){return t&&!t.eliminado});
+  var alc=await _crAlc(cronId),u=_crUniverso(cronId,alc),rp=_crReparto(tar);
+  var gIni=R.gIni,gFin=R.gFin;
+  tar.forEach(function(t){var cod=String(t.task_code),hh=0;
+    (t.items||[]).forEach(function(i){if(u.items[i]!=null)hh+=(Number(u.items[i])||0)/_crVeces(rp,i)});
+    var m={};R.actual[cod]=m;if(!(hh>0))return;var f=porCod[cod];if(!f||!f.p)return;
+    var pre=0,neg=0,dias=[];
+    Object.keys(f.p).forEach(function(k){if(k.indexOf('p_')!==0)return;var d=k.slice(2),v=Number(f.p[k])||0;
+      if(Math.abs(v)<1e-9||d>corte)return;
+      if(d<gIni){pre+=v;return}if(d>gFin)return;
+      if(v<0){neg+=v;return}m[d]=(m[d]||0)+v/hh;dias.push(d)});
+    if(gIni<=corte){if(pre<0){neg+=pre}else if(pre>1e-9){m[gIni]=(m[gIni]||0)+pre/hh;dias.push(gIni)}}
+    if(neg<0){dias.sort();var q=-neg/hh;for(var k9=dias.length-1;k9>=0&&q>1e-12;k9--){var d9=dias[k9],v9=m[d9]||0;var r9=Math.min(v9,q);m[d9]=v9-r9;q-=r9;if(!(m[d9]>1e-12))delete m[d9]}}})}
 async function _wkCLibroApp(semN,corte,ids){
-  var orig=pctOfAt,mapa={};
+  var orig=pctOfAt,origPR=_crPlanRecupera,mapa={};
   try{var L=(await _crPull()).filter(function(c){return !c.eliminado&&ids.indexOf(c.cron_id)>=0});
     var esp=L[L.length-1];if(esp){var D=await _crTablaDatosMemo(esp);(D.filas||[]).forEach(function(r){if(r&&r.id)mapa[r.id]=r})}
     pctOfAt=function(p,iso){var r=p&&mapa[p.id];if(!r)return orig.apply(this,arguments);var f=Number(_crFracHechaAt(r,iso))||0;return Math.max(0,Math.min(100,f*100))};
+    _crPlanRecupera=async function(cronId,corte2,semN2){var R=await origPR.apply(this,arguments);
+      try{await _wkCActualT2(R,cronId,corte2)}catch(e){try{console.warn('C.003 ACTUAL Tabla 2:',e)}catch(_e){}}return R};
     var LB=await _wkLibroApp(semN,corte,ids);
     LB.hojas=_wkCMigra(LB.hojas);window._wkCHojas=LB.hojas;
-    try{LB.info=LB.info||{};LB.info.gen='C.002'}catch(e){}return LB}
-  finally{pctOfAt=orig}}
+    try{LB.info=LB.info||{};LB.info.gen='C.003'}catch(e){}return LB}
+  finally{pctOfAt=orig;_crPlanRecupera=origPR}}
 function _wkExcel(){
   if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return}
   if(typeof DecompressionStream==='undefined'||typeof CompressionStream==='undefined'){
@@ -20921,7 +20948,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b33';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b34';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -24721,7 +24748,13 @@ function _rpUI(id){try{
    resto del aplicativo-: aqui solo cambia lo que uno ve para programar. */
 function _pgBaseProy(){return !!_ppfGet('baseProy',false)}
 /* el universo del cronograma ya cargado por _pgUnivListo (sincrono), o null */
-function _pgUnivU(){try{var U=window._pgUniv;if(U&&U.u&&U.u.hh>0&&U.filas&&(Date.now()-U.t)<300000&&(U.sig||'')===(window._ctSig||''))return U.u}catch(e){}return null}
+function _pgUnivU(){try{var U=window._pgUniv;if(U&&U.u&&U.u.hh>0&&U.filas&&(U.sig||'')===(window._ctSig||'')){if((Date.now()-U.t)>=300000)_pgUnivKick();return U.u}}catch(e){}return null}
+/* el universo se refresca en segundo plano (a los 5 min o cuando falta) y se repinta
+   el calendario al llegar; mientras tanto se sigue usando el que hay. Con cronograma
+   ACTUAL nunca se cae a la vara de las 3 especialidades: el numero cambiaba de vara
+   cada 5 minutos y en cada refresco. */
+function _pgUnivKick(){try{if(window._pgUnivPend)return;window._pgUnivPend=1;_pgUnivListo().then(function(x){window._pgUnivPend=0;try{if(x&&typeof renderCal==='function'&&$('scrProg')&&!$('scrProg').classList.contains('hidden'))renderCal()}catch(e){}},function(){window._pgUnivPend=0})}catch(e){window._pgUnivPend=0}}
+function _pgHayActual(){try{var a=(typeof _ctActiva==='function')?_ctActiva():null;return !!(a&&a.cron_id)}catch(e){return false}}
 function _pgPeso(p){try{
   if(!p||!p.id)return 0;
   /* con cronograma ACTUAL el peso es sobre las HH del alcance (las de las Tablas 1, 2 y 3); sin el, el catalogo */
@@ -24839,6 +24872,7 @@ function renderProgSelect(){try{window._pgPesoTot=null}catch(_e){}var wrap=$('pr
 try{if(_ppfGet('enMarchaArriba',false)&&_pgEnMarcha(p))color='#1E7A46'}catch(_ev){}
 var _pw='';try{
   var _U9=(typeof _pgUnivU==='function')?_pgUnivU():null,_hh9=_U9?(Number(_U9.items[p.id])||0):((typeof _hhDe==='function')?(Number(_hhDe(p))||0):0);
+  if(!_U9&&typeof _pgHayActual==='function'&&_pgHayActual()){_pgUnivKick();_hh9=0}
   if(_hh9>0){
     var _pv=_pgPeso(p);
     var _pb=_U9?true:_pgBaseProy();
@@ -33243,7 +33277,8 @@ function _pgCalcPct(){try{
   /* con el universo del cronograma: base = real al cierre anterior, y desde
      el inicio de la semana en curso cada dia suma su cuota programada (el
      saldo del cierre anterior repartido en sus dias; un tramo su cantidad) */
-  var UV=(window._pgUniv&&window._pgUniv.filas&&(Date.now()-window._pgUniv.t)<300000&&(window._pgUniv.sig||'')===(window._ctSig||''))?window._pgUniv.u:null;
+  var UV=_pgUnivU();
+  if(!UV&&_pgHayActual()){_pgUnivKick();window._pgPctDisc={};window._pgPctDia={};window._pgPctAcum={};window._pgPctBase=0;return}
   var PF=(UV&&window._pgUniv.filas)||null;
   var fracT=function(id,iso){try{var r=PF&&PF[id];return r?Math.max(0,Math.min(1,Number(_crFracHechaAt(r,iso))||0)):0}catch(_e){return 0}};
   if(!UV){if(!window._pgUnivPend){window._pgUnivPend=1;_pgUnivListo().then(function(x){window._pgUnivPend=0;try{if(x&&typeof renderCal==='function'&&$('scrProg')&&!$('scrProg').classList.contains('hidden'))renderCal()}catch(e){}},function(){window._pgUnivPend=0})}}
@@ -33310,7 +33345,7 @@ function _pgPctDiaHTML(ds){try{
   var _tit='';
   if(_R){_tit=_R.lineas.map(function(x){return x.txt}).join(' · ')+
     ' = '+n2(_R.total)+'% programado ese día\n'+
-    'Con lo anterior se llega a '+n2(_R.acum)+'%, partiendo del '+n2(_R.base)+'% '+((window._pgUniv&&(Date.now()-window._pgUniv.t)<300000)?'real al cierre de la semana anterior (cronograma '+String(window._pgUniv.cid)+')':('ya hecho'+(_R.todas?' entre las tres especialidades':' en '+progDisc)))}
+    'Con lo anterior se llega a '+n2(_R.acum)+'%, partiendo del '+n2(_R.base)+'% '+((typeof _pgUnivU==='function'&&_pgUnivU())?'real al cierre de la semana anterior (cronograma '+String(window._pgUniv.cid)+')':('ya hecho'+(_R.todas?' entre las tres especialidades':' en '+progDisc)))}
   return '<span class="cdpct" title="'+esc(_tit)+'" '+
     'style="font-size:8.5px;font-weight:800;color:#0C5132;background:#EAF3EC;border:1px solid #BFD8C6;'+
     'border-radius:5px;padding:0 4px;margin-right:auto;line-height:1.5;white-space:nowrap">'+
