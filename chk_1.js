@@ -20948,7 +20948,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b41';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b42';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -33340,9 +33340,38 @@ async function _pgUnivListo(){try{
      Tabla 2 daba 31.63 % */
   var PF={};try{var c9=L.filter(function(z){return String(z.cron_id)===String(cid)})[0]||null;if(c9){var D9=await ((typeof _crTablaDatosMemo==='function')?_crTablaDatosMemo(c9):_crTablaDatos(c9));(D9.filas||[]).forEach(function(r){if(r&&r.id)PF[r.id]=r});if(D9.u&&D9.u.hh>0)u=D9.u}}catch(_e9){}
   window._pgUniv={cid:cid,u:u,filas:PF,t:Date.now(),sig:(window._ctSig||'')};window._pgUnivUlt=window._pgUniv;return window._pgUniv}catch(e){return null}}
+/* Los rotulos del calendario ("x % \u00b7 y % ac") salen de la Tabla 3 \u00b7 Curva S con fuente
+   CALENDARIO, por dia: la misma cuenta que ensena esa tabla (hasta el cierre anterior lo
+   ganado real, desde ahi lo programado en el calendario), sobre las HH del alcance del
+   cronograma ACTUAL. Se calcula aparte (es asincrona) y se guarda con una huella de lo
+   que la cambia (programacion, partes, metrados, configuracion, dia); mientras se
+   recalcula se sigue ensenando lo ultimo. Antes el calendario llevaba una cuenta propia
+   (_crProyFilas con escalados y topes) que no cuadraba con la Tabla 3. */
+function _pgT3Sig(){try{var a=(typeof _ctActiva==='function')?_ctActiva():null;var cid=(a&&a.cron_id)?String(a.cron_id):'';
+  if(!cid)cid=String((typeof _ajGet==='function'?_ajGet('curva_cron',''):'')||'');if(!cid)return '';
+  var Pq=_pgProg()||{},ks=Object.keys(Pq).sort(),ps=[];ks.forEach(function(k){var x=Pq[k];if(!x||!x.start)return;var dT=Number(state.progDel&&state.progDel[k])||0;if(dT&&!(Number(x.ts)>dT))return;ps.push(k+':'+x.start+':'+(x.dias||1)+':'+(x.cant==null?'':x.cant))});
+  var sp=(state.partes||[]),ts=0;for(var q=0;q<sp.length;q++){var z=sp[q];if(!z)continue;ts+=((Number(z.ts)||0)%1e9)+(Number(z.cant)||0)+(Number(z.hh)||0)+(Number(z.pctGlb)||0)+(String(z.fecha||'').length)}
+  var mt=state.meta||{},tm=0;for(var k2 in mt){var y=mt[k2];if(y)tm+=((Number(y.ts)||0)%1e9)+(Number(y.total)||0)}
+  return cid+'|'+(window._ctSig||'')+'|'+sp.length+'|'+ts+'|'+((state.delpartes||[]).length)+'|'+tm+'|'+ps.length+'|'+ps.join(';')+'|'+todayISO()}catch(e){return ''}}
+async function _pgT3Calc(sig){var cid=String(sig||'').split('|')[0];if(!cid)return null;
+  var L=((await _crPull())||[]).filter(function(c){return c&&!c.eliminado&&String(c.cron_id)===cid});var c=L[0];if(!c)return null;
+  var D=await _t23Datos(c,{n:3,per:'dia',corte:4,vista:'alc',fuente:'cal',noLab:false});var u=D.u||{hh:0};if(!(u.hh>0))return null;
+  var hoy=todayISO();var nS=27+Math.floor((_crASerial(hoy)-46199)/7);var semIni=_wkISO(_wkSem(nS).ini);var antD=_crDeSerial(_crASerial(semIni)-1);
+  var tot={},por={};(D.filas||[]).forEach(function(r){if(!r||r._nosum)return;var p=r.p||{};for(var k in p){var v=Number(p[k])||0;if(!v)continue;var d=k.slice(2);tot[d]=(tot[d]||0)+v;var e=r.esp||'\u2014';if(!por[d])por[d]={};por[d][e]=(por[d][e]||0)+v}});
+  var dias=Object.keys(tot).sort(),ac=0,base=0,dia={},acum={},pd={};
+  dias.forEach(function(d){ac+=tot[d];if(d<=antD){base=ac;return}if(d<semIni)return;dia[d]=tot[d]/u.hh*100;acum[d]=ac/u.hh*100;pd[d]={};for(var e in por[d])pd[d][e]=por[d][e]/u.hh*100});
+  return {sig:sig,t:Date.now(),cid:cid,hh:u.hh,base:base/u.hh*100,dia:dia,acum:acum,porD:pd,corte:antD,sinProg:(D.info&&D.info.proy&&D.info.proy.sinProg)||0}}
+function _pgT3Rec(){try{var T=window._pgT3||null,sig=_pgT3Sig();if(!sig)return null;if(T&&T.sig===sig)return T;
+  if(!window._pgT3Pend){window._pgT3Pend=1;_pgT3Calc(sig).then(function(x){window._pgT3Pend=0;if(!x)return;var prev=window._pgT3;window._pgT3=x;
+    var cambio=!prev||prev.base!==x.base||JSON.stringify(prev.dia)!==JSON.stringify(x.dia);
+    try{if(cambio&&typeof renderCal==='function'&&$('scrProg')&&!$('scrProg').classList.contains('hidden'))renderCal()}catch(e){}},function(){window._pgT3Pend=0})}
+  return (T&&T.cid===sig.split('|')[0])?T:null}catch(e){return null}}
 function _pgCalcPct(){try{
   var dia={},porD={};
   var P=_pgProg();
+  var T3=(typeof _pgT3Rec==='function')?_pgT3Rec():null;
+  if(T3){window._pgPctDisc=T3.porD;window._pgPctDia=T3.dia;window._pgPctAcum=T3.acum;window._pgPctBase=T3.base;window._pgPctAntD=T3.corte;return}
+  if(_pgHayActual()){window._pgPctDisc={};window._pgPctDia={};window._pgPctAcum={};window._pgPctBase=0;return}
   /* con el universo del cronograma: base = real al cierre anterior, y desde
      el inicio de la semana en curso cada dia suma su cuota programada (el
      saldo del cierre anterior repartido en sus dias; un tramo su cantidad) */
@@ -33414,7 +33443,7 @@ function _pgPctDiaHTML(ds){try{
   var _tit='';
   if(_R){_tit=_R.lineas.map(function(x){return x.txt}).join(' · ')+
     ' = '+n2(_R.total)+'% programado ese día\n'+
-    'Con lo anterior se llega a '+n2(_R.acum)+'%, partiendo del '+n2(_R.base)+'% '+((typeof _pgUnivU==='function'&&_pgUnivU())?'real al '+_pgFechaTxt(window._pgPctAntD)+' (cierre de la semana anterior, cronograma '+String((_pgUnivRec()||{}).cid||'')+')':('ya hecho'+(_R.todas?' entre las tres especialidades':' en '+progDisc)))}
+    'Con lo anterior se llega a '+n2(_R.acum)+'%, partiendo del '+n2(_R.base)+'% '+((window._pgT3&&window._pgPctAntD)?'real al '+_pgFechaTxt(window._pgPctAntD)+' (cierre de la semana anterior, cronograma '+String(window._pgT3.cid)+'; la misma cuenta de la Tabla 3 \u00b7 Curva S con el calendario)':(typeof _pgUnivU==='function'&&_pgUnivU())?'real al '+_pgFechaTxt(window._pgPctAntD)+' (cierre de la semana anterior, cronograma '+String((_pgUnivRec()||{}).cid||'')+')':('ya hecho'+(_R.todas?' entre las tres especialidades':' en '+progDisc)))}
   return '<span class="cdpct" title="'+esc(_tit)+'" '+
     'style="font-size:8.5px;font-weight:800;color:#0C5132;background:#EAF3EC;border:1px solid #BFD8C6;'+
     'border-radius:5px;padding:0 4px;margin-right:auto;line-height:1.5;white-space:nowrap">'+
