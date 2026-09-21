@@ -14371,6 +14371,82 @@ function _wkFilasPct(xml,ss){
     return out}
   return {fAc:filaDe('% ACTUAL ACUMULADO'),fSe:filaDe('% ACTUAL SEMANA')}}
 /* ---------- la pantalla ---------- */
+/* ===== Historial de GENERACIONES del reporte semanal =====
+   Una generacion es una manera distinta de armar el MISMO libro. La A.001
+   es la de siempre y no se toca nunca; las nuevas se ANADEN a esta lista
+   sin borrar ninguna, para poder seguir exportando la vieja si la nueva
+   falla. Para sumar una C.001 basta con empujar aqui su ficha y escribir
+   su armador: el resto del dialogo ya la encuentra sola. */
+var _WK_GENS=[
+  {id:'A.001',
+   nombre:'A.001 — actual (no se toca)',
+   desc:'El libro de siempre: la data sale de _wkDatosLibro/_wkBloquesDe (cronograma marcado + pctOfAt por partida).',
+   fn:'_wkLibroApp'},
+  {id:'B.001',
+   nombre:'B.001 — desde las Tablas 1, 2, 3 y R',
+   desc:'La data sale de la Tabla del alcance y de las Tablas 2, 3 y R. Lo que no exista en el aplicativo va VACIO y se anota en la hoja Notas de la generación.',
+   fn:'_wkBLibroApp'}];
+var _WK_GEN_DEF='A.001';              /* hasta que B.001 este validada */
+var _WK_GEN_KEY='obf4_wk_gen';
+function _wkGenDe(id){for(var i=0;i<_WK_GENS.length;i++)if(_WK_GENS[i].id===id)return _WK_GENS[i];return null}
+function _wkGenLee(){try{var v=String(localStorage.getItem(_WK_GEN_KEY)||'');
+  if(_wkGenDe(v))return v}catch(e){}
+  return _WK_GEN_DEF}
+function _wkGenEscribe(id){try{if(_wkGenDe(id))localStorage.setItem(_WK_GEN_KEY,String(id))}catch(e){}}
+function _wkGenActiva(){return _wkGenDe(_wkGenLee())||_WK_GENS[0]}
+/* el sufijo del nombre del archivo: cada generacion deja su marca */
+function _wkGenSuf(){return ' — Gen '+_wkGenActiva().id}
+/* el despachador: mismo contrato que _wkLibroApp -> {hojas,styles,ss,info} */
+async function _wkLibroGen(semN,corte,ids){
+  var g=_wkGenActiva(),f=(typeof window!=='undefined')?window[g.fn]:null;
+  if(typeof f!=='function')throw new Error('la generación '+g.id+' no tiene armador ('+g.fn+')');
+  return await f(semN,corte,ids)}
+/* ---- Notas de la generacion ---------------------------------------------
+   Nada inventado: cuando un dato NO existe en el aplicativo la celda se
+   deja vacia y se apunta aqui de que hoja y de que celda se trata, y por
+   que. La hoja se agrega al final del libro de la generacion que la use. */
+var _WK_BNOTAS=[];
+function _wkBNotasLimpia(){_WK_BNOTAS=[]}
+function _wkBNota(hoja,celda,que,porque){
+  _WK_BNOTAS.push({hoja:String(hoja||''),celda:String(celda||''),
+    que:String(que||''),porque:String(porque||'')})}
+function _wkBHojaNotas(gen,semN,corte){
+  var filas=[],n=1,F=function(c){filas.push('<row r="'+n+'">'+c.join('')+'</row>');n++};
+  F([_wkCel('A',n,'NOTAS DE LA GENERACIÓN '+String(gen||''),true)]);
+  F([_wkCel('A',n,'Lo que aparece aqui se dejó VACÍO en el libro porque el aplicativo no tiene de dónde sacarlo.',true)]);
+  F([_wkCel('A',n,'Semana S'+String(semN||'')+'  —  corte '+String(corte||''),true)]);
+  n++;
+  F([_wkCel('A',n,'Hoja',true),_wkCel('B',n,'Celda / columna',true),
+    _wkCel('C',n,'Dato que falta',true),_wkCel('D',n,'Por qué no sale',true)]);
+  if(!_WK_BNOTAS.length)F([_wkCel('A',n,'Sin notas: todo el libro salió del aplicativo.',true)]);
+  else _WK_BNOTAS.forEach(function(z){
+    F([_wkCel('A',n,z.hoja,true),_wkCel('B',n,z.celda,true),
+      _wkCel('C',n,z.que,true),_wkCel('D',n,z.porque,true)])});
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<dimension ref="A1:D'+(n-1)+'"/><sheetFormatPr defaultRowHeight="15"/>'+
+    '<cols><col min="1" max="1" width="28" customWidth="1"/>'+
+    '<col min="2" max="2" width="18" customWidth="1"/>'+
+    '<col min="3" max="4" width="52" customWidth="1"/></cols>'+
+    '<sheetData>'+filas.join('')+'</sheetData>'+
+    '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'+
+    '</worksheet>'}
+/* ---- Generación B.001: el mismo libro, con la data de las Tablas ----
+   Todavia no existe. Mientras no exista, el boton avisa y NO baja nada:
+   la A.001 sigue siendo la unica que genera archivo y el aplicativo queda
+   a salvo. Cuando B.001 aterrice, esta funcion devolvera el mismo
+   {hojas,styles,ss,info} que _wkLibroApp y cerrara con la hoja que
+   devuelve _wkBHojaNotas(). */
+/* ===== GENERACION B.001: aqui van los bloques _wg y _wkB de los agentes B0..B5 (cada uno antes de su ancla) ===== */
+/* === ANCLA B0 === */
+/* === ANCLA B1 === */
+/* === ANCLA B2 === */
+/* === ANCLA B3 === */
+/* === ANCLA B4 === */
+/* === ANCLA B5 === */
+async function _wkBLibroApp(semN,corte,ids){
+  _wkBNotasLimpia();
+  throw new Error('Generación B.001 en construcción')}
 function _wkExcel(){
   if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return}
   if(typeof DecompressionStream==='undefined'||typeof CompressionStream==='undefined'){
@@ -14383,6 +14459,10 @@ function _wkExcel(){
   ov.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:17px 16px;box-sizing:border-box;max-height:92vh;overflow:auto">'+
     '<div style="font-weight:900;font-size:15.5px;color:#1F3864;margin-bottom:4px">📊 Excel semanal (Contractor Weekly Report)</div>'+
     '<div style="font-size:12px;color:#5C6779;line-height:1.5;margin-bottom:12px"><b>⚡ Solo desde el aplicativo</b>: el libro se genera solo — TODAS las semanas (S27 → la elegida) se reconstruyen con lo del aplicativo sobre el formato de guía que viaja con la app; no necesitas ningún archivo. <b>📄 Desde tu plantilla</b>: solo se llena la semana elegida y lo ya cargado en tu archivo se respeta.</div>'+
+    '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Generación del reporte</label>'+
+    '<select id="_wkGen" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:5px">'+
+    _WK_GENS.map(function(g){return '<option value="'+_wkEscAt(g.id)+'"'+((g.id===_wkGenLee())?' selected':'')+'>'+_wkEsc(g.nombre)+'</option>'}).join('')+'</select>'+
+    '<div id="_wkGenDesc" style="font-size:11px;color:#5C6779;line-height:1.45;margin-bottom:11px"></div>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Semana</label>'+
     '<select id="_wkSel" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:11px">'+ops+'</select>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Corte de datos</label>'+
@@ -14412,6 +14492,19 @@ function _wkExcel(){
   document.body.appendChild(ov);
   ov.onclick=function(e){if(e.target===ov)ov.remove()};
   document.getElementById('_wkNo').onclick=function(){ov.remove()};
+  /* la generacion elegida se recuerda, y el boton verde dice cual
+     va a armar: asi no hay forma de bajar B creyendo que es A */
+  var _genPinta=function(){try{
+    var sg=document.getElementById('_wkGen');if(!sg)return;
+    var g=_wkGenDe(sg.value)||_WK_GENS[0];
+    var d=document.getElementById('_wkGenDesc');
+    if(d)d.innerHTML=_wkEsc(g.desc);
+    var bs=document.getElementById('_wkSolo');
+    if(bs&&!bs.disabled)bs.textContent='⚡ Generar SOLO desde el aplicativo · Gen '+g.id;
+  }catch(_eg){}};
+  try{var _sg=document.getElementById('_wkGen');
+    if(_sg)_sg.onchange=function(){_wkGenEscribe(_sg.value);_genPinta()};
+    _genPinta()}catch(_eg2){}
   var file=null;
   /* los cronogramas cargados: se marcan los que deben salir en el reporte */
   (function(){try{(async function(){
@@ -14551,10 +14644,11 @@ function _wkExcel(){
       var corte=hastaHoy?((typeof todayISO==='function')?todayISO():corteJue):corteJue;
       var ids=[].slice.call(document.querySelectorAll('._wkCk:checked')).map(function(k){return k.value});
       if(!ids.length)throw new Error('marca al menos un cronograma');
-      msg.textContent='Armando el libro desde el aplicativo (S'+semN+')…';
+      var _gen=_wkGenActiva();
+      msg.textContent='Armando el libro desde el aplicativo (S'+semN+' — Gen '+_gen.id+')…';
       try{if(typeof syncPull==='function')await syncPull()}catch(_e){}
       await _crCatPull();
-      var LB=await _wkLibroApp(semN,corte,ids);
+      var LB=await _wkLibroGen(semN,corte,ids);
       var enc=new TextEncoder(),ent=[],partes=_wkPaqueteApp(LB.hojas,LB.styles,LB.ss,
         {'3WLookahead_PPC':1,'3WLookahead_Razones':1,'PARA 3WLA':1});
       for(var i=0;i<partes.length;i++){
@@ -14567,10 +14661,10 @@ function _wkExcel(){
       var _espV=LB.info.espina;
       try{((typeof _crLista==='function'&&_crLista())||[]).forEach(function(c){
         if(c.cron_id===LB.info.espina&&String(c.etiqueta||'').trim())_espV=String(c.etiqueta).trim()})}catch(_ev){}
-      a.href=url;a.download='Reporte semanal S'+semN+' — '+_espV+'.xlsx';
+      a.href=url;a.download='Reporte semanal S'+semN+' — '+_espV+_wkGenSuf()+'.xlsx';
       document.body.appendChild(a);a.click();
       setTimeout(function(){try{URL.revokeObjectURL(url);a.remove()}catch(e){}},4000);
-      msg.innerHTML='<div style="color:#0C5132;font-weight:800">✓ Libro armado — '+LB.hojas.length+
+      msg.innerHTML='<div style="color:#0C5132;font-weight:800">✓ Libro armado (Gen '+_gen.id+') — '+LB.hojas.length+
         ' hojas · '+LB.info.actividades+' actividades de '+esc(LB.info.espina)+
         ' · líneas: '+esc(LB.info.crons.join(' + '))+' + Actual · real al corte '+LB.info.pctReal+'%</div>';
     }catch(e2){
@@ -16188,7 +16282,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b24';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b25';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
