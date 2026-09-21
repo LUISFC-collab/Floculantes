@@ -16282,7 +16282,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b25';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b26';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -36019,6 +36019,74 @@ function _crXerCorrer(lineas,modelo,out){
   return res}
 
 /* lo ganado por actividad y por semana (viernes a jueves) hasta el corte */
+/* ============================================================================
+   LA VENTANA DE AVANCE DE UN CRONOGRAMA  (la Tabla 2, sin armar la Tabla 2)
+
+   _crXerRangoAvance(c) devuelve el universo del alcance, las fechas con
+   movimiento, la PRIMERA y la ULTIMA fecha con avance REAL (la ultima columna
+   de la Tabla 2 con dato) y una funcion `gan(iso)` con lo ganado a esa fecha.
+   De aqui salen el `max` del input de corte del dialogo, el aviso "la Tabla 2
+   solo tiene avance hasta dd/mm/yyyy" y el % fisico al corte.
+
+   Se mide con la MISMA cuenta de la Tabla 2 y de la curva roja
+   (_crFracHechaAt ponderado por las HH del alcance, = _crCurvaReal) sobre
+   _crTablaDatosMemo(c) -- la tabla SIN corte, igual que _t23Datos y que
+   _crXerGanadoSem -- para no rearmar la tabla del alcance en cada tecla.
+
+   El tope NO puede salir de `per[].fin` de la Tabla 2: en modo semana
+   _t23Periodos emite el jueves COMPLETO de la semana en curso, que es una
+   fecha futura. El tope correcto es min(hoy, ultimo evento que MUEVE la
+   fraccion): una celda de la Tabla 2 solo es distinta de cero donde la
+   fraccion cambia, y la fraccion solo cambia en una fecha de _t23Eventos.
+   Un retroceso (delta negativo) tambien pinta celda, por eso el criterio es
+   |delta| > 1e-6 y no delta > 0.
+   ============================================================================ */
+/* los memos de la Tabla 2 se tiran solos cuando cambian los partes, los
+   metrados o los borrados: MISMA firma que la cabecera de _t23Datos, y sobre
+   la MISMA variable window._t23SigP, para que sea idempotente con ella */
+function _crXerFrescoT23(){
+  try{var _sp=(typeof state!=='undefined'&&state.partes)||[],_ts=0;
+    for(var _q=0;_q<_sp.length;_q++){var _z=_sp[_q];if(!_z)continue;_ts+=((Number(_z.ts)||0)%1e9)+(Number(_z.cant)||0)+(Number(_z.hh)||0)+(Number(_z.pctGlb)||0)+(String(_z.fecha||'').length)}
+    var _mt=(typeof state!=='undefined'&&state.meta)||{},_tm=0;for(var _k in _mt){var _y=_mt[_k];if(_y)_tm+=((Number(_y.ts)||0)%1e9)+(Number(_y.total)||0)}
+    var _sg=_sp.length+'|'+_ts+'|'+(((typeof state!=='undefined'&&state.delpartes)||[]).length)+'|'+_tm;
+    if(window._t23SigP!==_sg){window._t23SigP=_sg;_t23Tira()}}catch(_es){}}
+/* el ultimo jueves <= iso: el corte del reporte semanal y de la Tabla 2 */
+function _crXerJueves(iso){
+  try{var n=_crASerial(iso);if(n==='')return '';
+    var dw=new Date(String(iso).slice(0,10)+'T00:00:00Z').getUTCDay();
+    return _crDeSerial(n-((dw-4+7)%7))}catch(_e){return String(iso||'').slice(0,10)}}
+/* dd/mm/yyyy para los mensajes */
+function _crXerDMY(iso){var t=String(iso||'').slice(0,10);
+  return (t.length===10)?(t.slice(8,10)+'/'+t.slice(5,7)+'/'+t.slice(0,4)):t}
+async function _crXerRangoAvance(c){
+  _crXerFrescoT23();
+  var hoy=(typeof todayISO==='function')?todayISO():'';
+  var D=await _crTablaDatosMemo(c);
+  var u=(D&&D.u)||{items:{},hh:0},porId={},id;
+  ((D&&D.filas)||[]).forEach(function(r){if(r&&r.id)porId[r.id]=r});
+  var hhT=0;for(id in u.items)hhT+=Number(u.items[id])||0;
+  /* las fechas con movimiento de TODO el universo (partes y fases), hasta hoy */
+  var E={};for(id in u.items){try{(_t23Eventos(id)||[]).forEach(function(f){if(f&&(!hoy||f<=hoy))E[f]=1})}catch(_e1){}}
+  var ev=Object.keys(E).sort();
+  var memo={},gan=function(iso){iso=String(iso||'').slice(0,10);if(!iso)return 0;
+    if(memo[iso]!=null)return memo[iso];
+    var g=0;for(var i in u.items){var hi=Number(u.items[i])||0;if(!(hi>0))continue;
+      g+=hi*Math.max(0,Math.min(1,Number(_crFracHechaAt(porId[i],iso))||0))}
+    return (memo[iso]=g)};
+  /* la ULTIMA fecha con dato: el ultimo evento en el que lo ganado CAMBIA.
+     Un parte que no mueve la fraccion (o uno de una partida fuera del
+     universo) no pinta celda en la Tabla 2 y no vale como corte. */
+  var ult='',j=ev.length-1,g1=ev.length?gan(ev[ev.length-1]):0,vuelta=0;
+  while(j>=0&&vuelta<60){vuelta++;
+    var g0=(j>0)?gan(ev[j-1]):0;
+    if(Math.abs(g1-g0)>1e-6){ult=ev[j];break}
+    g1=g0;j--}
+  /* si NINGUN evento mueve nada (todos los partes en 0) no se bloquea al
+     usuario: el tope cae en el ultimo evento */
+  if(!ult&&ev.length)ult=ev[ev.length-1];
+  return {cid:String((c&&c.cron_id)||''),hoy:hoy,hhUni:hhT,ev:ev,
+    min:(ev[0]||''),ult:ult,gan:gan,max:(ult||hoy)}}
+
 async function _crXerGanadoSem(c,corte,modo){
   corte=String(corte||'').slice(0,10);modo=(modo==='dia')?'dia':'sem';
   var tar=((await _crTareas(c.cron_id))||[]).filter(function(t){return t&&!t.eliminado});
@@ -37081,7 +37149,7 @@ function _crXerMenuUI(b,c,o){
     '<div id="_crXerPerFila" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:#cfe3ff;padding:2px 0 4px;border-bottom:1px solid #24344f"><span style="font-weight:800;color:#8ECBF5">Periodos financieros (real por fecha):</span>'+perB('sem','por semana (corte jueves, como la Tabla 2)')+perB('dia','día a día')+'</div>'+
     '<div id="_crXerCorteFila" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:#cfe3ff;padding:2px 0 4px;border-bottom:1px solid #24344f"><span style="font-weight:800;color:#8ECBF5">Corte del avance:</span>'+
     '<input type="date" id="_crXerCorte" value="'+corteDef+'" style="background:#151c28;color:#cfe3ff;border:1px solid #8ECBF5;border-radius:6px;padding:3px 6px;font-family:inherit;font-size:11px">'+
-    '<span style="color:#9db4d6">avance hasta ese día inclusive; la fecha de datos es el hábil siguiente y el archivo sale corrido a ella (sin F9)</span></div>'+
+    '<span style="color:#9db4d6">avance hasta ese día inclusive: la fecha de datos queda en ESE mismo día a las 23:59, lo que falta arranca el hábil siguiente y el archivo se abre ya corrido (sin F9)</span></div>'+
     bt('tal',0,'#4a2f7a','📄 Tal cual está · normal',
       'HH y costo <b>forecast</b> de la tabla, fechas, duraciones y predecesoras del aplicativo, y el calendario real del archivo. '+
       '<b>Conserva</b> los avances y la fecha de datos que trae el .xer y su mismo Project ID: P6 te ofrecerá ACTUALIZAR el proyecto que ya tienes.')+
@@ -37089,7 +37157,7 @@ function _crXerMenuUI(b,c,o){
       'Lo mismo, pero el presupuesto sale de <b>HH forecast mayor metrado</b> y <b>Costo forecast mayor metrado</b> de la tabla.')+
     bt('rep',0,'#1B5E8A','🔁 Para reprogramación · normal',
       'Todo lo anterior <b>más lo ejecutado al corte</b>: HH usadas, HH y duración remanentes, % físico y fechas reales. '+
-      'Entra como <b>proyecto nuevo</b> (-SEMANAn) con la fecha de datos en la mañana hábil siguiente al corte, y P6 reprograma desde ahí lo que falta.')+
+      'Entra como <b>proyecto nuevo</b> (-SEMANAn) con la fecha de datos a las <b>23:59 del día de corte</b>; lo que falta arranca el hábil siguiente y el archivo se abre ya corrido (sin F9).')+
     bt('rep',1,'#2477AE','🔁 Para reprogramación · con mayor metrado',
       'Lo mismo, con <b>HH/Costo forecast mayor metrado</b> como presupuesto y <b>HH/Costo actual forecast (MM)</b> como real.')+
     '<button data-m="no" data-mm="0" style="background:#151c28;color:#9db4d6;border:1px solid #24344f;border-radius:8px;padding:6px 10px;cursor:pointer;font-family:inherit">Cancelar</button>';
@@ -37160,6 +37228,39 @@ function _crXerAlcLive(){
     if(x&&x.alcX&&window._crCtx&&x.cron===window._crCtx&&typeof _crHoja!=='undefined'&&_crHoja===2)return x.alcX}catch(_e){}
   return null}
 
+/* EL CRONOGRAMA "ACTUAL": la misma cadena que usan el analisis de
+   restricciones (_rxNoCumplidasT23), la Tabla R (_rxAbreTablaR), el universo
+   del calendario (_pgUnivListo) y la curva flotante.
+     1) la configuracion de trabajo activa (_ctActiva, cron_trabajo) si su
+        cronograma sigue VIVO en la lista;
+     2) si no, el ULTIMO de tipo ACTUAL del catalogo (como _ctPorDefectoId);
+     3) si no, el ultimo de la lista.
+   Ojo: _ctActiva() puede devolver una fila con activa:false (el fallback "el
+   ultimo con el que se trabajo"), y esa fila igual manda en los numeros; por
+   eso se preselecciona igual y la insignia lo distingue. */
+function _crActualDe(L){
+  L=(L||[]).filter(function(c){return c&&c.cron_id!=null&&c.cron_id!==''&&!c.eliminado});
+  if(!L.length)return null;
+  var c=null;
+  try{var a=(typeof _ctActiva==='function')?_ctActiva():null;
+    if(a&&a.cron_id!=null)c=L.filter(function(z){return String(z.cron_id)===String(a.cron_id)})[0]||null}catch(_e){}
+  if(!c)L.forEach(function(z){if(String(z.tipo||'').toUpperCase()==='ACTUAL')c=z});
+  if(!c)c=L[L.length-1];
+  return c}
+/* el estado de un cronograma frente a la configuracion de trabajo:
+     'activa' = es la fila ACTUAL de cron_trabajo (el badge verde de la lista)
+     'ultima' = _ctActiva() lo devuelve por fallback, pero su fila no esta activa
+     'propia' = tiene fila propia, pero no manda
+     'sigue'  = NO tiene fila propia: hereda la de la ACTUAL (_crFilaDe), o sea
+                sus HH apagadas, sus partidas fuera y sus saldos retirados
+                salen de OTRO cronograma */
+function _crActualEstado(cronId){
+  try{var r=(typeof _ctDe==='function')?_ctDe(cronId):null;
+    if(r&&r.activa)return 'activa';
+    var a=(typeof _ctActiva==='function')?_ctActiva():null;
+    if(a&&String(a.cron_id)===String(cronId))return 'ultima';
+    return r?'propia':'sigue'}catch(_e){return 'sigue'}}
+
 /* ============================================================================
    _crExportUI  -  el boton semanal del panel de administracion.
    Mismo motor, modo 'rep', con la semana y el corte que elija el usuario.
@@ -37172,14 +37273,27 @@ function _crExportUI(){
   ov.style.cssText='position:fixed;inset:0;z-index:2147483591;background:rgba(10,18,32,.66);display:flex;align-items:flex-end;justify-content:center';
   ov.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:17px 16px;box-sizing:border-box;max-height:92vh;overflow:auto">'+
     '<div style="font-weight:900;font-size:15.5px;color:#1F3864;margin-bottom:4px">⏫ Exportar a Primavera (.xer corrido)</div>'+
-    '<div style="font-size:12px;color:#5C6779;line-height:1.5;margin-bottom:12px">Sale el .xer original con los datos de la <b>tabla del alcance</b>: HH y costo forecast como presupuesto, HH y costo actual como reales, remanente = target − actual, y las fechas, duraciones y predecesoras del aplicativo sobre el <b>calendario real del archivo</b>. La fecha de datos queda en la mañana hábil siguiente al corte. Antes de bajarlo se comprueba la estructura: si algo lo haría fallar en P6, no se descarga.</div>'+
+    '<div style="font-size:12px;color:#5C6779;line-height:1.5;margin-bottom:12px">Sale el .xer original con los datos de la <b>tabla del alcance</b>: HH y costo forecast como presupuesto, HH y costo actual como reales, remanente = target − actual, y las fechas, duraciones y predecesoras del aplicativo sobre el <b>calendario real del archivo</b>. La fecha de datos queda a las 23:59 del día de corte, lo que falta arranca el hábil siguiente y el archivo se abre ya corrido (sin F9). Antes de bajarlo se comprueba la estructura: si algo lo haría fallar en P6, no se descarga.</div>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Cronograma</label>'+
     '<select id="_crExpSel" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:11px"></select>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Semana que se crea</label>'+
     '<input type="number" id="_crExpSem" min="1" max="99" step="1" placeholder="38" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:4px">'+
     '<div id="_crExpSemNota" style="font-size:11px;color:#5C6779;margin-bottom:11px"></div>'+
-    '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Avance hasta (corte)</label>'+
-    '<input type="date" id="_crExpFec" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:9px">'+
+    '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin-bottom:4px">Corrido a (fecha de datos / corte del avance)</label>'+
+    '<input type="date" id="_crExpFec" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:11px;padding:12px;font-size:14px;font-family:inherit;background:#fff;margin-bottom:5px">'+
+    '<div id="_crExpFecNota" style="font-size:11px;color:#5C6779;line-height:1.45;margin-bottom:7px">El .xer sale con el avance hasta ese día <b>inclusive</b>: la <b>fecha de datos</b> queda en ese mismo día a las <b>23:59</b>, lo que falta arranca el hábil siguiente y el archivo se abre <b>ya corrido</b> (no hace falta F9). No se puede pedir una fecha que la Tabla 2 todavía no tiene.</div>'+
+    '<div id="_crExpPct" style="font-size:11.5px;line-height:1.5;color:#1F3864;background:#F2F6FC;border:1px solid #D8E3F2;border-radius:10px;padding:8px 10px;margin-bottom:11px">Elige el cronograma y la fecha de corte.</div>'+
+    (function(){
+      var b2=function(at,v,on,txt){return '<button type="button" data-'+at+'="'+v+'" style="background:'+(on?'#1F3864':'#F2F6FC')+';color:'+(on?'#fff':'#41526B')+';border:1px solid '+(on?'#1F3864':'#C7D2E0')+';border-radius:8px;padding:6px 9px;cursor:pointer;font-family:inherit;font-size:10.5px;font-weight:'+(on?'800':'600')+'">'+txt+'</button>'};
+      var rp=(typeof _crXerRemPref==='function')?_crXerRemPref():'hh';
+      var pp=(typeof _crXerPerPref==='function')?_crXerPerPref():'sem';
+      return '<div style="font-size:11px;font-weight:800;color:#1F3864;border-top:1px solid #E7EDF5;padding-top:9px;margin-bottom:6px">Opciones de <i>Para reprogramación</i> (las mismas del menú del cronograma)</div>'+
+        '<div id="_crExpRem" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:#41526B;margin-bottom:7px"><span style="font-weight:800;color:#1F3864">Remanente:</span>'+
+        b2('rem','hh',rp==='hh','⏱ por HH y rendimiento de la actividad (hoja 2)')+
+        b2('rem','tabla',rp==='tabla','📊 por las duraciones de la tabla (Rendimiento APP)')+'</div>'+
+        '<div id="_crExpPer" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:#41526B;margin-bottom:11px"><span style="font-weight:800;color:#1F3864">Periodos financieros (real por fecha):</span>'+
+        b2('per','sem',pp==='sem','por semana (corte jueves, como la Tabla 2)')+
+        b2('per','dia',pp==='dia','día a día')+'</div>'})()+
     '<label style="display:flex;gap:8px;align-items:center;font-size:12px;color:#1F3864;font-weight:700;margin-bottom:11px">'+
     '<input type="checkbox" id="_crExpMM" style="width:17px;height:17px"> Con <b>mayor metrado</b> (HH y costo forecast mayor metrado)</label>'+
     '<div id="_crExpMsg" style="font-size:12px;color:#5C6779;margin-bottom:11px"></div>'+
@@ -37191,6 +37305,91 @@ function _crExportUI(){
   document.getElementById('_crExpNo').onclick=function(){ov.remove()};
   var hoy=(typeof todayISO==='function')?todayISO():'';
   document.getElementById('_crExpFec').value=hoy;
+  /* ---- los dos pares de opciones de "Para reprogramacion" (misma preferencia
+         que el menu del cronograma: _tbCfg().xerRem / .xerPer) ---- */
+  (function(){
+    var luce=function(sel,at,pref){var xs=ov.querySelectorAll(sel+' button[data-'+at+']');
+      for(var q=0;q<xs.length;q++){var on=(xs[q].getAttribute('data-'+at)===pref);
+        xs[q].style.background=on?'#1F3864':'#F2F6FC';xs[q].style.color=on?'#fff':'#41526B';
+        xs[q].style.borderColor=on?'#1F3864':'#C7D2E0';xs[q].style.fontWeight=on?'800':'600'}};
+    var ata=function(sel,at,set,get){var xs=ov.querySelectorAll(sel+' button[data-'+at+']');
+      for(var j=0;j<xs.length;j++)(function(x){x.onclick=function(ev){ev.preventDefault();ev.stopPropagation();
+        try{set(x.getAttribute('data-'+at))}catch(_e){}
+        luce(sel,at,get())}})(xs[j])};
+    try{ata('#_crExpRem','rem',_crXerRemSet,_crXerRemPref)}catch(_e1){}
+    try{ata('#_crExpPer','per',_crXerPerSet,_crXerPerPref)}catch(_e2){}})();
+  /* ---- el cronograma elegido, su rango de avance y la validacion del corte ---- */
+  var _rango=null,_seq=0,_actId='',_actEst='sigue',_ini=true,_valT=null;
+  var _cronSel=function(){var id=(document.getElementById('_crExpSel')||{}).value||'';
+    return _crLista().filter(function(x){return String(x.cron_id)===String(id)})[0]||null};
+  var _caja=function(html,col){var p=document.getElementById('_crExpPct');if(!p)return;
+    p.style.background=(col==='mal')?'#FDF0EE':((col==='ojo')?'#FFF7E8':'#F2F6FC');
+    p.style.borderColor=(col==='mal')?'#F0C2BB':((col==='ojo')?'#EBD7AC':'#D8E3F2');
+    p.style.color=(col==='mal')?'#B42318':((col==='ojo')?'#7A4B00':'#1F3864');
+    p.innerHTML=html};
+  var _sincroSem=function(){var f=document.getElementById('_crExpFec'),e=document.getElementById('_crExpSem');
+    if(!f||!e)return;var w=_crXerSemReporte(f.value);if(w>0)e.value=w};
+  var _goOn=function(on){var b=document.getElementById('_crExpGo');if(!b)return;
+    b.disabled=!on;b.style.opacity=on?'1':'.5';b.style.cursor=on?'pointer':'not-allowed'};
+  /* los avisos del cronograma, debajo del select: si no es el ACTUAL y si no
+     tiene configuracion de trabajo propia (hereda la de la ACTUAL) */
+  var _avisoCron=function(){
+    var n=document.getElementById('_crExpCron');if(!n)return;
+    var c=_cronSel(),id=c?String(c.cron_id):'';
+    if(!id){n.innerHTML='';return}
+    var a=_crLista().filter(function(x){return String(x.cron_id)===String(_actId)})[0]||null;
+    var quien=a?('<b>'+esc(_crNomVis(a))+'</b>'):'la ACTUAL';
+    var caja=function(bg,bd,col,txt){return '<div style="background:'+bg+';border:1px solid '+bd+';border-radius:9px;padding:7px 9px;color:'+col+';font-size:11px;line-height:1.45;margin-bottom:6px">'+txt+'</div>'};
+    var H=[];
+    if(_actId&&id===_actId&&_actEst==='activa')
+      H.push(caja('#EAF3EC','#BFD8C6','#0C5132','⚙ <b>ACTUAL ✓</b> — es el cronograma con el que trabajan el análisis de restricciones, la Tabla R, las tarjetas y la curva.'));
+    else if(_actId&&id===_actId)
+      H.push(caja('#FFF7E8','#EBD7AC','#7A4B00','⚙ Ninguna configuración está marcada como <b>ACTUAL</b>: se está usando la última con la que se trabajó.'));
+    else
+      H.push(caja('#FDF0EE','#F0C2BB','#B42318','⚠ Estás exportando <b>'+esc(_crNomVis(c))+'</b>, que <b>no</b> es el cronograma ACTUAL ('+quien+'). El .xer saldrá con las actividades, el alcance y los rendimientos de <b>'+esc(_crNomVis(c))+'</b>.'));
+    if(_crActualEstado(id)==='sigue')
+      H.push(caja('#FFF7E8','#EBD7AC','#7A4B00','⚠ <b>'+esc(_crNomVis(c))+'</b> no tiene configuración de trabajo propia: sus <b>HH apagadas</b>, sus <b>partidas fuera</b>, sus <b>saldos retirados</b> y su base del peso salen de '+quien+'.'));
+    n.innerHTML=H.join('')};
+  /* mide el rango de avance del cronograma elegido y valida la fecha de corte.
+     Lleva guardia de secuencia: el usuario puede cambiar de cronograma
+     mientras se mide. */
+  var _crExpVal=async function(recarga){
+    var f=document.getElementById('_crExpFec'),c=_cronSel();
+    _avisoCron();
+    if(!c){_goOn(false);return}
+    var q=++_seq;
+    if(recarga||!_rango||_rango.cid!==String(c.cron_id)){
+      _caja('Midiendo el avance de la Tabla 2…');_goOn(false);
+      var R=null;try{R=await _crXerRangoAvance(c)}catch(_e){R=null}
+      if(q!==_seq)return;
+      if(!R){_rango=null;_caja('⚠ No se pudo medir el avance de este cronograma: revisa que sus actividades y su alcance hayan cargado.','ojo');_goOn(false);return}
+      _rango=R;
+      if(f){
+        f.max=R.max||R.hoy;
+        var cur=String(f.value||'').slice(0,10);
+        /* por defecto, la ultima fecha con avance; si el ultimo jueves cae
+           dentro del avance, ese (es el corte con el que se reporta y con el
+           que la Tabla 2 cierra semana) */
+        var def=R.ult||R.hoy,ju=_crXerJueves(R.hoy||'');
+        if(R.ult&&ju&&ju<=R.ult&&(!R.min||ju>=R.min))def=ju;
+        /* al cambiar de cronograma la fecha del usuario solo se pisa si ya no vale */
+        if(_ini||!cur||(R.hoy&&cur>R.hoy)||(R.ult&&cur>R.ult)){f.value=def;_sincroSem();_nota()}
+        _ini=false}}
+    if(q!==_seq)return;
+    var R2=_rango;if(!R2){_goOn(false);return}
+    var v=(f&&String(f.value||'').slice(0,10))||'';
+    var mide=function(iso){var g=R2.gan(iso),hh=Number(R2.hhUni)||0,p=(hh>0)?(g/hh*100):0;
+      return '<b>'+_nMil2(p)+' %</b> físico al corte  ·  <b>'+_nMil2(g)+'</b> hh ganadas de '+_nMil2(hh)+' hh del alcance'};
+    var ok=true,col='',txt='';
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){ok=false;col='mal';txt='⚠ Pon la fecha a la que quieres el .xer corrido.'}
+    else if(R2.hoy&&v>R2.hoy){ok=false;col='mal';txt='⚠ No se puede correr el .xer a una fecha futura: hoy es '+_crXerDMY(R2.hoy)+'.'}
+    else if(R2.ult&&v>R2.ult){ok=false;col='mal';txt='⚠ <b>la Tabla 2 solo tiene avance hasta '+_crXerDMY(R2.ult)+'</b>: elige esa fecha o una anterior.'}
+    else if(!R2.ult){col='ojo';txt='⚠ Este cronograma no tiene ningún avance en la Tabla 2 todavía: el .xer saldría con 0 % ejecutado.'}
+    else if(R2.min&&v<R2.min){col='ojo';txt='⚠ Esa fecha es anterior al primer avance ('+_crXerDMY(R2.min)+'): el .xer sale con 0 % ejecutado y sin periodos financieros.<br>'+mide(v)}
+    else txt=mide(v)+'<br><span style="font-size:10.5px;color:#41526B">Fecha de datos '+_crXerDMY(v)+' 23:59 (el archivo se abre ya corrido)  ·  la Tabla 2 tiene avance hasta '+_crXerDMY(R2.ult)+'</span>';
+    _caja(txt,col);_goOn(ok)};
+  var _valPronto=function(rec){try{if(_valT)clearTimeout(_valT)}catch(_e){}
+    _valT=setTimeout(function(){_valT=null;_crExpVal(rec)},180)};
   var _nota=function(){
     var e=document.getElementById('_crExpSem'),n=document.getElementById('_crExpSemNota');
     if(!e||!n)return;
@@ -37204,7 +37403,9 @@ function _crExportUI(){
     if(e&&f){
       var v=_crXerSemReporte(f.value);if(v>0)e.value=v;
       e.oninput=_nota;
-      f.addEventListener('change',function(){var w=_crXerSemReporte(f.value);if(w>0)e.value=w;_nota()})}
+      var mueve=function(){_sincroSem();_nota();_valPronto(false)};
+      f.addEventListener('change',mueve);
+      f.addEventListener('input',mueve)}
     _nota()})();
   _crPull().then(function(L){
     var s=document.getElementById('_crExpSel');if(!s)return;
@@ -37214,21 +37415,47 @@ function _crExportUI(){
       document.getElementById('_crExpGo').style.opacity='.5';
       document.getElementById('_crExpMsg').innerHTML='Primero carga un .xer en 📅 Cronogramas.';return}
     s.innerHTML=L.map(function(c){return '<option value="'+esc(c.cron_id)+'">'+esc(_crNomVis(c))+' — '+esc(String(c.nombre||'').slice(0,48))+'</option>'}).join('');
-    s.onchange=_nota;_nota()});
+    (function(){
+      var act=_crActualDe(L);
+      _actId=act?String(act.cron_id):'';
+      _actEst=_actId?_crActualEstado(_actId):'sigue';
+      s.innerHTML=L.map(function(c){var id=String(c.cron_id),mk='';
+        if(id===_actId)mk=((_actEst==='activa')?'⚙ ACTUAL ✓ ':'⚙ con este se trabaja ')+'· ';
+        return '<option value="'+esc(id)+'">'+mk+esc(_crNomVis(c))+' — '+esc(String(c.tipo||'LB'))+' — '+esc(String(c.nombre||'').slice(0,40))+'</option>'}).join('');
+      /* el atributo `selected` no siempre gana sobre un <select> recien
+         pintado (iOS/Safari): se fija tambien el value */
+      if(_actId)s.value=_actId;
+      if(!document.getElementById('_crExpCron'))s.insertAdjacentHTML('afterend','<div id="_crExpCron" style="font-size:11px;line-height:1.45;margin:-7px 0 9px"></div>')})();
+    s.onchange=function(){_nota();_crExpVal(true)};
+    _nota();_crExpVal(true)});
   document.getElementById('_crExpGo').onclick=async function(){
     var b=this,msg=document.getElementById('_crExpMsg');
     b.disabled=true;b.textContent='Armando…';
     try{
       var id=document.getElementById('_crExpSel').value;
-      var c=_crLista().filter(function(x){return x.cron_id===id})[0];
+      var c=_crLista().filter(function(x){return String(x.cron_id)===String(id)})[0];
       if(!c)throw new Error('no encuentro ese cronograma');
-      var corte=document.getElementById('_crExpFec').value||hoy;
+      var corte=String(document.getElementById('_crExpFec').value||'').slice(0,10)||hoy;
       var sem=parseInt(document.getElementById('_crExpSem').value,10);
       var mm=!!document.getElementById('_crExpMM').checked;
+      /* la misma validacion del boton, por si alguien fuerza la fecha a mano */
+      if(_rango&&_rango.cid===String(id)){
+        if(_rango.hoy&&corte>_rango.hoy)throw new Error('no se puede correr el .xer a una fecha futura: hoy es '+_crXerDMY(_rango.hoy));
+        if(_rango.ult&&corte>_rango.ult)throw new Error('la Tabla 2 solo tiene avance hasta '+_crXerDMY(_rango.ult))}
+      /* remanente y periodos financieros: las MISMAS preferencias del menu del
+         cronograma, para que los dos caminos den el mismo archivo */
+      var rem=(typeof _crXerRemPref==='function')?_crXerRemPref():'hh';
+      var per=(typeof _crXerPerPref==='function')?_crXerPerPref():'sem';
+      /* el alcance vivo del editor de relaciones solo vale si esta abierto en
+         ESTE mismo cronograma; si no, se exporta lo guardado */
+      var live=null;try{if(String(window._crCtx||'')===String(id)&&typeof _crXerAlcLive==='function')live=_crXerAlcLive()}catch(_el){live=null}
       var pinta=function(h){msg.innerHTML='<div style="background:#0d1117;border-radius:10px;padding:9px 11px">'+h+'</div>'};
       await _crXerDescarga(c,'rep',mm,{corte:corte,sem:(sem>0?sem:0),
+        rem:rem,per:per,alcLive:live,
         pinta:pinta,
         aviso:function(t){msg.innerHTML='<div style="color:#5C6779;font-weight:700">'+esc(t)+'</div>'}});
+      try{window._crXerCorteUlt=corte}catch(_e9){}
+      setTimeout(function(){try{_crExpVal(false)}catch(_ev){}},0);
       b.textContent='⬇ Generar otra vez';b.disabled=false}
     catch(e){
       msg.innerHTML='<div style="color:#B42318;font-weight:800">✖ '+
