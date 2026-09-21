@@ -13787,8 +13787,164 @@ function _wgPonCelda(col,r,q,st){
   var n=_wgNum(q.v);
   return (n==null)?(a+'/>'):(a+'><v>'+n+'</v></c>')}
 
+/* ---------------------------------------------------------------------------
+   1-bis. ORDEN DE CELDAS DENTRO DE LA FILA  (correccion B0b)
+   Excel EXIGE que, dentro de un <row>, las celdas vayan en orden ascendente
+   de columna, sin refs repetidas, que las filas vayan en orden ascendente y
+   que <dimension> las cubra. Si no, abre el libro diciendo
+     "Registros quitados: Informacion de celda de /xl/worksheets/sheetN.xml".
+   Paso lo que pasa: los alimentadores T1/T23 emiten, en el mismo bucle de
+   semanas, la columna de metrado (N, O, P...) y la de programado (AF, AG...)
+   alternadas.
+   \_wgOrdenaFilas\ es IDEMPOTENTE y devuelve la cadena BYTE A BYTE IGUAL
+   cuando ya estaba ordenada: por eso se puede envolver cualquier constructor
+   de hoja de B sin cambiar su salida cuando esta bien.
+   ------------------------------------------------------------------------- */
+
+/* el numero de columna de una referencia de celda: A=1, Z=26, AA=27, AB12=28.
+   Devuelve 0 si la referencia no empieza por letras. */
+function _wgColNum(ref){
+  var s=String(ref==null?'':ref),n=0,i=0,c;
+  for(i=0;i<s.length;i++){
+    c=s.charCodeAt(i);
+    if(c>=97&&c<=122)c-=32;
+    if(c<65||c>90)break;
+    n=n*26+(c-64)}
+  return (i>0&&n>0)?n:0}
+
+/* Ordena las celdas de cada <row> por columna, quita las refs repetidas
+   (gana la ULTIMA escrita), ordena las filas por su r y ensancha <dimension>.
+   \x\ puede ser una hoja entera o solo el cuerpo del <sheetData>.
+   Toda fila que no se pueda leer con seguridad se deja TAL CUAL. */
+function _wgOrdenaFilas(x,rot){
+  var s=String(x==null?'':x);
+  if(s.indexOf('<row')<0)return s;
+  rot=String(rot||'(hoja)');
+  var maxC=0,maxR=0,nDes=0,nDup=0,nRaro=0;
+  var reC=/<c(?:\s[^>]*?)?(?:\/>|>[\s\S]*?<\/c>)/g;
+  var reR=/<row(\s[^>]*?)?>([\s\S]*?)<\/row>/g;
+  s=s.replace(reR,function(todo,atr,cuerpo){
+    var cs=[];
+    var resto=String(cuerpo).replace(reC,function(z){cs.push(z);return ''});
+    if(/\S/.test(resto)){nRaro++;return todo}      /* hay algo que no es <c> */
+    var o=[],i,m,cn,rn,ok=true;
+    for(i=0;i<cs.length;i++){
+      m=cs[i].match(/\sr="([A-Za-z]+)([0-9]+)"/);
+      if(!m){ok=false;break}
+      cn=_wgColNum(m[1]);
+      if(!(cn>0)){ok=false;break}
+      rn=Number(m[2])||0;
+      if(cn>maxC)maxC=cn;
+      if(rn>maxR)maxR=rn;
+      o.push({c:cn,i:i,x:cs[i]})}
+    if(!ok){nRaro++;return todo}
+    var nec=false;
+    for(i=1;i<o.length;i++)if(o[i].c<=o[i-1].c){nec=true;break}
+    if(!nec)return todo;                            /* ya estaba: byte a byte igual */
+    nDes++;
+    o.sort(function(a,b){return (a.c-b.c)||(a.i-b.i)});
+    var vis={},out=[];
+    for(i=o.length-1;i>=0;i--){                     /* de derecha a izquierda: gana la ultima */
+      if(vis[o[i].c]){nDup++;continue}
+      vis[o[i].c]=1;out.unshift(o[i].x)}
+    return '<row'+(atr||'')+'>'+out.join('')+'</row>'});
+  /* --- las FILAS, en orden ascendente --- */
+  var filas=[],m2,re2=/<row(\s[^>]*?)?>([\s\S]*?)<\/row>/g;
+  while((m2=re2.exec(s))){
+    var mr=String(m2[1]||'').match(/\sr="([0-9]+)"/);
+    filas.push({r:mr?(Number(mr[1])||0):0,x:m2[0],i:filas.length})}
+  var reord=false,q;
+  for(q=1;q<filas.length;q++)if(!(filas[q].r>filas[q-1].r)){reord=true;break}
+  if(reord&&filas.length){
+    var fuera=s.replace(re2,'');
+    var a1=s.indexOf('<sheetData'),a2=s.indexOf('</sheetData>');
+    var ord=filas.slice().sort(function(a,b){return (a.r-b.r)||(a.i-b.i)})
+             .map(function(z){return z.x}).join('');
+    if(a1>=0&&a2>a1){
+      var abre=s.slice(a1,s.indexOf('>',a1)+1);
+      s=s.slice(0,a1)+abre+ord+s.slice(a2)}
+    else if(!(/\S/.test(fuera)))s=ord;
+    else reord=false}
+  /* --- la <dimension>, que cubra lo que hay de verdad --- */
+  if(maxC>0&&maxR>0){
+    s=s.replace(/<dimension ref="A1:([A-Za-z]+)([0-9]+)"\s*\/>/,
+      function(td,cL,rN){
+        var c0=_wgColNum(cL),r0=Number(rN)||0;
+        var cF=(maxC>c0)?maxC:c0,rF=(maxR>r0)?maxR:r0;
+        if(cF===c0&&rF===r0)return td;
+        var L='',k=cF,rr;
+        while(k>0){rr=(k-1)%26;L=String.fromCharCode(65+rr)+L;k=Math.floor((k-1)/26)}
+        return '<dimension ref="A1:'+L+rF+'"/>'})}
+  try{
+    if(nDes)_wgAviso('Orden de celdas ['+rot+']: '+nDes+' fila(s) venian con las '+
+      'columnas desordenadas y B.001 las reordenó al escribir (Excel no admite '+
+      'otro orden dentro de la fila)');
+    if(nDup)_wgAviso('Orden de celdas ['+rot+']: '+nDup+' celda(s) repetian '+
+      'columna en la misma fila; se dejó la última escrita');
+    if(nRaro)_wgAviso('Orden de celdas ['+rot+']: '+nRaro+' fila(s) no se pudieron '+
+      'leer con seguridad y se dejaron tal cual')}
+  catch(e){}
+  return s}
+
+/* Envuelve los constructores de hoja de B (NUNCA los de A) para que su XML
+   salga siempre con las celdas en orden. Es idempotente y no cambia la salida
+   de una hoja que ya estaba bien. Se instala sola al cargar y al entrar en
+   \_wgDatos\. */
+function _wgEnvuelveHojas(){
+  try{
+    var arreglo=function(r,rot){
+      if(r==null)return r;
+      if(typeof r==='string')return _wgOrdenaFilas(r,rot);
+      if(Object.prototype.toString.call(r)==='[object Array]'){
+        for(var i=0;i<r.length;i++){
+          var z=r[i];
+          if(z&&Object.prototype.toString.call(z)==='[object Array]'&&typeof z[1]==='string')
+            z[1]=_wgOrdenaFilas(z[1],rot);
+          else if(typeof z==='string')r[i]=_wgOrdenaFilas(z,rot)}
+        return r}
+      if(typeof r==='object'&&typeof r.xml==='string'){
+        r.xml=_wgOrdenaFilas(r.xml,rot);return r}
+      return r};
+    var L=['_wkBFeedT1','_wkBFeedT23','_wkBGantt','_wkBCron','_wkB3WLA','_wkBProg',
+           '_wkBMetrado','_wkBPhysical','_wkBCosto','_wkBPanel','_wkBCaratula',
+           '_wkBPpcAnalisis','_wkBRestric','_wkBLookHojas'];
+    var n=0;
+    for(var k=0;k<L.length;k++){
+      (function(nm){
+        var f=null;
+        try{f=window[nm]}catch(e0){f=null}
+        if(typeof f!=='function'||f._wgOrd)return;
+        var g=function(){
+          var r=f.apply(this,arguments);
+          if(r&&typeof r.then==='function')
+            return r.then(function(v){return arreglo(v,nm)});
+          return arreglo(r,nm)};
+        g._wgOrd=1;g._wgDe=f;
+        try{window[nm]=g;n++}catch(e1){}})(L[k])}
+    /* no se corta por un flag: si manana aparece otro constructor de B, la
+       siguiente pasada lo envuelve (los ya envueltos llevan _wgOrd) */
+    window._wgEnvHojas=(Number(window._wgEnvHojas)||0)+n;
+    return n}
+  catch(e){return 0}}
+
 function _wgFila(r,celdas){
-  return '<row r="'+r+'">'+((celdas||[]).join(''))+'</row>'}
+  /* B0b: las celdas salen SIEMPRE en orden ascendente de columna y sin
+     columnas repetidas; si alguna no se puede leer, se deja la fila tal cual */
+  var cs=(celdas||[]),o=[],i,m,cn,ok=true;
+  for(i=0;i<cs.length;i++){
+    if(cs[i]==null||cs[i]==='')continue;
+    m=String(cs[i]).match(/^<c\sr="([A-Za-z]+)[0-9]+"/);
+    if(!m){ok=false;break}
+    cn=_wgColNum(m[1]);
+    if(!(cn>0)){ok=false;break}
+    o.push({c:cn,i:o.length,x:cs[i]})}
+  if(!ok)return '<row r="'+r+'">'+cs.join('')+'</row>';
+  o.sort(function(a,b){return (a.c-b.c)||(a.i-b.i)});
+  var vis={},out=[];
+  for(i=o.length-1;i>=0;i--){
+    if(vis[o[i].c])continue;
+    vis[o[i].c]=1;out.unshift(o[i].x)}
+  return '<row r="'+r+'">'+out.join('')+'</row>'}
 
 /* El XML completo de una hoja propia de B (traza y notas). */
 function _wgHojaXml(o){
@@ -13803,7 +13959,7 @@ function _wgHojaXml(o){
     '<sheetViews><sheetView workbookViewId="0">'+(o.pane||'')+'</sheetView></sheetViews>'+
     '<sheetFormatPr defaultRowHeight="15"/>'+
     (o.cols||'')+
-    '<sheetData>'+filas.join('')+'</sheetData>'+
+    '<sheetData>'+_wgOrdenaFilas(filas.join(''),'(hoja B.001)')+'</sheetData>'+
     (o.extra||'')+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'+
     '</worksheet>'}
@@ -14555,6 +14711,7 @@ async function _wgDatos(semN,corte,ids,opc){
   semN=Number(semN)||0;
   ids=(ids||[]).map(function(z){return String(z)});
   _wgNotasLimpia();
+  _wgEnvuelveHojas();   /* B0b: el XML de B sale con las celdas en orden */
   /* el corte que manda el handler viene SIN clamp: solo sirve para deducir el
      modo; B usa el suyo (_wgCorte) */
   var o0={};
@@ -15008,6 +15165,9 @@ function _wgCuadre(CTX){
     '_t23Gen '+CTX.firma.t23Gen0+' → '+CTX.firma.t23Gen1+
     ', invalidaciones '+CTX.firma.tiros);
   return out}
+/* B0b: el envoltorio se instala tambien al cargar, por si alguna hoja se
+   arma fuera de `_wgDatos`. Idempotente y silencioso. */
+try{_wgEnvuelveHojas()}catch(_e0b){}
 /* ===== B0-FIN ===== */
 
 /* === ANCLA B0 === */
@@ -15099,6 +15259,42 @@ function _wkBVaciaF(xml){
 /* vacia un rango de una fila (para quitar los rotulos quemados del libro guia) */
 function _wkBQuitaFila(xml,fila,cols){
   var x=xml;for(var i=0;i<cols.length;i++)x=_wkBVaciaRef(x,cols[i]+fila);return x}
+/* Excel REPARA el libro ("Registros quitados: Informacion de celda") si dentro
+   de una <row> las celdas no van en orden ascendente de columna, o si las
+   filas no van en orden de r. Aqui se ordena todo y se quitan las repetidas
+   (manda la ultima escrita); dos <row> con el mismo r se funden en una.
+   Con `noDim` se respeta el <dimension> que ya traia la hoja del libro guia. */
+function _wkBFilaOrd(xml,noDim){
+  var s=String(xml||'');
+  var i=s.indexOf('<sheetData>'),j=s.indexOf('</sheetData>');
+  if(i<0||j<0||j<i)return s;
+  var enc=s.slice(0,i),cuerpo=s.slice(i+11,j),pie=s.slice(j+12);
+  var mapa={},orden=[],cmax=0,rmax=0;
+  var reF=/<row r="(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g,mF;
+  while((mF=reF.exec(cuerpo))){
+    var nr=Number(mF[1])||0,at=mF[2]||'',dentro=mF[3];
+    var f=mapa[nr];
+    if(!f){f={r:nr,at:at,cel:{},o:orden.length};mapa[nr]=f;orden.push(f)}
+    else if(at&&!f.at)f.at=at;
+    if(dentro){
+      var reC=/<c r="([A-Z]+)(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g,mC;
+      while((mC=reC.exec(dentro))){
+        var cn=_wkColNum(mC[1]);
+        if(!(cn>0))continue;
+        f.cel[cn]=mC[0];
+        if(cn>cmax)cmax=cn}}
+    if(nr>rmax)rmax=nr}
+  var lista=orden.slice().sort(function(a,b){return (a.r-b.r)||(a.o-b.o)});
+  var nuevo=lista.map(function(f){
+    var ks=[],k;for(k in f.cel)ks.push(Number(k));
+    ks.sort(function(a,b){return a-b});
+    if(!ks.length)return '<row r="'+f.r+'"'+f.at+'/>';
+    return '<row r="'+f.r+'"'+f.at+'>'+
+      ks.map(function(z){return f.cel[z]}).join('')+'</row>'}).join('');
+  if(!noDim&&cmax>0&&/<dimension ref="[^"]*"\/>/.test(enc))
+    enc=enc.replace(/<dimension ref="[^"]*"\/>/,
+      '<dimension ref="A1:'+_wkgCol('A',cmax-1)+(rmax||1)+'"\/>');
+  return enc+'<sheetData>'+nuevo+'</sheetData>'+pie}
 
 /* ---- serie semanal a partir de un mapa {p_<fin>: hh} ---------------------- */
 /* Mismo plegado de bordes que _t23Agrega (lo anterior a la rejilla cae en la
@@ -15392,10 +15588,17 @@ function _wkBFeedT1(bl,CTX){
   var corte=String((CTX.K&&CTX.K.corte)||'');
   var cc=null;for(var q=0;q<(CTX.X||[]).length;q++)if(CTX.X[q].id===bl.id)cc=CTX.X[q];
   var p1=(cc&&cc.porId1)||{}, rp=(cc&&cc.rp)||{}, u=(cc&&cc.u)||{items:{}};
-  var colMet=function(w){return _wkgCol('N',w-1)};
-  var colProg=function(w){return _wkgCol('AF',w-1)};
+  /* las columnas se derivan de nS: con 18 semanas salen las mismas letras de
+     siempre (N..AE, AF..AW, AX/AY/AZ), pero con una rejilla mas ancha los dos
+     bloques de metrado ya no pisan a los de costo */
+  var C0=13;                                   /* A..M = 13 columnas fijas */
+  var colMet =function(w){return _wkgCol('A',C0+w-1)};
+  var colProg=function(w){return _wkgCol('A',C0+nS+w-1)};
   var COL={clave:'A',cod:'B',nom:'C',und:'D',met:'E',metF:'F',metM:'G',metA:'H',
-    hhC:'I',hh:'J',rendQ:'K',rend:'L',durF:'M',costo:'AX',costoC:'AY',costoM:'AZ'};
+    hhC:'I',hh:'J',rendQ:'K',rend:'L',durF:'M',
+    costo :_wkgCol('A',C0+2*nS),
+    costoC:_wkgCol('A',C0+2*nS+1),
+    costoM:_wkgCol('A',C0+2*nS+2)};
   var hoja=_wkBNomHoja(bl.id,'T1 (',')');
   var r=[],E=_wkEspinaFilas(bl.filas,bl.nomWbs,3);
   r.push('<row r="1">'+_crXlsCel('A',1,'TABLA 1 - '+_wkBNom(bl.id),true,S.titulo)+
@@ -15405,9 +15608,12 @@ function _wkBFeedT1(bl,CTX){
     [COL.metA,'MET. ACTUAL AL CORTE'],[COL.hhC,'HH CONTRATO'],[COL.hh,'HH FORECAST'],
     [COL.rendQ,'REND. QPS'],[COL.rend,'REND. APP'],[COL.durF,'DURAC. FORECAST (d)']];
   var c2=cab.map(function(z){return _crXlsCel(z[0],2,z[1],true,S.cab)}).join('');
-  for(var w=1;w<=nS;w++){
+  /* PRIMERO las 18 de ejecutado y DESPUES las 18 de programado: dentro de una
+     fila las celdas tienen que ir en orden de columna o Excel repara el libro */
+  for(var w=1;w<=nS;w++)
     c2+=_crXlsCel(colMet(w),2,'MET. EJEC. ACUM. S'+sem[w-1].n,true,S.cab);
-    c2+=_crXlsCel(colProg(w),2,'MET. PROG. ACUM. S'+sem[w-1].n,true,S.cab)}
+  for(w=1;w<=nS;w++)
+    c2+=_crXlsCel(colProg(w),2,'MET. PROG. ACUM. S'+sem[w-1].n,true,S.cab);
   c2+=_crXlsCel(COL.costo,2,'COSTO CONTRATO',true,S.cab);
   c2+=_crXlsCel(COL.costoC,2,'COSTO FORECAST',true,S.cab);
   c2+=_crXlsCel(COL.costoM,2,'COSTO MAYOR',true,S.cab);
@@ -15441,6 +15647,7 @@ function _wkBFeedT1(bl,CTX){
     /* metrado ejecutado ACUMULADO al cierre de cada semana; despues del corte
        la celda va VACIA (no hay dato todavia, no es un cero) */
     var baseTope=(tope==='todo')?f._metM:f._metF;
+    var vEj=[],vPr=[],ap=0;
     for(var w2=1;w2<=nS;w2++){
       var s2=sem[w2-1],v='';
       if(f.und&&s2.fin<=corte){
@@ -15450,14 +15657,14 @@ function _wkBFeedT1(bl,CTX){
           var topeI=(tope==='todo')?(Number(rr.metM)||Number(rr.metF)||0):(Number(rr.metF)||0);
           acm+=Math.min(topeI,_wkBMetAt(rr,s2.fin))/d.veces});
         v=_wkBNum(acm,2)}
-      c+=_crXlsCel(colMet(w2),n,v,false,S.num);
+      vEj.push(v);
       /* metrado PROGRAMADO acumulado: el metrado base repartido con la misma
          proporcion de HH que la Tabla 3 (mismos dias laborables) */
-      var vp='';
-      if(f.und&&f.hh>0&&isFinite(baseTope)){
-        var ap=0;for(var j=0;j<w2;j++)ap+=Number(f.sem[j])||0;
-        vp=_wkBNum(baseTope*Math.max(0,Math.min(1,ap/f.hh)),2)}
-      c+=_crXlsCel(colProg(w2),n,vp,false,S.num)}
+      ap+=Number(f.sem[w2-1])||0;
+      vPr.push((f.und&&f.hh>0&&isFinite(baseTope))
+        ?_wkBNum(baseTope*Math.max(0,Math.min(1,ap/f.hh)),2):'')}
+    for(w2=1;w2<=nS;w2++)c+=_crXlsCel(colMet(w2),n,vEj[w2-1],false,S.num);
+    for(w2=1;w2<=nS;w2++)c+=_crXlsCel(colProg(w2),n,vPr[w2-1],false,S.num);
     c+=_crXlsCel(COL.costo,n,_wkBNum(f._costo,4),false,S.num);
     c+=_crXlsCel(COL.costoC,n,_wkBNum(f._costoC,4),false,S.num);
     c+=_crXlsCel(COL.costoM,n,_wkBNum(f._costoM,4),false,S.num);
@@ -15486,12 +15693,12 @@ function _wkBFeedT1(bl,CTX){
     '<col min="3" max="3" width="58" customWidth="1"/>'+
     '<col min="4" max="4" width="9" customWidth="1"/>'+
     '<col min="5" max="13" width="13" customWidth="1"/>'+
-    '<col min="14" max="52" width="12" customWidth="1"/></cols>'+
+    '<col min="14" max="'+(C0+2*nS+3)+'" width="12" customWidth="1"/></cols>'+
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>';
   var filaDe={};E.lista.forEach(function(x){if(x.tipo==='act')filaDe[x.f.clave]=x.r});
-  return {xml:xml, hoja:hoja, ref:_wkBRef(hoja), filaDe:filaDe, ultima:E.ultima,
-    total:nTot, col:COL, colMet:colMet, colProg:colProg}}
+  return {xml:_wkBFilaOrd(xml), hoja:hoja, ref:_wkBRef(hoja), filaDe:filaDe,
+    ultima:E.ultima, total:nTot, col:COL, colMet:colMet, colProg:colProg}}
 
 /* T23 (<cron>): las HH de las Tablas 2 y 3, por actividad y por semana.
       A CLAVE  B ITEM  C HH contrato  D HH forecast
@@ -15501,9 +15708,12 @@ function _wkBFeedT1(bl,CTX){
 function _wkBFeedT23(bl,CTX){
   var S=_WKS, sem=CTX.sem, nS=sem.length;
   var corte=String((CTX.K&&CTX.K.corte)||'');
-  var colHecho=function(w){return _wkgCol('E',w-1)};
-  var colProg =function(w){return _wkgCol('W',w-1)};
-  var colOcu  =function(w){return _wkgCol('AO',w-1)};
+  /* igual que en T1: las tres tandas se derivan de nS y van una detras de
+     otra, nunca entrelazadas */
+  var C0=4;                                    /* A..D = 4 columnas fijas */
+  var colHecho=function(w){return _wkgCol('A',C0+w-1)};
+  var colProg =function(w){return _wkgCol('A',C0+nS+w-1)};
+  var colOcu  =function(w){return _wkgCol('A',C0+2*nS+w-1)};
   var COL={clave:'A',cod:'B',hhC:'C',hh:'D'};
   var hoja=_wkBNomHoja(bl.id,'T23 (',')');
   var r=[],E=_wkEspinaFilas(bl.filas,bl.nomWbs,3);
@@ -15511,10 +15721,9 @@ function _wkBFeedT23(bl,CTX){
     _crXlsCel('C',1,corte?_crASerial(corte):'',false,S.fecha)+'</row>');
   var c2=[[COL.clave,'CLAVE'],[COL.cod,'ITEM'],[COL.hhC,'HH CONTRATO'],[COL.hh,'HH FORECAST']]
     .map(function(z){return _crXlsCel(z[0],2,z[1],true,S.cab)}).join('');
-  for(var w=1;w<=nS;w++){
-    c2+=_crXlsCel(colHecho(w),2,'HECHO S'+sem[w-1].n,true,S.cab);
-    c2+=_crXlsCel(colProg(w),2,'PROG. S'+sem[w-1].n,true,S.cab);
-    c2+=_crXlsCel(colOcu(w),2,'OCULTO S'+sem[w-1].n,true,S.cab)}
+  for(var w=1;w<=nS;w++)c2+=_crXlsCel(colHecho(w),2,'HECHO S'+sem[w-1].n,true,S.cab);
+  for(w=1;w<=nS;w++)c2+=_crXlsCel(colProg(w),2,'PROG. S'+sem[w-1].n,true,S.cab);
+  for(w=1;w<=nS;w++)c2+=_crXlsCel(colOcu(w),2,'OCULTO S'+sem[w-1].n,true,S.cab);
   r.push('<row r="2">'+c2+'</row>');
   var tC=0,tF=0,tH=[],tP=[],tO=[],i;
   for(i=0;i<nS;i++){tH.push(0);tP.push(0);tO.push(0)}
@@ -15529,26 +15738,29 @@ function _wkBFeedT23(bl,CTX){
     c+=_crXlsCel(COL.hhC,n,_wkBNum(f._hhC,4),false,S.num);
     c+=_crXlsCel(COL.hh,n,_wkBNum(f.hh,4),false,S.num);
     tC+=f._hhC;tF+=f.hh;
+    var vH=[],vP=[],vO=[];
     for(var w2=1;w2<=nS;w2++){
       var vr=f.semReal[w2-1];
       /* despues del corte: celda VACIA, nunca 0 (una semana cerrada sin avance
          si lleva un 0 de verdad) */
       var vh=(vr==null)?'':_wkBNum(vr,6);
       if(vh!=='')tH[w2-1]+=Number(vh)||0;
-      c+=_crXlsCel(colHecho(w2),n,vh,false,S.num);
+      vH.push(vh);
       var vp=_wkBNum(f.sem[w2-1],6);tP[w2-1]+=Number(vp)||0;
-      c+=_crXlsCel(colProg(w2),n,vp,false,S.num);
+      vP.push(vp);
       var vo=_wkBNum(f._ocu[w2-1],6);tO[w2-1]+=Number(vo)||0;
-      c+=_crXlsCel(colOcu(w2),n,vo,false,S.num)}
+      vO.push(vo)}
+    for(w2=1;w2<=nS;w2++)c+=_crXlsCel(colHecho(w2),n,vH[w2-1],false,S.num);
+    for(w2=1;w2<=nS;w2++)c+=_crXlsCel(colProg(w2),n,vP[w2-1],false,S.num);
+    for(w2=1;w2<=nS;w2++)c+=_crXlsCel(colOcu(w2),n,vO[w2-1],false,S.num);
     r.push('<row r="'+n+'">'+c+'</row>')});
   var nTot=E.ultima+1;
   var ct=_crXlsCel(COL.cod,nTot,'TOTAL '+_wkBNom(bl.id),true,S.total)+
     _crXlsCel(COL.hhC,nTot,_wkBNum(tC,4),false,S.totalNum)+
     _crXlsCel(COL.hh,nTot,_wkBNum(tF,4),false,S.totalNum);
-  for(i=1;i<=nS;i++){
-    ct+=_crXlsCel(colHecho(i),nTot,_wkBNum(tH[i-1],6),false,S.totalNum);
-    ct+=_crXlsCel(colProg(i),nTot,_wkBNum(tP[i-1],6),false,S.totalNum);
-    ct+=_crXlsCel(colOcu(i),nTot,_wkBNum(tO[i-1],6),false,S.totalNum)}
+  for(i=1;i<=nS;i++)ct+=_crXlsCel(colHecho(i),nTot,_wkBNum(tH[i-1],6),false,S.totalNum);
+  for(i=1;i<=nS;i++)ct+=_crXlsCel(colProg(i),nTot,_wkBNum(tP[i-1],6),false,S.totalNum);
+  for(i=1;i<=nS;i++)ct+=_crXlsCel(colOcu(i),nTot,_wkBNum(tO[i-1],6),false,S.totalNum);
   r.push('<row r="'+nTot+'">'+ct+'</row>');
   var ultCol=colOcu(nS);
   var xml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
@@ -15560,12 +15772,13 @@ function _wkBFeedT23(bl,CTX){
     '<sheetFormatPr defaultRowHeight="15"/>'+
     '<cols><col min="1" max="2" width="14" customWidth="1"/>'+
     '<col min="3" max="4" width="13" customWidth="1"/>'+
-    '<col min="5" max="58" width="11.5" customWidth="1"/></cols>'+
+    '<col min="5" max="'+(C0+3*nS)+'" width="11.5" customWidth="1"/></cols>'+
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>';
   var filaDe={};E.lista.forEach(function(x){if(x.tipo==='act')filaDe[x.f.clave]=x.r});
-  return {xml:xml, hoja:hoja, ref:_wkBRef(hoja), filaDe:filaDe, ultima:E.ultima,
-    total:nTot, col:COL, colHecho:colHecho, colProg:colProg, colOcu:colOcu}}
+  return {xml:_wkBFilaOrd(xml), hoja:hoja, ref:_wkBRef(hoja), filaDe:filaDe,
+    ultima:E.ultima, total:nTot, col:COL,
+    colHecho:colHecho, colProg:colProg, colOcu:colOcu}}
 
 /* ======================== 3) PROGRAMACION ================================== */
 /* La cabecera de semanas, escrita desde _crRejilla (hoy son literales del libro
@@ -15639,7 +15852,7 @@ function _wkBProgFix(xml,P,R){
 function _wkBProg(P){
   var R=_wkProgApp(P);
   R.act=_wkBAct(R,P);
-  R.xml=_wkBProgFix(R.xml,P,R);
+  R.xml=_wkBFilaOrd(_wkBProgFix(R.xml,P,R),true);
   R.marca={};(P.bloques||[]).forEach(function(bl){R.marca[bl.id]=_wkBMarca(bl.id)});
   _wkBApunta('PROGRAMACION','A (CODIGO COSTO)','codigo de costo',
     'el aplicativo no tiene ese campo');
@@ -15732,7 +15945,7 @@ function _wkBMetrado(P){
   pie=pie.replace(/<autoFilter ref="[^"]*"[^>]*\/>/,'<autoFilter ref="A9:'+ultCol+P.ultFila+'"/>');
   var xml=enc+'<sheetData>'+r.join('')+'</sheetData>'+pie;
   xml=_wkBCabSem(xml,sem,'P',(P.cabFilas||{n:6,ini:7,fin:8}),{s0:'S0'});
-  xml=_wkBVaciaF(xml);
+  xml=_wkBFilaOrd(_wkBVaciaF(xml),true);
   _wkBApunta('METRADO','A','CODIGO COSTO','no existe codigo de costo en el aplicativo');
   _wkBApunta('METRADO','filas de resumen y TOTAL de las columnas de semana',
     'totales de metrado','no se suman metrados de unidades distintas');
@@ -15838,7 +16051,7 @@ function _wkBPhysical(P){
   xml=_wkBPonFml(xml,'D10',
     'IFERROR(SUMIF($N$'+f0+':$N$'+ult+',"'+MARCAE+'",$F$'+f0+':$F$'+ult+'),0)');
   ['D2','D4','D5'].forEach(function(rf){xml=_wkBVaciaRef(xml,rf)});
-  xml=_wkBVaciaF(xml);
+  xml=_wkBFilaOrd(_wkBVaciaF(xml),true);
   _wkBApunta('PHYSICAL % PROGRESS','D2, D4, D5','numero y fechas de contrato',
     'el aplicativo no guarda contrato: solo el inicio y el fin del cronograma, que no es lo mismo');
   _wkBApunta('PHYSICAL % PROGRESS','E','% Weight (rotulo del guia)',
@@ -15920,7 +16133,7 @@ function _wkBCosto(P){
     'no existen en el aplicativo: en el libro guia salen de GG!F86 y de un 10 % quemado');
   _wkBApunta('COSTO','E (TOTAL LB 2)','costo de la segunda linea base',
     'lleva el costo de CONTRATO de la Tabla 1 de este mismo cronograma; el rotulo del guia dice LB 2');
-  R.xml=x;
+  R.xml=_wkBFilaOrd(x,true);
   return R}
 
 /* ====================== 7) REPORTE SEMANAL (panel) ========================= */
@@ -16007,7 +16220,7 @@ function _wkBPanel(P){
   if((P.nCrons||RS.length)>2)
     _wkBApunta('REPORTE SEMANAL','AC18, AC19','lineas del panel',
       'el panel del libro guia solo tiene dos lineas; hay '+(P.nCrons||RS.length)+' cronogramas marcados');
-  x=_wkBVaciaF(x);
+  x=_wkBFilaOrd(_wkBVaciaF(x),true);
   return {xml:x}}
 
 /* === ANCLA B1 === */
@@ -17650,6 +17863,54 @@ function _wkB4Nombre(pref,cc){
   if(s.length>31){var libre=31-pref.length-2;if(libre<1)libre=1;s=pref+'('+String(n).slice(0,libre)+')'}
   return s}
 
+/* ===== El orden de las celdas: lo que hacia que Excel reparase el libro =====
+   Excel exige que dentro de cada <row> las celdas vayan en orden ASCENDENTE
+   de columna, y que las <row> vayan en orden ascendente de fila. Si no, tira
+   el contenido de la hoja entera y avisa con "Registros quitados: Informacion
+   de celda de /xl/worksheets/sheetNN.xml".
+   Este saneador se pasa al final de cada hoja de B4: reordena, quita celdas
+   repetidas (se queda con la ultima escrita) y recalcula <dimension> con lo
+   que de verdad quedo escrito. No cambia ni un valor. */
+function _wkB4ColN(ref){                    /* 'AB' o 'AB12' -> 28  (A = 1) */
+  var m=/^([A-Z]+)/.exec(String(ref||''));if(!m)return 0;
+  var s=m[1],n=0,k;
+  for(k=0;k<s.length;k++)n=n*26+(s.charCodeAt(k)-64);
+  return n}
+function _wkB4Letra(n){                     /* 28 -> 'AB'  (1 = A) */
+  var s='';n=Math.max(1,Math.round(Number(n)||1));
+  while(n>0){var r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}
+  return s}
+function _wkB4Ordena(xml){
+  var s=String(xml||'');
+  var i=s.indexOf('<sheetData>'),j=s.indexOf('</sheetData>');
+  if(i<0||j<0||j<i)return s;
+  var enc=s.slice(0,i),cuerpo=s.slice(i+11,j),pie=s.slice(j+12);
+  var filas=[],cmax=0,rmax=0;
+  var reF=/<row r="(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g,mF;
+  while((mF=reF.exec(cuerpo))){
+    var nr=Number(mF[1])||0,at=mF[2]||'',dentro=mF[3],cel=[],vistas={};
+    if(dentro){
+      var reC=/<c r="([A-Z]+)(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g,mC;
+      while((mC=reC.exec(dentro))){
+        var cn=_wkB4ColN(mC[1]);if(!(cn>0))continue;
+        if(vistas[cn]!=null)cel[vistas[cn]]=null;      /* repetida: manda la ultima */
+        vistas[cn]=cel.length;
+        cel.push({n:cn,t:mC[0]});
+        if(cn>cmax)cmax=cn}
+      cel=cel.filter(function(z){return !!z});
+      cel.sort(function(a,b){return a.n-b.n})}
+    filas.push({r:nr,at:at,cel:cel});
+    if(nr>rmax)rmax=nr}
+  filas.sort(function(a,b){return a.r-b.r});
+  var nuevo=filas.map(function(f){
+    if(!f.cel.length)return '<row r="'+f.r+'"'+f.at+'/>';
+    return '<row r="'+f.r+'"'+f.at+'>'+
+      f.cel.map(function(z){return z.t}).join('')+'</row>'}).join('');
+  var ref='A1:'+_wkB4Letra(cmax||1)+(rmax||1);
+  if(/<dimension ref="[^"]*"\/>/.test(enc))
+    enc=enc.replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="'+ref+'"/>');
+  return enc+'<sheetData>'+nuevo+'</sheetData>'+pie}
+
 /* ======================= HOJA `GANTT SEMANA` ============================= */
 /* Una fila por task_code, en el orden de las tareas del cronograma. Los
    tramos y las fases ya vienen plegados en la partida por el motor de la
@@ -17733,9 +17994,12 @@ function _wkBGantt(CTX,cc){
   c='';
   cab.forEach(function(x){c+=_crXlsCel(x[0],2,x[1],true,S.cab)});
   for(n=0;n<7;n++){
-    var dd=D.dias[n]||'';
-    c+=_crXlsCel(_wkgCol(DIA1,n+1),2,'PROG '+dd,true,S.cabSem);
-    c+=_crXlsCel(_wkgCol(DIA2,n+1),2,'REAL '+dd,true,S.cabSem)}
+    c+=_crXlsCel(_wkgCol(DIA1,n+1),2,'PROG '+(D.dias[n]||''),true,S.cabSem)}
+  /* los 7 REAL van DESPUES de los 7 PROG: dentro de la fila las celdas tienen
+     que ir en orden ascendente de columna (U..AA y luego AB..AH) o Excel
+     repara el libro */
+  for(n=0;n<7;n++){
+    c+=_crXlsCel(_wkgCol(DIA2,n+1),2,'REAL '+(D.dias[n]||''),true,S.cabSem)}
   c+=_crXlsCel('AI',2,'ORIGEN FECHAS',true,S.cab);
   c+=_crXlsCel('AJ',2,'DUR PLAN (lab)',true,S.cab);
   c+=_crXlsCel('AK',2,'DUR REM (lab)',true,S.cab);
@@ -17767,10 +18031,12 @@ function _wkBGantt(CTX,cc){
     x+=_wkB4Cel('T',q,_wkB4Num(f.realSem,2),false,S.num);
     var k;
     for(k=0;k<7;k++){
-      var v3=f.d3[k],v2=f.d2[k];
+      var v3=f.d3[k];
       x+=_wkB4Cel(_wkgCol(DIA1,k+1),q,(v3===''?'':_wkB4Num(v3,2)),false,S.num);
+      if(v3!=='')T.d3[k]+=Number(v3)||0}
+    for(k=0;k<7;k++){
+      var v2=f.d2[k];
       x+=_wkB4Cel(_wkgCol(DIA2,k+1),q,(v2===''?'':_wkB4Num(v2,2)),false,S.num);
-      if(v3!=='')T.d3[k]+=Number(v3)||0;
       if(v2!=='')T.d2[k]+=Number(v2)||0}
     x+=_wkB4Cel('AI',q,f.org,true,S.texto);
     x+=_wkB4Cel('AJ',q,(f.durPlan===''?'':f.durPlan),false,S.ent);
@@ -17799,9 +18065,10 @@ function _wkBGantt(CTX,cc){
   ['L','M','N','O','P','Q','R'].forEach(function(cl){y+=_wkB4Cel(cl,q2,'',false,S.total)});
   y+=_crXlsCel('S',q2,_wkB4Num(T.prog,2),false,S.totalNum);
   y+=_crXlsCel('T',q2,_wkB4Num(T.real,2),false,S.totalNum);
-  for(n=0;n<7;n++){
+  for(n=0;n<7;n++)
     y+=_wkB4Cel(_wkgCol(DIA1,n+1),q2,(D.hayDia?_wkB4Num(T.d3[n],2):''),false,S.totalNum);
-    y+=_wkB4Cel(_wkgCol(DIA2,n+1),q2,(D.hayDia?_wkB4Num(T.d2[n],2):''),false,S.totalNum)}
+  for(n=0;n<7;n++)
+    y+=_wkB4Cel(_wkgCol(DIA2,n+1),q2,(D.hayDia?_wkB4Num(T.d2[n],2):''),false,S.totalNum);
   y+=_wkB4Cel('AI',q2,'',true,S.total);
   y+=_wkB4Cel('AJ',q2,'',false,S.total);
   y+=_wkB4Cel('AK',q2,'',false,S.total);
@@ -17847,6 +18114,7 @@ function _wkBGantt(CTX,cc){
     '<sheetData>'+r.join('')+'</sheetData>'+
     '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>'+
     '<pageSetup orientation="landscape"/></worksheet>';
+  xml=_wkB4Ordena(xml);          /* celdas en orden de columna, filas en orden */
   return {nombre:HOJA,xml:xml,filas:D.filas,ultima:q2,dias:D.dias,
     hayDia:D.hayDia,hhU:D.hhU,sumas:T}}
 
@@ -18034,6 +18302,7 @@ function _wkBCron(CTX){
     '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>'+
     (grafico?'<drawing r:id="rId1"/>':'')+
     '</worksheet>';
+  xml=_wkB4Ordena(xml);          /* celdas en orden de columna, filas en orden */
   return {nombre:HOJA,xml:xml,grafico:grafico,dibujo:dibujo,filaDe:filaDe,
     ultima:ult,series:series,colIni:colIni,colFin:colFin,filaCat:4}}
 /* ===================== fin del bloque del agente B4 ===================== */
@@ -18093,9 +18362,10 @@ var _WGB5_REQ=[
   ['_wkB3WLA','B3','PARA 3WLA / PPC / 3WLA'],
   ['_wkBPpcAnalisis','B3','PPC ANALISIS'],
   ['_wkBRestric','B3','Analisis de Restricciones'],
-  ['_wkBLookHojas','B3','3WLookahead_PPC / 3WLookahead_Razones'],
-  ['_wkBGantt','B4','GANTT SEMANA'],
-  ['_wkBCron','B4','CRONOGRAMAS']];
+  ['_wkBLookHojas','B3','3WLookahead_PPC / 3WLookahead_Razones']];
+/* B4 (_wkBGantt / _wkBCron) ya no se llama: el usuario no quiere pestanas
+   nuevas. Su codigo se queda donde esta, intacto y sin usar, por si algun
+   dia se pide GANTT SEMANA o CRONOGRAMAS. */
 function _wkB5Salud(){
   var f=[];
   _WGB5_A.forEach(function(n){if(!_wgFn(n))f.push(n+' (Generación A)')});
@@ -18160,9 +18430,122 @@ function _wgTab(xml,rgb){
   return (typeof _wkPonTab==='function')?_wkPonTab(x,rgb):x}
 /* --- el ORDEN del libro, declarativo (·1.8 del diseño) ------------------
    Una sola lista: asi el orden se prueba solo, sin armar ninguna hoja. */
+/* El libro de B ensena las MISMAS pestanas que el de A: ni GANTT SEMANA ni
+   CRONOGRAMAS (B4 queda inerte), y las cuatro hojas de trabajo de B viajan
+   ocultas. */
 var _WKB_ORDEN=['ap','p6','t1','t23','gg','car','panel','prog','met','phy','cos',
-  'gantt','crons','staff','equip','rfi','fcr','foto','carAzul','para3w','ppc',
+  'staff','equip','rfi','fcr','foto','carAzul','para3w','ppc',
   'tresw','lookPpc','lookRaz','ppcAna','restric','traza','notas'];
+/* las piezas a las que hay que quitarles la cache de las formulas: las que B
+   REESCRIBE sobre un donante o arma con formulas. Las 7 que se copian tal
+   cual (gg, staff, equip, rfi, fcr, foto, carAzul) se dejan como en A. */
+var _WGB5_LIMPIA=['car','panel','prog','met','phy','cos','para3w','ppc','tresw',
+  'lookPpc','lookRaz','ppcAna','restric'];
+/* --- quitar el color de pestaña sin llevarse el resto del <sheetPr> ------
+   _wkPonTab SUSTITUYE el sheetPr entero; aqui solo se va el <tabColor/>. */
+function _wgSinTab(xml){
+  var x=String(xml||'');
+  return x.replace(/<sheetPr(\s[^>]*?)?>([\s\S]*?)<\/sheetPr>/,function(t,a,c){
+    var c2=String(c||'').replace(/<tabColor[^>]*\/>/g,'');
+    if(!a&&!c2.replace(/\s+/g,''))return '';
+    return '<sheetPr'+(a||'')+'>'+c2+'</sheetPr>'})
+    .replace(/<sheetPr\s+tabColor[^>]*\/>/,'')}
+/* --- fuera la cache de las formulas ---------------------------------------
+   Una celda con <f> que conserva su <v> viejo pero ha perdido el t="str" se
+   lee como NUMERO, y con " " dentro Excel "repara la informacion de celda"
+   (era el caso de PPC ANALISIS!AL6). _wkB3SinCache (B3) solo caza <v> sin
+   atributos; aqui se quita TODA cache, lleve los atributos que lleve. El
+   libro sale con fullCalcOnLoad="1", asi que Excel las recalcula al abrir. */
+function _wgSinCacheV(xml){
+  return String(xml||'').replace(/<c ([^>]*[^\/>])>([\s\S]*?)<\/c>/g,function(t,at,dentro){
+    if(dentro.indexOf('<f')<0)return t;
+    var d2=dentro.replace(/<v(?:\s[^>]*?)?>[\s\S]*?<\/v>/g,'')
+                 .replace(/<v(?:\s[^>]*?)?\/>/g,'');
+    if(d2===dentro)return t;
+    return '<c '+at.replace(/\s+t="(?:str|e|b|n)"/,'')+'>'+d2+'</c>'})}
+/* --- las hojas de trabajo de B, ocultas ------------------------------------
+   La visibilidad de una hoja vive en workbook.xml, que lo escribe
+   _wkPaqueteApp a partir de su cuarto argumento; y el handler #_wkSolo pasa
+   ese mapa como literal y NO se toca (R0.1). Asi que se envuelve
+   _wkPaqueteApp con un guardia de IDENTIDAD: solo cuando la lista de hojas
+   es EXACTAMENTE la que B acaba de armar se le suman las ocultas de B. Para
+   cualquier otra llamada -- la Generacion A por el boton verde, y los dos
+   entregables de #_wkDos, que pasan listas nuevas de .filter() -- la
+   envoltura delega con los MISMOS argumentos y devuelve lo mismo. */
+var _WGB5_PAQ0=null,_WGB5_HOJAS=null,_WGB5_OCU=null;
+function _wgB5Oculta(hojas,mapa){
+  _WGB5_HOJAS=hojas;_WGB5_OCU=mapa;
+  try{
+    var R=_wgRaiz();if(!R||_WGB5_PAQ0)return;
+    if(typeof R._wkPaqueteApp!=='function')return;
+    _WGB5_PAQ0=R._wkPaqueteApp;
+    R._wkPaqueteApp=function(hj,st,ss,oc){
+      if(hj&&hj===_WGB5_HOJAS&&_WGB5_OCU){
+        var o2={},k;
+        if(oc)for(k in oc)o2[k]=oc[k];
+        for(k in _WGB5_OCU)o2[k]=_WGB5_OCU[k];
+        return _WGB5_PAQ0(hj,st,ss,o2)}
+      return _WGB5_PAQ0(hj,st,ss,oc)}
+  }catch(_eo){}}
+/* --- el gráfico del panel, sin acumular ni romperse ----------------------
+   Tres arreglos sobre el mismo sitio: no se escribe encima del donante
+   memorizado (_WKPAN), se doblan los dolares antes de _wkMeteSeries (que
+   mete las series como CADENA de reemplazo, donde '$1' significa "el grupo
+   1") y, si el resultado sale descuadrado, se deja el grafico del panel. */
+var _WGB5_CH0=null;
+function _wgDolar(t){return String(t==null?'':t).split('$').join('$$')}
+function _wgChartMal(ch){
+  var a=(ch.match(/<c:ser>/g)||[]).length,b=(ch.match(/<\/c:ser>/g)||[]).length;
+  if(a!==b)return 'series sin cerrar ('+a+'/'+b+')';
+  if(/<\/c:ser>[^<]/.test(ch))return 'texto suelto detrás de una serie';
+  var ids={},m,re=/<c:ser>[\s\S]*?<c:idx val="(\d+)"/g;
+  while((m=re.exec(ch))){if(ids[m[1]])return 'idx repetido ('+m[1]+')';ids[m[1]]=1}
+  return ''}
+function _wgPanelGrafico(ap2,chg,resRS,iSem,nom){
+  var out={},nota=_wgFn('_wgNota')||function(){};
+  if(!ap2||!ap2.partes)return out;
+  Object.keys(ap2.partes).forEach(function(k){out[k]=ap2.partes[k]});
+  if(!chg||!chg.cambios||!resRS||!resRS.length)return out;
+  if(!_WGB5_CH0)_WGB5_CH0={};
+  Object.keys(out).forEach(function(rp){
+    if(!/^xl\/charts\/chart\d+\.xml$/.test(rp))return;
+    if(typeof out[rp]!=='string')return;
+    if(_WGB5_CH0[rp]==null)_WGB5_CH0[rp]=out[rp];   /* la copia limpia */
+    var ch0=_WGB5_CH0[rp],ch=ch0;
+    try{
+      ch=_wkChartFilas(ch,'PHYSICAL % PROGRESS',chg.cambios);
+      try{
+        var cFin=_wkgCol('P',(iSem||1)-1);
+        resRS.forEach(function(x9){var rr=x9.rAcum;
+          ch=ch.replace(new RegExp('(\\$P\\$'+rr+':\\$)[A-Z]{1,2}(\\$'+rr+')(?![0-9])','g'),
+            function(_t9,a9,b9){return a9+cFin+b9})})}catch(_ef9){}
+      var sers=ch.match(/<c:ser>[\s\S]*?<\/c:ser>/g)||[];
+      if(sers.length>=2&&resRS.length>1){
+        var PAL=[['1F6FB2','7030A0'],['9C4A0A','008080'],['4B2A70','B03A2E']];
+        var nuevas=[],n0=sers.length;
+        for(var q=1;q<resRS.length;q++){
+          var cq=resRS[q],col=PAL[(q-1)%PAL.length];
+          nuevas.push(_wkClonaSerie(sers[0],{idx:n0++,hoja:'PHYSICAL % PROGRESS',
+            filas:(function(){var f={};f[resRS[0].pAcum]=cq.pAcum;return f})(),
+            viejo:'00B050',color:col[0],
+            nombre:'Programado ('+_wgDolar(nom(cq.id))+')'}));
+          nuevas.push(_wkClonaSerie(sers[1],{idx:n0++,hoja:'PHYSICAL % PROGRESS',
+            filas:(function(){var f={};f[resRS[0].rAcum]=cq.rAcum;return f})(),
+            viejo:'C00000',color:col[1]}))}
+        ch=_wkMeteSeries(ch,'lineChart',nuevas.map(_wgDolar))}
+      ch=ch.replace(/<c:tx><c:v>Programado \([^<]*\)<\/c:v><\/c:tx>/,
+        '<c:tx><c:v>Programado ('+_wgDolar(_wkEsc(nom(resRS[0].id)))+')</c:v></c:tx>');
+      var mal=_wgChartMal(ch);
+      if(mal){
+        nota('REPORTE SEMANAL','('+rp+')','las líneas base en el gráfico',
+          'el gráfico copiado no admitió las series nuevas ('+mal+'): se deja el del panel');
+        ch=ch0}
+    }catch(_ecg){
+      nota('REPORTE SEMANAL','('+rp+')','las líneas base en el gráfico',
+        'no se pudo reapuntar el gráfico copiado: se deja el del panel');
+      ch=ch0}
+    out[rp]=ch});
+  return out}
 function _wkBOrdenHojas(CTX,piezas){
   var esArr=function(v){return Object.prototype.toString.call(v)==='[object Array]'};
   var out=[];
@@ -18402,10 +18785,10 @@ async function _wkBLibroApp(semN,corte,ids,opc){
       Z.p6.push([nP6,pinta(xmlDe(nP6,h6),3),null]);
       var r1=await arma(nT1,(function(b){return function(){return _wkBFeedT1(b,CTX)}})(bl));
       t1Fila[bl.id]=r1.filaDe;t1Ult[bl.id]=r1.ultima;
-      Z.t1.push([nT1,_wgTab(pinta(xmlDe(nT1,r1),3),_WK_AMARILLO),null]);
+      Z.t1.push([nT1,_wgSinTab(pinta(xmlDe(nT1,r1),3)),null]);
       var r2=await arma(nT23,(function(b){return function(){return _wkBFeedT23(b,CTX)}})(bl));
       t23Fila[bl.id]=r2.filaDe;t23Ult[bl.id]=r2.ultima;
-      Z.t23.push([nT23,_wgTab(pinta(xmlDe(nT23,r2),3),_WK_AMARILLO),null])}
+      Z.t23.push([nT23,_wgSinTab(pinta(xmlDe(nT23,r2),3)),null])}
     var idEsp=BL[0].id;
     /* GG: copia literal del libro guia, con su unica referencia de fuera
        reapuntada al total de COSTO (igual que A, L11614-11617) */
@@ -18485,40 +18868,14 @@ async function _wkBLibroApp(semN,corte,ids,opc){
       /* el grafico copiado: se reapunta al cuadro vigente y se le clonan las
          series de las demas lineas base. Mismo procedimiento que A, con la
          ETIQUETA del cronograma en el nombre de cada serie. */
-      if(ap2&&ap2.partes&&chg.cambios)Object.keys(ap2.partes).forEach(function(rp){
-        if(!/^xl\/charts\/chart\d+\.xml$/.test(rp))return;
-        var ch=_wkChartFilas(ap2.partes[rp],'PHYSICAL % PROGRESS',chg.cambios);
-        try{
-          var cFin=_wkgCol('P',(CTX.iSem||1)-1);
-          resRS.forEach(function(x9){var rr=x9.rAcum;
-            ch=ch.replace(new RegExp('(\\$P\\$'+rr+':\\$)[A-Z]{1,2}(\\$'+rr+')(?![0-9])','g'),
-              function(_t9,a9,b9){return a9+cFin+b9})})}catch(_ef9){}
-        var sers=ch.match(/<c:ser>[\s\S]*?<\/c:ser>/g)||[];
-        if(sers.length>=2&&resRS.length>1){
-          var PAL=[['1F6FB2','7030A0'],['9C4A0A','008080'],['4B2A70','B03A2E']];
-          var nuevas=[],n0=sers.length;
-          for(var q=1;q<resRS.length;q++){
-            var cq=resRS[q],col=PAL[(q-1)%PAL.length];
-            nuevas.push(_wkClonaSerie(sers[0],{idx:n0++,hoja:'PHYSICAL % PROGRESS',
-              filas:(function(){var f={};f[resRS[0].pAcum]=cq.pAcum;return f})(),
-              viejo:'00B050',color:col[0],nombre:'Programado ('+nom(cq.id)+')'}));
-            nuevas.push(_wkClonaSerie(sers[1],{idx:n0++,hoja:'PHYSICAL % PROGRESS',
-              filas:(function(){var f={};f[resRS[0].rAcum]=cq.rAcum;return f})(),
-              viejo:'C00000',color:col[1]}))}
-          ch=_wkMeteSeries(ch,'lineChart',nuevas)}
-        ch=ch.replace(/<c:tx><c:v>Programado \([^<]*\)<\/c:v><\/c:tx>/,
-          '<c:tx><c:v>Programado ('+_wkEsc(nom(resRS[0].id))+')</c:v></c:tx>');
-        ap2.partes[rp]=ch});
+      var pzP=_wgPanelGrafico(ap2,chg,resRS,CTX.iSem,nom);
       Z.panel=['REPORTE SEMANAL',xmlDe('REPORTE SEMANAL',hp),
-        ap2?{relsHoja:ap2.rels,partes:ap2.partes}:null]}
+        ap2?{relsHoja:ap2.rels,partes:pzP}:null]}
     else nota('REPORTE SEMANAL','(hoja)','el panel de control',
       'panel.xlsx no se pudo bajar: el libro sale sin la portada de números');
-    /* GANTT SEMANA y CRONOGRAMAS: nuevas en la ruta del aplicativo */
-    var gt=await arma('GANTT SEMANA',function(){return _wkBGantt(CTX,CTX.X[0])});
-    Z.gantt=['GANTT SEMANA',_wgTab(pinta(xmlDe('GANTT SEMANA',gt),3),_WK_VERDE),null];
-    var cr=await arma('CRONOGRAMAS',function(){return _wkBCron(CTX)});
-    Z.crons=['CRONOGRAMAS',_wgTab(pinta(xmlDe('CRONOGRAMAS',cr),3),_WK_VERDE),
-      (cr.grafico?{grafico:cr.grafico,dibujo:cr.dibujo}:null)];
+    /* GANTT SEMANA y CRONOGRAMAS NO se arman: la B.001 ensena las mismas
+       pestanas que la A.001 y no crea hojas nuevas a la vista. _wkBGantt y
+       _wkBCron (B4) siguen en el archivo, enteros y sin usar. */
     /* los anexos del cliente: copia literal, cada uno con su fila en Notas */
     if(pan&&pan.hojas){
       ['STAFFING TABULATION CHART','CONSTRUCTION EQUIPMENT SCHE '].forEach(function(nm2,k){
@@ -18599,11 +18956,25 @@ async function _wkBLibroApp(semN,corte,ids,opc){
         sueltas.join(' · '))}
     /* 6) traza y notas, SIEMPRE las dos ultimas y en este orden */
     var trz=await arma(_WGB5_TRZ,function(){return _wgHojaTraza(CTX)});
-    Z.traza=[_WGB5_TRZ,_wgTab(xmlDe(_WGB5_TRZ,trz),'FF808080'),null];
+    Z.traza=[_WGB5_TRZ,_wgSinTab(xmlDe(_WGB5_TRZ,trz)),null];
     var nts=await arma(_WGB5_NOT,function(){return _wgHojaNotas(CTX)});
-    Z.notas=[_WGB5_NOT,_wgTab(xmlDe(_WGB5_NOT,nts),'FF808080'),null];
+    Z.notas=[_WGB5_NOT,_wgSinTab(xmlDe(_WGB5_NOT,nts)),null];
+    /* fuera la cache de las formulas de las hojas que B reescribe: una celda
+       con <f> que conserva su <v> viejo sin t="str" se lee como numero y
+       Excel repara la informacion de celda (PPC ANALISIS!AL6). */
+    _WGB5_LIMPIA.forEach(function(k){
+      var v=Z[k];if(!v)return;
+      if(Object.prototype.toString.call(v[0])==='[object Array]')
+        v.forEach(function(h){if(h)h[1]=_wgSinCacheV(h[1])});
+      else v[1]=_wgSinCacheV(v[1])});
     /* 7) el contrato, y solo entonces el libro */
     var hojas=_wkBOrdenHojas(CTX,Z);
+    /* las cuatro hojas de trabajo de B viajan OCULTAS, como las tres del
+       lookahead: a la vista quedan las MISMAS pestanas que en la A.001 */
+    var ocuB={};ocuB[_WGB5_TRZ]=1;ocuB[_WGB5_NOT]=1;
+    Object.keys(t1Nom).forEach(function(k9){ocuB[t1Nom[k9]]=1});
+    Object.keys(t23Nom).forEach(function(k9){ocuB[t23Nom[k9]]=1});
+    _wgB5Oculta(hojas,ocuB);
     var LB={hojas:hojas,styles:_wkPintorCierra(estilos),ss:base.ss,
       info:_wkBInfo(CTX,prog,BL)};
     _wgContrato(LB);
@@ -20454,7 +20825,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b29';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b30';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
