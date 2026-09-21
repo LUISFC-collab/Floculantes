@@ -16188,7 +16188,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b23';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b24';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -23764,10 +23764,13 @@ function _tqCfg(){var raw=null;try{raw=localStorage.getItem(_TQ_LS)}catch(e){}
   if(window._tqCfgMem&&window._tqCfgMem.str===raw)return window._tqCfgMem.obj;   /* sin JSON.parse en cada celda */
   var c=null;try{c=JSON.parse(raw||'null')}catch(e){c=null}
   if(!(c&&c.orden))c={orden:_TQ_COLS.map(function(x){return x[0]})};
-  /* semanas (columnas de periodo) que el usuario escondio con el boton
-     Semanas: guarda las OCULTAS, no las visibles, asi cada periodo nuevo
-     que aparece con el tiempo se ve solo */
-  c.semOc=c.semOc||{};
+  /* semanas que el usuario escondio con el boton Semanas: guarda las
+     OCULTAS, no las visibles, asi cada semana nueva que aparece con el
+     tiempo se ve sola. La clave es el FIN de la semana en ISO, SIN el
+     prefijo 'p_' de las columnas: las claves viejas 'p_<fin>' son ese
+     mismo fin y se normalizan aqui */
+  if(!(c.semOc&&typeof c.semOc==='object'))c.semOc={};
+  else{var _so9={},_sk9;for(_sk9 in c.semOc){if(c.semOc[_sk9])_so9[_tqSemK(_sk9)]=1}c.semOc=_so9}
   c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};c.filtros=c.filtros||{};
   /* una vez: las columnas nuevas de la primera version salen del orden
      guardado para irse al final del cuadro */
@@ -23845,27 +23848,66 @@ function _tqColsVis(){var cfg=_tqCfg(),by={};_TQ_COLS.forEach(function(x){by[x[0
     out.splice(pos,0,x)});
   return _tqSemFiltra(out)}
 /* ===== semanas que se ven y semanas que no (boton \ud83d\udcc5 Semanas) =====
-   cfg.semOc guarda las OCULTAS por su clave de periodo ('p_<fin>'): lo que
-   aparezca despues se ve por defecto y la lista crece sola. Ocultar una
-   semana NO cambia ninguna cifra: la columna 'Suma de HH', los subtotales,
-   el TOTAL, el pie y el Excel la siguen contando, como al ocultar una
+   La unidad de visibilidad es SIEMPRE la SEMANA, en los tres modos: si se
+   deja marcada solo la S38, en modo semana sale su columna, en modo dia
+   salen sus dias y en modo mes el mes solo desaparece si TODAS sus
+   semanas estan escondidas.
+   cfg.semOc guarda las OCULTAS por el FIN de su semana en ISO y SIN el
+   prefijo 'p_' ({'2026-09-17':1}); las claves viejas 'p_<fin>' de modo
+   semana siguen valiendo porque son ese mismo fin. Lo que aparezca
+   despues se ve por defecto y la lista crece sola. Esconder una semana
+   NO cambia ninguna cifra: la columna 'Suma de HH', los subtotales, el
+   TOTAL, el pie y el Excel la siguen contando, como al ocultar una
    columna en Excel. */
 function _tqSemOc(){try{var o=_tqCfg().semOc;return (o&&typeof o==='object')?o:{}}catch(e){return {}}}
+/* el dia en que CIERRA la semana de esta tabla (0=domingo ... 4=jueves) */
+function _tqSemCorte(){try{var W=Number(_tqCfg().corte);if(W>=0&&W<=6)return W}catch(e){}return 4}
+/* la clave de una semana: su fin en ISO, sin el prefijo 'p_' de las
+   columnas (asi las claves guardadas antes siguen valiendo) */
+function _tqSemK(v){v=String(v==null?'':v);return (v.slice(0,2)==='p_')?v.slice(2):v}
+/* el fin de la semana que contiene un dia, con el corte de esta tabla
+   (la misma cuenta de _t23Periodos: dia + ((corte - dow + 7) % 7)) */
+function _tqSemFin(iso){try{var a=_crASerial(String(iso||''));if(a===''||a==null)return '';
+  var W=_tqSemCorte();return _crDeSerial(a+((W-_t23Dow(a)+7)%7))}catch(e){return ''}}
+/* las semanas que toca una columna: en 'sem' la suya, en 'dia' la de ese
+   dia y en 'mes' TODAS las que se cruzan con el mes */
+function _tqSemDe(p){try{if(!p)return [];
+  var a=_crASerial(String(p.ini||p.fin||'')),b=_crASerial(String(p.fin||p.ini||''));
+  if(a===''||a==null||b===''||b==null)return [];if(b<a)b=a;
+  var W=_tqSemCorte(),out=[],f=a+((W-_t23Dow(a)+7)%7),n9=0;
+  while(f-6<=b&&n9<500){out.push(_crDeSerial(f));f+=7;n9++}
+  if(!out.length){var u9=_tqSemFin(p.fin||p.ini);if(u9)out.push(u9)}
+  return out}catch(e){return []}}
+/* una columna solo se va si TODAS sus semanas estan escondidas */
 function _tqSemFiltra(cols){try{var oc=_tqSemOc(),hay=false,k9;for(k9 in oc){if(oc[k9]){hay=true;break}}
-  if(!hay)return cols;return cols.filter(function(c9){return !(_tqEsPer(c9[0])&&oc[c9[0]])})}catch(e){return cols}}
-/* el rotulo de cada periodo en la lista: en semanas 'S38 \u00b7 17/09/2026',
-   en dias o meses lo que pinta la cabecera (lab y lab2) */
-function _tqSemLab(p){try{var B=' \u00b7 ';
-  var t=(p.sem!=null)?('S'+p.sem+B+p.lab):(p.lab+((p.lab2&&p.lab2!==p.lab)?(B+p.lab2):''));
-  if(p.cierre&&String(t).indexOf('CIERRE')<0)t+=B+'CIERRE';return t}catch(e){return String((p&&p.k)||'')}}
+  if(!hay)return cols;
+  return cols.filter(function(c9){if(!_tqEsPer(c9[0]))return true;
+    var p9=c9[2]||(window._tqPerMap||{})[c9[0]]||null,ss=_tqSemDe(p9);
+    if(!ss.length)return !oc[_tqSemK(c9[0])];
+    for(var i9=0;i9<ss.length;i9++)if(!oc[ss[i9]])return true;
+    return false})}catch(e){return cols}}
+/* la lista del boton: SIEMPRE semanas, la union de las semanas de las
+   columnas CON informacion de lo ultimo pintado, en orden */
+function _tqSemLista(D){try{var DD=D||((window._tqUltimo||{}).D)||null;
+  var per=(DD&&DD.per)||[],W=_tqSemCorte(),ix={},out=[];
+  /* la semana de cierre de la Tabla R, para marcarla tambien en modo mes */
+  var cieW='';try{var sf9=DD&&DD.info&&DD.info.semFin;
+    if(sf9!=null&&typeof _wkSem==='function')cieW=_tqSemFin(_wkISO(_wkSem(Number(sf9)).fin))}catch(_ec9){}
+  per.forEach(function(p){var ss=_tqSemDe(p);ss.forEach(function(f){
+    if(ix[f]==null){ix[f]=out.length;out.push({k:f,sem:(W===4)?_crSemNum(f):null,cierre:(cieW!==''&&f===cieW)})}
+    if(p.cierre&&ss.length===1)out[ix[f]].cierre=true})});
+  out.sort(function(u,v){return (u.k<v.k)?-1:((u.k>v.k)?1:0)});return out}catch(e){return []}}
+/* el rotulo de cada semana: 'S38 \u00b7 17/09/2026' (el numero de semana solo
+   cuando la tabla cierra en jueves) y ' \u00b7 CIERRE' en la Tabla R */
+function _tqSemLab(w){try{var B=' \u00b7 ',t=_t23DMY(w.k);
+  if(w.sem!=null)t='S'+w.sem+B+t;if(w.cierre)t+=B+'CIERRE';return t}catch(e){return String((w&&w.k)||'')}}
 function _tqSemPer(){try{var U=window._tqUltimo;return (U&&U.D&&U.D.per)||[]}catch(e){return []}}
-function _tqSemModo(D){try{var m=(D&&D.info&&D.info.per)||((window._tqUltimo||{}).D||{}).info;
-  if(m&&m.per)m=m.per;return (m==='dia'||m==='mes')?m:'sem'}catch(e){return 'sem'}}
-function _tqSemPal(m,n){return (m==='dia')?(n===1?'d\u00eda oculto':'d\u00edas ocultos'):((m==='mes')?(n===1?'mes oculto':'meses ocultos'):(n===1?'semana oculta':'semanas ocultas'))}
-/* el texto de estado avisa cuantas se dejaron fuera */
-function _tqSemTxt(D){try{var oc=_tqSemOc(),per=(D&&D.per)||[],n=0;
-  per.forEach(function(p){if(oc[p.k])n++});if(!n)return '';
-  return ' \u00b7 '+n+' '+_tqSemPal(_tqSemModo(D),n)}catch(e){return ''}}
+function _tqSemPal(n){return (n===1)?'semana oculta':'semanas ocultas'}
+/* el texto de estado avisa cuantas SEMANAS se dejaron fuera (en los tres
+   modos se cuenta en semanas) */
+function _tqSemTxt(D){try{var oc=_tqSemOc(),L=_tqSemLista(D),n=0;
+  L.forEach(function(w){if(oc[w.k])n++});if(!n)return '';
+  return ' \u00b7 '+n+' '+_tqSemPal(n)}catch(e){return ''}}
 /* el '% acumulado' del pie suma TODOS los periodos hasta ese, tambien los
    que el boton Semanas dejo fuera: una semana oculta sigue contando */
 function _tqAcumHasta(D,S,k,ac){try{var per=(D&&D.per)||[],t=0,vi=false;
@@ -24282,30 +24324,31 @@ function _tqFxArrastre(x,root,doc,k,pos,keys,col){x.style.cursor='move';
       window._tqFxDragged=true;setTimeout(function(){window._tqFxDragged=false},80);
       var c9=colDe(ev);if(!c9||!_TQ_NUM[c9.k]||c9.k===k)return;var F2=_tqFxDe(k).slice();F2[pos]=c9.k;_tqFxGuarda(k,F2)};
     e.preventDefault();e.stopPropagation();doc.addEventListener('mousemove',mm);doc.addEventListener('mouseup',mu)}}
-/* ===== \ud83d\udcc5 Semanas: aparecer o desaparecer columnas de periodo =====
-   La lista son los periodos de lo ULTIMO pintado (D.per), o sea SOLO los
-   que tienen informacion: cuando pasa una semana se agrega ella sola.
-   'Todo' marcado = ninguna oculta; marcarlo devuelve la tabla como debe
-   salir realmente. Va en 'doc' para que funcione tambien en la ventana
-   emergente de la tabla. */
+/* ===== \ud83d\udcc5 Semanas: aparecer o desaparecer SEMANAS =====
+   La lista son SIEMPRE semanas, tambien en modo dia y en modo mes: las
+   de las columnas de lo ULTIMO pintado, o sea SOLO las que tienen
+   informacion, asi que cuando pasa una semana se agrega ella sola. Lo
+   que se esconde aqui se esconde en los tres modos.
+   'Todo' marcado = ninguna oculta (la tabla como debe salir realmente);
+   desmarcado = se esconden todas las de la lista. Va en 'doc' para que
+   funcione tambien en la ventana emergente de la tabla. */
 function _crTablaQSemUI(doc,anchor,rerender){
   var old=doc.getElementById('_tqSemPop');if(old){old.remove();return}
   var pop=doc.createElement('div');pop.id='_tqSemPop';
   pop.style.cssText='position:fixed;z-index:2147483647;background:#152436;border:1px solid #1d3550;border-radius:10px;padding:8px 10px;font-size:12px;color:#cfe3ff;box-shadow:0 10px 30px rgba(0,0,0,.5);max-height:70vh;overflow:auto;min-width:200px';
   var r=anchor.getBoundingClientRect();pop.style.left=Math.max(4,r.left-120)+'px';pop.style.top=(r.bottom+4)+'px';
-  var arma=function(){var cfg=_tqCfg(),oc=cfg.semOc||{},per=_tqSemPer(),m=_tqSemModo(null),nOc=0;
+  var arma=function(){var oc=_tqSemOc(),per=_tqSemLista(null),nOc=0;
     per.forEach(function(p){if(oc[p.k])nOc++});
-    var tit=(m==='dia')?'D\u00edas':((m==='mes')?'Meses':'Semanas');
+    var tit='Semanas';
     var h='<div style="font-weight:800;color:#9db4d6;margin-bottom:4px;white-space:nowrap">'+tit+' con informaci\u00f3n</div>';
     h+='<label style="display:block;white-space:nowrap;cursor:pointer;font-weight:800;border-bottom:1px solid #1d3550;padding-bottom:4px;margin-bottom:4px" title="Marcado: salen todas, como la tabla debe salir realmente"><input type="checkbox" id="_tqSemTodo"'+(nOc?'':' checked')+'> Todo</label>';
     if(!per.length)h+='<div style="color:#9db4d6;white-space:nowrap">(la tabla a\u00fan no est\u00e1 pintada)</div>';
     per.forEach(function(p){h+='<label style="display:block;white-space:nowrap;cursor:pointer"><input type="checkbox" class="_tqSemCb" data-k="'+p.k+'"'+(oc[p.k]?'':' checked')+'> '+esc(_tqSemLab(p))+'</label>'});
-    h+='<div style="margin-top:5px;color:#FFD37A;font-weight:800;white-space:nowrap">'+(nOc?(nOc+' '+_tqSemPal(m,nOc)):'&nbsp;')+'</div>';
+    h+='<div style="margin-top:5px;color:#FFD37A;font-weight:800;white-space:nowrap">'+(nOc?(nOc+' '+_tqSemPal(nOc)):'&nbsp;')+'</div>';
     pop.innerHTML=h;
     var todo=pop.querySelector('#_tqSemTodo');
-    /* desmarcar 'Todo' por si solo no hace nada: 'Todo' marcado es, por
-       definicion, que no hay ninguna oculta */
-    /* 'Todo' marcado = ninguna oculta; desmarcado = se ocultan TODAS las que estan en la lista */
+    /* 'Todo' marcado = ninguna oculta; desmarcado = se esconden TODAS las
+       semanas de la lista */
     if(todo)todo.onchange=function(){var c2=_tqCfg();c2.semOc={};
       if(!todo.checked)Array.prototype.forEach.call(pop.querySelectorAll('._tqSemCb'),function(cb){var k=cb.getAttribute('data-k');if(k)c2.semOc[k]=1});
       _tqCfgSave(c2);arma();rerender()};
@@ -24547,7 +24590,7 @@ function _crTablaQDocHTML(titulo){
     'table{border-collapse:collapse;font-size:11.5px}th,td{border:1px solid #223049;padding:3px 6px;white-space:nowrap}th{background:#152436;color:#8ECBF5;position:sticky;top:0;cursor:pointer;z-index:2}'+
     '</style></head><body><div id="top"><input id="_tqBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026"><span id="_tqRes"></span>'+
     '<button id="_tqCols" title="Ocultar o mostrar columnas (arrastra las cabeceras para moverlas)">\u2699 Columnas</button>'+
-    '<button id="_tqSem" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button>'+
+    '<button id="_tqSem" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n. Lo que escondas aqu\u00ed se esconde igual en modo semana, d\u00eda y mes; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button>'+
     '<button id="_tqMax" title="A toda la pantalla">\ud83d\uddd6 Maximizar</button>'+
     '<button id="_tqAj" title="Con ajuste, la celda envuelve el texto y la fila crece; sin ajuste, una línea y recorte">↩ Ajustar texto</button>'+
     '<button id="_tqFzCel" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tqFzNo" title="Soltar filas y columnas inmovilizadas">▶ Movilizar</button>'+
@@ -24597,7 +24640,7 @@ async function _crTablaQUI(c){
   var bst='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer';
   top.innerHTML='<input id="_tqBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026" style="flex:1;min-width:160px;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:8px;padding:6px 9px;font-size:12px">'+
     '<span id="_tqRes" style="font-size:11px;color:#9FE8B0;font-weight:800"></span>'+
-    '<button id="_tqCols" style="'+bst+'">⚙ Columnas</button><button id="_tqSem" style="'+bst+'" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button><button id="_tqAj" style="'+bst+'">↩ Ajustar texto</button><button id="_tqFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tqFzNo" style="'+bst+'">▶ Movilizar</button><button id="_tqExp" style="'+bst+';font-size:11px;padding:4px 7px" title="Desplegar todos los títulos WBS">▾ Expandir todo</button><button id="_tqCon" style="'+bst+';font-size:11px;padding:4px 7px" title="Plegar todos los títulos WBS">▸ Contraer todo</button><button id="_tqMenos" style="'+bst+'">A\u2212</button><button id="_tqMas" style="'+bst+'">A+</button>'+
+    '<button id="_tqCols" style="'+bst+'">⚙ Columnas</button><button id="_tqSem" style="'+bst+'" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n. Lo que escondas aqu\u00ed se esconde igual en modo semana, d\u00eda y mes; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button><button id="_tqAj" style="'+bst+'">↩ Ajustar texto</button><button id="_tqFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tqFzNo" style="'+bst+'">▶ Movilizar</button><button id="_tqExp" style="'+bst+';font-size:11px;padding:4px 7px" title="Desplegar todos los títulos WBS">▾ Expandir todo</button><button id="_tqCon" style="'+bst+';font-size:11px;padding:4px 7px" title="Plegar todos los títulos WBS">▸ Contraer todo</button><button id="_tqMenos" style="'+bst+'">A\u2212</button><button id="_tqMas" style="'+bst+'">A+</button>'+
     '<button id="_tqCopiar" style="'+bst+'">\ud83d\udccb Copiar como tabla</button><button id="_tqXls" style="'+bst+'" title="Descarga el cuadro tal como se ve (columnas, colores, t\u00edtulos WBS y TOTAL) con los costos como f\u00f3rmulas">\u2b07 Exportar a Excel</button>'+_tqBarraHTML()+'<div id="_tqFx" title="Barra de f\u00f3rmulas: toca una celda y aqu\u00ed sale su referencia y, si es f\u00f3rmula, la f\u00f3rmula con sus celdas marcadas" style="flex-basis:100%;display:flex;align-items:center;gap:6px;background:#0d1117;border:1px solid #1d3550;border-radius:8px;padding:3px 6px;font-size:12px"><span id="_tqFxRef" style="min-width:52px;text-align:center;font-weight:800;color:#8ECBF5;border-right:1px solid #1d3550;padding-right:6px">&nbsp;</span><span style="color:#7d8590;font-style:italic;font-weight:800">fx</span><span id="_tqFxVal" style="flex:1;font-family:Consolas,monospace;color:#cfe3ff;white-space:normal;overflow-wrap:anywhere;min-height:16px"></span></div>';
   ov.insertBefore(top,body);
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
@@ -24688,10 +24731,13 @@ function _tvCfg(){var raw=null;try{raw=localStorage.getItem(_TV_LS)}catch(e){}
   if(window._tvCfgMem&&window._tvCfgMem.str===raw)return window._tvCfgMem.obj;   /* sin JSON.parse en cada celda */
   var c=null;try{c=JSON.parse(raw||'null')}catch(e){c=null}
   if(!(c&&c.orden))c={orden:_TV_COLS.map(function(x){return x[0]})};
-  /* semanas (columnas de periodo) que el usuario escondio con el boton
-     Semanas: guarda las OCULTAS, no las visibles, asi cada periodo nuevo
-     que aparece con el tiempo se ve solo */
-  c.semOc=c.semOc||{};
+  /* semanas que el usuario escondio con el boton Semanas: guarda las
+     OCULTAS, no las visibles, asi cada semana nueva que aparece con el
+     tiempo se ve sola. La clave es el FIN de la semana en ISO, SIN el
+     prefijo 'p_' de las columnas: las claves viejas 'p_<fin>' son ese
+     mismo fin y se normalizan aqui */
+  if(!(c.semOc&&typeof c.semOc==='object'))c.semOc={};
+  else{var _so9={},_sk9;for(_sk9 in c.semOc){if(c.semOc[_sk9])_so9[_tvSemK(_sk9)]=1}c.semOc=_so9}
   c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};c.filtros=c.filtros||{};   /* filtros de columna tipo Excel: guardan lo EXCLUIDO ({ex:{...}}); _tvCfgSave NO les quita las claves de periodo p_... */
   /* una vez: las columnas nuevas de la primera version salen del orden
      guardado para irse al final del cuadro */
@@ -24769,27 +24815,66 @@ function _tvColsVis(){var cfg=_tvCfg(),by={};_TV_COLS.forEach(function(x){by[x[0
     out.splice(pos,0,x)});
   return _tvSemFiltra(out)}
 /* ===== semanas que se ven y semanas que no (boton \ud83d\udcc5 Semanas) =====
-   cfg.semOc guarda las OCULTAS por su clave de periodo ('p_<fin>'): lo que
-   aparezca despues se ve por defecto y la lista crece sola. Ocultar una
-   semana NO cambia ninguna cifra: la columna 'Suma de HH', los subtotales,
-   el TOTAL, el pie y el Excel la siguen contando, como al ocultar una
+   La unidad de visibilidad es SIEMPRE la SEMANA, en los tres modos: si se
+   deja marcada solo la S38, en modo semana sale su columna, en modo dia
+   salen sus dias y en modo mes el mes solo desaparece si TODAS sus
+   semanas estan escondidas.
+   cfg.semOc guarda las OCULTAS por el FIN de su semana en ISO y SIN el
+   prefijo 'p_' ({'2026-09-17':1}); las claves viejas 'p_<fin>' de modo
+   semana siguen valiendo porque son ese mismo fin. Lo que aparezca
+   despues se ve por defecto y la lista crece sola. Esconder una semana
+   NO cambia ninguna cifra: la columna 'Suma de HH', los subtotales, el
+   TOTAL, el pie y el Excel la siguen contando, como al ocultar una
    columna en Excel. */
 function _tvSemOc(){try{var o=_tvCfg().semOc;return (o&&typeof o==='object')?o:{}}catch(e){return {}}}
+/* el dia en que CIERRA la semana de esta tabla (0=domingo ... 4=jueves) */
+function _tvSemCorte(){try{var W=Number(_tvCfg().corte);if(W>=0&&W<=6)return W}catch(e){}return 4}
+/* la clave de una semana: su fin en ISO, sin el prefijo 'p_' de las
+   columnas (asi las claves guardadas antes siguen valiendo) */
+function _tvSemK(v){v=String(v==null?'':v);return (v.slice(0,2)==='p_')?v.slice(2):v}
+/* el fin de la semana que contiene un dia, con el corte de esta tabla
+   (la misma cuenta de _t23Periodos: dia + ((corte - dow + 7) % 7)) */
+function _tvSemFin(iso){try{var a=_crASerial(String(iso||''));if(a===''||a==null)return '';
+  var W=_tvSemCorte();return _crDeSerial(a+((W-_t23Dow(a)+7)%7))}catch(e){return ''}}
+/* las semanas que toca una columna: en 'sem' la suya, en 'dia' la de ese
+   dia y en 'mes' TODAS las que se cruzan con el mes */
+function _tvSemDe(p){try{if(!p)return [];
+  var a=_crASerial(String(p.ini||p.fin||'')),b=_crASerial(String(p.fin||p.ini||''));
+  if(a===''||a==null||b===''||b==null)return [];if(b<a)b=a;
+  var W=_tvSemCorte(),out=[],f=a+((W-_t23Dow(a)+7)%7),n9=0;
+  while(f-6<=b&&n9<500){out.push(_crDeSerial(f));f+=7;n9++}
+  if(!out.length){var u9=_tvSemFin(p.fin||p.ini);if(u9)out.push(u9)}
+  return out}catch(e){return []}}
+/* una columna solo se va si TODAS sus semanas estan escondidas */
 function _tvSemFiltra(cols){try{var oc=_tvSemOc(),hay=false,k9;for(k9 in oc){if(oc[k9]){hay=true;break}}
-  if(!hay)return cols;return cols.filter(function(c9){return !(_tvEsPer(c9[0])&&oc[c9[0]])})}catch(e){return cols}}
-/* el rotulo de cada periodo en la lista: en semanas 'S38 \u00b7 17/09/2026',
-   en dias o meses lo que pinta la cabecera (lab y lab2) */
-function _tvSemLab(p){try{var B=' \u00b7 ';
-  var t=(p.sem!=null)?('S'+p.sem+B+p.lab):(p.lab+((p.lab2&&p.lab2!==p.lab)?(B+p.lab2):''));
-  if(p.cierre&&String(t).indexOf('CIERRE')<0)t+=B+'CIERRE';return t}catch(e){return String((p&&p.k)||'')}}
+  if(!hay)return cols;
+  return cols.filter(function(c9){if(!_tvEsPer(c9[0]))return true;
+    var p9=c9[2]||(window._tvPerMap||{})[c9[0]]||null,ss=_tvSemDe(p9);
+    if(!ss.length)return !oc[_tvSemK(c9[0])];
+    for(var i9=0;i9<ss.length;i9++)if(!oc[ss[i9]])return true;
+    return false})}catch(e){return cols}}
+/* la lista del boton: SIEMPRE semanas, la union de las semanas de las
+   columnas CON informacion de lo ultimo pintado, en orden */
+function _tvSemLista(D){try{var DD=D||((window._tvUltimo||{}).D)||null;
+  var per=(DD&&DD.per)||[],W=_tvSemCorte(),ix={},out=[];
+  /* la semana de cierre de la Tabla R, para marcarla tambien en modo mes */
+  var cieW='';try{var sf9=DD&&DD.info&&DD.info.semFin;
+    if(sf9!=null&&typeof _wkSem==='function')cieW=_tvSemFin(_wkISO(_wkSem(Number(sf9)).fin))}catch(_ec9){}
+  per.forEach(function(p){var ss=_tvSemDe(p);ss.forEach(function(f){
+    if(ix[f]==null){ix[f]=out.length;out.push({k:f,sem:(W===4)?_crSemNum(f):null,cierre:(cieW!==''&&f===cieW)})}
+    if(p.cierre&&ss.length===1)out[ix[f]].cierre=true})});
+  out.sort(function(u,v){return (u.k<v.k)?-1:((u.k>v.k)?1:0)});return out}catch(e){return []}}
+/* el rotulo de cada semana: 'S38 \u00b7 17/09/2026' (el numero de semana solo
+   cuando la tabla cierra en jueves) y ' \u00b7 CIERRE' en la Tabla R */
+function _tvSemLab(w){try{var B=' \u00b7 ',t=_t23DMY(w.k);
+  if(w.sem!=null)t='S'+w.sem+B+t;if(w.cierre)t+=B+'CIERRE';return t}catch(e){return String((w&&w.k)||'')}}
 function _tvSemPer(){try{var U=window._tvUltimo;return (U&&U.D&&U.D.per)||[]}catch(e){return []}}
-function _tvSemModo(D){try{var m=(D&&D.info&&D.info.per)||((window._tvUltimo||{}).D||{}).info;
-  if(m&&m.per)m=m.per;return (m==='dia'||m==='mes')?m:'sem'}catch(e){return 'sem'}}
-function _tvSemPal(m,n){return (m==='dia')?(n===1?'d\u00eda oculto':'d\u00edas ocultos'):((m==='mes')?(n===1?'mes oculto':'meses ocultos'):(n===1?'semana oculta':'semanas ocultas'))}
-/* el texto de estado avisa cuantas se dejaron fuera */
-function _tvSemTxt(D){try{var oc=_tvSemOc(),per=(D&&D.per)||[],n=0;
-  per.forEach(function(p){if(oc[p.k])n++});if(!n)return '';
-  return ' \u00b7 '+n+' '+_tvSemPal(_tvSemModo(D),n)}catch(e){return ''}}
+function _tvSemPal(n){return (n===1)?'semana oculta':'semanas ocultas'}
+/* el texto de estado avisa cuantas SEMANAS se dejaron fuera (en los tres
+   modos se cuenta en semanas) */
+function _tvSemTxt(D){try{var oc=_tvSemOc(),L=_tvSemLista(D),n=0;
+  L.forEach(function(w){if(oc[w.k])n++});if(!n)return '';
+  return ' \u00b7 '+n+' '+_tvSemPal(n)}catch(e){return ''}}
 /* el '% acumulado' del pie suma TODOS los periodos hasta ese, tambien los
    que el boton Semanas dejo fuera: una semana oculta sigue contando */
 function _tvAcumHasta(D,S,k,ac){try{var per=(D&&D.per)||[],t=0,vi=false;
@@ -25212,30 +25297,31 @@ function _tvFxArrastre(x,root,doc,k,pos,keys,col){x.style.cursor='move';
       window._tvFxDragged=true;setTimeout(function(){window._tvFxDragged=false},80);
       var c9=colDe(ev);if(!c9||!_TV_NUM[c9.k]||c9.k===k)return;var F2=_tvFxDe(k).slice();F2[pos]=c9.k;_tvFxGuarda(k,F2)};
     e.preventDefault();e.stopPropagation();doc.addEventListener('mousemove',mm);doc.addEventListener('mouseup',mu)}}
-/* ===== \ud83d\udcc5 Semanas: aparecer o desaparecer columnas de periodo =====
-   La lista son los periodos de lo ULTIMO pintado (D.per), o sea SOLO los
-   que tienen informacion: cuando pasa una semana se agrega ella sola.
-   'Todo' marcado = ninguna oculta; marcarlo devuelve la tabla como debe
-   salir realmente. Va en 'doc' para que funcione tambien en la ventana
-   emergente de la tabla. */
+/* ===== \ud83d\udcc5 Semanas: aparecer o desaparecer SEMANAS =====
+   La lista son SIEMPRE semanas, tambien en modo dia y en modo mes: las
+   de las columnas de lo ULTIMO pintado, o sea SOLO las que tienen
+   informacion, asi que cuando pasa una semana se agrega ella sola. Lo
+   que se esconde aqui se esconde en los tres modos.
+   'Todo' marcado = ninguna oculta (la tabla como debe salir realmente);
+   desmarcado = se esconden todas las de la lista. Va en 'doc' para que
+   funcione tambien en la ventana emergente de la tabla. */
 function _crTablaVSemUI(doc,anchor,rerender){
   var old=doc.getElementById('_tvSemPop');if(old){old.remove();return}
   var pop=doc.createElement('div');pop.id='_tvSemPop';
   pop.style.cssText='position:fixed;z-index:2147483647;background:#152436;border:1px solid #1d3550;border-radius:10px;padding:8px 10px;font-size:12px;color:#cfe3ff;box-shadow:0 10px 30px rgba(0,0,0,.5);max-height:70vh;overflow:auto;min-width:200px';
   var r=anchor.getBoundingClientRect();pop.style.left=Math.max(4,r.left-120)+'px';pop.style.top=(r.bottom+4)+'px';
-  var arma=function(){var cfg=_tvCfg(),oc=cfg.semOc||{},per=_tvSemPer(),m=_tvSemModo(null),nOc=0;
+  var arma=function(){var oc=_tvSemOc(),per=_tvSemLista(null),nOc=0;
     per.forEach(function(p){if(oc[p.k])nOc++});
-    var tit=(m==='dia')?'D\u00edas':((m==='mes')?'Meses':'Semanas');
+    var tit='Semanas';
     var h='<div style="font-weight:800;color:#9db4d6;margin-bottom:4px;white-space:nowrap">'+tit+' con informaci\u00f3n</div>';
     h+='<label style="display:block;white-space:nowrap;cursor:pointer;font-weight:800;border-bottom:1px solid #1d3550;padding-bottom:4px;margin-bottom:4px" title="Marcado: salen todas, como la tabla debe salir realmente"><input type="checkbox" id="_tvSemTodo"'+(nOc?'':' checked')+'> Todo</label>';
     if(!per.length)h+='<div style="color:#9db4d6;white-space:nowrap">(la tabla a\u00fan no est\u00e1 pintada)</div>';
     per.forEach(function(p){h+='<label style="display:block;white-space:nowrap;cursor:pointer"><input type="checkbox" class="_tvSemCb" data-k="'+p.k+'"'+(oc[p.k]?'':' checked')+'> '+esc(_tvSemLab(p))+'</label>'});
-    h+='<div style="margin-top:5px;color:#FFD37A;font-weight:800;white-space:nowrap">'+(nOc?(nOc+' '+_tvSemPal(m,nOc)):'&nbsp;')+'</div>';
+    h+='<div style="margin-top:5px;color:#FFD37A;font-weight:800;white-space:nowrap">'+(nOc?(nOc+' '+_tvSemPal(nOc)):'&nbsp;')+'</div>';
     pop.innerHTML=h;
     var todo=pop.querySelector('#_tvSemTodo');
-    /* desmarcar 'Todo' por si solo no hace nada: 'Todo' marcado es, por
-       definicion, que no hay ninguna oculta */
-    /* 'Todo' marcado = ninguna oculta; desmarcado = se ocultan TODAS las que estan en la lista */
+    /* 'Todo' marcado = ninguna oculta; desmarcado = se esconden TODAS las
+       semanas de la lista */
     if(todo)todo.onchange=function(){var c2=_tvCfg();c2.semOc={};
       if(!todo.checked)Array.prototype.forEach.call(pop.querySelectorAll('._tvSemCb'),function(cb){var k=cb.getAttribute('data-k');if(k)c2.semOc[k]=1});
       _tvCfgSave(c2);arma();rerender()};
@@ -25477,7 +25563,7 @@ function _crTablaVDocHTML(titulo){
     'table{border-collapse:collapse;font-size:11.5px}th,td{border:1px solid #223049;padding:3px 6px;white-space:nowrap}th{background:#152436;color:#8ECBF5;position:sticky;top:0;cursor:pointer;z-index:2}'+
     '</style></head><body><div id="top"><input id="_tvBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026"><span id="_tvRes"></span>'+
     '<button id="_tvCols" title="Ocultar o mostrar columnas (arrastra las cabeceras para moverlas)">\u2699 Columnas</button>'+
-    '<button id="_tvSem" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button>'+
+    '<button id="_tvSem" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n. Lo que escondas aqu\u00ed se esconde igual en modo semana, d\u00eda y mes; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button>'+
     '<button id="_tvMax" title="A toda la pantalla">\ud83d\uddd6 Maximizar</button>'+
     '<button id="_tvAj" title="Con ajuste, la celda envuelve el texto y la fila crece; sin ajuste, una línea y recorte">↩ Ajustar texto</button>'+
     '<button id="_tvFzCel" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tvFzNo" title="Soltar filas y columnas inmovilizadas">▶ Movilizar</button>'+
@@ -25527,7 +25613,7 @@ async function _crTablaVUI(c){
   var bst='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer';
   top.innerHTML='<input id="_tvBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026" style="flex:1;min-width:160px;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:8px;padding:6px 9px;font-size:12px">'+
     '<span id="_tvRes" style="font-size:11px;color:#9FE8B0;font-weight:800"></span>'+
-    '<button id="_tvCols" style="'+bst+'">⚙ Columnas</button><button id="_tvSem" style="'+bst+'" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button><button id="_tvAj" style="'+bst+'">↩ Ajustar texto</button><button id="_tvFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tvFzNo" style="'+bst+'">▶ Movilizar</button><button id="_tvExp" style="'+bst+';font-size:11px;padding:4px 7px" title="Desplegar todos los títulos WBS">▾ Expandir todo</button><button id="_tvCon" style="'+bst+';font-size:11px;padding:4px 7px" title="Plegar todos los títulos WBS">▸ Contraer todo</button><button id="_tvMenos" style="'+bst+'">A\u2212</button><button id="_tvMas" style="'+bst+'">A+</button>'+
+    '<button id="_tvCols" style="'+bst+'">⚙ Columnas</button><button id="_tvSem" style="'+bst+'" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n. Lo que escondas aqu\u00ed se esconde igual en modo semana, d\u00eda y mes; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button><button id="_tvAj" style="'+bst+'">↩ Ajustar texto</button><button id="_tvFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tvFzNo" style="'+bst+'">▶ Movilizar</button><button id="_tvExp" style="'+bst+';font-size:11px;padding:4px 7px" title="Desplegar todos los títulos WBS">▾ Expandir todo</button><button id="_tvCon" style="'+bst+';font-size:11px;padding:4px 7px" title="Plegar todos los títulos WBS">▸ Contraer todo</button><button id="_tvMenos" style="'+bst+'">A\u2212</button><button id="_tvMas" style="'+bst+'">A+</button>'+
     '<button id="_tvCopiar" style="'+bst+'">\ud83d\udccb Copiar como tabla</button><button id="_tvXls" style="'+bst+'" title="Descarga el cuadro tal como se ve (columnas, colores, t\u00edtulos WBS y TOTAL) con los costos como f\u00f3rmulas">\u2b07 Exportar a Excel</button>'+_tvBarraHTML()+'<div id="_tvFx" title="Barra de f\u00f3rmulas: toca una celda y aqu\u00ed sale su referencia y, si es f\u00f3rmula, la f\u00f3rmula con sus celdas marcadas" style="flex-basis:100%;display:flex;align-items:center;gap:6px;background:#0d1117;border:1px solid #1d3550;border-radius:8px;padding:3px 6px;font-size:12px"><span id="_tvFxRef" style="min-width:52px;text-align:center;font-weight:800;color:#8ECBF5;border-right:1px solid #1d3550;padding-right:6px">&nbsp;</span><span style="color:#7d8590;font-style:italic;font-weight:800">fx</span><span id="_tvFxVal" style="flex:1;font-family:Consolas,monospace;color:#cfe3ff;white-space:normal;overflow-wrap:anywhere;min-height:16px"></span></div>';
   ov.insertBefore(top,body);
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
@@ -25795,10 +25881,13 @@ function _txCfg(){var raw=null;try{raw=localStorage.getItem(_TX_LS)}catch(e){}
   if(window._txCfgMem&&window._txCfgMem.str===raw)return window._txCfgMem.obj;   /* sin JSON.parse en cada celda */
   var c=null;try{c=JSON.parse(raw||'null')}catch(e){c=null}
   if(!(c&&c.orden))c={orden:_TX_COLS.map(function(x){return x[0]})};
-  /* semanas (columnas de periodo) que el usuario escondio con el boton
-     Semanas: guarda las OCULTAS, no las visibles, asi cada periodo nuevo
-     que aparece con el tiempo se ve solo */
-  c.semOc=c.semOc||{};
+  /* semanas que el usuario escondio con el boton Semanas: guarda las
+     OCULTAS, no las visibles, asi cada semana nueva que aparece con el
+     tiempo se ve sola. La clave es el FIN de la semana en ISO, SIN el
+     prefijo 'p_' de las columnas: las claves viejas 'p_<fin>' son ese
+     mismo fin y se normalizan aqui */
+  if(!(c.semOc&&typeof c.semOc==='object'))c.semOc={};
+  else{var _so9={},_sk9;for(_sk9 in c.semOc){if(c.semOc[_sk9])_so9[_txSemK(_sk9)]=1}c.semOc=_so9}
   c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};
   /* los filtros de columna (como Excel): guardan lo EXCLUIDO por columna,
      tambien en las columnas de periodo (_txCfgSave no las quita de aqui) */
@@ -25879,27 +25968,66 @@ function _txColsVis(){var cfg=_txCfg(),by={};_TX_COLS.forEach(function(x){by[x[0
     out.splice(pos,0,x)});
   return _txSemFiltra(out)}
 /* ===== semanas que se ven y semanas que no (boton \ud83d\udcc5 Semanas) =====
-   cfg.semOc guarda las OCULTAS por su clave de periodo ('p_<fin>'): lo que
-   aparezca despues se ve por defecto y la lista crece sola. Ocultar una
-   semana NO cambia ninguna cifra: la columna 'Suma de HH', los subtotales,
-   el TOTAL, el pie y el Excel la siguen contando, como al ocultar una
+   La unidad de visibilidad es SIEMPRE la SEMANA, en los tres modos: si se
+   deja marcada solo la S38, en modo semana sale su columna, en modo dia
+   salen sus dias y en modo mes el mes solo desaparece si TODAS sus
+   semanas estan escondidas.
+   cfg.semOc guarda las OCULTAS por el FIN de su semana en ISO y SIN el
+   prefijo 'p_' ({'2026-09-17':1}); las claves viejas 'p_<fin>' de modo
+   semana siguen valiendo porque son ese mismo fin. Lo que aparezca
+   despues se ve por defecto y la lista crece sola. Esconder una semana
+   NO cambia ninguna cifra: la columna 'Suma de HH', los subtotales, el
+   TOTAL, el pie y el Excel la siguen contando, como al ocultar una
    columna en Excel. */
 function _txSemOc(){try{var o=_txCfg().semOc;return (o&&typeof o==='object')?o:{}}catch(e){return {}}}
+/* el dia en que CIERRA la semana de esta tabla (0=domingo ... 4=jueves) */
+function _txSemCorte(){try{var W=Number(_txCfg().corte);if(W>=0&&W<=6)return W}catch(e){}return 4}
+/* la clave de una semana: su fin en ISO, sin el prefijo 'p_' de las
+   columnas (asi las claves guardadas antes siguen valiendo) */
+function _txSemK(v){v=String(v==null?'':v);return (v.slice(0,2)==='p_')?v.slice(2):v}
+/* el fin de la semana que contiene un dia, con el corte de esta tabla
+   (la misma cuenta de _t23Periodos: dia + ((corte - dow + 7) % 7)) */
+function _txSemFin(iso){try{var a=_crASerial(String(iso||''));if(a===''||a==null)return '';
+  var W=_txSemCorte();return _crDeSerial(a+((W-_t23Dow(a)+7)%7))}catch(e){return ''}}
+/* las semanas que toca una columna: en 'sem' la suya, en 'dia' la de ese
+   dia y en 'mes' TODAS las que se cruzan con el mes */
+function _txSemDe(p){try{if(!p)return [];
+  var a=_crASerial(String(p.ini||p.fin||'')),b=_crASerial(String(p.fin||p.ini||''));
+  if(a===''||a==null||b===''||b==null)return [];if(b<a)b=a;
+  var W=_txSemCorte(),out=[],f=a+((W-_t23Dow(a)+7)%7),n9=0;
+  while(f-6<=b&&n9<500){out.push(_crDeSerial(f));f+=7;n9++}
+  if(!out.length){var u9=_txSemFin(p.fin||p.ini);if(u9)out.push(u9)}
+  return out}catch(e){return []}}
+/* una columna solo se va si TODAS sus semanas estan escondidas */
 function _txSemFiltra(cols){try{var oc=_txSemOc(),hay=false,k9;for(k9 in oc){if(oc[k9]){hay=true;break}}
-  if(!hay)return cols;return cols.filter(function(c9){return !(_txEsPer(c9[0])&&oc[c9[0]])})}catch(e){return cols}}
-/* el rotulo de cada periodo en la lista: en semanas 'S38 \u00b7 17/09/2026',
-   en dias o meses lo que pinta la cabecera (lab y lab2) */
-function _txSemLab(p){try{var B=' \u00b7 ';
-  var t=(p.sem!=null)?('S'+p.sem+B+p.lab):(p.lab+((p.lab2&&p.lab2!==p.lab)?(B+p.lab2):''));
-  if(p.cierre&&String(t).indexOf('CIERRE')<0)t+=B+'CIERRE';return t}catch(e){return String((p&&p.k)||'')}}
+  if(!hay)return cols;
+  return cols.filter(function(c9){if(!_txEsPer(c9[0]))return true;
+    var p9=c9[2]||(window._txPerMap||{})[c9[0]]||null,ss=_txSemDe(p9);
+    if(!ss.length)return !oc[_txSemK(c9[0])];
+    for(var i9=0;i9<ss.length;i9++)if(!oc[ss[i9]])return true;
+    return false})}catch(e){return cols}}
+/* la lista del boton: SIEMPRE semanas, la union de las semanas de las
+   columnas CON informacion de lo ultimo pintado, en orden */
+function _txSemLista(D){try{var DD=D||((window._txUltimo||{}).D)||null;
+  var per=(DD&&DD.per)||[],W=_txSemCorte(),ix={},out=[];
+  /* la semana de cierre de la Tabla R, para marcarla tambien en modo mes */
+  var cieW='';try{var sf9=DD&&DD.info&&DD.info.semFin;
+    if(sf9!=null&&typeof _wkSem==='function')cieW=_txSemFin(_wkISO(_wkSem(Number(sf9)).fin))}catch(_ec9){}
+  per.forEach(function(p){var ss=_txSemDe(p);ss.forEach(function(f){
+    if(ix[f]==null){ix[f]=out.length;out.push({k:f,sem:(W===4)?_crSemNum(f):null,cierre:(cieW!==''&&f===cieW)})}
+    if(p.cierre&&ss.length===1)out[ix[f]].cierre=true})});
+  out.sort(function(u,v){return (u.k<v.k)?-1:((u.k>v.k)?1:0)});return out}catch(e){return []}}
+/* el rotulo de cada semana: 'S38 \u00b7 17/09/2026' (el numero de semana solo
+   cuando la tabla cierra en jueves) y ' \u00b7 CIERRE' en la Tabla R */
+function _txSemLab(w){try{var B=' \u00b7 ',t=_t23DMY(w.k);
+  if(w.sem!=null)t='S'+w.sem+B+t;if(w.cierre)t+=B+'CIERRE';return t}catch(e){return String((w&&w.k)||'')}}
 function _txSemPer(){try{var U=window._txUltimo;return (U&&U.D&&U.D.per)||[]}catch(e){return []}}
-function _txSemModo(D){try{var m=(D&&D.info&&D.info.per)||((window._txUltimo||{}).D||{}).info;
-  if(m&&m.per)m=m.per;return (m==='dia'||m==='mes')?m:'sem'}catch(e){return 'sem'}}
-function _txSemPal(m,n){return (m==='dia')?(n===1?'d\u00eda oculto':'d\u00edas ocultos'):((m==='mes')?(n===1?'mes oculto':'meses ocultos'):(n===1?'semana oculta':'semanas ocultas'))}
-/* el texto de estado avisa cuantas se dejaron fuera */
-function _txSemTxt(D){try{var oc=_txSemOc(),per=(D&&D.per)||[],n=0;
-  per.forEach(function(p){if(oc[p.k])n++});if(!n)return '';
-  return ' \u00b7 '+n+' '+_txSemPal(_txSemModo(D),n)}catch(e){return ''}}
+function _txSemPal(n){return (n===1)?'semana oculta':'semanas ocultas'}
+/* el texto de estado avisa cuantas SEMANAS se dejaron fuera (en los tres
+   modos se cuenta en semanas) */
+function _txSemTxt(D){try{var oc=_txSemOc(),L=_txSemLista(D),n=0;
+  L.forEach(function(w){if(oc[w.k])n++});if(!n)return '';
+  return ' \u00b7 '+n+' '+_txSemPal(n)}catch(e){return ''}}
 /* el '% acumulado' del pie suma TODOS los periodos hasta ese, tambien los
    que el boton Semanas dejo fuera: una semana oculta sigue contando */
 function _txAcumHasta(D,S,k,ac){try{var per=(D&&D.per)||[],t=0,vi=false;
@@ -26366,30 +26494,31 @@ function _txFxArrastre(x,root,doc,k,pos,keys,col){x.style.cursor='move';
       window._txFxDragged=true;setTimeout(function(){window._txFxDragged=false},80);
       var c9=colDe(ev);if(!c9||!_TX_NUM[c9.k]||c9.k===k)return;var F2=_txFxDe(k).slice();F2[pos]=c9.k;_txFxGuarda(k,F2)};
     e.preventDefault();e.stopPropagation();doc.addEventListener('mousemove',mm);doc.addEventListener('mouseup',mu)}}
-/* ===== \ud83d\udcc5 Semanas: aparecer o desaparecer columnas de periodo =====
-   La lista son los periodos de lo ULTIMO pintado (D.per), o sea SOLO los
-   que tienen informacion: cuando pasa una semana se agrega ella sola.
-   'Todo' marcado = ninguna oculta; marcarlo devuelve la tabla como debe
-   salir realmente. Va en 'doc' para que funcione tambien en la ventana
-   emergente de la tabla. */
+/* ===== \ud83d\udcc5 Semanas: aparecer o desaparecer SEMANAS =====
+   La lista son SIEMPRE semanas, tambien en modo dia y en modo mes: las
+   de las columnas de lo ULTIMO pintado, o sea SOLO las que tienen
+   informacion, asi que cuando pasa una semana se agrega ella sola. Lo
+   que se esconde aqui se esconde en los tres modos.
+   'Todo' marcado = ninguna oculta (la tabla como debe salir realmente);
+   desmarcado = se esconden todas las de la lista. Va en 'doc' para que
+   funcione tambien en la ventana emergente de la tabla. */
 function _crTablaRSemUI(doc,anchor,rerender){
   var old=doc.getElementById('_txSemPop');if(old){old.remove();return}
   var pop=doc.createElement('div');pop.id='_txSemPop';
   pop.style.cssText='position:fixed;z-index:2147483647;background:#152436;border:1px solid #1d3550;border-radius:10px;padding:8px 10px;font-size:12px;color:#cfe3ff;box-shadow:0 10px 30px rgba(0,0,0,.5);max-height:70vh;overflow:auto;min-width:200px';
   var r=anchor.getBoundingClientRect();pop.style.left=Math.max(4,r.left-120)+'px';pop.style.top=(r.bottom+4)+'px';
-  var arma=function(){var cfg=_txCfg(),oc=cfg.semOc||{},per=_txSemPer(),m=_txSemModo(null),nOc=0;
+  var arma=function(){var oc=_txSemOc(),per=_txSemLista(null),nOc=0;
     per.forEach(function(p){if(oc[p.k])nOc++});
-    var tit=(m==='dia')?'D\u00edas':((m==='mes')?'Meses':'Semanas');
+    var tit='Semanas';
     var h='<div style="font-weight:800;color:#9db4d6;margin-bottom:4px;white-space:nowrap">'+tit+' con informaci\u00f3n</div>';
     h+='<label style="display:block;white-space:nowrap;cursor:pointer;font-weight:800;border-bottom:1px solid #1d3550;padding-bottom:4px;margin-bottom:4px" title="Marcado: salen todas, como la tabla debe salir realmente"><input type="checkbox" id="_txSemTodo"'+(nOc?'':' checked')+'> Todo</label>';
     if(!per.length)h+='<div style="color:#9db4d6;white-space:nowrap">(la tabla a\u00fan no est\u00e1 pintada)</div>';
     per.forEach(function(p){h+='<label style="display:block;white-space:nowrap;cursor:pointer"><input type="checkbox" class="_txSemCb" data-k="'+p.k+'"'+(oc[p.k]?'':' checked')+'> '+esc(_txSemLab(p))+'</label>'});
-    h+='<div style="margin-top:5px;color:#FFD37A;font-weight:800;white-space:nowrap">'+(nOc?(nOc+' '+_txSemPal(m,nOc)):'&nbsp;')+'</div>';
+    h+='<div style="margin-top:5px;color:#FFD37A;font-weight:800;white-space:nowrap">'+(nOc?(nOc+' '+_txSemPal(nOc)):'&nbsp;')+'</div>';
     pop.innerHTML=h;
     var todo=pop.querySelector('#_txSemTodo');
-    /* desmarcar 'Todo' por si solo no hace nada: 'Todo' marcado es, por
-       definicion, que no hay ninguna oculta */
-    /* 'Todo' marcado = ninguna oculta; desmarcado = se ocultan TODAS las que estan en la lista */
+    /* 'Todo' marcado = ninguna oculta; desmarcado = se esconden TODAS las
+       semanas de la lista */
     if(todo)todo.onchange=function(){var c2=_txCfg();c2.semOc={};
       if(!todo.checked)Array.prototype.forEach.call(pop.querySelectorAll('._txSemCb'),function(cb){var k=cb.getAttribute('data-k');if(k)c2.semOc[k]=1});
       _txCfgSave(c2);arma();rerender()};
@@ -26640,7 +26769,7 @@ function _crTablaRDocHTML(titulo){
     'table{border-collapse:collapse;font-size:11.5px}th,td{border:1px solid #223049;padding:3px 6px;white-space:nowrap}th{background:#152436;color:#8ECBF5;position:sticky;top:0;cursor:pointer;z-index:2}'+
     '</style></head><body><div id="top"><input id="_txBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026"><span id="_txRes"></span>'+
     '<button id="_txCols" title="Ocultar o mostrar columnas (arrastra las cabeceras para moverlas)">\u2699 Columnas</button>'+
-    '<button id="_txSem" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button>'+
+    '<button id="_txSem" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n. Lo que escondas aqu\u00ed se esconde igual en modo semana, d\u00eda y mes; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button>'+
     '<button id="_txMax" title="A toda la pantalla">\ud83d\uddd6 Maximizar</button>'+
     '<button id="_txAj" title="Con ajuste, la celda envuelve el texto y la fila crece; sin ajuste, una línea y recorte">↩ Ajustar texto</button>'+
     '<button id="_txFzCel" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_txFzNo" title="Soltar filas y columnas inmovilizadas">▶ Movilizar</button>'+
@@ -26690,7 +26819,7 @@ async function _crTablaRUI(c){
   var bst='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer';
   top.innerHTML='<input id="_txBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026" style="flex:1;min-width:160px;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:8px;padding:6px 9px;font-size:12px">'+
     '<span id="_txRes" style="font-size:11px;color:#9FE8B0;font-weight:800"></span>'+
-    '<button id="_txCols" style="'+bst+'">⚙ Columnas</button><button id="_txSem" style="'+bst+'" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button><button id="_txAj" style="'+bst+'">↩ Ajustar texto</button><button id="_txFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_txFzNo" style="'+bst+'">▶ Movilizar</button><button id="_txExp" style="'+bst+';font-size:11px;padding:4px 7px" title="Desplegar todos los títulos WBS">▾ Expandir todo</button><button id="_txCon" style="'+bst+';font-size:11px;padding:4px 7px" title="Plegar todos los títulos WBS">▸ Contraer todo</button><button id="_txMenos" style="'+bst+'">A\u2212</button><button id="_txMas" style="'+bst+'">A+</button>'+
+    '<button id="_txCols" style="'+bst+'">⚙ Columnas</button><button id="_txSem" style="'+bst+'" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n. Lo que escondas aqu\u00ed se esconde igual en modo semana, d\u00eda y mes; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button><button id="_txAj" style="'+bst+'">↩ Ajustar texto</button><button id="_txFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_txFzNo" style="'+bst+'">▶ Movilizar</button><button id="_txExp" style="'+bst+';font-size:11px;padding:4px 7px" title="Desplegar todos los títulos WBS">▾ Expandir todo</button><button id="_txCon" style="'+bst+';font-size:11px;padding:4px 7px" title="Plegar todos los títulos WBS">▸ Contraer todo</button><button id="_txMenos" style="'+bst+'">A\u2212</button><button id="_txMas" style="'+bst+'">A+</button>'+
     '<button id="_txCopiar" style="'+bst+'">\ud83d\udccb Copiar como tabla</button><button id="_txXls" style="'+bst+'" title="Descarga el cuadro tal como se ve (columnas, colores, t\u00edtulos WBS y TOTAL) con los costos como f\u00f3rmulas">\u2b07 Exportar a Excel</button>'+_txBarraHTML()+'<div id="_txFx" title="Barra de f\u00f3rmulas: toca una celda y aqu\u00ed sale su referencia y, si es f\u00f3rmula, la f\u00f3rmula con sus celdas marcadas" style="flex-basis:100%;display:flex;align-items:center;gap:6px;background:#0d1117;border:1px solid #1d3550;border-radius:8px;padding:3px 6px;font-size:12px"><span id="_txFxRef" style="min-width:52px;text-align:center;font-weight:800;color:#8ECBF5;border-right:1px solid #1d3550;padding-right:6px">&nbsp;</span><span style="color:#7d8590;font-style:italic;font-weight:800">fx</span><span id="_txFxVal" style="flex:1;font-family:Consolas,monospace;color:#cfe3ff;white-space:normal;overflow-wrap:anywhere;min-height:16px"></span></div>';
   ov.insertBefore(top,body);
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
