@@ -15441,7 +15441,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b20';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b21';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -23017,6 +23017,10 @@ function _tqCfg(){var raw=null;try{raw=localStorage.getItem(_TQ_LS)}catch(e){}
   if(window._tqCfgMem&&window._tqCfgMem.str===raw)return window._tqCfgMem.obj;   /* sin JSON.parse en cada celda */
   var c=null;try{c=JSON.parse(raw||'null')}catch(e){c=null}
   if(!(c&&c.orden))c={orden:_TQ_COLS.map(function(x){return x[0]})};
+  /* semanas (columnas de periodo) que el usuario escondio con el boton
+     Semanas: guarda las OCULTAS, no las visibles, asi cada periodo nuevo
+     que aparece con el tiempo se ve solo */
+  c.semOc=c.semOc||{};
   c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};c.filtros=c.filtros||{};
   /* una vez: las columnas nuevas de la primera version salen del orden
      guardado para irse al final del cuadro */
@@ -23080,7 +23084,10 @@ function _tqAplicaFijas(root){try{var cfg=_tqCfg(),tb=root.querySelector('table'
 function _tqAjusta(){try{return _tqCfg().ajustar!==false}catch(e){return true}}
 function _tqAnchoCss(k){try{var w=(_tqCfg().anchos||{})[k];if(w>0)return 'width:'+w+'px;max-width:'+w+'px;min-width:'+w+'px;'+(_tqAjusta()?'white-space:normal;overflow-wrap:anywhere;':'overflow:hidden;text-overflow:ellipsis;')}catch(e){}return ''}
 function _tqCfgSave(c){try{c.orden=(c.orden||[]).filter(function(k){return !_tqEsPer(k)});
+  /* 'filtros' y 'semOc' NO entran en esta limpieza: sus claves SON de
+     periodo (p_2026-09-17) y se tienen que guardar tal cual */
   ['ocultas','anchos','colores','fuentes','formulas'].forEach(function(M){var o=c[M];if(!o)return;for(var k in o)if(_tqEsPer(k))delete o[k]});
+  if(c.semOc&&typeof c.semOc!=='object')c.semOc={};
   if(c.fija&&_tqEsPer(c.fija.col))c.fija={};
   c.ts=(typeof nowSrv==='function'?nowSrv():Date.now());localStorage.setItem(_TQ_LS,JSON.stringify(c))}catch(e){}window._tqCfgMem=null;try{_tqCfgPush()}catch(e){}}
 function _tqColsVis(){var cfg=_tqCfg(),by={};_TQ_COLS.forEach(function(x){by[x[0]]=x});var out=[];(cfg.orden||[]).forEach(function(k){if(by[k]&&!cfg.ocultas[k])out.push(by[k])});
@@ -23089,7 +23096,34 @@ function _tqColsVis(){var cfg=_tqCfg(),by={};_TQ_COLS.forEach(function(x){by[x[0
   _TQ_COLS.forEach(function(x,i){if((cfg.orden||[]).indexOf(x[0])>=0||cfg.ocultas[x[0]])return;if(_TQ_FIN[x[0]]||_tqEsPer(x[0])){out.push(x);return}var pos=out.length;
     for(var j=i-1;j>=0;j--){var q=-1;for(var t=0;t<out.length;t++)if(out[t][0]===_TQ_COLS[j][0]){q=t;break}if(q>=0){pos=q+1;break}}
     out.splice(pos,0,x)});
-  return out}
+  return _tqSemFiltra(out)}
+/* ===== semanas que se ven y semanas que no (boton \ud83d\udcc5 Semanas) =====
+   cfg.semOc guarda las OCULTAS por su clave de periodo ('p_<fin>'): lo que
+   aparezca despues se ve por defecto y la lista crece sola. Ocultar una
+   semana NO cambia ninguna cifra: la columna 'Suma de HH', los subtotales,
+   el TOTAL, el pie y el Excel la siguen contando, como al ocultar una
+   columna en Excel. */
+function _tqSemOc(){try{var o=_tqCfg().semOc;return (o&&typeof o==='object')?o:{}}catch(e){return {}}}
+function _tqSemFiltra(cols){try{var oc=_tqSemOc(),hay=false,k9;for(k9 in oc){if(oc[k9]){hay=true;break}}
+  if(!hay)return cols;return cols.filter(function(c9){return !(_tqEsPer(c9[0])&&oc[c9[0]])})}catch(e){return cols}}
+/* el rotulo de cada periodo en la lista: en semanas 'S38 \u00b7 17/09/2026',
+   en dias o meses lo que pinta la cabecera (lab y lab2) */
+function _tqSemLab(p){try{var B=' \u00b7 ';
+  var t=(p.sem!=null)?('S'+p.sem+B+p.lab):(p.lab+((p.lab2&&p.lab2!==p.lab)?(B+p.lab2):''));
+  if(p.cierre&&String(t).indexOf('CIERRE')<0)t+=B+'CIERRE';return t}catch(e){return String((p&&p.k)||'')}}
+function _tqSemPer(){try{var U=window._tqUltimo;return (U&&U.D&&U.D.per)||[]}catch(e){return []}}
+function _tqSemModo(D){try{var m=(D&&D.info&&D.info.per)||((window._tqUltimo||{}).D||{}).info;
+  if(m&&m.per)m=m.per;return (m==='dia'||m==='mes')?m:'sem'}catch(e){return 'sem'}}
+function _tqSemPal(m,n){return (m==='dia')?(n===1?'d\u00eda oculto':'d\u00edas ocultos'):((m==='mes')?(n===1?'mes oculto':'meses ocultos'):(n===1?'semana oculta':'semanas ocultas'))}
+/* el texto de estado avisa cuantas se dejaron fuera */
+function _tqSemTxt(D){try{var oc=_tqSemOc(),per=(D&&D.per)||[],n=0;
+  per.forEach(function(p){if(oc[p.k])n++});if(!n)return '';
+  return ' \u00b7 '+n+' '+_tqSemPal(_tqSemModo(D),n)}catch(e){return ''}}
+/* el '% acumulado' del pie suma TODOS los periodos hasta ese, tambien los
+   que el boton Semanas dejo fuera: una semana oculta sigue contando */
+function _tqAcumHasta(D,S,k,ac){try{var per=(D&&D.per)||[],t=0,vi=false;
+  for(var i9=0;i9<per.length;i9++){t+=Number(S[per[i9].k])||0;if(per[i9].k===k){vi=true;break}}
+  return vi?t:(ac+(Number(S[k])||0))}catch(e){return ac+(Number(S[k])||0)}}
 /* busqueda sin tildes: cada caracter a su letra base (misma longitud que el
    original, para poder marcar en el texto tal cual se escribio) */
 function _tqNorm(s){s=String(s==null?'':s);var out='';for(var i=0;i<s.length;i++){var ch=s.charAt(i),d=ch;try{d=ch.normalize('NFD').charAt(0)||ch}catch(e){}out+=d}return out.toLowerCase()}
@@ -23300,7 +23334,7 @@ function _crTablaQHTML(D,q,ord){
   var _tqPieFila=function(lab,S,modo){_rn++;var bg='#132033';var den=Number(D.u&&D.u.hh)||0;var h='<tr data-rn="'+_rn+'" data-den="'+den+'" style="background:'+bg+'">'+numCel(_rn,5,'bottom:0;');var ST='position:sticky;bottom:0;z-index:3;background:'+bg+';';var run=0,puesto=false,ac=0;
     var flush=function(){if(!run)return;h+='<td colspan="'+run+'" style="'+ST+'border-top:0;border-bottom:1px solid #223049;border-left:0;border-right:0;padding:3px 6px;font-weight:700;color:#9FE8B0;font-size:10.5px;white-space:nowrap">'+(puesto?'':('<span style="position:sticky;left:36px;display:inline-block">'+lab+'</span>'))+'</td>';puesto=true;run=0};
     cols.forEach(function(cl){var k=cl[0],W=ST+(_ANCHO[k]!=null?_ANCHO[k]:_tqAnchoCss(k))+'white-space:nowrap;';
-      if(_tqEsPer(k)||k==='suma'){flush();var v=Number(S[k])||0;var x=(modo==='acum'&&_tqEsPer(k))?(ac+=v):v;var pc=(den>0)?(x/den*100):0;h+=td('<span style="color:#9FE8B0;font-size:10.5px">'+_nMil2(pc)+'%</span>',1,W,Math.round(pc*100)/100)}
+      if(_tqEsPer(k)||k==='suma'){flush();var v=Number(S[k])||0;var x=(modo==='acum'&&_tqEsPer(k))?_tqAcumHasta(D,S,k,ac):v;if(modo==='acum'&&_tqEsPer(k))ac=x;var pc=(den>0)?(x/den*100):0;h+=td('<span style="color:#9FE8B0;font-size:10.5px">'+_nMil2(pc)+'%</span>',1,W,Math.round(pc*100)/100)}
       else run++;
       if(_fzk[k]&&_cfgT.fija&&k===_cfgT.fija.col)flush()});flush();
     if(!puesto)h+='<td style="'+ST+'border-bottom:1px solid #223049;padding:3px 6px;font-weight:700;color:#9FE8B0;font-size:10.5px;white-space:nowrap">'+lab+'</td>';
@@ -23501,6 +23535,35 @@ function _tqFxArrastre(x,root,doc,k,pos,keys,col){x.style.cursor='move';
       window._tqFxDragged=true;setTimeout(function(){window._tqFxDragged=false},80);
       var c9=colDe(ev);if(!c9||!_TQ_NUM[c9.k]||c9.k===k)return;var F2=_tqFxDe(k).slice();F2[pos]=c9.k;_tqFxGuarda(k,F2)};
     e.preventDefault();e.stopPropagation();doc.addEventListener('mousemove',mm);doc.addEventListener('mouseup',mu)}}
+/* ===== \ud83d\udcc5 Semanas: aparecer o desaparecer columnas de periodo =====
+   La lista son los periodos de lo ULTIMO pintado (D.per), o sea SOLO los
+   que tienen informacion: cuando pasa una semana se agrega ella sola.
+   'Todo' marcado = ninguna oculta; marcarlo devuelve la tabla como debe
+   salir realmente. Va en 'doc' para que funcione tambien en la ventana
+   emergente de la tabla. */
+function _crTablaQSemUI(doc,anchor,rerender){
+  var old=doc.getElementById('_tqSemPop');if(old){old.remove();return}
+  var pop=doc.createElement('div');pop.id='_tqSemPop';
+  pop.style.cssText='position:fixed;z-index:2147483647;background:#152436;border:1px solid #1d3550;border-radius:10px;padding:8px 10px;font-size:12px;color:#cfe3ff;box-shadow:0 10px 30px rgba(0,0,0,.5);max-height:70vh;overflow:auto;min-width:200px';
+  var r=anchor.getBoundingClientRect();pop.style.left=Math.max(4,r.left-120)+'px';pop.style.top=(r.bottom+4)+'px';
+  var arma=function(){var cfg=_tqCfg(),oc=cfg.semOc||{},per=_tqSemPer(),m=_tqSemModo(null),nOc=0;
+    per.forEach(function(p){if(oc[p.k])nOc++});
+    var tit=(m==='dia')?'D\u00edas':((m==='mes')?'Meses':'Semanas');
+    var h='<div style="font-weight:800;color:#9db4d6;margin-bottom:4px;white-space:nowrap">'+tit+' con informaci\u00f3n</div>';
+    h+='<label style="display:block;white-space:nowrap;cursor:pointer;font-weight:800;border-bottom:1px solid #1d3550;padding-bottom:4px;margin-bottom:4px" title="Marcado: salen todas, como la tabla debe salir realmente"><input type="checkbox" id="_tqSemTodo"'+(nOc?'':' checked')+'> Todo</label>';
+    if(!per.length)h+='<div style="color:#9db4d6;white-space:nowrap">(la tabla a\u00fan no est\u00e1 pintada)</div>';
+    per.forEach(function(p){h+='<label style="display:block;white-space:nowrap;cursor:pointer"><input type="checkbox" class="_tqSemCb" data-k="'+p.k+'"'+(oc[p.k]?'':' checked')+'> '+esc(_tqSemLab(p))+'</label>'});
+    h+='<div style="margin-top:5px;color:#FFD37A;font-weight:800;white-space:nowrap">'+(nOc?(nOc+' '+_tqSemPal(m,nOc)):'&nbsp;')+'</div>';
+    pop.innerHTML=h;
+    var todo=pop.querySelector('#_tqSemTodo');
+    /* desmarcar 'Todo' por si solo no hace nada: 'Todo' marcado es, por
+       definicion, que no hay ninguna oculta */
+    if(todo)todo.onchange=function(){if(!todo.checked){todo.checked=true;return}
+      var c2=_tqCfg();c2.semOc={};_tqCfgSave(c2);arma();rerender()};
+    Array.prototype.forEach.call(pop.querySelectorAll('._tqSemCb'),function(cb){cb.onchange=function(){
+      var c2=_tqCfg();c2.semOc=c2.semOc||{};var k=cb.getAttribute('data-k');
+      if(cb.checked)delete c2.semOc[k];else c2.semOc[k]=1;_tqCfgSave(c2);arma();rerender()}})};
+  arma();doc.body.appendChild(pop)}
 function _crTablaQColsUI(doc,anchor,rerender){
   var old=doc.getElementById('_tqColsPop');if(old){old.remove();return}
   var cfg=_tqCfg();var pop=doc.createElement('div');pop.id='_tqColsPop';
@@ -23511,7 +23574,7 @@ function _crTablaQColsUI(doc,anchor,rerender){
   h+='<button id="_tqColsReset" style="grid-column:1/3;margin-top:4px;background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:5px 8px;font-weight:800;cursor:pointer">Restablecer orden y columnas</button>';
   pop.innerHTML=h;doc.body.appendChild(pop);
   pop.querySelectorAll('input[type=checkbox]').forEach(function(cb){cb.onchange=function(){var c2=_tqCfg();if(cb.id==='_tqCeros'){c2.ceros=!!cb.checked;_tqCfgSave(c2);rerender();return}if(cb.checked)delete c2.ocultas[cb.getAttribute('data-k')];else c2.ocultas[cb.getAttribute('data-k')]=1;_tqCfgSave(c2);rerender()}});
-  pop.querySelector('#_tqColsReset').onclick=function(){var c0=_tqCfg();_tqCfgSave({per:c0.per,corte:c0.corte,vista:c0.vista,fuente:c0.fuente,noLab:c0.noLab,ceros:c0.ceros,ajustar:c0.ajustar,orden:_TQ_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{},filtros:{}});pop.remove();rerender()}}
+  pop.querySelector('#_tqColsReset').onclick=function(){var c0=_tqCfg();_tqCfgSave({per:c0.per,corte:c0.corte,vista:c0.vista,fuente:c0.fuente,noLab:c0.noLab,ceros:c0.ceros,ajustar:c0.ajustar,orden:_TQ_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{},filtros:{},semOc:{}});pop.remove();rerender()}}
 /* la ventana propia (fuera del navegador): un documento minimo con buscador,
    zoom, columnas, copiar y la tabla; se repinta desde la app con cada cambio */
 /* ---------------- Exportar a Excel el cuadro tal como se ve ----------------
@@ -23735,6 +23798,7 @@ function _crTablaQDocHTML(titulo){
     'table{border-collapse:collapse;font-size:11.5px}th,td{border:1px solid #223049;padding:3px 6px;white-space:nowrap}th{background:#152436;color:#8ECBF5;position:sticky;top:0;cursor:pointer;z-index:2}'+
     '</style></head><body><div id="top"><input id="_tqBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026"><span id="_tqRes"></span>'+
     '<button id="_tqCols" title="Ocultar o mostrar columnas (arrastra las cabeceras para moverlas)">\u2699 Columnas</button>'+
+    '<button id="_tqSem" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button>'+
     '<button id="_tqMax" title="A toda la pantalla">\ud83d\uddd6 Maximizar</button>'+
     '<button id="_tqAj" title="Con ajuste, la celda envuelve el texto y la fila crece; sin ajuste, una línea y recorte">↩ Ajustar texto</button>'+
     '<button id="_tqFzCel" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tqFzNo" title="Soltar filas y columnas inmovilizadas">▶ Movilizar</button>'+
@@ -23763,6 +23827,7 @@ async function _crTablaQUI(c){
     doc.getElementById('_tqBus').oninput=function(){q=this.value;pintaHTML()};
     _tqBarraBind(doc,function(){pinta()});
     doc.getElementById('_tqCols').onclick=function(){_crTablaQColsUI(doc,this,pintaHTML)};
+    var _bSem9=doc.getElementById('_tqSem');if(_bSem9)_bSem9.onclick=function(){_crTablaQSemUI(doc,this,pintaHTML)};
     var bAj=doc.getElementById('_tqAj');var pintaAj=function(){bAj.textContent=(_tqAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAj();bAj.onclick=function(){var c2=_tqCfg();c2.ajustar=!_tqAjusta();_tqCfgSave(c2);pintaAj();pintaHTML()};
     doc.getElementById('_tqMas').onclick=function(){zoom=Math.min(3,zoom*1.1);cuerpo.style.zoom=zoom};
     doc.getElementById('_tqMenos').onclick=function(){zoom=Math.max(.4,zoom/1.1);cuerpo.style.zoom=zoom};
@@ -23783,7 +23848,7 @@ async function _crTablaQUI(c){
   var bst='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer';
   top.innerHTML='<input id="_tqBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026" style="flex:1;min-width:160px;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:8px;padding:6px 9px;font-size:12px">'+
     '<span id="_tqRes" style="font-size:11px;color:#9FE8B0;font-weight:800"></span>'+
-    '<button id="_tqCols" style="'+bst+'">⚙ Columnas</button><button id="_tqAj" style="'+bst+'">↩ Ajustar texto</button><button id="_tqFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tqFzNo" style="'+bst+'">▶ Movilizar</button><button id="_tqExp" style="'+bst+';font-size:11px;padding:4px 7px" title="Desplegar todos los títulos WBS">▾ Expandir todo</button><button id="_tqCon" style="'+bst+';font-size:11px;padding:4px 7px" title="Plegar todos los títulos WBS">▸ Contraer todo</button><button id="_tqMenos" style="'+bst+'">A\u2212</button><button id="_tqMas" style="'+bst+'">A+</button>'+
+    '<button id="_tqCols" style="'+bst+'">⚙ Columnas</button><button id="_tqSem" style="'+bst+'" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button><button id="_tqAj" style="'+bst+'">↩ Ajustar texto</button><button id="_tqFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tqFzNo" style="'+bst+'">▶ Movilizar</button><button id="_tqExp" style="'+bst+';font-size:11px;padding:4px 7px" title="Desplegar todos los títulos WBS">▾ Expandir todo</button><button id="_tqCon" style="'+bst+';font-size:11px;padding:4px 7px" title="Plegar todos los títulos WBS">▸ Contraer todo</button><button id="_tqMenos" style="'+bst+'">A\u2212</button><button id="_tqMas" style="'+bst+'">A+</button>'+
     '<button id="_tqCopiar" style="'+bst+'">\ud83d\udccb Copiar como tabla</button><button id="_tqXls" style="'+bst+'" title="Descarga el cuadro tal como se ve (columnas, colores, t\u00edtulos WBS y TOTAL) con los costos como f\u00f3rmulas">\u2b07 Exportar a Excel</button>'+_tqBarraHTML()+'<div id="_tqFx" title="Barra de f\u00f3rmulas: toca una celda y aqu\u00ed sale su referencia y, si es f\u00f3rmula, la f\u00f3rmula con sus celdas marcadas" style="flex-basis:100%;display:flex;align-items:center;gap:6px;background:#0d1117;border:1px solid #1d3550;border-radius:8px;padding:3px 6px;font-size:12px"><span id="_tqFxRef" style="min-width:52px;text-align:center;font-weight:800;color:#8ECBF5;border-right:1px solid #1d3550;padding-right:6px">&nbsp;</span><span style="color:#7d8590;font-style:italic;font-weight:800">fx</span><span id="_tqFxVal" style="flex:1;font-family:Consolas,monospace;color:#cfe3ff;white-space:normal;overflow-wrap:anywhere;min-height:16px"></span></div>';
   ov.insertBefore(top,body);
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
@@ -23793,13 +23858,14 @@ async function _crTablaQUI(c){
   top.querySelector('#_tqBus').oninput=function(){q=this.value;pintaHTMLF()};
   _tqBarraBind(document,function(){pintaF()});
   top.querySelector('#_tqCols').onclick=function(){_crTablaQColsUI(document,this,pintaHTMLF)};
+  var _bSem9=top.querySelector('#_tqSem');if(_bSem9)_bSem9.onclick=function(){_crTablaQSemUI(document,this,pintaHTMLF)};
   var bAjF=top.querySelector('#_tqAj');var pintaAjF=function(){bAjF.textContent=(_tqAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAjF();bAjF.onclick=function(){var c2=_tqCfg();c2.ajustar=!_tqAjusta();_tqCfgSave(c2);pintaAjF();pintaHTMLF()};
   top.querySelector('#_tqMas').onclick=function(){ov._zoom=Math.min(3,(ov._zoom||1)*1.1);wrap.style.zoom=ov._zoom};
   top.querySelector('#_tqMenos').onclick=function(){ov._zoom=Math.max(.4,(ov._zoom||1)/1.1);wrap.style.zoom=ov._zoom};
   top.querySelector('#_tqCopiar').onclick=function(){try{var t=wrap.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_tqEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});navigator.clipboard.writeText(out.join('\n')).then(function(){toast('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){toast('No se pudo copiar')})}catch(e){}};
   ov._sacar=function(){ov.remove();try{ov._alCerrar()}catch(e){}window._crTablaQRepinta=null;_crTablaQUI(c)};
   window._crTablaQRepinta=function(){try{if(!document.getElementById('_crTabQOv'))return;if(window._tqT)clearTimeout(window._tqT);window._tqT=setTimeout(function(){window._tqT=null;pintaF()},150)}catch(e){}};
-  var cerrar=ov._alCerrar;ov._alCerrar=function(){try{cerrar&&cerrar()}catch(e){}window._crTablaQRepinta=null;window._tqSelCol=null;window._tqRoot=null;window._tqClip=null;try{var pp9=document.getElementById('_tqColsPop');if(pp9)pp9.remove()}catch(e){}};
+  var cerrar=ov._alCerrar;ov._alCerrar=function(){try{cerrar&&cerrar()}catch(e){}window._crTablaQRepinta=null;window._tqSelCol=null;window._tqRoot=null;window._tqClip=null;try{var pp9=document.getElementById('_tqColsPop');if(pp9)pp9.remove()}catch(e){}try{var ps9=document.getElementById('_tqSemPop');if(ps9)ps9.remove()}catch(e){}};
   wrap.innerHTML='<div style="padding:12px;color:#9db4d6">Armando la tabla\u2026</div>';
   await pintaF()}
 
@@ -23814,6 +23880,7 @@ function _tqInfoTxt(D){try{var o=D.info||{},per=D.per||[];var t=(D.u.n+' partida
     if(o.proy.sinFecha>0.005)t+=' \u00b7 sin fecha '+_nMil2(o.proy.sinFecha)+' hh'}
   if(D.sueltas&&D.sueltas.length)t+=' \u00b7 '+D.sueltas.length+' sin agrupaci\u00f3n (en rojo, no suman)';
   try{var f9=window._tqFltRes;if(f9)t+=' \u00b7 filtrado: '+f9.vis+' de '+f9.tot+' filas'}catch(_e9){}
+  try{var _s9=_tqSemTxt(D);if(_s9)t+=_s9}catch(_es9){}
   return t}catch(e){return ''}}
 function _tqBarraHTML(){var c=_tqCfg();var seg=function(id,ops,val){return '<span id="'+id+'" style="display:inline-flex;border:1px solid #1d3550;border-radius:8px;overflow:hidden">'+ops.map(function(o){var on=(o[0]===val);return '<button data-v="'+o[0]+'" title="'+o[2]+'" style="border-radius:0;background:'+(on?'#1B5E8A':'#182c42')+';color:'+(on?'#fff':'#9db4d6')+';padding:5px 9px;border:0;font-weight:800;cursor:pointer">'+o[1]+'</button>'}).join('')+'</span>'};
   var W=(c.corte!=null&&c.corte!=='')?Number(c.corte):4;
@@ -23872,6 +23939,10 @@ function _tvCfg(){var raw=null;try{raw=localStorage.getItem(_TV_LS)}catch(e){}
   if(window._tvCfgMem&&window._tvCfgMem.str===raw)return window._tvCfgMem.obj;   /* sin JSON.parse en cada celda */
   var c=null;try{c=JSON.parse(raw||'null')}catch(e){c=null}
   if(!(c&&c.orden))c={orden:_TV_COLS.map(function(x){return x[0]})};
+  /* semanas (columnas de periodo) que el usuario escondio con el boton
+     Semanas: guarda las OCULTAS, no las visibles, asi cada periodo nuevo
+     que aparece con el tiempo se ve solo */
+  c.semOc=c.semOc||{};
   c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};c.filtros=c.filtros||{};   /* filtros de columna tipo Excel: guardan lo EXCLUIDO ({ex:{...}}); _tvCfgSave NO les quita las claves de periodo p_... */
   /* una vez: las columnas nuevas de la primera version salen del orden
      guardado para irse al final del cuadro */
@@ -23935,7 +24006,10 @@ function _tvAplicaFijas(root){try{var cfg=_tvCfg(),tb=root.querySelector('table'
 function _tvAjusta(){try{return _tvCfg().ajustar!==false}catch(e){return true}}
 function _tvAnchoCss(k){try{var w=(_tvCfg().anchos||{})[k];if(w>0)return 'width:'+w+'px;max-width:'+w+'px;min-width:'+w+'px;'+(_tvAjusta()?'white-space:normal;overflow-wrap:anywhere;':'overflow:hidden;text-overflow:ellipsis;')}catch(e){}return ''}
 function _tvCfgSave(c){try{c.orden=(c.orden||[]).filter(function(k){return !_tvEsPer(k)});
+  /* 'filtros' y 'semOc' NO entran en esta limpieza: sus claves SON de
+     periodo (p_2026-09-17) y se tienen que guardar tal cual */
   ['ocultas','anchos','colores','fuentes','formulas'].forEach(function(M){var o=c[M];if(!o)return;for(var k in o)if(_tvEsPer(k))delete o[k]});
+  if(c.semOc&&typeof c.semOc!=='object')c.semOc={};
   if(c.fija&&_tvEsPer(c.fija.col))c.fija={};
   c.ts=(typeof nowSrv==='function'?nowSrv():Date.now());localStorage.setItem(_TV_LS,JSON.stringify(c))}catch(e){}window._tvCfgMem=null;try{_tvCfgPush()}catch(e){}}
 function _tvColsVis(){var cfg=_tvCfg(),by={};_TV_COLS.forEach(function(x){by[x[0]]=x});var out=[];(cfg.orden||[]).forEach(function(k){if(by[k]&&!cfg.ocultas[k])out.push(by[k])});
@@ -23944,7 +24018,34 @@ function _tvColsVis(){var cfg=_tvCfg(),by={};_TV_COLS.forEach(function(x){by[x[0
   _TV_COLS.forEach(function(x,i){if((cfg.orden||[]).indexOf(x[0])>=0||cfg.ocultas[x[0]])return;if(_TV_FIN[x[0]]||_tvEsPer(x[0])){out.push(x);return}var pos=out.length;
     for(var j=i-1;j>=0;j--){var q=-1;for(var t=0;t<out.length;t++)if(out[t][0]===_TV_COLS[j][0]){q=t;break}if(q>=0){pos=q+1;break}}
     out.splice(pos,0,x)});
-  return out}
+  return _tvSemFiltra(out)}
+/* ===== semanas que se ven y semanas que no (boton \ud83d\udcc5 Semanas) =====
+   cfg.semOc guarda las OCULTAS por su clave de periodo ('p_<fin>'): lo que
+   aparezca despues se ve por defecto y la lista crece sola. Ocultar una
+   semana NO cambia ninguna cifra: la columna 'Suma de HH', los subtotales,
+   el TOTAL, el pie y el Excel la siguen contando, como al ocultar una
+   columna en Excel. */
+function _tvSemOc(){try{var o=_tvCfg().semOc;return (o&&typeof o==='object')?o:{}}catch(e){return {}}}
+function _tvSemFiltra(cols){try{var oc=_tvSemOc(),hay=false,k9;for(k9 in oc){if(oc[k9]){hay=true;break}}
+  if(!hay)return cols;return cols.filter(function(c9){return !(_tvEsPer(c9[0])&&oc[c9[0]])})}catch(e){return cols}}
+/* el rotulo de cada periodo en la lista: en semanas 'S38 \u00b7 17/09/2026',
+   en dias o meses lo que pinta la cabecera (lab y lab2) */
+function _tvSemLab(p){try{var B=' \u00b7 ';
+  var t=(p.sem!=null)?('S'+p.sem+B+p.lab):(p.lab+((p.lab2&&p.lab2!==p.lab)?(B+p.lab2):''));
+  if(p.cierre&&String(t).indexOf('CIERRE')<0)t+=B+'CIERRE';return t}catch(e){return String((p&&p.k)||'')}}
+function _tvSemPer(){try{var U=window._tvUltimo;return (U&&U.D&&U.D.per)||[]}catch(e){return []}}
+function _tvSemModo(D){try{var m=(D&&D.info&&D.info.per)||((window._tvUltimo||{}).D||{}).info;
+  if(m&&m.per)m=m.per;return (m==='dia'||m==='mes')?m:'sem'}catch(e){return 'sem'}}
+function _tvSemPal(m,n){return (m==='dia')?(n===1?'d\u00eda oculto':'d\u00edas ocultos'):((m==='mes')?(n===1?'mes oculto':'meses ocultos'):(n===1?'semana oculta':'semanas ocultas'))}
+/* el texto de estado avisa cuantas se dejaron fuera */
+function _tvSemTxt(D){try{var oc=_tvSemOc(),per=(D&&D.per)||[],n=0;
+  per.forEach(function(p){if(oc[p.k])n++});if(!n)return '';
+  return ' \u00b7 '+n+' '+_tvSemPal(_tvSemModo(D),n)}catch(e){return ''}}
+/* el '% acumulado' del pie suma TODOS los periodos hasta ese, tambien los
+   que el boton Semanas dejo fuera: una semana oculta sigue contando */
+function _tvAcumHasta(D,S,k,ac){try{var per=(D&&D.per)||[],t=0,vi=false;
+  for(var i9=0;i9<per.length;i9++){t+=Number(S[per[i9].k])||0;if(per[i9].k===k){vi=true;break}}
+  return vi?t:(ac+(Number(S[k])||0))}catch(e){return ac+(Number(S[k])||0)}}
 /* busqueda sin tildes: cada caracter a su letra base (misma longitud que el
    original, para poder marcar en el texto tal cual se escribio) */
 function _tvNorm(s){s=String(s==null?'':s);var out='';for(var i=0;i<s.length;i++){var ch=s.charAt(i),d=ch;try{d=ch.normalize('NFD').charAt(0)||ch}catch(e){}out+=d}return out.toLowerCase()}
@@ -24160,7 +24261,7 @@ function _crTablaVHTML(D,q,ord){
   var _tvPieFila=function(lab,S,modo){_rn++;var bg='#132033';var den=Number(D.u&&D.u.hh)||0;var h='<tr data-rn="'+_rn+'" data-den="'+den+'" style="background:'+bg+'">'+numCel(_rn,5,'bottom:0;');var ST='position:sticky;bottom:0;z-index:3;background:'+bg+';';var run=0,puesto=false,ac=0;
     var flush=function(){if(!run)return;h+='<td colspan="'+run+'" style="'+ST+'border-top:0;border-bottom:1px solid #223049;border-left:0;border-right:0;padding:3px 6px;font-weight:700;color:#9FE8B0;font-size:10.5px;white-space:nowrap">'+(puesto?'':('<span style="position:sticky;left:36px;display:inline-block">'+lab+'</span>'))+'</td>';puesto=true;run=0};
     cols.forEach(function(cl){var k=cl[0],W=ST+(_ANCHO[k]!=null?_ANCHO[k]:_tvAnchoCss(k))+'white-space:nowrap;';
-      if(_tvEsPer(k)||k==='suma'){flush();var v=Number(S[k])||0;var x=(modo==='acum'&&_tvEsPer(k))?(ac+=v):v;var pc=(den>0)?(x/den*100):0;h+=td('<span style="color:#9FE8B0;font-size:10.5px">'+_nMil2(pc)+'%</span>',1,W,Math.round(pc*100)/100)}
+      if(_tvEsPer(k)||k==='suma'){flush();var v=Number(S[k])||0;var x=(modo==='acum'&&_tvEsPer(k))?_tvAcumHasta(D,S,k,ac):v;if(modo==='acum'&&_tvEsPer(k))ac=x;var pc=(den>0)?(x/den*100):0;h+=td('<span style="color:#9FE8B0;font-size:10.5px">'+_nMil2(pc)+'%</span>',1,W,Math.round(pc*100)/100)}
       else run++;
       if(_fzk[k]&&_cfgT.fija&&k===_cfgT.fija.col)flush()});flush();
     if(!puesto)h+='<td style="'+ST+'border-bottom:1px solid #223049;padding:3px 6px;font-weight:700;color:#9FE8B0;font-size:10.5px;white-space:nowrap">'+lab+'</td>';
@@ -24362,6 +24463,35 @@ function _tvFxArrastre(x,root,doc,k,pos,keys,col){x.style.cursor='move';
       window._tvFxDragged=true;setTimeout(function(){window._tvFxDragged=false},80);
       var c9=colDe(ev);if(!c9||!_TV_NUM[c9.k]||c9.k===k)return;var F2=_tvFxDe(k).slice();F2[pos]=c9.k;_tvFxGuarda(k,F2)};
     e.preventDefault();e.stopPropagation();doc.addEventListener('mousemove',mm);doc.addEventListener('mouseup',mu)}}
+/* ===== \ud83d\udcc5 Semanas: aparecer o desaparecer columnas de periodo =====
+   La lista son los periodos de lo ULTIMO pintado (D.per), o sea SOLO los
+   que tienen informacion: cuando pasa una semana se agrega ella sola.
+   'Todo' marcado = ninguna oculta; marcarlo devuelve la tabla como debe
+   salir realmente. Va en 'doc' para que funcione tambien en la ventana
+   emergente de la tabla. */
+function _crTablaVSemUI(doc,anchor,rerender){
+  var old=doc.getElementById('_tvSemPop');if(old){old.remove();return}
+  var pop=doc.createElement('div');pop.id='_tvSemPop';
+  pop.style.cssText='position:fixed;z-index:2147483647;background:#152436;border:1px solid #1d3550;border-radius:10px;padding:8px 10px;font-size:12px;color:#cfe3ff;box-shadow:0 10px 30px rgba(0,0,0,.5);max-height:70vh;overflow:auto;min-width:200px';
+  var r=anchor.getBoundingClientRect();pop.style.left=Math.max(4,r.left-120)+'px';pop.style.top=(r.bottom+4)+'px';
+  var arma=function(){var cfg=_tvCfg(),oc=cfg.semOc||{},per=_tvSemPer(),m=_tvSemModo(null),nOc=0;
+    per.forEach(function(p){if(oc[p.k])nOc++});
+    var tit=(m==='dia')?'D\u00edas':((m==='mes')?'Meses':'Semanas');
+    var h='<div style="font-weight:800;color:#9db4d6;margin-bottom:4px;white-space:nowrap">'+tit+' con informaci\u00f3n</div>';
+    h+='<label style="display:block;white-space:nowrap;cursor:pointer;font-weight:800;border-bottom:1px solid #1d3550;padding-bottom:4px;margin-bottom:4px" title="Marcado: salen todas, como la tabla debe salir realmente"><input type="checkbox" id="_tvSemTodo"'+(nOc?'':' checked')+'> Todo</label>';
+    if(!per.length)h+='<div style="color:#9db4d6;white-space:nowrap">(la tabla a\u00fan no est\u00e1 pintada)</div>';
+    per.forEach(function(p){h+='<label style="display:block;white-space:nowrap;cursor:pointer"><input type="checkbox" class="_tvSemCb" data-k="'+p.k+'"'+(oc[p.k]?'':' checked')+'> '+esc(_tvSemLab(p))+'</label>'});
+    h+='<div style="margin-top:5px;color:#FFD37A;font-weight:800;white-space:nowrap">'+(nOc?(nOc+' '+_tvSemPal(m,nOc)):'&nbsp;')+'</div>';
+    pop.innerHTML=h;
+    var todo=pop.querySelector('#_tvSemTodo');
+    /* desmarcar 'Todo' por si solo no hace nada: 'Todo' marcado es, por
+       definicion, que no hay ninguna oculta */
+    if(todo)todo.onchange=function(){if(!todo.checked){todo.checked=true;return}
+      var c2=_tvCfg();c2.semOc={};_tvCfgSave(c2);arma();rerender()};
+    Array.prototype.forEach.call(pop.querySelectorAll('._tvSemCb'),function(cb){cb.onchange=function(){
+      var c2=_tvCfg();c2.semOc=c2.semOc||{};var k=cb.getAttribute('data-k');
+      if(cb.checked)delete c2.semOc[k];else c2.semOc[k]=1;_tvCfgSave(c2);arma();rerender()}})};
+  arma();doc.body.appendChild(pop)}
 function _crTablaVColsUI(doc,anchor,rerender){
   var old=doc.getElementById('_tvColsPop');if(old){old.remove();return}
   var cfg=_tvCfg();var pop=doc.createElement('div');pop.id='_tvColsPop';
@@ -24372,7 +24502,7 @@ function _crTablaVColsUI(doc,anchor,rerender){
   h+='<button id="_tvColsReset" style="grid-column:1/3;margin-top:4px;background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:5px 8px;font-weight:800;cursor:pointer">Restablecer orden y columnas</button>';
   pop.innerHTML=h;doc.body.appendChild(pop);
   pop.querySelectorAll('input[type=checkbox]').forEach(function(cb){cb.onchange=function(){var c2=_tvCfg();if(cb.id==='_tvCeros'){c2.ceros=!!cb.checked;_tvCfgSave(c2);rerender();return}if(cb.checked)delete c2.ocultas[cb.getAttribute('data-k')];else c2.ocultas[cb.getAttribute('data-k')]=1;_tvCfgSave(c2);rerender()}});
-  pop.querySelector('#_tvColsReset').onclick=function(){var c0=_tvCfg();_tvCfgSave({per:c0.per,corte:c0.corte,vista:c0.vista,fuente:c0.fuente,noLab:c0.noLab,ceros:c0.ceros,ajustar:c0.ajustar,orden:_TV_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{},filtros:{}});pop.remove();rerender()}}
+  pop.querySelector('#_tvColsReset').onclick=function(){var c0=_tvCfg();_tvCfgSave({per:c0.per,corte:c0.corte,vista:c0.vista,fuente:c0.fuente,noLab:c0.noLab,ceros:c0.ceros,ajustar:c0.ajustar,orden:_TV_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{},filtros:{},semOc:{}});pop.remove();rerender()}}
 /* la ventana propia (fuera del navegador): un documento minimo con buscador,
    zoom, columnas, copiar y la tabla; se repinta desde la app con cada cambio */
 /* ---------------- Exportar a Excel el cuadro tal como se ve ----------------
@@ -24596,6 +24726,7 @@ function _crTablaVDocHTML(titulo){
     'table{border-collapse:collapse;font-size:11.5px}th,td{border:1px solid #223049;padding:3px 6px;white-space:nowrap}th{background:#152436;color:#8ECBF5;position:sticky;top:0;cursor:pointer;z-index:2}'+
     '</style></head><body><div id="top"><input id="_tvBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026"><span id="_tvRes"></span>'+
     '<button id="_tvCols" title="Ocultar o mostrar columnas (arrastra las cabeceras para moverlas)">\u2699 Columnas</button>'+
+    '<button id="_tvSem" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button>'+
     '<button id="_tvMax" title="A toda la pantalla">\ud83d\uddd6 Maximizar</button>'+
     '<button id="_tvAj" title="Con ajuste, la celda envuelve el texto y la fila crece; sin ajuste, una línea y recorte">↩ Ajustar texto</button>'+
     '<button id="_tvFzCel" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tvFzNo" title="Soltar filas y columnas inmovilizadas">▶ Movilizar</button>'+
@@ -24624,6 +24755,7 @@ async function _crTablaVUI(c){
     doc.getElementById('_tvBus').oninput=function(){q=this.value;pintaHTML()};
     _tvBarraBind(doc,function(){pinta()});
     doc.getElementById('_tvCols').onclick=function(){_crTablaVColsUI(doc,this,pintaHTML)};
+    var _bSem9=doc.getElementById('_tvSem');if(_bSem9)_bSem9.onclick=function(){_crTablaVSemUI(doc,this,pintaHTML)};
     var bAj=doc.getElementById('_tvAj');var pintaAj=function(){bAj.textContent=(_tvAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAj();bAj.onclick=function(){var c2=_tvCfg();c2.ajustar=!_tvAjusta();_tvCfgSave(c2);pintaAj();pintaHTML()};
     doc.getElementById('_tvMas').onclick=function(){zoom=Math.min(3,zoom*1.1);cuerpo.style.zoom=zoom};
     doc.getElementById('_tvMenos').onclick=function(){zoom=Math.max(.4,zoom/1.1);cuerpo.style.zoom=zoom};
@@ -24644,7 +24776,7 @@ async function _crTablaVUI(c){
   var bst='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer';
   top.innerHTML='<input id="_tvBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026" style="flex:1;min-width:160px;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:8px;padding:6px 9px;font-size:12px">'+
     '<span id="_tvRes" style="font-size:11px;color:#9FE8B0;font-weight:800"></span>'+
-    '<button id="_tvCols" style="'+bst+'">⚙ Columnas</button><button id="_tvAj" style="'+bst+'">↩ Ajustar texto</button><button id="_tvFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tvFzNo" style="'+bst+'">▶ Movilizar</button><button id="_tvExp" style="'+bst+';font-size:11px;padding:4px 7px" title="Desplegar todos los títulos WBS">▾ Expandir todo</button><button id="_tvCon" style="'+bst+';font-size:11px;padding:4px 7px" title="Plegar todos los títulos WBS">▸ Contraer todo</button><button id="_tvMenos" style="'+bst+'">A\u2212</button><button id="_tvMas" style="'+bst+'">A+</button>'+
+    '<button id="_tvCols" style="'+bst+'">⚙ Columnas</button><button id="_tvSem" style="'+bst+'" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button><button id="_tvAj" style="'+bst+'">↩ Ajustar texto</button><button id="_tvFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_tvFzNo" style="'+bst+'">▶ Movilizar</button><button id="_tvExp" style="'+bst+';font-size:11px;padding:4px 7px" title="Desplegar todos los títulos WBS">▾ Expandir todo</button><button id="_tvCon" style="'+bst+';font-size:11px;padding:4px 7px" title="Plegar todos los títulos WBS">▸ Contraer todo</button><button id="_tvMenos" style="'+bst+'">A\u2212</button><button id="_tvMas" style="'+bst+'">A+</button>'+
     '<button id="_tvCopiar" style="'+bst+'">\ud83d\udccb Copiar como tabla</button><button id="_tvXls" style="'+bst+'" title="Descarga el cuadro tal como se ve (columnas, colores, t\u00edtulos WBS y TOTAL) con los costos como f\u00f3rmulas">\u2b07 Exportar a Excel</button>'+_tvBarraHTML()+'<div id="_tvFx" title="Barra de f\u00f3rmulas: toca una celda y aqu\u00ed sale su referencia y, si es f\u00f3rmula, la f\u00f3rmula con sus celdas marcadas" style="flex-basis:100%;display:flex;align-items:center;gap:6px;background:#0d1117;border:1px solid #1d3550;border-radius:8px;padding:3px 6px;font-size:12px"><span id="_tvFxRef" style="min-width:52px;text-align:center;font-weight:800;color:#8ECBF5;border-right:1px solid #1d3550;padding-right:6px">&nbsp;</span><span style="color:#7d8590;font-style:italic;font-weight:800">fx</span><span id="_tvFxVal" style="flex:1;font-family:Consolas,monospace;color:#cfe3ff;white-space:normal;overflow-wrap:anywhere;min-height:16px"></span></div>';
   ov.insertBefore(top,body);
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
@@ -24654,13 +24786,14 @@ async function _crTablaVUI(c){
   top.querySelector('#_tvBus').oninput=function(){q=this.value;pintaHTMLF()};
   _tvBarraBind(document,function(){pintaF()});
   top.querySelector('#_tvCols').onclick=function(){_crTablaVColsUI(document,this,pintaHTMLF)};
+  var _bSem9=top.querySelector('#_tvSem');if(_bSem9)_bSem9.onclick=function(){_crTablaVSemUI(document,this,pintaHTMLF)};
   var bAjF=top.querySelector('#_tvAj');var pintaAjF=function(){bAjF.textContent=(_tvAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAjF();bAjF.onclick=function(){var c2=_tvCfg();c2.ajustar=!_tvAjusta();_tvCfgSave(c2);pintaAjF();pintaHTMLF()};
   top.querySelector('#_tvMas').onclick=function(){ov._zoom=Math.min(3,(ov._zoom||1)*1.1);wrap.style.zoom=ov._zoom};
   top.querySelector('#_tvMenos').onclick=function(){ov._zoom=Math.max(.4,(ov._zoom||1)/1.1);wrap.style.zoom=ov._zoom};
   top.querySelector('#_tvCopiar').onclick=function(){try{var t=wrap.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_tvEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});navigator.clipboard.writeText(out.join('\n')).then(function(){toast('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){toast('No se pudo copiar')})}catch(e){}};
   ov._sacar=function(){ov.remove();try{ov._alCerrar()}catch(e){}window._crTablaVRepinta=null;_crTablaVUI(c)};
   window._crTablaVRepinta=function(){try{if(!document.getElementById('_crTabVOv'))return;if(window._tvT)clearTimeout(window._tvT);window._tvT=setTimeout(function(){window._tvT=null;pintaF()},150)}catch(e){}};
-  var cerrar=ov._alCerrar;ov._alCerrar=function(){try{cerrar&&cerrar()}catch(e){}window._crTablaVRepinta=null;window._tvSelCol=null;window._tvRoot=null;window._tvClip=null;try{var pp9=document.getElementById('_tvColsPop');if(pp9)pp9.remove()}catch(e){}};
+  var cerrar=ov._alCerrar;ov._alCerrar=function(){try{cerrar&&cerrar()}catch(e){}window._crTablaVRepinta=null;window._tvSelCol=null;window._tvRoot=null;window._tvClip=null;try{var pp9=document.getElementById('_tvColsPop');if(pp9)pp9.remove()}catch(e){}try{var ps9=document.getElementById('_tvSemPop');if(ps9)ps9.remove()}catch(e){}};
   wrap.innerHTML='<div style="padding:12px;color:#9db4d6">Armando la tabla\u2026</div>';
   await pintaF()}
 
@@ -24670,6 +24803,7 @@ async function _tvDatos(c){return await _t23Datos(c,_tvOpc())}
 function _tvInfoTxt(D){var _t9='';try{_t9=_tvInfoTxt0(D)}catch(e){_t9=''}
   try{var _f9=_tvCfg().filtros||{},_h9=false;for(var _k9 in _f9)if(_fltActivo(_f9,_k9)){_h9=true;break}
     if(_h9)_t9+=' \u00b7 filtrado: '+(window._tvFiltX||0)+' de '+(window._tvFiltN||0)+' filas'}catch(e){}
+  try{var _s9=_tvSemTxt(D);if(_s9)_t9+=_s9}catch(_es9){}
   return _t9}
 function _tvInfoTxt0(D){try{var o=D.info||{},per=D.per||[];var t=(D.u.n+' partidas cuentan \u00b7 '+_nMil2(D.u.hh)+' hh \u00b7 '+per.length+(o.per==='dia'?' d\u00edas':' semanas'));
   if(per.length)t+=' \u00b7 '+per[0].ini+' \u2192 '+per[per.length-1].fin;
@@ -24910,6 +25044,10 @@ function _txCfg(){var raw=null;try{raw=localStorage.getItem(_TX_LS)}catch(e){}
   if(window._txCfgMem&&window._txCfgMem.str===raw)return window._txCfgMem.obj;   /* sin JSON.parse en cada celda */
   var c=null;try{c=JSON.parse(raw||'null')}catch(e){c=null}
   if(!(c&&c.orden))c={orden:_TX_COLS.map(function(x){return x[0]})};
+  /* semanas (columnas de periodo) que el usuario escondio con el boton
+     Semanas: guarda las OCULTAS, no las visibles, asi cada periodo nuevo
+     que aparece con el tiempo se ve solo */
+  c.semOc=c.semOc||{};
   c.ocultas=c.ocultas||{};c.anchos=c.anchos||{};c.fija=c.fija||{};c.colores=c.colores||{};c.fuentes=c.fuentes||{};c.filasOc=c.filasOc||{};c.pleg=c.pleg||{};
   /* los filtros de columna (como Excel): guardan lo EXCLUIDO por columna,
      tambien en las columnas de periodo (_txCfgSave no las quita de aqui) */
@@ -24976,7 +25114,10 @@ function _txAplicaFijas(root){try{var cfg=_txCfg(),tb=root.querySelector('table'
 function _txAjusta(){try{return _txCfg().ajustar!==false}catch(e){return true}}
 function _txAnchoCss(k){try{var w=(_txCfg().anchos||{})[k];if(w>0)return 'width:'+w+'px;max-width:'+w+'px;min-width:'+w+'px;'+(_txAjusta()?'white-space:normal;overflow-wrap:anywhere;':'overflow:hidden;text-overflow:ellipsis;')}catch(e){}return ''}
 function _txCfgSave(c){try{c.orden=(c.orden||[]).filter(function(k){return !_txEsPer(k)});
+  /* 'filtros' y 'semOc' NO entran en esta limpieza: sus claves SON de
+     periodo (p_2026-09-17) y se tienen que guardar tal cual */
   ['ocultas','anchos','colores','fuentes','formulas'].forEach(function(M){var o=c[M];if(!o)return;for(var k in o)if(_txEsPer(k))delete o[k]});
+  if(c.semOc&&typeof c.semOc!=='object')c.semOc={};
   if(c.fija&&_txEsPer(c.fija.col))c.fija={};
   c.ts=(typeof nowSrv==='function'?nowSrv():Date.now());localStorage.setItem(_TX_LS,JSON.stringify(c))}catch(e){}window._txCfgMem=null;try{_txCfgPush()}catch(e){}}
 function _txColsVis(){var cfg=_txCfg(),by={};_TX_COLS.forEach(function(x){by[x[0]]=x});var out=[];(cfg.orden||[]).forEach(function(k){if(by[k]&&!cfg.ocultas[k])out.push(by[k])});
@@ -24985,7 +25126,34 @@ function _txColsVis(){var cfg=_txCfg(),by={};_TX_COLS.forEach(function(x){by[x[0
   _TX_COLS.forEach(function(x,i){if((cfg.orden||[]).indexOf(x[0])>=0||cfg.ocultas[x[0]])return;if(_TX_FIN[x[0]]||_txEsPer(x[0])){out.push(x);return}var pos=out.length;
     for(var j=i-1;j>=0;j--){var q=-1;for(var t=0;t<out.length;t++)if(out[t][0]===_TX_COLS[j][0]){q=t;break}if(q>=0){pos=q+1;break}}
     out.splice(pos,0,x)});
-  return out}
+  return _txSemFiltra(out)}
+/* ===== semanas que se ven y semanas que no (boton \ud83d\udcc5 Semanas) =====
+   cfg.semOc guarda las OCULTAS por su clave de periodo ('p_<fin>'): lo que
+   aparezca despues se ve por defecto y la lista crece sola. Ocultar una
+   semana NO cambia ninguna cifra: la columna 'Suma de HH', los subtotales,
+   el TOTAL, el pie y el Excel la siguen contando, como al ocultar una
+   columna en Excel. */
+function _txSemOc(){try{var o=_txCfg().semOc;return (o&&typeof o==='object')?o:{}}catch(e){return {}}}
+function _txSemFiltra(cols){try{var oc=_txSemOc(),hay=false,k9;for(k9 in oc){if(oc[k9]){hay=true;break}}
+  if(!hay)return cols;return cols.filter(function(c9){return !(_txEsPer(c9[0])&&oc[c9[0]])})}catch(e){return cols}}
+/* el rotulo de cada periodo en la lista: en semanas 'S38 \u00b7 17/09/2026',
+   en dias o meses lo que pinta la cabecera (lab y lab2) */
+function _txSemLab(p){try{var B=' \u00b7 ';
+  var t=(p.sem!=null)?('S'+p.sem+B+p.lab):(p.lab+((p.lab2&&p.lab2!==p.lab)?(B+p.lab2):''));
+  if(p.cierre&&String(t).indexOf('CIERRE')<0)t+=B+'CIERRE';return t}catch(e){return String((p&&p.k)||'')}}
+function _txSemPer(){try{var U=window._txUltimo;return (U&&U.D&&U.D.per)||[]}catch(e){return []}}
+function _txSemModo(D){try{var m=(D&&D.info&&D.info.per)||((window._txUltimo||{}).D||{}).info;
+  if(m&&m.per)m=m.per;return (m==='dia'||m==='mes')?m:'sem'}catch(e){return 'sem'}}
+function _txSemPal(m,n){return (m==='dia')?(n===1?'d\u00eda oculto':'d\u00edas ocultos'):((m==='mes')?(n===1?'mes oculto':'meses ocultos'):(n===1?'semana oculta':'semanas ocultas'))}
+/* el texto de estado avisa cuantas se dejaron fuera */
+function _txSemTxt(D){try{var oc=_txSemOc(),per=(D&&D.per)||[],n=0;
+  per.forEach(function(p){if(oc[p.k])n++});if(!n)return '';
+  return ' \u00b7 '+n+' '+_txSemPal(_txSemModo(D),n)}catch(e){return ''}}
+/* el '% acumulado' del pie suma TODOS los periodos hasta ese, tambien los
+   que el boton Semanas dejo fuera: una semana oculta sigue contando */
+function _txAcumHasta(D,S,k,ac){try{var per=(D&&D.per)||[],t=0,vi=false;
+  for(var i9=0;i9<per.length;i9++){t+=Number(S[per[i9].k])||0;if(per[i9].k===k){vi=true;break}}
+  return vi?t:(ac+(Number(S[k])||0))}catch(e){return ac+(Number(S[k])||0)}}
 /* busqueda sin tildes: cada caracter a su letra base (misma longitud que el
    original, para poder marcar en el texto tal cual se escribio) */
 function _txNorm(s){s=String(s==null?'':s);var out='';for(var i=0;i<s.length;i++){var ch=s.charAt(i),d=ch;try{d=ch.normalize('NFD').charAt(0)||ch}catch(e){}out+=d}return out.toLowerCase()}
@@ -25235,7 +25403,7 @@ function _crTablaRHTML(D,q,ord){
     var h='<tr data-rn="'+_rn+'" data-den="'+den+'" data-modo="'+modo+'" data-tipo="'+(tipo||'')+'" style="background:'+bg+'">'+numCel(_rn,5,'bottom:0;');var ST='position:sticky;bottom:0;z-index:3;background:'+bg+';';var run=0,puesto=false,ac=0;
     var flush=function(){if(!run)return;h+='<td colspan="'+run+'" style="'+ST+'border-top:0;border-bottom:1px solid #223049;border-left:0;border-right:0;padding:3px 6px;font-weight:700;color:'+CT+';font-size:10.5px;white-space:nowrap">'+(puesto?'':('<span style="position:sticky;left:36px;display:inline-block">'+lab+'</span>'))+'</td>';puesto=true;run=0};
     cols.forEach(function(cl){var k=cl[0],W=ST+(_ANCHO[k]!=null?_ANCHO[k]:_txAnchoCss(k))+'white-space:nowrap;';
-      if(_txEsPer(k)||k==='suma'){flush();var v=Number(S[k])||0;var x=(modo==='acum'&&_txEsPer(k))?(ac+=v):v;var pc=(den>0)?(x/den*100):0;h+=td('<span style="color:'+CT+';font-size:10.5px">'+_nMil2(pc)+'%</span>',1,W,Math.round(pc*100)/100)}
+      if(_txEsPer(k)||k==='suma'){flush();var v=Number(S[k])||0;var x=(modo==='acum'&&_txEsPer(k))?_txAcumHasta(D,S,k,ac):v;if(modo==='acum'&&_txEsPer(k))ac=x;var pc=(den>0)?(x/den*100):0;h+=td('<span style="color:'+CT+';font-size:10.5px">'+_nMil2(pc)+'%</span>',1,W,Math.round(pc*100)/100)}
       else run++;
       if(_fzk[k]&&_cfgT.fija&&k===_cfgT.fija.col)flush()});flush();
     if(!puesto)h+='<td style="'+ST+'border-bottom:1px solid #223049;padding:3px 6px;font-weight:700;color:'+CT+';font-size:10.5px;white-space:nowrap">'+lab+'</td>';
@@ -25447,6 +25615,35 @@ function _txFxArrastre(x,root,doc,k,pos,keys,col){x.style.cursor='move';
       window._txFxDragged=true;setTimeout(function(){window._txFxDragged=false},80);
       var c9=colDe(ev);if(!c9||!_TX_NUM[c9.k]||c9.k===k)return;var F2=_txFxDe(k).slice();F2[pos]=c9.k;_txFxGuarda(k,F2)};
     e.preventDefault();e.stopPropagation();doc.addEventListener('mousemove',mm);doc.addEventListener('mouseup',mu)}}
+/* ===== \ud83d\udcc5 Semanas: aparecer o desaparecer columnas de periodo =====
+   La lista son los periodos de lo ULTIMO pintado (D.per), o sea SOLO los
+   que tienen informacion: cuando pasa una semana se agrega ella sola.
+   'Todo' marcado = ninguna oculta; marcarlo devuelve la tabla como debe
+   salir realmente. Va en 'doc' para que funcione tambien en la ventana
+   emergente de la tabla. */
+function _crTablaRSemUI(doc,anchor,rerender){
+  var old=doc.getElementById('_txSemPop');if(old){old.remove();return}
+  var pop=doc.createElement('div');pop.id='_txSemPop';
+  pop.style.cssText='position:fixed;z-index:2147483647;background:#152436;border:1px solid #1d3550;border-radius:10px;padding:8px 10px;font-size:12px;color:#cfe3ff;box-shadow:0 10px 30px rgba(0,0,0,.5);max-height:70vh;overflow:auto;min-width:200px';
+  var r=anchor.getBoundingClientRect();pop.style.left=Math.max(4,r.left-120)+'px';pop.style.top=(r.bottom+4)+'px';
+  var arma=function(){var cfg=_txCfg(),oc=cfg.semOc||{},per=_txSemPer(),m=_txSemModo(null),nOc=0;
+    per.forEach(function(p){if(oc[p.k])nOc++});
+    var tit=(m==='dia')?'D\u00edas':((m==='mes')?'Meses':'Semanas');
+    var h='<div style="font-weight:800;color:#9db4d6;margin-bottom:4px;white-space:nowrap">'+tit+' con informaci\u00f3n</div>';
+    h+='<label style="display:block;white-space:nowrap;cursor:pointer;font-weight:800;border-bottom:1px solid #1d3550;padding-bottom:4px;margin-bottom:4px" title="Marcado: salen todas, como la tabla debe salir realmente"><input type="checkbox" id="_txSemTodo"'+(nOc?'':' checked')+'> Todo</label>';
+    if(!per.length)h+='<div style="color:#9db4d6;white-space:nowrap">(la tabla a\u00fan no est\u00e1 pintada)</div>';
+    per.forEach(function(p){h+='<label style="display:block;white-space:nowrap;cursor:pointer"><input type="checkbox" class="_txSemCb" data-k="'+p.k+'"'+(oc[p.k]?'':' checked')+'> '+esc(_txSemLab(p))+'</label>'});
+    h+='<div style="margin-top:5px;color:#FFD37A;font-weight:800;white-space:nowrap">'+(nOc?(nOc+' '+_txSemPal(m,nOc)):'&nbsp;')+'</div>';
+    pop.innerHTML=h;
+    var todo=pop.querySelector('#_txSemTodo');
+    /* desmarcar 'Todo' por si solo no hace nada: 'Todo' marcado es, por
+       definicion, que no hay ninguna oculta */
+    if(todo)todo.onchange=function(){if(!todo.checked){todo.checked=true;return}
+      var c2=_txCfg();c2.semOc={};_txCfgSave(c2);arma();rerender()};
+    Array.prototype.forEach.call(pop.querySelectorAll('._txSemCb'),function(cb){cb.onchange=function(){
+      var c2=_txCfg();c2.semOc=c2.semOc||{};var k=cb.getAttribute('data-k');
+      if(cb.checked)delete c2.semOc[k];else c2.semOc[k]=1;_txCfgSave(c2);arma();rerender()}})};
+  arma();doc.body.appendChild(pop)}
 function _crTablaRColsUI(doc,anchor,rerender){
   var old=doc.getElementById('_txColsPop');if(old){old.remove();return}
   var cfg=_txCfg();var pop=doc.createElement('div');pop.id='_txColsPop';
@@ -25457,7 +25654,7 @@ function _crTablaRColsUI(doc,anchor,rerender){
   h+='<button id="_txColsReset" style="grid-column:1/3;margin-top:4px;background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:5px 8px;font-weight:800;cursor:pointer">Restablecer orden y columnas</button>';
   pop.innerHTML=h;doc.body.appendChild(pop);
   pop.querySelectorAll('input[type=checkbox]').forEach(function(cb){cb.onchange=function(){var c2=_txCfg();if(cb.id==='_txCeros'){c2.ceros=!!cb.checked;_txCfgSave(c2);rerender();return}if(cb.checked)delete c2.ocultas[cb.getAttribute('data-k')];else c2.ocultas[cb.getAttribute('data-k')]=1;_txCfgSave(c2);rerender()}});
-  pop.querySelector('#_txColsReset').onclick=function(){var c0=_txCfg();_txCfgSave({per:c0.per,corte:c0.corte,vista:c0.vista,fuente:c0.fuente,noLab:c0.noLab,ceros:c0.ceros,ajustar:c0.ajustar,orden:_TX_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{},filtros:{}});pop.remove();rerender()}}
+  pop.querySelector('#_txColsReset').onclick=function(){var c0=_txCfg();_txCfgSave({per:c0.per,corte:c0.corte,vista:c0.vista,fuente:c0.fuente,noLab:c0.noLab,ceros:c0.ceros,ajustar:c0.ajustar,orden:_TX_COLS.map(function(x){return x[0]}),ocultas:{},anchos:{},fija:{},colores:{},fuentes:{},filasOc:{},pleg:{},filtros:{},semOc:{}});pop.remove();rerender()}}
 /* la ventana propia (fuera del navegador): un documento minimo con buscador,
    zoom, columnas, copiar y la tabla; se repinta desde la app con cada cambio */
 /* ---------------- Exportar a Excel el cuadro tal como se ve ----------------
@@ -25690,6 +25887,7 @@ function _crTablaRDocHTML(titulo){
     'table{border-collapse:collapse;font-size:11.5px}th,td{border:1px solid #223049;padding:3px 6px;white-space:nowrap}th{background:#152436;color:#8ECBF5;position:sticky;top:0;cursor:pointer;z-index:2}'+
     '</style></head><body><div id="top"><input id="_txBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026"><span id="_txRes"></span>'+
     '<button id="_txCols" title="Ocultar o mostrar columnas (arrastra las cabeceras para moverlas)">\u2699 Columnas</button>'+
+    '<button id="_txSem" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button>'+
     '<button id="_txMax" title="A toda la pantalla">\ud83d\uddd6 Maximizar</button>'+
     '<button id="_txAj" title="Con ajuste, la celda envuelve el texto y la fila crece; sin ajuste, una línea y recorte">↩ Ajustar texto</button>'+
     '<button id="_txFzCel" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_txFzNo" title="Soltar filas y columnas inmovilizadas">▶ Movilizar</button>'+
@@ -25718,6 +25916,7 @@ async function _crTablaRUI(c){
     doc.getElementById('_txBus').oninput=function(){q=this.value;pintaHTML()};
     _txBarraBind(doc,function(){pinta()});
     doc.getElementById('_txCols').onclick=function(){_crTablaRColsUI(doc,this,pintaHTML)};
+    var _bSem9=doc.getElementById('_txSem');if(_bSem9)_bSem9.onclick=function(){_crTablaRSemUI(doc,this,pintaHTML)};
     var bAj=doc.getElementById('_txAj');var pintaAj=function(){bAj.textContent=(_txAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAj();bAj.onclick=function(){var c2=_txCfg();c2.ajustar=!_txAjusta();_txCfgSave(c2);pintaAj();pintaHTML()};
     doc.getElementById('_txMas').onclick=function(){zoom=Math.min(3,zoom*1.1);cuerpo.style.zoom=zoom};
     doc.getElementById('_txMenos').onclick=function(){zoom=Math.max(.4,zoom/1.1);cuerpo.style.zoom=zoom};
@@ -25738,7 +25937,7 @@ async function _crTablaRUI(c){
   var bst='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer';
   top.innerHTML='<input id="_txBus" placeholder="Buscar partida, apartado, sistema, tarea, estado\u2026" style="flex:1;min-width:160px;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:8px;padding:6px 9px;font-size:12px">'+
     '<span id="_txRes" style="font-size:11px;color:#9FE8B0;font-weight:800"></span>'+
-    '<button id="_txCols" style="'+bst+'">⚙ Columnas</button><button id="_txAj" style="'+bst+'">↩ Ajustar texto</button><button id="_txFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_txFzNo" style="'+bst+'">▶ Movilizar</button><button id="_txExp" style="'+bst+';font-size:11px;padding:4px 7px" title="Desplegar todos los títulos WBS">▾ Expandir todo</button><button id="_txCon" style="'+bst+';font-size:11px;padding:4px 7px" title="Plegar todos los títulos WBS">▸ Contraer todo</button><button id="_txMenos" style="'+bst+'">A\u2212</button><button id="_txMas" style="'+bst+'">A+</button>'+
+    '<button id="_txCols" style="'+bst+'">⚙ Columnas</button><button id="_txSem" style="'+bst+'" title="Aparecer o desaparecer semanas: salen solo las que ya tienen informaci\u00f3n; marca Todo para verlas todas">\ud83d\udcc5 Semanas</button><button id="_txAj" style="'+bst+'">↩ Ajustar texto</button><button id="_txFzCel" style="'+bst+'" title="Como Excel: toca una celda y las filas de arriba y las columnas a su izquierda quedan fijas">📌 Inmovilizar</button><button id="_txFzNo" style="'+bst+'">▶ Movilizar</button><button id="_txExp" style="'+bst+';font-size:11px;padding:4px 7px" title="Desplegar todos los títulos WBS">▾ Expandir todo</button><button id="_txCon" style="'+bst+';font-size:11px;padding:4px 7px" title="Plegar todos los títulos WBS">▸ Contraer todo</button><button id="_txMenos" style="'+bst+'">A\u2212</button><button id="_txMas" style="'+bst+'">A+</button>'+
     '<button id="_txCopiar" style="'+bst+'">\ud83d\udccb Copiar como tabla</button><button id="_txXls" style="'+bst+'" title="Descarga el cuadro tal como se ve (columnas, colores, t\u00edtulos WBS y TOTAL) con los costos como f\u00f3rmulas">\u2b07 Exportar a Excel</button>'+_txBarraHTML()+'<div id="_txFx" title="Barra de f\u00f3rmulas: toca una celda y aqu\u00ed sale su referencia y, si es f\u00f3rmula, la f\u00f3rmula con sus celdas marcadas" style="flex-basis:100%;display:flex;align-items:center;gap:6px;background:#0d1117;border:1px solid #1d3550;border-radius:8px;padding:3px 6px;font-size:12px"><span id="_txFxRef" style="min-width:52px;text-align:center;font-weight:800;color:#8ECBF5;border-right:1px solid #1d3550;padding-right:6px">&nbsp;</span><span style="color:#7d8590;font-style:italic;font-weight:800">fx</span><span id="_txFxVal" style="flex:1;font-family:Consolas,monospace;color:#cfe3ff;white-space:normal;overflow-wrap:anywhere;min-height:16px"></span></div>';
   ov.insertBefore(top,body);
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
@@ -25748,13 +25947,14 @@ async function _crTablaRUI(c){
   top.querySelector('#_txBus').oninput=function(){q=this.value;pintaHTMLF()};
   _txBarraBind(document,function(){pintaF()});
   top.querySelector('#_txCols').onclick=function(){_crTablaRColsUI(document,this,pintaHTMLF)};
+  var _bSem9=top.querySelector('#_txSem');if(_bSem9)_bSem9.onclick=function(){_crTablaRSemUI(document,this,pintaHTMLF)};
   var bAjF=top.querySelector('#_txAj');var pintaAjF=function(){bAjF.textContent=(_txAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAjF();bAjF.onclick=function(){var c2=_txCfg();c2.ajustar=!_txAjusta();_txCfgSave(c2);pintaAjF();pintaHTMLF()};
   top.querySelector('#_txMas').onclick=function(){ov._zoom=Math.min(3,(ov._zoom||1)*1.1);wrap.style.zoom=ov._zoom};
   top.querySelector('#_txMenos').onclick=function(){ov._zoom=Math.max(.4,(ov._zoom||1)/1.1);wrap.style.zoom=ov._zoom};
   top.querySelector('#_txCopiar').onclick=function(){try{var t=wrap.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_txEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});navigator.clipboard.writeText(out.join('\n')).then(function(){toast('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){toast('No se pudo copiar')})}catch(e){}};
   ov._sacar=function(){ov.remove();try{ov._alCerrar()}catch(e){}window._crTablaRRepinta=null;_crTablaRUI(c)};
   window._crTablaRRepinta=function(){try{if(!document.getElementById('_crTabROv'))return;if(window._txT)clearTimeout(window._txT);window._txT=setTimeout(function(){window._txT=null;pintaF()},150)}catch(e){}};
-  var cerrar=ov._alCerrar;ov._alCerrar=function(){try{cerrar&&cerrar()}catch(e){}window._crTablaRRepinta=null;window._txSelCol=null;window._txRoot=null;window._txClip=null;try{var pp9=document.getElementById('_txColsPop');if(pp9)pp9.remove()}catch(e){}};
+  var cerrar=ov._alCerrar;ov._alCerrar=function(){try{cerrar&&cerrar()}catch(e){}window._crTablaRRepinta=null;window._txSelCol=null;window._txRoot=null;window._txClip=null;try{var pp9=document.getElementById('_txColsPop');if(pp9)pp9.remove()}catch(e){}try{var ps9=document.getElementById('_txSemPop');if(ps9)ps9.remove()}catch(e){}};
   wrap.innerHTML='<div style="padding:12px;color:#9db4d6">Armando la tabla\u2026</div>';
   await pintaF()}
 
@@ -25774,6 +25974,7 @@ function _txInfoTxt(D){try{var o=D.info||{},per=D.per||[];var t=((o.baseNombre?(
     if(o.proy.sinFecha>0.005)t+=' \u00b7 sin fecha '+_nMil2(o.proy.sinFecha)+' hh'}
   /* lo que dejan fuera los filtros de columna */
   try{var _f9=window._txFiltro;if(_f9&&_f9.hay)t+=' \u00b7 filtrado: '+_f9.n+' de '+_f9.N+' filas'}catch(_ef9){}
+  try{var _s9=_txSemTxt(D);if(_s9)t+=_s9}catch(_es9){}
   if(D.sueltas&&D.sueltas.length)t+=' \u00b7 '+_txNPart(D.sueltas)+' sin agrupaci\u00f3n (en rojo, no suman)';
   return t}catch(e){return ''}}
 function _txBarraHTML(){var c=_txCfg();var seg=function(id,ops,val){return '<span id="'+id+'" style="display:inline-flex;border:1px solid #1d3550;border-radius:8px;overflow:hidden">'+ops.map(function(o){var on=(o[0]===val);return '<button data-v="'+o[0]+'" title="'+o[2]+'" style="border-radius:0;background:'+(on?'#1B5E8A':'#182c42')+';color:'+(on?'#fff':'#9db4d6')+';padding:5px 9px;border:0;font-weight:800;cursor:pointer">'+o[1]+'</button>'}).join('')+'</span>'};
