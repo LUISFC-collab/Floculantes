@@ -138,6 +138,25 @@ function _crXerMLineas(r){
     var d=Math.round(((Number(r[k])||0)-sm)*100)/100;
     resto[k]=(d>0)?d:0;
     if(d>0.05&&KB[k])hay=true});
+  /* EL ACTUAL DEL RESTO (el cuadre con la Tabla 2 que pidio el usuario):
+     _crTablaDatos machaca r.hhA con la SUMA de los apartados (22660-22663), asi
+     que "Resto de la partida" salia siempre con hhA = r.hhA - suma = 0 y el
+     .xer decia MENOS avance que la Tabla 2, que reparte cuenta x
+     _crFracHechaAt sobre la partida ENTERA. Se le da al resto la misma
+     fraccion que llevan los apartados, que es exactamente lo que la Tabla 2
+     pinta en su propia fila "Resto de la partida".
+     Algebra: suma_lineas hhA = suma(h_k r_k) + (cuenta - suma h_k) x
+     (suma(h_k r_k)/suma h_k) = cuenta x frac = la Tabla 2. */
+  if(hay){
+    var _hT9=0,_hA9=0,_cT9=0,_cA9=0;
+    L.forEach(function(m){_hT9+=Number(m.hh)||0;_hA9+=Number(m.hhA)||0;
+      _cT9+=Number(m.costoC)||0;_cA9+=Number(m.costoA)||0});
+    var _fH9=(_hT9>0)?(_hA9/_hT9):0,_fC9=(_cT9>0)?(_cA9/_cT9):0;
+    if(!(_fH9>0))_fH9=0;if(_fH9>1)_fH9=1;
+    if(!(_fC9>0))_fC9=0;if(_fC9>1)_fC9=1;
+    resto.hhA=Math.round((Number(resto.hh)||0)*_fH9*100)/100;
+    resto.costoA=Math.round((Number(resto.costoC)||0)*_fC9*100)/100;
+    resto.hhAM=resto.hhA;resto.costoAM=resto.costoA}
   if(hay){
     var m2={},k3;
     for(k3 in r)if(k3!=='partes')m2[k3]=r[k3];
@@ -176,7 +195,15 @@ function _crXerMCuadra(L,campo,objetivo){
   var tope=Math.max(0.05,L.length*0.005+0.01);
   if(Math.abs(d)>tope)return 0;
   var best=null;
-  L.forEach(function(m){if(!best||(Number(m[campo])||0)>(Number(best[campo])||0))best=m});
+  /* la tarea elegida tiene que ADMITIR el ajuste: el clamp que viene despues
+     (if(m.hhA>m.hhT)m.hhA=m.hhT) deshacia el cuadre de hhA/costoA cuando la
+     mas grande ya estaba al 100 % (X3 H8). Si ninguna lo admite se vuelve a la
+     regla de antes, que al menos deja el desvio en la mayor. */
+  var tope9=(campo==='hhA')?'hhT':((campo==='costoA')?'costoT':'');
+  L.forEach(function(m){
+    if(tope9&&((Number(m[campo])||0)+d)>(Number(m[tope9])||0)+1e-9)return;
+    if(!best||(Number(m[campo])||0)>(Number(best[campo])||0))best=m});
+  if(!best&&tope9)L.forEach(function(m){if(!best||(Number(m[campo])||0)>(Number(best[campo])||0))best=m});
   if(!best)return 0;
   var v=_crXerM2((Number(best[campo])||0)+d);
   if(v<0)v=0;
@@ -691,9 +718,24 @@ async function _crXerModelo(c,opt){
     else if(m.informativa&&m.hhT<=0&&m.costoT<=0){
       /* informativa: se respeta lo que trae el archivo, no se inventa estado */
       m.estado='';m.pct=null}
-    else if(m.pct>=100-1e-9)m.estado='Complete';   /* la regla: Complete si su % ya es 100, con HH o sin ellas */
+    /* COMPLETE SOLO CON EL REMANENTE EN CERO (X5 P1-A): m.pct sale de
+       _crXerM2 (dos decimales), asi que un 99.996 % daba Complete con 0.04 hh
+       de remanente, _crXerValida E-19 lo marca como ERROR y el .xer NO se
+       descarga. hhT/hhA/hhR ya estan redondeados a 2 decimales, de modo que
+       hhR<=0.004 equivale a hhR===0. Sin HH (hitos informativos, actividades
+       sin alcance) manda el % fisico, como siempre. */
+    else if((m.hhT>0.005)?(m.hhR<=0.004&&m.hhA>0.005):(m.pct>=100-1e-9)){m.estado='Complete';m.pct=100}
+    else if(m.pct>=100-1e-9){m.estado='Active';m.pct=99.99}
     else if(m.pct>0)m.estado='Active';
     else m.estado='NotStart';
+    /* Y EL ESTADO TAMPOCO PUEDE CONTRADECIR A LAS UNIDADES POR ABAJO (X3 H2):
+       con un corte temprano una actividad de 10'000 hh con 0.30 hh reales
+       redondea su % a 0.00 y salia TK_NotStart con act_work_qty 0.30, que
+       tambien es E-19 y tampoco se descargaba. El umbral (0.005) es el mismo
+       con el que _crXerMNum decide si escribe el campo en cero.
+       En "tal cual" el estado es el del ARCHIVO y no se toca. */
+    if(m.estado==='NotStart'&&!(modo==='tal'&&m.tipo==='xer')&&m.hhT>0&&m.hhA>0.005){
+      m.estado='Active';if(!(m.pct>0))m.pct=0.01}
     /* sin alcance (HH apagadas, fuera, saldo retirado) pero ejecutada del todo
        sobre el metrado del CONTRATO: en P6 es Complete con sus fechas reales,
        no una Not Started con 0 dias (A1490: 1206 de 1206 m hechos) */
@@ -1065,6 +1107,13 @@ function _crXerEscribe(lineas,modelo){
        edita de ella en el aplicativo. --- */
     if(m.informativa&&!(m.hhT>0||m.costoT>0)){
       out.informativas++;
+      /* lo unico que NO se le respeta a una informativa: P6 no puede
+         recalcular por su cuenta el avance de nada de este archivo. Con
+         auto_compute_act_flag='Y' (lo que traen las del .xer original) el
+         primer F9 le pone actuals por su cuenta y el corrido deja de ser el
+         del aplicativo. Lo encontro el xer_check.js de X5 (E6). */
+      if(TA.col.auto_compute_act_flag!=null&&String(fi.v[TA.col.auto_compute_act_flag]||'')!=='N'){
+        fi.v[TA.col.auto_compute_act_flag]='N';lineas[fi.i]='%R'+_XTAB+fi.v.join(_XTAB)}
       var nomI=_crXerMTx(m.nombre,200);
       if(nomI&&_crTx(fi.o.task_name)!==nomI&&TA.col.task_name!=null){
         fi.v[TA.col.task_name]=nomI;lineas[fi.i]='%R\t'+fi.v.join('\t');out.renombradas++}
@@ -1277,7 +1326,10 @@ function _crXerEscribe(lineas,modelo){
     m.taskId=String(maxT);
 
     /* y su asignacion de recurso, que es de donde P6 saca las horas y el costo */
-    if(!TR||m.hito||m.loe)return;
+    /* una actividad NUEVA informativa (sin partidas: 0 HH y 0 costo) no
+       necesita asignacion de recurso; las que ya estaban en el archivo solo la
+       llevan si(qT>0||cT>0), y asi las dos ramas dicen lo mismo (X3 H11) */
+    if(!TR||m.hito||m.loe||!((Number(m.hhT)||0)>0||(Number(m.costoT)||0)>0))return;
     if(!modR&&!labRsrc){out.avisos.push('la actividad nueva '+cod+' se escribio sin asignacion de recurso: el .xer no trae ninguna que copiar');return}
     maxR++;
     var w=_crXerMFila(modR?modR.v.slice():TR.cs.map(function(){return ''}),TR.cs.length);
@@ -2506,7 +2558,19 @@ function _crXerFechas(lineas,modelo){
       var ri=iniRealF||_crFec(fi.o.act_start_date)||ini;
       var rf=finRealF||_crFec(fi.o.act_end_date)||fin;
       eIni=_crXerCalSnap(C,ri,false);eFin=_crXerCalSnap(C,rf,true);
-      if(_crASerial(eFin)<_crASerial(eIni))eFin=eIni;
+      /* NUNCA DESPUES DE LA FECHA DE DATOS (X4 H3): con el corte en domingo o
+         en feriado, el snap HACIA DELANTE del inicio real se pasaba del corte
+         y, como P6 reparte el presupuesto sobre las fechas PLANIFICADAS, todo
+         el trabajo de una TERMINADA caia despues de la fecha de datos y el
+         acumulado del archivo dejaba de ser lo real. El tope es el ultimo dia
+         laborable en o antes de la fecha de datos. */
+      var _tp9=_crXerCalLab(C,DD.iso)?DD.iso:_crXerCalSnap(C,DD.iso,true);
+      if(_crASerial(_tp9)!==''){
+        if(_crASerial(eIni)>_crASerial(_tp9))eIni=_tp9;
+        if(_crASerial(eFin)>_crASerial(_tp9))eFin=_tp9}
+      /* si aun asi el fin queda antes del inicio, se baja el INICIO (bajarlo
+         no puede volver a pasarse de la fecha de datos; subir el fin, si) */
+      if(_crASerial(eFin)<_crASerial(eIni))eIni=eFin;
       hEi=_crXerCalAbre(C,eIni);hEf=_crXerCalCierra(C,eFin);
       /* las TEMPRANAS de lo terminado, en la fecha de datos: es lo que
          escribe P6 en su propio .xer (las fechas que se ven en Start y
@@ -2963,7 +3027,19 @@ function _crXerCorrer(lineas,modelo,out){
     pw('restart_date',esF);pw('reend_date',efF);
     pw('early_start_date',esF);pw('early_end_date',efF);
     pw('rem_late_start_date',lsF);pw('rem_late_end_date',lfF);pw('late_end_date',lfF);
-    if(n.st==='TK_NotStart'){pw('target_start_date',esF);pw('target_end_date',efF);pw('late_start_date',lsF)}
+    if(n.st==='TK_NotStart'){pw('target_start_date',esF);pw('target_end_date',efF);pw('late_start_date',lsF);
+      /* P6 IGUALA Remaining a Original en toda no iniciada al importar (lo dice
+         el propio comentario de _crXerEscribe): si el archivo sale con
+         original = span del plan viejo y remanente = rd x hpd, el remanente
+         que calculo la hoja 2 se pierde y la actividad dura lo que decia el
+         plan (X5 P1-C). El plan de una no iniciada ES su remanente, y ademas
+         asi el par de fechas planificadas y la duracion original cuadran.
+         Las informativas que el usuario no ha movido se dejan con lo del
+         archivo, que es la regla de _crXerFechas para ellas. */
+      var _ti9=(modelo&&modelo.tareas)?modelo.tareas[n.cod]:null;
+      if(!(_ti9&&_ti9.informativa&&!_ti9.movida)){
+        pw('target_drtn_hr_cnt',_crXerNum(n.rem));
+        if(_ti9)_ti9.durH=n.rem}}
     else{
       /* iniciada con inicio real SINTETICO (remanente por HH): la red pudo
          correr su fin, y el tramo real tiene que seguir pesando exactamente
@@ -2981,7 +3057,18 @@ function _crXerCorrer(lineas,modelo,out){
           pw('act_start_date',asF);pw('target_start_date',asF);
           pw('target_drtn_hr_cnt',_crXerNum(Math.round((actH+span)*100)/100));
           n.aS=AS;t9.iniReal=AS.iso;t9.durH=Math.round((actH+span)*100)/100}}
-      pw('target_end_date',efF);pw('late_start_date',n.aS?_crXerFec(n.aS.iso,n.aS.hora):lsF)}
+      pw('target_end_date',efF);
+      /* CON EL REMANENTE POR LA TABLA la duracion original la escribio
+         _crXerFechas como el total de la tabla x hpd, y aqui la red acaba de
+         correr el fin: el par de fechas planificadas pasa a valer otra cosa y
+         P6 reparte el presupuesto sobre ESE tramo, no sobre target_drtn (X4
+         H4: plan 09/09-29/09 = 180 h con target_drtn 150 h daba 200.00 hh
+         acumuladas frente a 240.00 reales). La rama del inicio real sintetico
+         ya rehace su propia duracion mas arriba. */
+      if(n.aS&&t9&&t9.deTabla&&!t9.iniRealSint&&t9.alcance!==false){
+        var _td9=_crXerPHoras(n.C,_crXerPIni(n.C,n.aS),n.EF);
+        if(_td9>0){_td9=Math.round(_td9*100)/100;pw('target_drtn_hr_cnt',_crXerNum(_td9));t9.durH=_td9}}
+      pw('late_start_date',n.aS?_crXerFec(n.aS.iso,n.aS.hora):lsF)}
     pw('total_float_hr_cnt',_crXerNum(n.TF));pw('free_float_hr_cnt',_crXerNum(n.FF));
     res.n++;
     if(esF.slice(0,10)!==rs0.slice(0,10)||efF.slice(0,10)!==re0.slice(0,10)){res.movidas++;
@@ -2995,6 +3082,17 @@ function _crXerCorrer(lineas,modelo,out){
     TR.filas.forEach(function(x){
       var fi=porT[String(x.o.task_id)];if(!fi)return;var ch=false;
       CAMPOS.forEach(function(k){var j=TA.col[k],jj=TR.col[k];if(j==null||jj==null)return;var v=String(fi.v[j]==null?'':fi.v[j]);if(x.v[jj]!==v){x.v[jj]=v;ch=true}});
+      /* LOS RATIOS UNIDADES/TIEMPO, otra vez (X5 P1-B): _crXerFechas los rehizo
+         en su bloque 1b, pero _crXerCorrer corre DESPUES y acaba de cambiar
+         target_drtn_hr_cnt. Con duration_type = DT_FixedDrtn (Fixed Duration
+         AND Units/Time) P6 deriva Unidades = Duracion x Unidades/Tiempo en
+         cuanto algo toca la duracion, y el presupuesto se moveria solo. */
+      try{var _jd=TA.col.target_drtn_hr_cnt,_jr=TA.col.remain_drtn_hr_cnt;
+        var _d=(_jd==null)?0:(Number(fi.v[_jd])||0),_r=(_jr==null)?0:(Number(fi.v[_jr])||0);
+        var _q=Number(x.o.target_qty)||0,_rq=Number(x.o.remain_qty)||0;
+        var _ju=TR.col.target_qty_per_hr,_jru=TR.col.remain_qty_per_hr;
+        if(_ju!=null){var _u=(_d>0?(_q/_d):0).toFixed(6);if(x.v[_ju]!==_u){x.v[_ju]=_u;ch=true}}
+        if(_jru!=null){var _ru=(_r>0?(_rq/_r):0).toFixed(6);if(x.v[_jru]!==_ru){x.v[_jru]=_ru;ch=true}}}catch(_eu){}
       /* la asignacion con horas reales sigue el inicio real sintetico de su tarea */
       try{if((Number(x.o.act_reg_qty)||0)>0){
           /* toda asignacion con horas reales lleva las fechas reales de su
@@ -3075,18 +3173,30 @@ async function _crXerRangoAvance(c){
   return {cid:String((c&&c.cron_id)||''),hoy:hoy,hhUni:hhT,ev:ev,
     min:(ev[0]||''),ult:ult,gan:gan,max:(ult||hoy)}}
 
-async function _crXerGanadoSem(c,corte,modo){
+async function _crXerGanadoSem(c,corte,modo,modelo){
   corte=String(corte||'').slice(0,10);modo=(modo==='dia')?'dia':'sem';
   var tar=((await _crTareas(c.cron_id))||[]).filter(function(t){return t&&!t.eliminado});
   var alc=await _crAlc(c.cron_id),u=_crUniverso(c.cron_id,alc);
-  var filas=((await _crTablaDatos(c))||{}).filas||[],P={};
+  /* LA MISMA FOTO QUE EL MODELO: _crXerModelo ya armo la tabla al corte y la
+     dejo en modelo.tabla; esto era una SEGUNDA pasada completa de
+     _crTablaDatos por exportacion. El numero no cambia -y por tanto el .xer
+     sigue cuadrando con lo que el usuario VE en la Tabla 2 (X4 H9)- porque
+     _crFracHechaAt solo lee campos que no dependen de la foto (r.metF, r.met y,
+     de cada apartado, hh y metF) y remide el avance por su cuenta en cada
+     p.fin con _fzAvanceAt / acumCantAt. Sin modelo se cae a la tabla al corte,
+     que es la que usa el resto del motor (X3 H3). */
+  var filas=(((modelo&&modelo.tabla)||(await _crTablaDatos(c,corte)))||{}).filas||[],P={};
   filas.forEach(function(r){if(r&&r.id)P[r.id]=r});
   var rp=_crReparto(tar);
   var _mF={},frac=function(id,iso){var k=id+'|'+iso,v=_mF[k];if(v!=null)return v;v=Math.max(0,Math.min(1,Number(_crFracHechaAt(P[id],iso))||0));_mF[k]=v;return v};
   var min='';
   for(var id in u.items){try{var ev=(typeof _t23Eventos==='function')?_t23Eventos(id):[];if(ev.length&&(!min||ev[0]<min))min=ev[0]}catch(_e){}}
-  if(!min||!corte||min>corte)return {per:[],W:{}};
-  var s0=_crASerial(min);if(s0==='')return {per:[],W:{}};
+  /* sin periodos, pero DICIENDO POR QUE (X4 H6): hasta ahora el .xer salia
+     sin un solo FINDATES y en silencio */
+  if(!min||!corte||min>corte)return {per:[],W:{},modo:modo,corte:corte,t2:0,t2Tar:0,hh:0,
+    motivo:(min?('el corte '+corte+' es anterior al primer avance ('+min+')')
+               :'ninguna partida del alcance tiene partes con fecha')};
+  var s0=_crASerial(min);if(s0==='')return {per:[],W:{},modo:modo,corte:corte,t2:0,t2Tar:0,hh:0,motivo:'la fecha del primer avance ('+min+') no es una fecha valida'};
   var per=[],k=0;
   if(modo==='dia'){
     /* DIA A DIA: un periodo por cada dia natural desde el primer parte hasta el corte */
@@ -3104,17 +3214,44 @@ async function _crXerGanadoSem(c,corte,modo){
       (t.items||[]).forEach(function(i){var hi=Number(u.items[i])||0;if(!(hi>0))return;g+=_crGanadas(rp,i,cod,hi,frac(i,p.fin))});
       if(g<prev)g=prev;ser.push(g-prev);prev=g});
     W[cod]=ser});
-  return {per:per,W:W,modo:modo}}
+  /* EL ACUMULADO DE LA TABLA 2 AL CORTE, que es el numero contra el que el
+     usuario quiere cuadrar el archivo:
+        t2  = suma_i u.items[i] x _crFracHechaAt(fila_i, corte)   (TODO el
+              universo del cronograma, con actividad o sin ella)
+        t2Tar = la suma de la matriz W = lo que llega a alguna actividad y por
+              tanto lo unico que puede salir en el .xer; la diferencia es
+              modelo.perdido
+        hh  = las HH forecast del universo, para el % al corte
+     Se calcula aqui porque `frac` ya esta memoizada y no cuesta una pasada mas. */
+  var t29=0,hh9=0,id9;
+  for(id9 in u.items){var h9=Number(u.items[id9])||0;if(!(h9>0))continue;hh9+=h9;t29+=h9*frac(id9,corte)}
+  var tT9=0,cd9;
+  for(cd9 in W)(W[cd9]||[]).forEach(function(v9){tT9+=Number(v9)||0});
+  return {per:per,W:W,modo:modo,corte:corte,
+    t2:Math.round(t29*100)/100,t2Tar:Math.round(tT9*100)/100,hh:Math.round(hh9*100)/100}}
 
 function _crXerPeriodos(lineas,modelo,G){
   var res={n:0,tareas:0,asig:0,hh:0,desde:'',hasta:'',avisos:[]};
-  if(!G||!G.per||!G.per.length)return res;
+  /* el acumulado de la Tabla 2 al corte viaja hasta el mensaje aunque no haya
+     un solo periodo financiero que escribir */
+  if(G){res.t2=(G.t2==null)?null:Number(G.t2);res.t2Tar=(G.t2Tar==null)?null:Number(G.t2Tar);
+    res.hhUniv=(G.hh==null)?null:Number(G.hh);res.corte=String(G.corte||'')}
+  if(!G||!G.per||!G.per.length){if(G&&G.motivo)res.avisos.push('el .xer sale SIN periodos financieros: '+G.motivo);return res}
   var T=_crXerTablas(lineas),TA=T.TASK,TR=T.TASKRSRC,PR=T.PROJECT;
   if(!TA||!TA.cs.length)return res;
   if(T.FINDATES||T.TRSRCFIN||T.TASKFIN){res.avisos.push('el archivo ya traia periodos financieros: se conservan y no se anaden los de la Tabla 2');return res}
   var r2=function(x){return Math.round((Number(x)||0)*100)/100};
   var per=G.per,W=G.W||{};
-  var nom=function(p){var f=function(iso){return iso.slice(8,10)+'/'+iso.slice(5,7)};if(p.ini===p.fin)return 'D '+f(p.fin)+'/'+p.fin.slice(0,4);var s='';try{s='S'+_crSemNum(p.fin)+' '}catch(_e){s=''}return s+f(p.ini)+'-'+f(p.fin)+'/'+p.fin.slice(0,4)};
+  /* la etiqueta sale del MODO, no de que el periodo dure un dia: con el corte
+     en viernes la ultima semana dura un solo dia y salia rotulada "D 18/09"
+     dentro de una serie S31...S38 (X4 H2). Y el periodo recortado en el corte
+     se marca, para que en P6 se vea cual es el parcial. */
+  var modoP=(G&&G.modo==='dia')?'dia':'sem';
+  var nom=function(p){var f=function(iso){return iso.slice(8,10)+'/'+iso.slice(5,7)};
+    if(modoP==='dia')return 'D '+f(p.fin)+'/'+p.fin.slice(0,4);
+    var s='';try{s='S'+_crSemNum(p.fin)+' '}catch(_e){s=''}
+    var par='';try{if(_crASerial(p.fin)!==_crSemSerial(_crSemNum(p.fin)))par=' corte'}catch(_e2){par=''}
+    return s+f(p.ini)+'-'+f(p.fin)+'/'+p.fin.slice(0,4)+par};
   var ftId=String((T.FINTMPL&&T.FINTMPL.filas[0]&&T.FINTMPL.filas[0].o.fintmpl_id)||'');
   var csF=['fin_dates_id','fin_dates_name','start_date','end_date'];if(ftId)csF.push('fintmpl_id');
   var filF=[];
@@ -3129,7 +3266,18 @@ function _crXerPeriodos(lineas,modelo,G){
     var ser=(W[cod]||[]).slice(),s=0;ser.forEach(function(v){s+=v});
     var q;
     if(s>1e-9)q=per.map(function(p,i){return (Number(ser[i])||0)/s*A});
-    else{q=per.map(function(){return 0});q[q.length-1]=A}
+    else{q=per.map(function(){return 0});
+      /* SIN SERIE DE LA TABLA 2 (las HH reales que solo trae el .xer original y
+         el aplicativo no mide, y las partidas compartidas con apartados en las
+         que _crGanadas reparte distinto que _crXerMGana): antes TODO caia en el
+         ULTIMO periodo, que con un corte a media semana es el parcial y
+         deformaba la curva (X4 H7, X3 H4). Ahora va al periodo de su fecha
+         real, y se cuenta para poder avisarlo. */
+      var _f9=_crFec(o.act_end_date)||_crFec(o.act_start_date)||'',_j9=per.length-1;
+      if(_f9)for(var _z9=0;_z9<per.length;_z9++){if(_f9<=per[_z9].fin){_j9=_z9;break}}
+      q[_j9]=A;
+      res.sinSerie=(res.sinSerie||0)+1;if(!res.sinSerieL)res.sinSerieL=[];
+      if(res.sinSerieL.length<200)res.sinSerieL.push(cod+' ('+_crXer2(A)+' hh)')}
     var acc=0,last=-1;q=q.map(function(v,i){var x=r2(v);if(x>0)last=i;acc+=x;return x});
     if(last>=0)q[last]=r2(q[last]+(A-acc));else q[q.length-1]=r2(A);
     var lab=(asigDe[String(o.task_id)]||[]).filter(function(x){return (Number(x.o.act_reg_qty)||0)>0.005});
@@ -3286,7 +3434,12 @@ function _crXerCabecera(lineas,modelo){
     if(scd&&maxFin&&scd<maxFin){pon('scd_end_date','');out.scdLimpia=scd}
     var ps=_crFec(f.o.plan_start_date);
     if(ps&&minIni&&minIni<ps)out.avisos.push('hay actividades que arrancan el '+minIni+', antes del inicio planificado del proyecto ('+ps+'): P6 las empujara al programar');
-    if(nuevoId){pon('proj_short_name',nuevoId);out.projShort=nuevoId}
+    if(nuevoId){pon('proj_short_name',nuevoId);out.projShort=nuevoId;
+      /* cada -SEMANAn entra a P6 como proyecto propio: si repite el guid del
+         crudo original, en la base acaban N proyectos con el mismo
+         identificador global y cualquier round-trip posterior (XML,
+         reflections, baselines) los confunde (X5 P2-D) */
+      if(PR.col.guid!=null)pon('guid',_crXerMGuid('PROJ|'+modelo.cronId+'|'+nuevoId))}
     else out.projShort=actual;
     if(toca){lineas[f.i]='%R\t'+f.v.join('\t');n++}});
   if(nuevoId&&nuevoId!==actual)out.cambios.push('Project ID: "'+actual+'" -> "'+nuevoId+'"');
@@ -3644,6 +3797,62 @@ function _crXerValida(lineas,modelo){
     WBS.filas.forEach(function(f){
       if(_crTx(f.o.wbs_short_name).length>40)A('PROJWBS: el codigo "'+_crTx(f.o.wbs_short_name)+'" pasa de 40 caracteres')})})();
 
+  /* ---- E-29 a E-34: lo que P6 recalcula o fusiona en silencio (X5) ----
+     Gravedad: se avisa (A) de todo lo que puede venir del .xer ORIGINAL -guid
+     repetidos, periodos de la empresa que van mas alla de la fecha de datos,
+     sumas de periodos ajenos- porque bloquear la descarga por eso es lo
+     contrario de lo que se pide; se marca como ERROR (E) solo lo que escribe
+     el propio aplicativo y deja el archivo incoherente. */
+  (function(){
+    /* E-29: guid repetido dentro de una tabla. Si el %F del archivo no trae la
+       columna guid, los pon('guid',...) de _crXerEscribe fallan en silencio y
+       las filas nuevas heredan el guid de la plantilla. */
+    ['PROJWBS','RSRC','TASK','TASKRSRC'].forEach(function(nom){
+      var tab=T[nom];if(!tab||!tab.cs||tab.col.guid==null)return;
+      var g={},rep9=0,L9=[];
+      tab.filas.forEach(function(f){var x=String(f.o.guid||'');if(!x)return;
+        if(g[x]){rep9++;if(L9.length<5)L9.push((nom==='TASK')?_crTx(f.o.task_code):String(f.o.guid))}g[x]=1});
+      if(rep9)A(nom+': '+rep9+' fila(s) con guid repetido ('+L9.join(', ')+'): P6 las fusiona al importar')});
+    var asg={};TRS.filas.forEach(function(x){(asg[String(x.o.task_id)]=asg[String(x.o.task_id)]||[]).push(x)});
+    var n30=0,n31=0,n32=0,n33=0;
+    TAS.filas.forEach(function(f){
+      var cod=_crTx(f.o.task_code),st=String(f.o.status_code||'');
+      var td=Number(f.o.target_drtn_hr_cnt)||0,rd=Number(f.o.remain_drtn_hr_cnt)||0;
+      var pc=Number(f.o.phys_complete_pct)||0,tt=String(f.o.task_type||'TT_Task');
+      /* E-30 */
+      if(st==='TK_Complete'&&Math.abs(pc-100)>0.01){n30++;if(n30<=5)A(cod+': terminada con '+_crXer2(pc)+' % fisico (P6 la pone al 100)')}
+      /* E-33 */
+      if(st==='TK_NotStart'&&tt!=='TT_LOE'&&tt!=='TT_WBS'&&Math.abs(td-rd)>0.05){
+        n33++;if(n33<=5)A(cod+': sin empezar con duracion original '+_crXer2(td)+' h y remanente '+_crXer2(rd)+' h (P6 las iguala al importar)')}
+      (asg[String(f.o.task_id)]||[]).forEach(function(x){
+        var q=Number(x.o.target_qty)||0,rq=Number(x.o.remain_qty)||0,aq=Number(x.o.act_reg_qty)||0;
+        var uh=Number(x.o.target_qty_per_hr)||0,ruh=Number(x.o.remain_qty_per_hr)||0;
+        /* E-31 */
+        if(aq>0.005&&!_crFec(x.o.act_start_date)){n31++;if(n31<=5)E(cod+': asignacion con '+_crXer2(aq)+' HH reales y sin fecha real de inicio')}
+        if(st==='TK_NotStart'&&aq>0.005){n31++;if(n31<=5)E(cod+': sin empezar y con HH reales en su asignacion')}
+        /* E-32 */
+        if(td>0&&q>0.05&&Math.abs(uh*td-q)>Math.max(0.5,q*0.005)){n32++;if(n32<=5)A(cod+': unidades/tiempo '+uh.toFixed(6)+' x '+_crXer2(td)+' h = '+_crXer2(uh*td)+' y las unidades son '+_crXer2(q)+' (con DT_FixedDrtn P6 recalcula)')}
+        if(rd>0&&rq>0.05&&Math.abs(ruh*rd-rq)>Math.max(0.5,rq*0.005)){n32++;if(n32<=5)A(cod+': remanente unidades/tiempo descuadrado')}})});
+    /* E-34: los periodos financieros */
+    var FD=t_('FINDATES'),TF=t_('TASKFIN'),RF=t_('TRSRCFIN');
+    if(!FD.filas.length){if(TF.filas.length||RF.filas.length)E('hay TASKFIN/TRSRCFIN sin tabla FINDATES');return}
+    var per9=FD.filas.map(function(f){return {id:String(f.o.fin_dates_id),a:String(f.o.start_date||''),b:String(f.o.end_date||''),n:String(f.o.fin_dates_name||'')}})
+      .sort(function(x,y){return (x.a<y.a)?-1:(x.a>y.a)?1:0});
+    for(var z=1;z<per9.length;z++)if(per9[z].a<=per9[z-1].b){A('los periodos financieros '+per9[z-1].n+' y '+per9[z].n+' se solapan');break}
+    var ddP=PRO.filas.length?String(PRO.filas[0].o.last_recalc_date||''):'';
+    if(ddP&&per9.length&&per9[per9.length-1].b.slice(0,10)>ddP.slice(0,10))
+      A('el ultimo periodo financiero termina el '+per9[per9.length-1].b.slice(0,10)+', despues de la fecha de datos ('+ddP.slice(0,10)+')');
+    var fd={};FD.filas.forEach(function(f){fd[String(f.o.fin_dates_id)]=1});
+    var sT={},sR={},n34=0;
+    TF.filas.forEach(function(f){if(!fd[String(f.o.fin_dates_id)])E('TASKFIN linea '+(f.i+1)+': fin_dates_id '+f.o.fin_dates_id+' no existe en FINDATES');
+      sT[String(f.o.task_id)]=(sT[String(f.o.task_id)]||0)+(Number(f.o.act_work_qty)||0)});
+    RF.filas.forEach(function(f){if(!fd[String(f.o.fin_dates_id)])E('TRSRCFIN linea '+(f.i+1)+': fin_dates_id '+f.o.fin_dates_id+' no existe en FINDATES');
+      sR[String(f.o.taskrsrc_id)]=(sR[String(f.o.taskrsrc_id)]||0)+(Number(f.o.act_qty)||0)});
+    TAS.filas.forEach(function(f){var aw=Number(f.o.act_work_qty)||0,q=sT[String(f.o.task_id)];
+      if(q!=null&&Math.abs(q-aw)>0.02){n34++;if(n34<=5)A(_crTx(f.o.task_code)+': los periodos financieros suman '+_crXer2(q)+' HH y act_work_qty es '+_crXer2(aw))}});
+    TRS.filas.forEach(function(x){var aq=Number(x.o.act_reg_qty)||0,q=sR[String(x.o.taskrsrc_id)];
+      if(q!=null&&Math.abs(q-aq)>0.02){n34++;if(n34<=5)A('taskrsrc '+x.o.taskrsrc_id+': los periodos suman '+_crXer2(q)+' y act_reg_qty es '+_crXer2(aq))}})})();
+
   /* ---- E-28: NINGUNA restriccion en lo que gestiona el aplicativo ----
      Pedido del usuario: el .xer no puede salir con restricciones. Si el modelo
      viene, se miran solo sus actividades; sin modelo, todas las de TASK. */
@@ -3764,7 +3973,7 @@ async function _crXerArma(c,opt){
   /* --- 4. cantidades, estados, reales, remanentes, altas y bajas --- */
   di('4/8 Escribiendo HH, costo, estados, actividades y WBS…');
   /* lo ganado por actividad y por semana (Tabla 2) hasta el corte, para los periodos financieros */
-  var G=null;if(modo==='rep'){try{G=await _crXerGanadoSem(c,corte,opt.per)}catch(_eg){G=null;try{console.warn('periodos .xer:',_eg)}catch(_e9){}}}
+  var G=null;if(modo==='rep'){try{G=await _crXerGanadoSem(c,corte,opt.per,modelo)}catch(_eg){G=null;try{console.warn('periodos .xer:',_eg)}catch(_e9){}}}
   var esc9=await _crXerEscribe(lineas,modelo);
 
   /* --- 5. calendario real, fechas y predecesoras --- */
@@ -3898,6 +4107,54 @@ function _crXerMensaje(r,modo,mm){
     ' · costo real archivo '+_crXerS(A.costoA)+' / tabla '+_crXerS(T.costoA));
 
   /* --- fecha de datos y calendario --- */
+  /* ================== EL CUADRE QUE PIDIO EL USUARIO ====================
+     % al corte segun la Tabla 2 y su diferencia con el archivo, las unidades
+     tal como las suma P6, la identidad Remaining = Budgeted - Actual, las
+     actividades por estado y el cuadre de los periodos con la fecha de datos. */
+  (function(){
+    var t29=(r.per&&r.per.t2!=null)?Number(r.per.t2):null;
+    var hU9=(r.per&&r.per.hhUniv!=null)?Number(r.per.hhUniv):null;
+    if(t29!=null){
+      var dT9=Math.abs(t29-(Number(A.hhA)||0));
+      var base9=(hU9>0)?hU9:(Number(T.hhT)||0);
+      var pT9=(base9>0)?(t29/base9*100):0;
+      var pA9=((Number(A.hhT)||0)>0)?((Number(A.hhA)||0)/Number(A.hhT)*100):0;
+      lin((dT9<=0.05||mm)?claro:rojo,
+        'Tabla 2 al corte <b>'+_crXerEsc(r.corte||'')+'</b>: <b>'+_crXerHH(t29)+'</b> hh ganadas (<b>'+
+        _crXerHH(pT9)+' %</b>) \u00b7 el archivo lleva <b>'+_crXerHH(A.hhA)+'</b> hh (<b>'+_crXerHH(pA9)+
+        ' %</b>) \u00b7 '+((dT9<=0.05)?'<b>diferencia 0.00</b>':('<b>diferencia '+_crXerHH((Number(A.hhA)||0)-t29)+' hh</b>'))+
+        (mm?(' \u00b7 <b>con mayor metrado el archivo pasa de la Tabla 2 a proposito</b>: el sobremetrado ganado no esta en ella'):'')+
+        (((r.per.t2Tar!=null)&&Math.abs(Number(r.per.t2Tar)-t29)>0.05)?
+          (' \u00b7 de esas, '+_crXerHH(t29-Number(r.per.t2Tar))+' hh son de partidas que no llegan a ninguna actividad (ver abajo)'):''))}
+    var TT9=null;try{TT9=_crXerTablas(String(r.txt||'').split(/\r?\n/))}catch(_et9){TT9=null}
+    if(TT9){
+      var TX9=TT9.TASK,FN9=TT9.FINDATES,TF9=TT9.TASKFIN;
+      var nC9=0,nA9=0,nN9=0,nH9=0;
+      if(TX9&&TX9.cs.length)TX9.filas.forEach(function(f){
+        var st9=String(f.o.status_code||'');
+        if(st9==='TK_Complete')nC9++;else if(st9==='TK_Active')nA9++;else nN9++;
+        if((Number(f.o.target_work_qty)||0)>0.005)nH9++});
+      var id9=Math.abs((Number(A.hhT)||0)-(Number(A.hhA)||0)-(Number(A.hhR)||0));
+      lin((id9<=0.05)?claro:rojo,'Unidades como las suma P6 (asignaciones LABOR; sin asignacion, la propia actividad): '+
+        'Budgeted <b>'+_crXerHH(A.hhT)+'</b> \u00b7 Actual <b>'+_crXerHH(A.hhA)+'</b> \u00b7 Remaining <b>'+_crXerHH(A.hhR)+'</b> hh \u00b7 '+
+        ((id9<=0.05)?('Budgeted \u2212 Actual = Remaining'):('<b>OJO: Budgeted \u2212 Actual \u2260 Remaining</b>')));
+      lin(claro,'Actividades por estado: <b>'+nC9+'</b> terminadas \u00b7 <b>'+nA9+'</b> en curso \u00b7 <b>'+nN9+'</b> sin empezar \u00b7 '+nH9+' con HH');
+      if(FN9&&FN9.cs.length&&TF9&&TF9.cs.length){
+        var sF9=0;TF9.filas.forEach(function(f){sF9+=Number(f.o.act_work_qty)||0});
+        var ul9='';FN9.filas.forEach(function(f){var b9=String(f.o.end_date||'').slice(0,10);if(b9>ul9)ul9=b9});
+        var dF9=Math.abs(sF9-(Number(A.hhA)||0));
+        lin((dF9<=0.05)?claro:rojo,'Periodos financieros: suman <b>'+_crXerHH(sF9)+'</b> hh reales \u00b7 el archivo lleva <b>'+
+          _crXerHH(A.hhA)+'</b> hh \u00b7 diferencia <b>'+_crXerHH(dF9)+'</b> \u00b7 el ultimo llega al <b>'+_crXerEsc(ul9)+'</b>'+
+          ((ul9===String(fe.dataDate||'').slice(0,10))?' (= la fecha de datos)':(' <b>(\u2260 la fecha de datos)</b>')))}}
+    if(String((r.modelo&&r.modelo.rem)||'')==='tabla')
+      lin(ambar,'Con el remanente <b>por la tabla</b> el acumulado de P6 en la fecha de datos sale de las DURACIONES (total \u2212 restante, en dias, antes del corte) y no de las HH: puede no coincidir con lo real. Con el remanente por HH coincide al centimo.');
+    if(r.per&&r.per.sinSerie)
+      lin(ambar,'<b>'+r.per.sinSerie+'</b> actividad(es) con HH reales y <b>sin serie en la Tabla 2</b> (tipicamente las que solo trae el .xer original): su real se carga entero en el periodo de su fecha real. '+
+        _crXerEsc((r.per.sinSerieL||[]).slice(0,40).join(' \u00b7 ')));
+    if(r.per&&r.per.modo==='sem'&&r.corte&&r.sem)
+      lin(claro,'El archivo se rotula <b>SEMANA'+r.sem+'</b> (la ultima semana CERRADA, como el informe) y el avance llega al <b>'+
+        _crXerEsc(r.corte)+'</b>: si el corte cae a media semana, el ultimo periodo financiero es parcial y la Tabla 2 en pantalla puede ensenar de mas en su ultima columna, porque no la recorta en el corte.')})();
+
   lin(claro,'Fecha de datos: <b>'+_crXerEsc(fe.dataDate||'')+' '+_crXerEsc(fe.dataHora||'')+'</b>'+
     ' · avance hasta el corte <b>'+_crXerEsc(r.corte||'')+'</b>'+
     (fe.calendario?(' · calendario <b>'+_crXerEsc(fe.calendario)+'</b>'):'')+
@@ -4096,10 +4353,14 @@ async function _crXerDescarga(c,modo,mm,o){
 /* la semana que se REPORTA es la ultima CERRADA (la del jueves de corte), la
    misma que usa el Excel semanal; la semana en curso solo tiene dias sin
    cerrar y el .xer saldria rotulado un numero por delante del informe */
-function _crXerSemReporte(iso){
+/* `cerrada` (opcional, por defecto true) = la semana que se reporta es la
+   ultima CERRADA, que es lo que hace hoy y lo que pide el brief. Con
+   cerrada===false devuelve la semana que CONTIENE al corte, que es lo que
+   rotularia un corte a media semana (X4 H1): el dialogo puede ofrecerlo. */
+function _crXerSemReporte(iso,cerrada){
   try{
     var s=_crSemNum(iso),ser=_crASerial(iso);
-    if(ser!==''&&ser<_crSemSerial(s))s--;
+    if(cerrada!==false&&ser!==''&&ser<_crSemSerial(s))s--;
     return (s>0)?s:0}catch(_e){return 0}}
 
 /* ----------------------------------------------------------------------------
