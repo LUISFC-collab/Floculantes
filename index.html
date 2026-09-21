@@ -16188,7 +16188,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b12';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b13';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -25193,65 +25193,126 @@ function _tvBarraBind(doc,repinta){try{
    semana de cierre elegida; hecho = la Tabla 2 (lo ganado real por semana).
    ============================================================================ */
 async function _t23DatosR(c,o){o=o||{};var semFin=Number(o.semFin)||_rxSemRige();var vista=(o.vista==='agr')?'agr':'alc';
+  /* el PERIODO de las columnas (semana, dia o mes) y el dia en que CIERRA la
+     semana los elige el usuario en la barra, como en la Tabla 2 */
+  var MODO=(o.per==='dia'||o.per==='mes')?o.per:'sem';
+  var CORTE=(o.corte==null||o.corte==='')?4:Number(o.corte);if(!(CORTE>=0&&CORTE<=6))CORTE=4;
+  var PD=(MODO==='sem')?'sem':'dia';   /* el mes se arma sumando los dias */
   var F=_progFuente(o.base||_progFuenteId(false));
   if(F.tipo==='foto'&&F.falta){try{await new Promise(function(res9){_bkcPull(res9)})}catch(_e0){}window._pfMemo=null;F=_progFuente(o.base||_progFuenteId(false))}
   var aviso='';if(F.tipo==='foto'&&F.falta)aviso='FOTO SIN DESCARGAR: programado con el calendario actual';
-  var T2=await _t23Datos(c,{n:2,per:'sem',corte:4,vista:vista,noLab:true});
+  var T2=await _t23Datos(c,{n:2,per:PD,corte:CORTE,vista:vista,noLab:true});
   var finC=_wkSem(semFin).fin;
   /* el cronograma que programa: el del analisis; con base 'plan' de otro cronograma, ese otro (curva S) */
   var cP=c,L9=null;if(F.tipo==='plan'&&F.cron_id&&String(F.cron_id)!==String(c.cron_id)){try{L9=(await _crPull()).filter(function(z){return !z.eliminado});var cX=L9.filter(function(z){return String(z.cron_id)===String(F.cron_id)})[0];if(cX)cP=cX}catch(_e1){}}
   if(F.tipo==='plan')aviso=(aviso?aviso+' | ':'')+'base plan: curva S del cronograma '+String(cP.cron_id||'')+' al corte de hoy';
-  var T3=await _t23Datos(cP,{n:3,per:'sem',corte:4,vista:vista,fuente:(F.tipo==='plan')?'curva':'cal',noLab:true,prog:F.prog,fkey:F.key,finC:finC});
+  var T3=await _t23Datos(cP,{n:3,per:PD,corte:CORTE,vista:vista,fuente:(F.tipo==='plan')?'curva':'cal',noLab:true,prog:F.prog,fkey:F.key,finC:finC});
   /* las semanas DESPUES del cierre van con la base de las proximas, si es otra */
   var T3p=null,Fp=null;if(o.prox!==false){try{var idP=_progFuenteId(true);if(String(idP)!==String(F.id)){Fp=_progFuente(idP);if(Fp.tipo==='foto'&&Fp.falta){try{await new Promise(function(res8){_bkcPull(res8)})}catch(_e2){}window._pfMemo=null;Fp=_progFuente(idP)}
     var cQ=c;if(Fp.tipo==='plan'&&Fp.cron_id&&String(Fp.cron_id)!==String(c.cron_id)){if(!L9)L9=(await _crPull()).filter(function(z){return !z.eliminado});var cY=L9.filter(function(z){return String(z.cron_id)===String(Fp.cron_id)})[0];if(cY)cQ=cY}
-    T3p=await _t23Datos(cQ,{n:3,per:'sem',corte:4,vista:vista,fuente:(Fp.tipo==='plan')?'curva':'cal',noLab:true,prog:Fp.prog,fkey:Fp.key,finC:finC})}}catch(_e3){T3p=null}}
-  var hasta=_wkISO(_wkSem(semFin+(o.prox!==false?3:0)).fin),cierre=_wkISO(finC);
+    T3p=await _t23Datos(cQ,{n:3,per:PD,corte:CORTE,vista:vista,fuente:(Fp.tipo==='plan')?'curva':'cal',noLab:true,prog:Fp.prog,fkey:Fp.key,finC:finC})}}catch(_e3){T3p=null}}
+  /* el tope de las "proximas 3 semanas" es SIEMPRE por semanas, sea cual sea el periodo */
+  var hasta=_wkISO(_wkSem(semFin+(o.prox!==false?3:0)).fin),cierre=_wkISO(finC),cIni=_wkISO(_wkSem(semFin).ini);
   var k2={},k3={};(T2.filas||[]).forEach(function(r){for(var k in (r.p||{}))if(r.p[k]>0.005)k2[k]=1});(T3.filas||[]).forEach(function(r){for(var k in (r.p||{}))if(r.p[k]>0.005)k3[k]=1});
   var vis={},master=[];(T3.per||[]).concat(T2.per||[]).concat((T3p&&T3p.per)||[]).forEach(function(p){if(vis[p.fin])return;vis[p.fin]=1;master.push(p)});master.sort(function(a,b){return a.fin<b.fin?-1:1});
-  /* UNA columna por semana (la forma de _t23Periodos 'sem' corte jueves) */
-  var per=[];master.forEach(function(p){if(p.fin>hasta)return;if(!per.length&&!k2[p.k]&&!k3[p.k])return;var sN=(p.sem!=null)?p.sem:_crSemNum(p.fin);var esC=(p.fin===cierre);
-    per.push({k:'p_'+p.fin,ini:p.ini,fin:p.fin,lab:p.lab,lab2:String(p.lab2||'')+(esC?(' · CIERRE'):''),hoy:!!p.hoy,fut:!!p.fut,nolab:false,sem:sN,cierre:esC})});
-  /* OCULTAS: desmarcar 'visible' en el analisis QUITA lo programado de esa actividad
-     en esa semana; en vista 'alc' la partida se pone en cero solo si TODAS las
-     actividades que la contienen estan ocultas esa semana */
+  /* las columnas BASE: una por semana (la forma de _t23Periodos 'sem') o una por dia */
+  var base=[];master.forEach(function(p){if(p.fin>hasta)return;if(!base.length&&!k2[p.k]&&!k3[p.k])return;
+    var esC=(p.ini<=cierre&&p.fin>=cierre);
+    base.push({k:'p_'+p.fin,ini:p.ini,fin:p.fin,lab:p.lab,lab2:String(p.lab2||'')+((esC&&MODO==='sem')?(' · CIERRE'):''),hoy:!!p.hoy,fut:!!p.fut,nolab:!!p.nolab,sem:(MODO==='sem')?((p.sem!=null)?p.sem:_crSemNum(p.fin)):null,cierre:esC})});
+  var baseDe={};base.forEach(function(q){baseDe[q.k]=q});
+  /* las columnas VISIBLES y, por cada una, las columnas base que suma */
+  var per=base,GRP=[];
+  if(MODO==='mes'){
+    var MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    var hoyI=(typeof todayISO==='function')?todayISO():'';
+    var mm={},mOrd=[];
+    base.forEach(function(q){var ym=String(q.fin).slice(0,7);
+      if(!mm[ym]){var y9=Number(ym.slice(0,4)),m9=Number(ym.slice(5,7));
+        var pri=ym+'-01',ult=new Date(Date.UTC(y9,m9,0)).toISOString().slice(0,10);
+        mm[ym]={k:'p_'+ult,ini:pri,fin:ult,lab:MES[m9-1]+' '+y9,lab2:'',hoy:!!(hoyI&&hoyI>=pri&&hoyI<=ult),fut:!!(hoyI&&pri>hoyI),nolab:false,sem:null,cierre:(pri<=cierre&&ult>=cierre),_ks:[]};
+        mOrd.push(ym)}
+      mm[ym]._ks.push(q.k)});
+    mOrd.sort();per=mOrd.map(function(ym){return mm[ym]});
+    per.forEach(function(q){GRP.push(q._ks);delete q._ks})}
+  else per.forEach(function(q){GRP.push([q.k])});
+  /* la SEMANA DE CIERRE dentro de las columnas base: de ella sale el STATUS */
+  var esCie=(MODO==='sem')?function(b){return !!b.cierre}:function(b){return b.fin>=cIni&&b.fin<=cierre};
+  /* OCULTAS: desmarcar 'visible' en el analisis QUITA lo programado de esa
+     actividad en esa semana; en vista 'alc' la partida se pone en cero solo si
+     TODAS las actividades que la contienen estan ocultas esa semana. En modo
+     dia o mes, la semana de cada dia sale de _crSemNum */
   var tarR=[];try{tarR=((await _crTareas(c.cron_id))||[]).filter(function(t){return t&&!t.eliminado})}catch(_e4){tarR=[]}
   var itTar={};if(vista!=='agr')tarR.forEach(function(t){var cod=String(t.task_code||'');(t.items||[]).forEach(function(i){var id=String(i);(itTar[id]=itTar[id]||[]).push(cod)})});
-  var ocuInfo={},ocuCero={};
-  per.forEach(function(q){var sN=(q.sem!=null)?q.sem:_crSemNum(q.fin);var cods=[],mapa={};
-    tarR.forEach(function(t){var cod=String(t.task_code||'');if(mapa[cod])return;if(!_pvVisible(sN,cod)){mapa[cod]=1;cods.push(cod)}});
-    if(!cods.length)return;
-    ocuInfo[String(sN)]=cods;var S={};
-    if(vista==='agr')cods.forEach(function(cd){S[cd]=1});
-    else for(var id in itTar){var L=itTar[id],todas=(L.length>0);for(var w=0;w<L.length;w++)if(!mapa[L[w]]){todas=false;break}if(todas)S[id]=1}
-    ocuCero[q.k]=S});
+  var ocuInfo={},ocuCero={},ocuSem={};
+  base.forEach(function(q){var sN=(q.sem!=null)?q.sem:_crSemNum(q.fin);var S=ocuSem[sN];
+    if(S===undefined){var cods=[],mapa={};
+      tarR.forEach(function(t){var cod=String(t.task_code||'');if(mapa[cod])return;if(!_pvVisible(sN,cod)){mapa[cod]=1;cods.push(cod)}});
+      if(!cods.length)S=null;
+      else{ocuInfo[String(sN)]=cods;S={};
+        if(vista==='agr')cods.forEach(function(cd){S[cd]=1});
+        else for(var id in itTar){var L=itTar[id],todas=(L.length>0);for(var w=0;w<L.length;w++)if(!mapa[L[w]]){todas=false;break}if(todas)S[id]=1}}
+      ocuSem[sN]=S}
+    if(S)ocuCero[q.k]=S});
   var by3={},by3p={};(T3.filas||[]).forEach(function(r){by3[r.id]=r});((T3p&&T3p.filas)||[]).forEach(function(r){by3p[r.id]=r});
   var copia=function(r){var m={};for(var k in r)m[k]=r[k];return m};
   var hhOcu=0;
   /* fila PROGRAMADO: la base hasta el cierre, la base de las proximas despues */
-  var mkPr=function(r2,r3,r3p,ocuId,cuenta){var m=copia(r2);m._tipo='pr';m.pert='PROGRAMADO';m.partes=[];var p={},s=0;
-    per.forEach(function(q){var rr=(q.fin>cierre&&T3p)?r3p:r3;var v=Number(((rr&&rr.p)||{})['p_'+q.fin])||0;
-      if(v&&ocuId&&ocuCero[q.k]&&ocuCero[q.k][ocuId]){if(cuenta)hhOcu+=v;v=0}
-      p[q.k]=v;s+=v});
-    m.p=p;m.suma=s;return m};
+  var mkPr=function(r2,r3,r3p,ocuId,cuenta){var m=copia(r2);m._tipo='pr';m.pert='PROGRAMADO';m.partes=[];var p={},s=0,cie=0,cieOcu=0;
+    per.forEach(function(q,iq){var t=0;
+      GRP[iq].forEach(function(bk){var b9=baseDe[bk];if(!b9)return;var rr=(b9.fin>cierre&&T3p)?r3p:r3;var v=Number(((rr&&rr.p)||{})[bk])||0;
+        if(v&&ocuId&&ocuCero[bk]&&ocuCero[bk][ocuId]){if(cuenta)hhOcu+=v;if(esCie(b9))cieOcu+=v;v=0}
+        t+=v;if(esCie(b9))cie+=v});
+      p[q.k]=t;s+=t});
+    m.p=p;m.suma=s;m._cieP=cie;m._cieOcu=cieOcu;return m};
   /* fila HECHO: la Tabla 2 */
-  var mkHc=function(r2){var m=copia(r2);m._tipo='hc';m.pert='HECHO';m.partes=[];var p={},s=0;
-    per.forEach(function(q){var v=Number(((r2&&r2.p)||{})['p_'+q.fin])||0;p[q.k]=v;s+=v});
-    m.p=p;m.suma=s;return m};
+  var mkHc=function(r2){var m=copia(r2);m._tipo='hc';m.pert='HECHO';m.partes=[];var p={},s=0,cie=0;
+    per.forEach(function(q,iq){var t=0;
+      GRP[iq].forEach(function(bk){var b9=baseDe[bk];var v=Number(((r2&&r2.p)||{})[bk])||0;t+=v;if(b9&&esCie(b9))cie+=v});
+      p[q.k]=t;s+=t});
+    m.p=p;m.suma=s;m._cieH=cie;return m};
   var parteDe=function(r3,pert){return (((r3&&r3.partes)||[]).filter(function(z){return String(z.pert||'')===String(pert||'')})[0])||null};
+  /* ===== las RESTRICCIONES del alcance en la SEMANA DE CIERRE =====
+     una fila = una celda por campo: varios registros se unen con ' | ' y no se
+     recorta nada. Solo las lleva la fila PROGRAMADO. */
+  var itemsDe={};if(vista==='agr')tarR.forEach(function(t){itemsDe[String(t.task_code||'')]=(t.items||[])});
+  var rxH=0,_h9=function(t){t=String(t==null?'':t);for(var i9=0;i9<t.length;i9++)rxH=((rxH<<5)-rxH+t.charCodeAt(i9))|0};
+  var _1l=function(v){return String(v==null?'':v).replace(/\s+/g,' ').replace(/^\s+|\s+$/g,'')};
+  var _rxU=function(L,f){var o9=[];(L||[]).forEach(function(x){var v=_1l(f(x));if(v)o9.push(v)});return o9.join(' | ')};
+  var _fd=function(v){v=String(v||'');return /^\d{4}-\d{2}-\d{2}/.test(v)?_t23DMY(v):''};
+  var _rxFec=function(x){return [_fd(x&&x.f_ident),_fd(x&&x.f_req),_fd(x&&x.f_nueva)].filter(function(z){return z}).join(' → ')};
+  var ponVac=function(m){m.rxStatus='';m.rxDesc='';m.rxAcc='';m.rxRazon='';m.rxResp='';m.rxFechas='';m.rxEst='';return m};
+  var ponRx=function(m,L,st){m.rxStatus=st||'';
+    m.rxDesc=_rxU(L,function(x){return x.descripcion});
+    m.rxAcc=_rxU(L,function(x){return x.accion});
+    m.rxRazon=_rxU(L,function(x){return x.razon});
+    m.rxResp=_rxU(L,function(x){return [_1l(x.personal),_1l(x.area)].filter(function(z){return z}).join(' / ')});
+    m.rxFechas=_rxU(L,_rxFec);
+    m.rxEst=_rxU(L,function(x){return x.estado});
+    _h9(m.rxStatus+'|'+m.rxDesc+'|'+m.rxAcc+'|'+m.rxRazon+'|'+m.rxResp+'|'+m.rxFechas+'|'+m.rxEst);return m};
+  /* el STATUS de la semana de cierre, con lo programado y lo hecho de ESA fila */
+  var statusDe=function(pr,hc){var prog=Number(pr._cieP)||0,hecho=Number(hc&&hc._cieH)||0,ocu=Number(pr._cieOcu)||0;
+    if(ocu>0.01&&prog<=0.01)return 'oculta';
+    var tol=0.005*prog;try{if(typeof _rxTol==='function')tol=_rxTol(prog,Number(pr.hh)||0,Number(pr.hhu)||0,false)}catch(_et){tol=0.005*prog}
+    if(!(tol>=0))tol=0.005*prog;
+    if(prog>0.01){if(hecho<-0.01)return 'retroceso';return (hecho>=prog-tol)?'cumplida':'no cumplida'}
+    return (hecho>0.01)?'avanzó sin programar':'sin programar'};
   var filas=[];
   (T2.filas||[]).forEach(function(r2){var r3=by3[r2.id]||null,r3p=by3p[r2.id]||null,oid=String(r2.id);
     var pr=mkPr(r2,r3,r3p,oid,true),hc=mkHc(r2);
+    var Lr=[];try{Lr=(vista==='agr')?_rxDeActSemTodas(oid,itemsDe[oid]||[],semFin):_rxDeAlcSem(oid,'',semFin)}catch(_er){Lr=[]}
+    ponRx(pr,Lr,statusDe(pr,hc));ponVac(hc);
     (r2.partes||[]).forEach(function(q2){var nm=String(q2.pert||'');
       var qp=mkPr(q2,parteDe(r3,nm),parteDe(r3p,nm),oid,false);qp.pert=nm+' · programado';
       var qh=mkHc(q2);qh.pert=nm+' · hecho';
+      var Lq=[];if(vista!=='agr'){try{var fid9=_rxFaseId(oid,nm);Lq=fid9?_rxDeAlcSem(oid,fid9,semFin):[]}catch(_eq){Lq=[]}}
+      ponRx(qp,Lq,statusDe(qp,qh));ponVac(qh);
       hc.partes.push(qp,qh)});
     filas.push(pr,hc)});
   var sueltas=[];
   (T2.sueltas||[]).forEach(function(r2){var pr=mkPr(r2,null,null,'',false),hc=mkHc(r2);
-    pr._nosum=true;hc._nosum=true;pr.partes=[];hc.partes=[];sueltas.push(pr,hc)});
-  var nomB=F.nombre+((T3p&&Fp)?(' · pr'+'óximas: '+Fp.nombre):'')+(aviso?(' · ⚠ '+aviso):'');
-  return {filas:filas,per:per,u:T2.u,c:c,sueltas:sueltas,info:{n:4,per:'sem',corte:4,vista:vista,fuente:F.tipo,hhUni:T2.u.hh,rango:[per.length?per[0].ini:'',per.length?per[per.length-1].fin:''],proy:T3.info&&T3.info.proy,baseNombre:nomB,semFin:semFin,aviso:aviso,ocultas:ocuInfo,ocultasHH:Math.round(hhOcu*100)/100}}}
+    pr._nosum=true;hc._nosum=true;pr.partes=[];hc.partes=[];ponVac(pr);ponVac(hc);sueltas.push(pr,hc)});
+  var nomB=F.nombre+((T3p&&Fp)?(' · próximas: '+Fp.nombre):'')+(aviso?(' · ⚠ '+aviso):'');
+  return {filas:filas,per:per,u:T2.u,c:c,sueltas:sueltas,info:{n:4,per:MODO,corte:CORTE,vista:vista,fuente:F.tipo,hhUni:T2.u.hh,rango:[per.length?per[0].ini:'',per.length?per[per.length-1].fin:''],proy:T3.info&&T3.info.proy,baseNombre:nomB,semFin:semFin,aviso:aviso,ocultas:ocuInfo,ocultasHH:Math.round(hhOcu*100)/100,rxSig:rxH}}}
 /* abre la Tabla R con el cronograma del analisis (el ACTUAL) */
 async function _rxAbreTablaR(){try{var L=(await _crPull()).filter(function(c){return !c.eliminado});var id=(window._rxNoR&&window._rxNoR.cron)||'';var c=L.filter(function(z){return String(z.cron_id)===String(id)})[0];
   if(!c){var a=(typeof _ctActiva==='function')?_ctActiva():null;if(a)c=L.filter(function(z){return String(z.cron_id)===String(a.cron_id)})[0]}
@@ -25276,12 +25337,21 @@ function _txFxCalc(a,op,b){if(a==null||a===''||b==null||b==='')return null;var x
 /* una linea de la tabla con las columnas de formula cambiada recalculadas */
 function _txFxAplica(m){try{_TX_COLS.forEach(function(cl){var k=cl[0];if(!_txFxCambiada(k))return;var F=_txFxDe(k);m[k]=_txFxCalc(m[F[0]],F[1],m[F[2]])})}catch(e){}return m}
 function _txFxSimb(op){return op==='*'?'\u00d7':(op==='/'?'\u00f7':(op==='-'?'\u2212':'+'))}
-var _TX_FIJAS=[['num','N\u00b0'],['pert','Pertenece'],['id','Item'],['nom','Partida'],['esp','Esp.'],['tareas','Tarea(s)'],['und','Und'],['met','Metrado contractual'],['hhC','HH contractual'],['suma','Suma HH']];
+var _TX_FIJAS=[['num','N\u00b0'],['pert','Pertenece'],['id','Item'],['nom','Partida'],['esp','Esp.'],['tareas','Tarea(s)'],['und','Und'],['met','Metrado contractual'],['hhC','HH contractual'],['suma','Suma HH'],['rxStatus','Status'],['rxDesc','Restricci\u00f3n'],['rxAcc','Acci\u00f3n'],['rxRazon','Raz\u00f3n'],['rxResp','Responsable'],['rxFechas','Fechas'],['rxEst','Estado restricci\u00f3n']];
 /* en la fila HECHO estas columnas no se repiten: son del alcance, no del tipo */
-var _TX_HCVAC={nom:1,esp:1,tareas:1,und:1,met:1,hhC:1,hh:1};
+var _TX_HCVAC={nom:1,esp:1,tareas:1,und:1,met:1,hhC:1,hh:1,rxStatus:1,rxDesc:1,rxAcc:1,rxRazon:1,rxResp:1,rxFechas:1,rxEst:1};
 var _TX_COLS=_TX_FIJAS.slice();
 function _txEsPer(k){return /^p_\d{4}-\d{2}-\d{2}$/.test(String(k||''))}
 /* el color de una fila por su tipo: programado (arena) o hecho (verde) */
+/* el color del STATUS de la semana de cierre: el de los chips del analisis */
+function _txColStatus(s){s=String(s||'');
+  if(s==='cumplida')return '#9FE8B0';
+  if(s==='no cumplida')return '#FFB4A8';
+  if(s==='avanzó sin programar')return '#F5D08A';
+  if(s==='sin programar')return '#FFD37A';
+  if(s==='retroceso')return '#E8C9A0';
+  if(s==='oculta')return '#7d8590';
+  return '#cfe3ff'}
 function _txColTipo(t,fut){if(t==='pr')return '#E8C9A0';if(t==='hc')return '#9FE8B0';return fut?'#5C6779':'#cfe3ff'}
 /* cuantos alcances hay en una lista de dos filas por alcance */
 function _txNPart(A){var n=0;(A||[]).forEach(function(x){if(x&&x._tipo!=='hc')n++});return n}
@@ -25399,7 +25469,7 @@ function _crTablaRHTML(D,q,ord){
     if(_ug&&_ug.k===kg&&_ug.L.length<2){_ug.L.push(r);return}_ug={k:kg,L:[r]};G.push(_ug)});
   /* solo los alcances cuyas PROPIAS celdas coinciden: el titulo WBS (sistema) no
      arrastra a todo su grupo aunque lleve la palabra buscada */
-  var _txTexto=function(r){return _txNorm(r.id+' '+r.nom+' '+r.tareas+' '+r.grupo+' '+r.est+' '+r.esp+' '+(r.und||'')+' '+(r.pert||'')+' '+(r.partes||[]).map(function(x){return x.pert+' '+(x.est||'')+' '+(x.apOff||'')+' '+(x.ret||'')}).join(' '))};
+  var _txTexto=function(r){return _txNorm(r.id+' '+r.nom+' '+r.tareas+' '+r.grupo+' '+r.est+' '+r.esp+' '+(r.und||'')+' '+(r.pert||'')+' '+(r.rxStatus||'')+' '+(r.rxDesc||'')+' '+(r.rxAcc||'')+' '+(r.rxRazon||'')+' '+(r.rxResp||'')+' '+(r.rxFechas||'')+' '+(r.rxEst||'')+' '+(r.partes||[]).map(function(x){return x.pert+' '+(x.est||'')+' '+(x.apOff||'')+' '+(x.ret||'')}).join(' '))};
   if(qq)G=G.filter(function(g){return g.L.some(function(r){return _txTexto(r).indexOf(qq)>=0})});
   var cols=_txColsVis();
   /* como Excel: letra de cada columna visible y numero de fila (la cabecera
@@ -25432,6 +25502,14 @@ function _crTablaRHTML(D,q,ord){
   var td0=function(v,n,extra,raw,f){return '<td'+((raw!=null&&raw!==''&&isFinite(Number(raw)))?(' data-num="'+raw+'"'):'')+(f?(' data-f="'+esc(f)+'"'):'')+' style="border-right:1px solid #223049;border-bottom:1px solid #223049;padding:3px 6px;vertical-align:top;'+(_aj?'white-space:normal;overflow-wrap:anywhere;':'white-space:nowrap;')+(n?'text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;':'')+(extra||'')+'">'+((v==null)?'':((qq&&!n)?_txMarca(v,qq):v))+'</td>'};var td=td0;   /* con busqueda, las coincidencias en amarillo */
   var celda=function(r,k,esParte,num){var W=(_ANCHO[k]!=null?_ANCHO[k]:_txAnchoCss(k));var td=function(v,n,extra,raw,f){return td0(v,n,(extra||'')+W,raw,f)};
     if(r._tipo==='hc'&&_TX_HCVAC[k])return td('');   /* la fila HECHO no repite lo que ya dice la fila PROGRAMADO de su alcance */
+    /* las columnas de restriccion: texto, nunca numericas (no suman en el TOTAL ni en el pie) */
+    if(k==='rxStatus')return td(r.rxStatus?('<b style="color:'+_txColStatus(r.rxStatus)+'">'+esc(r.rxStatus)+'</b>'):'');
+    if(k==='rxDesc')return td(esc(r.rxDesc||''));
+    if(k==='rxAcc')return td(esc(r.rxAcc||''));
+    if(k==='rxRazon')return td(esc(r.rxRazon||''));
+    if(k==='rxResp')return td(esc(r.rxResp||''));
+    if(k==='rxFechas')return td(esc(r.rxFechas||''));
+    if(k==='rxEst')return td(r.rxEst?('<b style="color:'+((String(r.rxEst).indexOf('LIBERADA')>=0)?'#9FE8B0':'#FFD37A')+'">'+esc(r.rxEst)+'</b>'):'');
     if(_txEsPer(k)){var vP=(r.p&&r.p[k]!=null)?Number(r.p[k]):0;var pP=_txPerDe(k);var txtP=(Math.abs(vP)<0.005&&!_cfgT.ceros)?'':_nMil2(vP);
       var colP=_txColTipo(r._tipo,!!(pP&&pP.fut));   /* programado o hecho; en cursiva si la semana es futura */
       return td(txtP?('<span style="color:'+colP+((pP&&pP.fut)?';font-style:italic':'')+'">'+txtP+'</span>'):'',1,(pP&&pP.hoy)?'box-shadow:inset 0 0 0 1px #FFD37A;':'',vP)}
@@ -26119,9 +26197,9 @@ async function _crTablaRUI(c){
   await pintaF()}
 
 /* ---- lo propio de las tablas por periodo ---- */
-function _txOpc(){var cfg=_txCfg();return {n:4,per:'sem',corte:4,vista:(cfg.vista==='agr')?'agr':'alc',noLab:true,base:_progFuenteId(false),semFin:_rxSemRige(),prox:cfg.prox!==false}}
+function _txOpc(){var cfg=_txCfg();return {n:4,per:((cfg.per==='dia'||cfg.per==='mes')?cfg.per:'sem'),corte:((cfg.corte!=null&&cfg.corte!=='')?Number(cfg.corte):4),vista:(cfg.vista==='agr')?'agr':'alc',noLab:true,base:_progFuenteId(false),semFin:_rxSemRige(),prox:cfg.prox!==false}}
 async function _txDatos(c){return await _t23DatosR(c,_txOpc())}
-function _txInfoTxt(D){try{var o=D.info||{},per=D.per||[];var t=((o.baseNombre?('Base: '+o.baseNombre+' \u00b7 cierre S'+o.semFin+' \u00b7 '):'')+D.u.n+' partidas cuentan \u00b7 '+_nMil2(D.u.hh)+' hh \u00b7 '+per.length+' semanas \u00b7 2 filas por alcance (programado y hecho)');
+function _txInfoTxt(D){try{var o=D.info||{},per=D.per||[];var t=((o.baseNombre?('Base: '+o.baseNombre+' \u00b7 cierre S'+o.semFin+' \u00b7 '):'')+D.u.n+' partidas cuentan \u00b7 '+_nMil2(D.u.hh)+' hh \u00b7 '+per.length+' '+((o.per==='dia')?'d\u00edas':((o.per==='mes')?'meses':'semanas'))+' \u00b7 2 filas por alcance (programado y hecho)');
   /* lo que el analisis dejo de programar al desmarcar 'visible' */
   try{var oc=o.ocultas||{},ks=[];for(var s9 in oc){if(oc[s9]&&oc[s9].length)ks.push(s9)}
     if(ks.length){ks.sort(function(x,y){return Number(x)-Number(y)});
@@ -26136,9 +26214,13 @@ function _txInfoTxt(D){try{var o=D.info||{},per=D.per||[];var t=((o.baseNombre?(
   return t}catch(e){return ''}}
 function _txBarraHTML(){var c=_txCfg();var seg=function(id,ops,val){return '<span id="'+id+'" style="display:inline-flex;border:1px solid #1d3550;border-radius:8px;overflow:hidden">'+ops.map(function(o){var on=(o[0]===val);return '<button data-v="'+o[0]+'" title="'+o[2]+'" style="border-radius:0;background:'+(on?'#1B5E8A':'#182c42')+';color:'+(on?'#fff':'#9db4d6')+';padding:5px 9px;border:0;font-weight:800;cursor:pointer">'+o[1]+'</button>'}).join('')+'</span>'};
   var W=(c.corte!=null&&c.corte!=='')?Number(c.corte):4;
+  var _TXMOD=(c.per==='dia'||c.per==='mes')?c.per:'sem';
+  var _TXLAB=(_TXMOD==='dia')?'D\u00edas':((_TXMOD==='mes')?'Meses':('Semanas al corte '+(T23_DOW[W]||'jueves')));
+  var _TXPER=seg('_txPer',[['sem','\ud83d\udcc5 Semana','Una columna por semana (cierra en el d\u00eda de corte)'],['dia','\ud83d\uddd3 D\u00eda','Una columna por d\u00eda laborable (muchas m\u00e1s columnas)'],['mes','\ud83d\udcc6 Mes','Una columna por mes: se suman los d\u00edas de cada mes']],_TXMOD)+
+    '<label style="display:flex;align-items:center;gap:4px;font-weight:800;color:#9db4d6" title="El d\u00eda en que CIERRA cada semana: la semana son los 7 d\u00edas que terminan en \u00e9l">Corte: <select id="_txCorte" style="background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:8px;padding:4px 6px;font-size:11px;font-weight:800">'+T23_DOW.map(function(d,i){return '<option value="'+i+'"'+(W===i?' selected':'')+'>'+d+'</option>'}).join('')+'</select></label>';
   return '<div id="_txBar2" style="flex-basis:100%;display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:#cfe3ff">'+
-    '<span style="font-weight:800;color:#9db4d6" title="Una columna por semana y DOS filas por alcance: PROGRAMADO (la base de programaci\u00f3n elegida en el an\u00e1lisis) y HECHO (Tabla 2), hasta la semana de cierre elegida y las 3 siguientes">\ud83d\udcc5 Semanas al corte jueves \u00b7 2 filas por alcance: programado (base) y hecho</span>'+
-    seg('_txVista',[['alc','\ud83d\udccb Alcance','Una fila por partida y por apartado, como la Tabla del alcance'],['agr','\ud83e\udde9 Agrupadas','Una fila por actividad del cronograma; al final, en rojo, las partidas que no entran en ninguna (informativas)']],(c.vista==='agr')?'agr':'alc')+
+    '<span style="font-weight:800;color:#9db4d6" title="Una columna por semana y DOS filas por alcance: PROGRAMADO (la base de programaci\u00f3n elegida en el an\u00e1lisis) y HECHO (Tabla 2), hasta la semana de cierre elegida y las 3 siguientes">\ud83d\udcc5 '+_TXLAB+' \u00b7 2 filas por alcance: programado (base) y hecho</span>'+
+    _TXPER+seg('_txVista',[['alc','\ud83d\udccb Alcance','Una fila por partida y por apartado, como la Tabla del alcance'],['agr','\ud83e\udde9 Agrupadas','Una fila por actividad del cronograma; al final, en rojo, las partidas que no entran en ninguna (informativas)']],(c.vista==='agr')?'agr':'alc')+
     (_TX_N===3?seg('_txFuente',[['curva','\ud83d\udcc8 Curva S','Lo proyectado por el cronograma: hasta el corte lo ganado real, desde el corte el remanente de cada actividad por d\u00eda laboral'],['cal','\ud83d\udcc5 Calendario','Lo programado en el calendario de la app (pantalla Cronograma): el saldo de cada partida en los d\u00edas que tiene puestos']],(c.fuente==='cal')?'cal':'curva'):'')+
     '<label style="display:flex;align-items:center;gap:4px;color:#9db4d6" title="Ense\u00f1ar tambi\u00e9n las 3 semanas siguientes al cierre"><input type="checkbox" id="_txProx"'+(c.prox!==false?' checked':'')+'> pr\u00f3ximas 3 semanas</label>'+
     '</div>'}
