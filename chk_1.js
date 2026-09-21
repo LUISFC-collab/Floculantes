@@ -20948,7 +20948,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b40';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b41';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -32078,7 +32078,12 @@ function _retCantDe(x){var c=Number(x&&x.cantidad)||0,a=Number(x&&x.avance)||0;v
 /* la partida sin apartados se retira o amplia como una sola parte: "Partida completa" */
 function _retParteImplicita(id){try{var p=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0]);if(!p)return null;
   var m=(typeof metaOf==='function')?metaOf(id):null;var c=(m&&Number(m.total))||Number(p.metrado)||0;if(!(c>0))return null;
-  var a=0;try{var pr=(typeof _pctRawBaseRet==='function')?Number(_pctRawBaseRet(p)):((typeof _pctBaseRet==='function')?Number(_pctBaseRet(p)):0);if(isFinite(pr)&&pr>0)a=Math.round(c*pr/100*100)/100}catch(e){}
+  /* lo hecho es la CANTIDAD cargada en los partes, no un % redondeado a dos decimales:
+     con 9 m de 226.93 el % era 3.97 y devolvia 9.01 m, y el saldo retirado dejaba 9.01
+     en vez de 9.00. Sin partes de cantidad (globales, % inicial) sigue el %. */
+  var a=0;try{var _hayC=!!(m&&m.unidad!=='glb'&&Number(m.total)>0&&typeof partesOf==='function'&&partesOf(id).some(function(x){return x&&x.tipo==='cant'}));
+    if(_hayC){a=Math.round(Math.min(c,Math.max(0,Number(acumCant(id))||0))*100)/100}
+    else{var pr=(typeof _pctRawBaseRet==='function')?Number(_pctRawBaseRet(p)):((typeof _pctBaseRet==='function')?Number(_pctBaseRet(p)):0);if(isFinite(pr)&&pr>0)a=Math.round(c*pr/100*100)/100}}catch(e){}
   return {nombre:'Partida completa',unidad:(m&&m.unidad)||p.unidad||'',cantidad:c,avance:a,peso:100,_imp:true}}catch(e){return null}}
 /* la fraccion de la actividad que no se realiza por saldos retirados */
 function _retFrac(id,cronId){try{var r=(typeof _fzDe==='function')?_fzDe(id,cronId):null;
