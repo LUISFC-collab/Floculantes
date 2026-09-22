@@ -20949,7 +20949,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b52';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b53';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -31880,7 +31880,56 @@ function _txBarraBind(doc,repinta){try{
   var s=doc.getElementById('_txCorte');if(s)s.onchange=function(){var c=_txCfg();c.corte=Number(s.value)||0;_txCfgSave(c);repinta()};
   var nl=doc.getElementById('_txProx');if(nl)nl.onchange=function(){var c=_txCfg();c.prox=!!nl.checked;_txCfgSave(c);repinta()}}catch(e){}}
 
-function _t23Repinta(){try{_t23Tira()}catch(e){}
+/* ===== CIFRAS SEMANALES PARA POWER BI (tabla bi_semana_create_220926) =====
+   La app publica, con su MISMA vara, una fila por semana y por especialidad
+   (esp 'TOTAL' = proyecto entero) del cronograma ACTUAL: real (Tabla 2), real +
+   calendario (Tabla 3 fuente calendario), curva S del cronograma (Tabla 3 fuente
+   curva) y PPC (pares programado/hecho de la Tabla R). Solo escribe el administrador,
+   en segundo plano, cuando cambia algo (huella) y como maximo cada 30 s; Power BI
+   la lee con Actualizar. Los eventos realtime de esta tabla se ignoran en la app. */
+var T_BI='bi_semana_create_220926';
+function _biSig(){try{return (typeof _pgT3Sig==='function'?_pgT3Sig():'')+'|'+String(_rxSemRige())}catch(e){return ''}}
+async function _biPublica(motivo){try{
+  if(window._biBusy)return null;if(!(typeof esAdmin==='function'&&esAdmin()&&sbReady()&&navigator.onLine))return null;
+  var sig=_biSig();if(motivo!=='manual'&&sig&&window._biUltSig===sig)return null;
+  window._biBusy=1;
+  var a=(typeof _ctActiva==='function')?_ctActiva():null,cid=(a&&a.cron_id)?String(a.cron_id):'';
+  var L=((await _crPull())||[]).filter(function(z){return z&&!z.eliminado});var c=L.filter(function(z){return String(z.cron_id)===cid})[0]||L[L.length-1];if(!c){window._biBusy=0;return null}
+  var D2=await _t23Datos(c,{n:2,per:'sem',corte:4,vista:'alc',noLab:true});
+  var Dc=await _t23Datos(c,{n:3,per:'sem',corte:4,vista:'alc',fuente:'cal',noLab:true});
+  var Dx=await _t23Datos(c,{n:3,per:'sem',corte:4,vista:'alc',fuente:'curva',noLab:true});
+  var R=await _t23DatosR(c,{per:'sem',corte:4,vista:'alc',prox:true});
+  var u=D2.u||{items:{},hh:0},hoy=todayISO(),cierre=_rxSemRige();
+  var W={};[D2,Dc,Dx,R].forEach(function(D){(D.per||[]).forEach(function(p){if(p.sem==null)return;var w=W[p.sem]||(W[p.sem]={sem:p.sem,ini:p.ini,fin:p.fin});if(!w.ini||p.ini<w.ini)w.ini=p.ini;if(!w.fin||p.fin>w.fin)w.fin=p.fin})});
+  var sems=Object.keys(W).map(Number).sort(function(x,y){return x-y});
+  var esps={};(D2.filas||[]).forEach(function(r){if(r&&!r._nosum&&r.esp)esps[r.esp]=1});var lista=['TOTAL'].concat(Object.keys(esps).sort());
+  var r2=function(x){return Math.round((Number(x)||0)*100)/100},pct=function(a9,b9){return (b9>0)?Math.round(a9/b9*10000)/100:0};
+  var sum=function(D,k,esp){var t=0;(D.filas||[]).forEach(function(r){if(!r||r._nosum)return;if(esp!=='TOTAL'&&r.esp!==esp)return;t+=Number((r.p||{})[k])||0});return t};
+  var hhAlc=function(esp){var t=0;(D2.filas||[]).forEach(function(r){if(!r||r._nosum)return;if(esp!=='TOTAL'&&r.esp!==esp)return;t+=Number(u.items[r.id])||0});return t};
+  var kDe=function(D,sem){var p=(D.per||[]).filter(function(q){return q.sem===sem})[0];return p?p.k:null};
+  var now=(typeof nowSrv==='function'?nowSrv():Date.now()),quien=String((state.user&&state.user.supervisor)||'');
+  var sinProg=(Dc.info&&Dc.info.proy&&Dc.info.proy.sinProg)||0;
+  var ganHoy=0;(D2.filas||[]).forEach(function(r){if(!r||r._nosum)return;var h=Number(u.items[r.id])||0;if(h>0)ganHoy+=h*Math.max(0,Math.min(1,Number(_crFracHechaAt(r,hoy))||0))});
+  var rows=[];
+  lista.forEach(function(esp){var hA=hhAlc(esp),acR=0,acP=0,acX=0;
+    sems.forEach(function(sem){var w=W[sem],k2=kDe(D2,sem),kc=kDe(Dc,sem),kx=kDe(Dx,sem),kr=kDe(R,sem);
+      var rs=k2?sum(D2,k2,esp):0,ps=kc?sum(Dc,kc,esp):0,xs=kx?sum(Dx,kx,esp):0;acR+=rs;acP+=ps;acX+=xs;
+      var prT=0,cuT=0,nP=0,nC=0;if(kr){var pr={},hc={};(R.filas||[]).forEach(function(r){if(!r||r._nosum)return;if(esp!=='TOTAL'&&r.esp!==esp)return;var key=String(r.id)+'|'+String(r.pert||'');var v=Number((r.p||{})[kr])||0;if(r._tipo==='pr')pr[key]=(pr[key]||0)+v;else if(r._tipo==='hc')hc[key]=(hc[key]||0)+v});
+        Object.keys(pr).forEach(function(key){var p9=pr[key];if(!(p9>1e-6))return;var h9=hc[key]||0;nP++;prT+=p9;cuT+=Math.min(h9,p9);if(h9>=p9-1e-6)nC++})}
+      var oc=0;try{oc=((R.info&&R.info.ocultas&&R.info.ocultas[String(sem)])||[]).length}catch(e){}
+      var pR=pct(acR,hA),pX=pct(acX,hA);
+      rows.push({proyecto:DATA.proyecto,cron_id:String(c.cron_id),semana:sem,esp:esp,ini:w.ini||null,fin:w.fin||null,es_cierre:(sem===cierre),
+        hh_alcance:r2(hA),hh_real_sem:r2(rs),hh_real_acum:r2(acR),pct_real:pR,hh_prog_sem:r2(ps),hh_prog_acum:r2(acP),pct_prog_acum:pct(acP,hA),
+        hh_curva_sem:r2(xs),hh_curva_acum:r2(acX),pct_curva_acum:pX,desv_pp:r2(pR-pX),
+        hh_prog_ppc:r2(prT),hh_cumplido_ppc:r2(cuT),ppc_hh:pct(cuT,prT),n_alc_prog:nP,n_alc_cumplidos:nC,ppc_act:pct(nC,nP),ocultas_n:oc,
+        sin_programar_hh:(esp==='TOTAL')?r2(sinProg):null,pct_real_hoy:(esp==='TOTAL')?pct(ganHoy,hA):null,fecha_hoy:hoy,
+        generado_por:quien,generado_ts:now,ts:now,cell_at:Date.now(),eliminado:false})})});
+  await sbUpsert(T_BI,rows,'proyecto,cron_id,semana,esp');window._biUltSig=sig;window._biBusy=0;
+  try{_logAdd('bi','publicadas '+rows.length+' filas ('+String(motivo||'')+')')}catch(e){}return rows.length
+}catch(e){window._biBusy=0;try{_logAdd('bi','error '+((e&&e.message)||e))}catch(_e){}return null}}
+function _biPublicaSoon(){try{clearTimeout(window._biT)}catch(e){}window._biT=setTimeout(function(){window._biT=null;try{_biPublica('cambio')}catch(e){}},30000)}
+try{setTimeout(function(){try{_biPublica('inicio')}catch(e){}},45000);setInterval(function(){try{if(!document.hidden)_biPublica('peri'+String.fromCharCode(243)+'dica')}catch(e){}},1800000)}catch(e){}
+function _t23Repinta(){try{_t23Tira()}catch(e){}try{_biPublicaSoon()}catch(e){}
   /* lo que antes no se enteraba de un cambio de avance, alcance o programacion (revision del 20/09/2026):
      el Analisis de restricciones abierto, la curva flotante y el calendario del Cronograma */
   try{if(window._t23RxT)clearTimeout(window._t23RxT);window._t23RxT=setTimeout(function(){window._t23RxT=null;
