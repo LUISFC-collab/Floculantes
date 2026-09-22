@@ -21697,7 +21697,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b52';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b53';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -23004,6 +23004,39 @@ function _showFlow(){var _old=document.getElementById('_flowScroll');var _st=_ol
   document.getElementById('_flowSync').onclick=function(){if(typeof syncNow==='function')syncNow();if(typeof toast==='function')toast('Sincronizando…');};
   var _fv=document.getElementById('_flowVerif');if(_fv)_fv.onclick=function(){if(window._flowTimer){clearTimeout(window._flowTimer);window._flowTimer=null}ov.remove();if(typeof _verifServer==='function')_verifServer()};
   if(window._flowTimer)clearTimeout(window._flowTimer);window._flowTimer=setTimeout(function(){if(document.getElementById('_flowOv'))_showFlow()},1500);}
+/* VERIFICACION AUTOMATICA contra el servidor. Al volver la conexion (y al abrir con red),
+   despues de subir lo pendiente, se pregunta a Supabase fila por fila si lo que este equipo
+   tiene ya esta alla: partes, metrados, programacion, actividades nuevas y restricciones
+   (la misma cuenta que el boton "Esta todo en el servidor?", pero sola y sin ventana).
+   Lo que falte se vuelve a marcar como pendiente y se sube otra vez; si a la segunda sigue
+   faltando, se avisa. Nunca se reenvia lo que tiene lapida de borrado (lo borro otro equipo). */
+async function _verifSilent(){var P=DATA.proyecto,enc=encodeURIComponent,out={};
+  var del={};(state.delpartes||[]).forEach(function(c){del[String(c)]=1});
+  var kinds=[['partes','partes','client_id',function(){return (state.partes||[]).filter(function(p){return p&&p.client_id&&p.synced&&!del[String(p.client_id)]}).map(function(p){return p.client_id})}],
+    ['metrados','metrados','partida_id',function(){return Object.keys(state.meta||{}).filter(function(id){return !del['cfg:metrados:'+id]})}],
+    ['programacion','programacion','partida_id',function(){return Object.keys(state.prog||{}).filter(function(id){var dT=Number(state.progDel&&state.progDel[id])||0,rw=state.prog[id];return rw&&rw.start&&(!dT||Number(rw.ts)>dT)&&!del['cfg:programacion:'+id]})}],
+    ['nuevas','nuevas','partida_id',function(){return (state.nuevas||[]).map(function(n){return n&&n.id}).filter(function(id){return id&&!del['cfg:nuevas:'+id]})}],
+    ['reportab','reportabilidad','rid',function(){var a=[];Object.keys(state.repo||{}).forEach(function(id){(state.repo[id]||[]).forEach(function(e){if(e&&e.ts!=null&&!(typeof tombHas==='function'&&tombHas('reportabilidad',String(e.ts))))a.push(String(e.ts))})});return a}]];
+  for(var q=0;q<kinds.length;q++){var kd=kinds[q],k=kd[0],tabla=kd[1],col=kd[2],loc=kd[3]();if(!loc.length){out[k]=[];continue}var found={};
+    for(var i=0;i<loc.length;i+=300){var chunk=loc.slice(i,i+300);var rows=await sbSelect(tabla,col+'=in.('+chunk.map(function(v){return enc(String(v))}).join(',')+')&proyecto=eq.'+enc(P)+'&select='+col);(rows||[]).forEach(function(r){found[String(r[col])]=1})}
+    out[k]=loc.filter(function(x){return !found[String(x)]})}
+  return out}
+function _verifReenvia(miss){var n=0;try{
+  if(miss.partes&&miss.partes.length){var set={};miss.partes.forEach(function(c){set[c]=1});var np=0;(state.partes||[]).forEach(function(p){if(p&&set[p.client_id]&&p.synced){p.synced=false;np++}});if(np){n+=np;store.set(KP,state.partes)}}
+  var tira=function(pref,ids){(ids||[]).forEach(function(id){if(_sent[pref+'|'+id]!==undefined){delete _sent[pref+'|'+id];n++}})};
+  tira('metrados',miss.metrados);tira('programacion',miss.programacion);tira('nuevas',miss.nuevas);tira('reportabilidad',miss.reportab);
+  if(miss.metrados&&miss.metrados.length){window._metaPend=window._metaPend||{};miss.metrados.forEach(function(id){window._metaPend[id]=1})}
+  try{localStorage.setItem(SENTKEY,JSON.stringify(_sent))}catch(e){}
+  if(n)state.dirty=true}catch(e){}return n}
+async function _verifAuto(motivo){try{
+  if(window._verifAutoBusy)return;if(!(state.user&&sbReady()&&navigator.onLine))return;window._verifAutoBusy=1;
+  var espera=async function(){for(var i=0;i<60&&(syncing||window._rtSyncT);i++)await new Promise(function(r){setTimeout(r,500)})};
+  await espera();var m1=await _verifSilent();var tot=function(m){var t=0;for(var k in m)t+=(m[k]||[]).length;return t};var f1=tot(m1);
+  try{_logAdd('verif',String(motivo||'')+': faltan en el servidor '+f1)}catch(_e){}
+  if(f1>0){var n=_verifReenvia(m1);if(n&&typeof syncNow==='function'){await syncNow(true);await espera()}var m2=await _verifSilent();var f2=tot(m2);
+    try{_logAdd('verif','tras reenviar '+n+': faltan '+f2)}catch(_e2){}
+    try{if(typeof toast==='function')toast(f2===0?('\u2705 Se reenviaron '+n+' cosa(s) que no estaban en el servidor'):('\u26a0 '+f2+' cosa(s) siguen sin llegar al servidor: abre "¿Está todo en el servidor?"'))}catch(_e3){}}
+}catch(e){try{_logAdd('verif','error '+((e&&e.message)||e))}catch(_e4){}}window._verifAutoBusy=0}
 async function _verifServer(){
  try{
   if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine)){if(typeof toast==='function')toast('Sin conexión — no se puede verificar contra el servidor');return;}
@@ -38536,7 +38569,9 @@ function dayBreakOpen(g,i){var w=$('dayBreak');if(!w)return;var d=w._dbData,f=w.
 document.addEventListener('click',function(e){var t=e.target;if(!t)return;if(t.tagName==='IMG'&&(t.classList.contains('rp-foto')||t.classList.contains('pend-cf'))){openLightbox(t.src);return}var d=t.closest&&t.closest('.admthumb');if(d&&!(t.closest&&t.closest('.admfotox'))&&d.dataset&&d.dataset.foto){openLightbox(d.dataset.foto)}},true);
 $('lightbox').onclick=function(e){if(e.target.id!=='lightboxImg')closeLightbox()};document.addEventListener('click',function(e){try{var d=e.target.closest&&e.target.closest('[data-foto]');if(!d||d.classList.contains('admthumb'))return;if(e.target.closest('.del'))return;if(typeof openLightbox==='function')openLightbox(d.getAttribute('data-foto'))}catch(_e){}},true);
 $('btnSync').onclick=()=>syncNow();
-window.addEventListener('online',()=>{updSync();if(typeof setTopSync==='function')setTopSync('pushing');if(typeof startUploadWindow==='function')startUploadWindow();else syncNow(true)});
+window.addEventListener('online',()=>{updSync();if(typeof setTopSync==='function')setTopSync('pushing');if(typeof startUploadWindow==='function')startUploadWindow();else syncNow(true);try{setTimeout(function(){_verifAuto('reconexi\u00f3n')},12000)}catch(e){}});
+/* al abrir con red: una verificacion tras la primera sincronizacion; y una por hora de respaldo */
+try{setTimeout(function(){if(navigator.onLine)_verifAuto('inicio')},25000);setInterval(function(){try{if(navigator.onLine&&!document.hidden)_verifAuto('peri\u00f3dica')}catch(e){}},3600000)}catch(e){}
 window.addEventListener('offline',()=>{updSync();if(typeof setTopSync==='function')setTopSync('offline')});
 try{if(typeof setTopSync==='function')setTopSync(navigator.onLine?'pushing':'offline')}catch(e){}
 // === Sincronización en tiempo real (polling cada 12s) ===
