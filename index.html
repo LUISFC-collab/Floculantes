@@ -21697,7 +21697,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b49';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b50';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -27975,6 +27975,32 @@ function _fltBind(doc,root,leerFiltros,valoresDe,guardar){try{doc=doc||document;
       try{F=leerFiltros()||{}}catch(_e){F={}}
       try{V=valoresDe(k)||[]}catch(_e2){V=[]}
       _fltAbre(doc,b,k,V,F,guardar)}})}catch(e){}}
+/* Navegacion con el teclado en las tablas (1, 2, 3 y R), como Excel: con una celda
+   elegida (clic, borde ambar), las flechas mueven la eleccion; Tab / Shift+Tab van a la
+   derecha / izquierda. Se salta la columna de numeros, los titulos WBS y las filas
+   plegadas; arriba/abajo se quedan en el cuerpo (el pie tiene celdas combinadas).
+   La celda destino se elige con su propio onclick, asi la barra fx y el resto siguen igual. */
+function _tabNavBind(doc,root,pfx){try{
+  window['_nav'+pfx+'Root']=root;
+  if(doc['_nav'+pfx+'On'])return;doc['_nav'+pfx+'On']=1;
+  doc.addEventListener('keydown',function(e){try{
+    var k=e.key;if(k!=='ArrowLeft'&&k!=='ArrowRight'&&k!=='ArrowUp'&&k!=='ArrowDown'&&k!=='Tab')return;
+    if(e.ctrlKey||e.altKey||e.metaKey)return;
+    var ae=doc.activeElement;if(ae&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName))return;
+    var rt=window['_nav'+pfx+'Root'];if(!rt||!doc.contains(rt))return;
+    var cur=rt.querySelector('td.'+pfx+'SelC');if(!cur)return;
+    var tr=cur.parentNode,ci=Array.prototype.indexOf.call(tr.children,cur);
+    var esEx=function(td){return !td||!!(td.classList&&td.classList.contains(pfx+'Ex'))};
+    var dest=null;
+    if(k==='ArrowLeft'||(k==='Tab'&&e.shiftKey)){var t=cur.previousElementSibling;while(t&&esEx(t))t=t.previousElementSibling;dest=t}
+    else if(k==='ArrowRight'||k==='Tab'){dest=cur.nextElementSibling}
+    else{var filas=Array.prototype.slice.call(rt.querySelectorAll('tbody tr')).filter(function(f){return !(f.classList&&f.classList.contains(pfx+'Tit'))&&f.offsetParent!==null});
+      var i=filas.indexOf(tr);if(i<0)return;var paso=(k==='ArrowUp')?-1:1;
+      for(var j=i+paso;j>=0&&j<filas.length;j+=paso){var f2=filas[j],td2=f2.children[ci];if(td2&&!esEx(td2)&&!((parseInt(td2.getAttribute('colspan'),10)||1)>1)){dest=td2;break}}}
+    if(!dest||esEx(dest))return;e.preventDefault();
+    if(typeof dest.onclick==='function')dest.onclick({});else dest.click();
+    try{dest.scrollIntoView({block:'nearest',inline:'nearest'})}catch(_e){}
+  }catch(_e){}})}catch(e){}}
 /* ===== TABLA DEL ALCANCE (tipo Excel) en ventana flotante =====
    Todo lo que cuenta en un cronograma, fila por partida y agrupado por
    sistema, con la MISMA regla de HH que la tarjeta y la curva. Se repinta
@@ -28570,7 +28596,7 @@ function _crTablaBind(root,ordRef,rerender){
   /* celda elegida (clic) y botones Inmovilizar / Movilizar de la barra; la
      barra fx ensena su referencia y su formula (la columna de numeros no cuenta) */
   root.querySelectorAll('tbody td, tfoot td').forEach(function(td){if(td.classList.contains('_tbEx'))return;td.onclick=function(){if(window._tbFxDragged)return;if(td.parentNode&&td.parentNode.classList&&td.parentNode.classList.contains('_tbTit'))return;try{var prev=root.querySelector('td._tbSelC');if(prev){prev.classList.remove('_tbSelC');prev.style.outline=''}}catch(_e){}td.classList.add('_tbSelC');td.style.outline='2px solid #FFD37A';td.style.outlineOffset='-2px';var tr=td.parentNode;window._tbSel={fila:Array.prototype.indexOf.call(tr.parentNode.children,tr),col:Array.prototype.indexOf.call(tr.children,td)-1,colspan:tr.children.length-1};window._tbSelKey={rk:tr.getAttribute('data-rk')||'',k:keys9[window._tbSel.col]||''};try{_tbFxMuestra(root,doc,td)}catch(_e2){}}});
-  try{_tbFxMuestra(root,doc,null)}catch(_e3){}
+  try{_tbFxMuestra(root,doc,null)}catch(_e3){}try{_tabNavBind(doc,root,'_tb')}catch(_e4){}
   try{var bF=doc.getElementById('_tbFzCel'),bN=doc.getElementById('_tbFzNo'),res=doc.getElementById('_tbRes');
     if(bF)bF.onclick=function(){var sel=window._tbSel;if(!sel){if(res)res.textContent='Toca primero una celda: se inmovilizan las filas de arriba y las columnas a su izquierda';return}var cfg=_tbCfg();var keys=Array.prototype.map.call(root.querySelectorAll('thead th'),function(t){return t.getAttribute('data-k')});cfg.fija={col:(sel.colspan===keys.length&&sel.col>0)?keys[sel.col-1]:null,fila:sel.fila>0?sel.fila:0};_tbCfgSave(cfg);window._tbSel=null;rerender()};
     if(bN)bN.onclick=function(){var cfg=_tbCfg();cfg.fija={};_tbCfgSave(cfg);window._tbSel=null;rerender()}}catch(e){}
@@ -29344,6 +29370,8 @@ function _tqPerDe(k){return (window._tqPerMap||{})[k]||null}
    vacio o nulo lo convierte _fltTxt en '(vacias)' */
 function _tqFltValor(m,k){if(!m)return '';if(_tqEsPer(k))return (m.p&&m.p[k]!=null)?Number(m.p[k]):0;if(k==='suma')return Number(m.suma)||0;var v=m[k];return (v==null)?'':v}
 /* las columnas de esta pintada: las fijas y una por periodo (semana o dia) */
+/* la columna base del % avance para la formula: HH (o metrado, en modo metrado) contractual / forecast / mayor metrado */
+function _tqBaseCol(){var b=window._tqBaseK||'fc',m=!!window._tqUniM;return b==='con'?(m?'met':'hhC'):(b==='mm'?(m?'metM':'hhM'):(m?'metF':'hh'))}
 function _tqColsDe(D){var per=(D&&D.per)||[];window._tqPerMap={};
   _TQ_COLS=_TQ_FIJAS.concat(per.map(function(p){window._tqPerMap[p.k]=p;
     var l2=(p.sem!=null?('S'+p.sem+' \u00b7 '):'')+p.lab2;
@@ -29596,7 +29624,8 @@ function _crTablaQHTML(D,q,ord){
       case 'pu':return td(r.pu!=null?_nMon(r.pu):'',1);
       case 'hhu':return td(r.hhu!=null?_nMil2(r.hhu):'',1,'',r.hhu);
       case 'dCosto':return td(r.dCosto>0?('<b style="color:#FFB4A8">\u2212 '+_nMon(r.dCosto)+'</b>'):(r.dCosto<0?('<b style="color:#9FE8B0">+ '+_nMon(-r.dCosto)+'</b>'):(r.dCosto!=null?_nMon(0):'')),1,'',r.dCosto,fxK(k,r));
-      case 'pctAv':return td(r.pctAv!=null?('<b style="color:#9FE8B0">'+_nMil2(r.pctAv)+'%</b>'):'',1,'',r.pctAv);
+      case 'pctAv':{var bc9=_tqBaseCol();var fP9=(r.pctAv!=null&&LET.suma&&LET[bc9])?('=IFERROR('+LET.suma+_rn+'/'+LET[bc9]+_rn+'*100,0)'):'';
+        return td(r.pctAv!=null?('<b style="color:#9FE8B0">'+_nMil2(r.pctAv)+'%</b>'):'',1,'',r.pctAv,fP9)}
       case 'hhC':return td(_nMil2(r.hhC),1,'',r.hhC,fxK(k,r));
       case 'hh':return td('<b style="color:'+(r.hh>0?'#9FE8B0':'#7d8590')+'">'+_nMil2(r.hh)+'</b>',1,'',r.hh,fxK(k,r));
       case 'metR':return td(r.metR!=null?_nMil(_apuCant(r.metR)):'',1,'',r.metR,fxK(k,r));
@@ -29644,7 +29673,7 @@ function _crTablaQHTML(D,q,ord){
     var flush=function(){if(!run)return;h+='<td colspan="'+run+'" style="'+ST+'border-top:1px solid #223049;border-bottom:1px solid #223049;border-left:0;border-right:0;padding:4px 6px;font-weight:'+fw+';color:#cfe3ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle">'+(puesto?'':('<span style="position:sticky;left:36px;display:inline-block">'+lab+'</span>'))+'</td>';puesto=true;run=0};
     cols.forEach(function(cl){var k=cl[0],W=ST+(_ANCHO[k]!=null?_ANCHO[k]:_tqAnchoCss(k))+'white-space:nowrap;';
       if(_tqEsPer(k)||k==='suma'){flush();h+=(window._tqUniM?td('<span style="color:#7d8590" title="En metrado no se suman las partidas: cada una tiene su unidad">—</span>',1,W):td('<b>'+_nMil2(S[k]||0)+'</b>',1,W,S[k]||0,sumF(k)))}
-      else if(k==='pctAv'){flush();var pw9=((S.hhBase||0)>0)?((S.avHH||0)/S.hhBase*100):0;h+=td('<b style="color:#9FE8B0" title="HH ganadas entre las HH de la base ('+({con:'contractual',fc:'forecast',mm:'mayor metrado'}[window._tqBaseK]||'forecast')+') de las lineas que se ven">'+_nMil2(pw9)+'%</b>',1,W,pw9)}
+      else if(k==='pctAv'){flush();var pw9=((S.hhBase||0)>0)?((S.avHH||0)/S.hhBase*100):0;h+=td('<b style="color:#9FE8B0" title="HH ganadas entre las HH de la base ('+({con:'contractual',fc:'forecast',mm:'mayor metrado'}[window._tqBaseK]||'forecast')+') de las lineas que se ven">'+_nMil2(pw9)+'%</b>',1,W,pw9,(function(){var bc9=_tqBaseCol();if((window._tqBaseK||'fc')!=='fc'||!_rnIni||!LET.suma||!LET[bc9])return '';return '=IFERROR(SUM('+LET.suma+_rnIni+':'+LET.suma+_rnFin+')/SUM('+LET[bc9]+_rnIni+':'+LET[bc9]+_rnFin+')*100,0)'})())}
       else if(k==='hhC'){flush();h+=td('<b>'+_nMil2(S.hhC)+'</b>',1,W,S.hhC,sumF('hhC'))}
       else if(k==='hh'){flush();h+=td('<b style="color:#9FE8B0">'+_nMil2(S.hh)+'</b>',1,W,S.hh,sumF('hh'))}
       else if(k==='costo'){flush();h+=td('<b>'+_nMon(S.costo)+'</b>',1,W,S.costo,sumF('costo'))}
@@ -29838,7 +29867,7 @@ function _crTablaQBind(root,ordRef,rerender){
   /* celda elegida (clic) y botones Inmovilizar / Movilizar de la barra; la
      barra fx ensena su referencia y su formula (la columna de numeros no cuenta) */
   root.querySelectorAll('tbody td, tfoot td').forEach(function(td){if(td.classList.contains('_tqEx'))return;td.onclick=function(){if(window._tqFxDragged)return;if(td.parentNode&&td.parentNode.classList&&td.parentNode.classList.contains('_tqTit'))return;try{var prev=root.querySelector('td._tqSelC');if(prev){prev.classList.remove('_tqSelC');prev.style.outline=''}}catch(_e){}td.classList.add('_tqSelC');td.style.outline='2px solid #FFD37A';td.style.outlineOffset='-2px';var tr=td.parentNode;window._tqSel={fila:Array.prototype.indexOf.call(tr.parentNode.children,tr),col:Array.prototype.indexOf.call(tr.children,td)-1,colspan:tr.children.length-1};window._tqSelKey={rk:tr.getAttribute('data-rk')||'',k:keys9[window._tqSel.col]||''};try{_tqFxMuestra(root,doc,td)}catch(_e2){}}});
-  try{_tqFxMuestra(root,doc,null)}catch(_e3){}
+  try{_tqFxMuestra(root,doc,null)}catch(_e3){}try{_tabNavBind(doc,root,'_tq')}catch(_e4){}
   try{var bF=doc.getElementById('_tqFzCel'),bN=doc.getElementById('_tqFzNo'),res=doc.getElementById('_tqRes');
     if(bF)bF.onclick=function(){var sel=window._tqSel;if(!sel){if(res)res.textContent='Toca primero una celda: se inmovilizan las filas de arriba y las columnas a su izquierda';return}var cfg=_tqCfg();var keys=Array.prototype.map.call(root.querySelectorAll('thead th'),function(t){return t.getAttribute('data-k')});cfg.fija={col:(sel.colspan===keys.length&&sel.col>0)?keys[sel.col-1]:null,fila:sel.fila>0?sel.fila:0};_tqCfgSave(cfg);window._tqSel=null;rerender()};
     if(bN)bN.onclick=function(){var cfg=_tqCfg();cfg.fija={};_tqCfgSave(cfg);window._tqSel=null;rerender()}}catch(e){}
@@ -30824,7 +30853,7 @@ function _crTablaVBind(root,ordRef,rerender){
   /* celda elegida (clic) y botones Inmovilizar / Movilizar de la barra; la
      barra fx ensena su referencia y su formula (la columna de numeros no cuenta) */
   root.querySelectorAll('tbody td, tfoot td').forEach(function(td){if(td.classList.contains('_tvEx'))return;td.onclick=function(){if(window._tvFxDragged)return;if(td.parentNode&&td.parentNode.classList&&td.parentNode.classList.contains('_tvTit'))return;try{var prev=root.querySelector('td._tvSelC');if(prev){prev.classList.remove('_tvSelC');prev.style.outline=''}}catch(_e){}td.classList.add('_tvSelC');td.style.outline='2px solid #FFD37A';td.style.outlineOffset='-2px';var tr=td.parentNode;window._tvSel={fila:Array.prototype.indexOf.call(tr.parentNode.children,tr),col:Array.prototype.indexOf.call(tr.children,td)-1,colspan:tr.children.length-1};window._tvSelKey={rk:tr.getAttribute('data-rk')||'',k:keys9[window._tvSel.col]||''};try{_tvFxMuestra(root,doc,td)}catch(_e2){}}});
-  try{_tvFxMuestra(root,doc,null)}catch(_e3){}
+  try{_tvFxMuestra(root,doc,null)}catch(_e3){}try{_tabNavBind(doc,root,'_tv')}catch(_e4){}
   try{var bF=doc.getElementById('_tvFzCel'),bN=doc.getElementById('_tvFzNo'),res=doc.getElementById('_tvRes');
     if(bF)bF.onclick=function(){var sel=window._tvSel;if(!sel){if(res)res.textContent='Toca primero una celda: se inmovilizan las filas de arriba y las columnas a su izquierda';return}var cfg=_tvCfg();var keys=Array.prototype.map.call(root.querySelectorAll('thead th'),function(t){return t.getAttribute('data-k')});cfg.fija={col:(sel.colspan===keys.length&&sel.col>0)?keys[sel.col-1]:null,fila:sel.fila>0?sel.fila:0};_tvCfgSave(cfg);window._tvSel=null;rerender()};
     if(bN)bN.onclick=function(){var cfg=_tvCfg();cfg.fija={};_tvCfgSave(cfg);window._tvSel=null;rerender()}}catch(e){}
@@ -31123,11 +31152,14 @@ async function _tvExportarXlsx2(root,doc){
     /* las filas de % del pie: formulas sobre la fila TOTAL */
     var rTot=r-1,ixSuma=keys.indexOf('suma');
     Array.prototype.slice.call(tb.querySelectorAll('tfoot tr')).slice(1).forEach(function(tf2,q2){var tds3=Array.prototype.slice.call(tf2.children).filter(function(x){return !(x.classList&&x.classList.contains('_tvEx'))}),ci3=0,h4='';
+      /* que fila del pie es: la de % por periodo y la acumulada de la tabla salen como formula sobre el TOTAL;
+         las de 'solo lo hecho' y 'curva S del cronograma' no nacen del TOTAL y van como valor */
+      var lab9=String(tf2.textContent||''),esVal9=/solo lo hecho|curva S del cronograma/.test(lab9),esAc9=/% acumulado/.test(lab9);
       tds3.forEach(function(td){var span=parseInt(td.getAttribute('colspan'),10)||1;var k=keys[ci3],ref=colL(ci3)+r;
         if(span>1){h4+=celT(ref,txt(td),estiloDe(td,tf2,0,'left'));merges.push(ref+':'+colL(ci3+span-1)+r)}
         else if(_tvEsPer(k)||k==='suma'){var dn9=Number(tf2.getAttribute('data-den')),lit9=(isFinite(dn9)&&dn9>0);
           var den=lit9?String(Math.round(dn9*1e6)/1e6):((ixSuma>=0)?('$'+colL(ixSuma)+'$'+rTot):'');
-          if(den){var f9=(q2===1&&_tvEsPer(k)&&ixP0!=null)?('SUM($'+colL(ixP0)+rTot+':'+colL(ci3)+rTot+')/'+den+'*100'):(colL(ci3)+rTot+'/'+den+'*100');h4+=celF(ref,lit9?f9:('IF('+den+'=0,0,'+f9+')'),estiloDe(td,tf2,PCT,'right'))}
+          if(den&&!esVal9){var f9=(esAc9&&_tvEsPer(k)&&ixP0!=null)?('SUM($'+colL(ixP0)+rTot+':'+colL(ci3)+rTot+')/'+den+'*100'):(colL(ci3)+rTot+'/'+den+'*100');h4+=celF(ref,lit9?f9:('IF('+den+'=0,0,'+f9+')'),estiloDe(td,tf2,PCT,'right'))}
           else{var raw9=td.getAttribute('data-num');if(raw9!=null&&raw9!=='')h4+=celN(ref,raw9,estiloDe(td,tf2,PCT,'right'))}}
         ci3+=span});
       filas.push('<row r="'+r+'" ht="16" customHeight="1">'+h4+'</row>');r++})}
@@ -32050,7 +32082,7 @@ function _crTablaRBind(root,ordRef,rerender){
   /* celda elegida (clic) y botones Inmovilizar / Movilizar de la barra; la
      barra fx ensena su referencia y su formula (la columna de numeros no cuenta) */
   root.querySelectorAll('tbody td, tfoot td').forEach(function(td){if(td.classList.contains('_txEx'))return;td.onclick=function(){if(window._txFxDragged)return;if(td.parentNode&&td.parentNode.classList&&td.parentNode.classList.contains('_txTit'))return;try{var prev=root.querySelector('td._txSelC');if(prev){prev.classList.remove('_txSelC');prev.style.outline=''}}catch(_e){}td.classList.add('_txSelC');td.style.outline='2px solid #FFD37A';td.style.outlineOffset='-2px';var tr=td.parentNode;window._txSel={fila:Array.prototype.indexOf.call(tr.parentNode.children,tr),col:Array.prototype.indexOf.call(tr.children,td)-1,colspan:tr.children.length-1};window._txSelKey={rk:tr.getAttribute('data-rk')||'',k:keys9[window._txSel.col]||''};try{_txFxMuestra(root,doc,td)}catch(_e2){}}});
-  try{_txFxMuestra(root,doc,null)}catch(_e3){}
+  try{_txFxMuestra(root,doc,null)}catch(_e3){}try{_tabNavBind(doc,root,'_tx')}catch(_e4){}
   try{var bF=doc.getElementById('_txFzCel'),bN=doc.getElementById('_txFzNo'),res=doc.getElementById('_txRes');
     if(bF)bF.onclick=function(){var sel=window._txSel;if(!sel){if(res)res.textContent='Toca primero una celda: se inmovilizan las filas de arriba y las columnas a su izquierda';return}var cfg=_txCfg();var keys=Array.prototype.map.call(root.querySelectorAll('thead th'),function(t){return t.getAttribute('data-k')});cfg.fija={col:(sel.colspan===keys.length&&sel.col>0)?keys[sel.col-1]:null,fila:sel.fila>0?sel.fila:0};_txCfgSave(cfg);window._txSel=null;rerender()};
     if(bN)bN.onclick=function(){var cfg=_txCfg();cfg.fija={};_txCfgSave(cfg);window._txSel=null;rerender()}}catch(e){}
