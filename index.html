@@ -21697,7 +21697,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b48';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b49';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -30720,7 +30720,7 @@ function _crTablaVHTML(D,q,ord){
       var SR={},SC={};cols.forEach(function(cl){var k=cl[0];if(!_tvEsPer(k))return;SR[k]=Number((T._real||{})[k])||0;SC[k]=Number(T._plan[k])||0});
       return _tvPieFila('% acumulado \u00b7 real APP (solo lo hecho)',SR,'acum')
         +_tvPieFila('% acumulado \u00b7 APP: real + '+((D.info&&D.info.fuente==='cal')?'calendario':'curva S del cronograma'),T,'acum')
-        +_tvPieFila('% acumulado \u00b7 programado seg\u00fan el .xer (units del .xer: lo que deber\u00eda tener)',SC,'acum')}catch(e){return ''}})()
+        +_tvPieFila('% acumulado \u00b7 curva S del cronograma (.xer): lo que deber\u00eda tener',SC,'acum')}catch(e){return ''}})()
     +'</tfoot></table>';
   return H}
 /* cabecera: ordenar con clic, mover arrastrando; boton Columnas para ocultar/mostrar */
@@ -31264,7 +31264,9 @@ async function _tvDatos(c){var o=_tvOpc();var D0=await _t23Datos(c,o);if(!o.difC
    ese plan. La fila extra lleva hh = 0: no cuenta como partida ni en subtotales ni en el
    TOTAL; sus sumas van a T._plan para las filas de % del pie. */
 async function _tvDatosExtra(c,o,D0){
-  var oP={};for(var k in o)oP[k]=o[k];oP.fuente='curva';oP.plan=true;oP.incSem=false;var DP=await _t23Datos(c,oP);var D=D0;
+  /* la misma serie que la curva AZUL de la ventana Curva del cronograma (_crCurvaRep): hasta la
+     fecha de datos del .xer lo ganado y desde ahi el remanente de cada actividad por dia laboral */
+  var oP={};for(var k in o)oP[k]=o[k];oP.fuente='curva';oP.plan=false;oP.incSem=false;var DP=await _t23Datos(c,oP);var D=D0;
   if(DP.per&&DP.per.length&&D0.per&&D0.per.length){var ini=DP.per[0].ini,fin=DP.per[DP.per.length-1].fin;
     if(ini<D0.per[0].ini||fin>D0.per[D0.per.length-1].fin){var oH={};for(var k2 in o)oH[k2]=o[k2];oH.desde=(ini<D0.per[0].ini)?ini:'';oH.hasta=(fin>D0.per[D0.per.length-1].fin)?fin:'';D=await _t23Datos(c,oH)}}
   var per=D.per||[];if(!per.length)return D;
@@ -31274,7 +31276,7 @@ async function _tvDatosExtra(c,o,D0){
   var porIdR={};(DR.filas||[]).forEach(function(r){if(r&&r.id!=null)porIdR[String(r.id)]=r});
   var out=[];(D.filas||[]).forEach(function(r){out.push(r);if(!r||r._nosum)return;
     r._realP=((porIdR[String(r.id)]||{}).p)||{};
-    var m={};for(var k3 in r)if(k3!=='partes'&&k3!=='p')m[k3]=r[k3];m.partes=[];m._tipo='plan';m.pert='\u21b3 Programado seg\u00fan el .xer';m.hh=0;m.hhC=0;m.hhM=0;m.met=null;m.metF=null;m.metM=null;m.est='';m.av=null;m.pct=null;m.p={};
+    var m={};for(var k3 in r)if(k3!=='partes'&&k3!=='p')m[k3]=r[k3];m.partes=[];m._tipo='plan';m.pert='\u21b3 Curva S del cronograma (.xer)';m.hh=0;m.hhC=0;m.hhM=0;m.met=null;m.metF=null;m.metM=null;m.est='';m.av=null;m.pct=null;m.p={};
     var rp=porIdP[String(r.id)],sm=0;per.forEach(function(p){var v=Number(((rp&&rp.p)||{})[p.k])||0;if(Math.abs(v)<1e-9)v=0;m.p[p.k]=v;sm+=v});m.suma=sm;out.push(m)});
   var hoy=todayISO(),nS=27+Math.floor((_crASerial(hoy)-46199)/7),semFinHoy=_wkISO(_wkSem(nS).fin);
   D.filas=out;D.info=D.info||{};D.info.extra={plan:true,semFinHoy:semFinHoy,finPlan:(DP.per&&DP.per.length)?DP.per[DP.per.length-1].fin:'',sinFecha:(DP.info&&DP.info.proy&&DP.info.proy.sinFecha)||0};return D}
@@ -31288,7 +31290,7 @@ function _tvInfoTxt0(D){try{var o=D.info||{},per=D.per||[];var t=(D.u.n+' partid
   if(per.length)t+=' \u00b7 '+per[0].ini+' \u2192 '+per[per.length-1].fin;
   if(per.tope)t+=' \u00b7 \u26a0 recortado al tope de '+per.tope+(o.per==='dia'?' d\u00edas':' semanas')+': lo posterior se acumula en la \u00faltima columna';
   if(o.proy&&o.proy.incSem)t+=' \u00b7 INCLUYE EL AVANCE DE LA SEMANA: real hasta '+String(o.proy.corte||'hoy')+' y, desde hoy, solo el saldo programado';
-  if(o.extra&&o.extra.plan)t+=' \u00b7 fila por partida con lo PROGRAMADO SEG\u00daN EL .XER (plan lineal) y semanas hasta el fin del plan ('+String(o.extra.finPlan||'')+')'+(o.extra.sinFecha>0.005?(' \u00b7 sin fecha en el .xer '+_nMil2(o.extra.sinFecha)+' hh'):'');
+  if(o.extra&&o.extra.plan)t+=' \u00b7 fila por partida con la CURVA S DEL CRONOGRAMA (.xer) y semanas hasta el fin de la curva ('+String(o.extra.finPlan||'')+')'+(o.extra.sinFecha>0.005?(' \u00b7 sin fecha en el .xer '+_nMil2(o.extra.sinFecha)+' hh'):'');
   if(o.proy){if(o.proy.rep)t+=' \u00b7 reprogramaci\u00f3n: ganado '+_nMil2(o.proy.ganado)+' hh hasta '+o.proy.corte+' + remanente '+_nMil2(o.proy.remanente)+' hh';
     if(o.proy.fuente==='cal')t+=' \u00b7 calendario: '+_nMil2(o.proy.remanente)+' hh programadas'+(o.proy.sinProg>0.005?(' \u00b7 SIN PROGRAMAR '+_nMil2(o.proy.sinProg)+' hh'):'');
     if(o.proy.sinFecha>0.005)t+=' \u00b7 sin fecha '+_nMil2(o.proy.sinFecha)+' hh'}
@@ -31303,7 +31305,7 @@ function _tvBarraHTML(){var c=_tvCfg();var seg=function(id,ops,val){return '<spa
     (_TV_N===3?seg('_tvFuente',[['curva','\ud83d\udcc8 Curva S','Lo proyectado por el cronograma: hasta el corte lo ganado real, desde el corte el remanente de cada actividad por d\u00eda laboral'],['cal','\ud83d\udcc5 Calendario','Lo programado en el calendario de la app (pantalla Cronograma): el saldo de cada partida en los d\u00edas que tiene puestos']],(c.fuente==='cal')?'cal':'curva'):'')+
     '<label style="display:flex;align-items:center;gap:4px;color:#9db4d6" title="En modo d\u00eda: sin s\u00e1bados, domingos ni feriados del calendario (sus HH caen en el siguiente d\u00eda laborable)"><input type="checkbox" id="_tvNoLab"'+(c.noLab!==false?' checked':'')+'> sin s\u00e1b/dom/feriados</label>'+
     '<label style="display:flex;align-items:center;gap:4px;color:#9FE8B0;font-weight:800" title="Incluir el avance de la semana en curso: lo real se cuenta hasta hoy (los d\u00edas ya pasados de la semana llevan lo hecho) y desde hoy solo el saldo programado que queda: lo ya hecho no se duplica. Sin marcar: real hasta el cierre anterior y programado desde el inicio de la semana"><input type="checkbox" id="_tvIncSem"'+(c.incSem?' checked':'')+'> incluir avance semanal</label>'+
-    '<label style="display:flex;align-items:center;gap:4px;color:#FFD37A;font-weight:800" title="Una fila m\u00e1s por partida con lo que el .xer ten\u00eda programado (plan lineal del cronograma, sin reprogramar), y en el pie dos acumulados m\u00e1s: real APP hasta esta semana + programado .xer despu\u00e9s, y el programado .xer puro (lo que deber\u00eda tener). La tabla se alarga hasta el fin del plan"><input type="checkbox" id="_tvDif"'+(c.difCurva?' checked':'')+'> programado seg\u00fan el .xer (una fila por partida)</label>'+
+    '<label style="display:flex;align-items:center;gap:4px;color:#FFD37A;font-weight:800" title="Una fila m\u00e1s por partida con la curva S del cronograma (la l\u00ednea azul de la ventana Curva: hasta la fecha de datos del .xer lo ganado y desde ah\u00ed el remanente por d\u00eda laboral), y en el pie dos acumulados m\u00e1s: solo lo hecho y la curva S (lo que deber\u00eda tener). La tabla se alarga hasta el fin de la curva"><input type="checkbox" id="_tvDif"'+(c.difCurva?' checked':'')+'> curva S del cronograma (una fila por partida)</label>'+
     '</div>'}
 function _tvBarraBind(doc,repinta){try{
   var seg=function(id,campo,def){var box=doc.getElementById(id);if(!box)return;Array.prototype.forEach.call(box.querySelectorAll('button'),function(b){b.onclick=function(e){e.preventDefault();var c=_tvCfg();var v=b.getAttribute('data-v');if((c[campo]||def)===v)return;c[campo]=v;_tvCfgSave(c);
