@@ -152,6 +152,25 @@ function setDiaOpen(f,on,d){if(!state.diasOpen)state.diasOpen={};
   var _dn=function(x){return x==='Mecanica'?'Mec\u00e1nica':(x==='Electrica'?'El\u00e9ctrica':x)};
   if(typeof toast==='function')toast(d?(on?('D\u00eda habilitado para '+_dn(d)+' \u2713'):('D\u00eda bloqueado para '+_dn(d))):(on?'D\u00eda habilitado para escritura \u2713':'D\u00eda bloqueado (solo lectura)'))}
 function diaCerrado(f){return !esAdmin() && !!f && !diaHabilitado(f)}
+/* DIAS HABILITADOS EN VIVO: el evento realtime de dias_habilitados trae la fila; se aplica
+   al instante a state.diasOpen y se repinta el Diario (y la lista) sin esperar la sincronizacion
+   completa. Despues, una lectura chica de la tabla confirma (por si llegaron varios cambios). */
+function _dhDeFila(r){if(!r||!r.abierto)return null;var ds=String(r.discs||'').split(',').map(function(x){return x.trim()}).filter(Boolean);if(!ds.length)return 1;var t={};ds.forEach(function(x){t[x]=1});return t}
+function _dhGuarda(){try{localStorage.setItem('obf4_diasopen',JSON.stringify(state.diasOpen||{}))}catch(e){}}
+function _dhRepinta(){try{var sd=$('scrDiario');if(sd&&!sd.classList.contains('hidden')&&typeof renderDiario==='function')renderDiario()}catch(e){}try{var sl=$('scrList');if(sl&&!sl.classList.contains('hidden')&&typeof renderList==='function'&&!(typeof _editing==='function'&&_editing()))renderList()}catch(e){}}
+function _dhAplica(r){try{if(!r||!r.fecha||(r.proyecto&&r.proyecto!==DATA.proyecto))return false;if(!state.diasOpen)state.diasOpen={};var v=_dhDeFila(r);var antes=JSON.stringify(state.diasOpen[r.fecha]||null);if(v)state.diasOpen[r.fecha]=v;else delete state.diasOpen[r.fecha];if(antes===JSON.stringify(state.diasOpen[r.fecha]||null))return false;_dhGuarda();return true}catch(e){return false}}
+async function _dhPull(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var rows=await sbSelect('dias_habilitados','select=fecha,abierto,discs&proyecto=eq.'+encodeURIComponent(DATA.proyecto));if(!rows)return;var n={};rows.forEach(function(r){var v=_dhDeFila(r);if(v)n[r.fecha]=v});var cambia=JSON.stringify(n)!==JSON.stringify(state.diasOpen||{});state.diasOpen=n;if(cambia){_dhGuarda();_dhRepinta()}}catch(e){}}
+function _dhRT(rec){try{if(rec&&_dhAplica(rec))_dhRepinta()}catch(e){}try{clearTimeout(window._dhT)}catch(e){}window._dhT=setTimeout(function(){_dhPull()},400)}
+/* los dias anteriores que salen en la lista del Diario (no Hoy; un descanso solo si tiene reportes) */
+function _dhCandidatos(){try{var hoy=todayISO();return dayList().filter(function(f){if(f>=hoy)return false;var rest=(typeof esFeriado==='function')&&esFeriado(f);return !rest||partesDia(f).some(function(p){return !esCuadre(p)})})}catch(e){return []}}
+/* HABILITAR TODOS: abre o cierra la especialidad d en todos los dias anteriores de la lista, de una
+   sola vez (un solo upsert). Hoy no entra: siempre se puede cargar. */
+function setDiaOpenTodos(on,d){if(!d)return;if(!state.diasOpen)state.diasOpen={};var fs=_dhCandidatos(),rows=[],_t=Date.now();
+  fs.forEach(function(f){var o=_diaDiscs(f);if(on)o[d]=1;else delete o[d];var ks=DISC.filter(function(x){return o[x]});if(ks.length){var t={};ks.forEach(function(x){t[x]=1});state.diasOpen[f]=t}else delete state.diasOpen[f];
+    rows.push({proyecto:DATA.proyecto,fecha:f,abierto:ks.length>0,discs:ks.join(','),quien:(state.user&&state.user.supervisor)||'',ts:_t,updated_at:new Date(_t).toISOString()})});
+  _dhGuarda();try{if(rows.length&&typeof sbReady==='function'&&sbReady()&&navigator.onLine)sbUpsert('dias_habilitados',rows,'proyecto,fecha').catch(function(){})}catch(e){}
+  try{renderDiario()}catch(e){}var _dn=function(x){return x==='Mecanica'?'Mec\u00e1nica':(x==='Electrica'?'El\u00e9ctrica':x)};
+  if(typeof toast==='function')toast((on?'Habilitados ':'Bloqueados ')+fs.length+' d\u00edas anteriores para '+_dn(d)+(on?' \u2713':''))}
 function dayBefore(iso){try{var d=new Date(iso+'T00:00:00');d.setDate(d.getDate()-1);return isoLocal(d.getTime())}catch(e){return iso}}
 function puedeBorrar(creador){if(esAdmin())return true;if(!creador)return true;return (state.user&&state.user.supervisor)===creador}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1900)}
@@ -377,6 +396,12 @@ function renderDiario(){try{var _bp=$('btnProg');if(_bp)_bp.textContent='\ud83d\
   $('dDays').textContent=wp.length;$('dPend').textContent=wp.filter(f=>['pend','cam'].includes(sentInfo(f).st)).length;
   const w=$('diaList');w.innerHTML='';
   const stmap={env:['Enviado ✓','done'],pend:['Pendiente','prog'],cam:['Cambios sin enviar','nometa'],sin:['Sin registros','todo']};
+  /* tira del admin, ENCIMA de la tarjeta de Hoy (fuera de ella): una casilla por especialidad que
+     abre o cierra TODOS los dias anteriores de la lista. Casilla llena = todos abiertos;
+     a medias (ambar, n/N) = solo algunos. Hoy nunca entra. */
+  if(typeof esAdmin==='function'&&esAdmin()){try{var _cf=_dhCandidatos();if(_cf.length){var _bar=document.createElement('div');_bar.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding:8px 12px;margin:0 0 8px;background:#EEF2FB;border:1px solid #D9E0EC;border-radius:12px;font-size:12px;color:var(--muted)';var _dn=function(x){return x==='Mecanica'?'Mec\u00e1nica':(x==='Electrica'?'El\u00e9ctrica':x)};
+    _bar.innerHTML='<span style="flex:1 0 100%;font-weight:700;color:var(--brand)">Habilitar escritura de supervisores en TODOS los d\u00edas anteriores ('+_cf.length+'):</span>'+DISC.map(function(d){var tot=_cf.filter(function(f){return !!_diaDiscs(f)[d]}).length,all=(tot===_cf.length),alg=(tot>0&&!all);return '<label style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border:1px solid var(--line);border-radius:8px;background:'+(all?'#E7F6EC':(alg?'#FFF4D6':'transparent'))+';cursor:pointer" title="'+tot+' de '+_cf.length+' d\u00edas habilitados"><input type="checkbox" data-disc="'+d+'" data-ind="'+(alg?1:0)+'" style="width:15px;height:15px" '+(all?'checked':'')+'>'+_dn(d)+(alg?' <span style="font-weight:800;color:#8A6D1E">'+tot+'/'+_cf.length+'</span>':'')+'</label>'}).join('')+'<span style="flex:1 0 100%;font-size:11px">Hoy siempre se puede cargar; esto solo abre o cierra los d\u00edas de abajo.</span>';
+    _bar.querySelectorAll('input').forEach(function(ci){if(ci.getAttribute('data-ind')==='1')ci.indeterminate=true;ci.onchange=function(){setDiaOpenTodos(this.checked,this.getAttribute('data-disc'))}});w.appendChild(_bar)}}catch(_eb){}}
   days.forEach(f=>{const ps=partesDia(f);const nAct=new Set(ps.filter(p=>!esCuadre(p)).map(p=>p.id)).size;const sm=stmap[sentInfo(f).st];const isT=f===todayISO();
     var _rest=(typeof esFeriado==='function')&&esFeriado(f);var _rc=(state.calend||{})[f];var _rfer=!!(_rc&&_rc.tipo==='feriado');var _rlbl=_rfer?'Feriado':'Descanso';var _rcom=(_rc&&_rc.comentario)?(' <span style="font-weight:600;color:#B06A5E">· '+esc(_rc.comentario)+'</span>'):'';
     const card=document.createElement('div');card.className='pd-card'+(_rest?' rest':'');card.style.cursor='pointer';
@@ -618,6 +643,7 @@ function _rtOnCambio(tabla,_fila){
       if($('scrList')&&!$('scrList').classList.contains('hidden')&&typeof renderList==='function')renderList()
     }catch(e){}},_apl?60:1200);
     return}
+  if(tabla==='dias_habilitados'){try{_dhRT(_rec)}catch(e){}return}
   if(tabla==='restricciones_partida'||tabla==='restricciones_generales'||
      tabla==='interf_log'||tabla==='dias_habilitados'||tabla==='pendientes'){
     try{_rtSyncSoon()}catch(e){}
@@ -20949,7 +20975,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b54';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b55';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -37963,6 +37989,7 @@ if(!window._tabBloqueada&&state.user){if(typeof puedeEsp==='function'&&state.use
    else if(t==='bitacora'||t==='presencia_lapsos'){try{if(typeof esAdminReal==='function'&&esAdminReal()){if(typeof updPresencia==='function')updPresencia();if(document.getElementById('_lapsOv')&&typeof window._lapsRefetch==='function')window._lapsRefetch();}}catch(_eb){}}
    else if(t==='tormenta'){if(typeof syncStormOnly==='function')syncStormOnly()}
    else if(t==='visibilidad'){if(typeof _pullVisib==='function')_pullVisib()}
+   else if(t==='dias_habilitados'){if(typeof _dhPull==='function')_dhPull()}
    else if(t==='back_cron'||t==='back_cron_cuad'){if(typeof _bkcPull==='function')_bkcPull(function(){
        /* el analisis de restricciones compara contra estos respaldos: que
           se refresque con el respaldo recien llegado */
