@@ -21824,7 +21824,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b98';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b99';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -29641,48 +29641,72 @@ async function _tbExportarXlsx2(root,doc,opt){
     var QW={metF:1,metM:1,metA:1,metAM:1,av:1,metR:1,metRF:1},PW={pct:1,noHace:1,pctRet:1};
     var agB=(typeof _tbAgBase==='function')?_tbAgBase():'hh';
     var ref=function(k,rr){return S1+colL(ix[k])+rr};
-    var f2=[],r2=1,hdr='';keys.forEach(function(k,i){hdr+=celT(colL(i)+r2,nomCol[k]||k,xRH)});
-    f2.push('<row r="1" ht="'+Math.max(30,Math.round(Math.max.apply(null,keys.map(function(k,i){return lineas(nomCol[k]||k,wch[i])}))*13+4))+'" customHeight="1">'+hdr+'</row>');r2++;var r2a=r2;
+    /* columnas del Resumen: las exportadas y, aunque no se hayan marcado, el COSTO UNITARIO y el COSTO de cada
+       metrado que haya (al final) */
+    var MC=[['met','costo'],['metF','costoC'],['metM','costoM'],['metA','costoA'],['metAM','costoAM'],['metR','costoR'],['metRF','costoRF']];
+    var RK=keys.slice(),wR=wch.slice();
+    if(MC.some(function(p){return ix[p[0]]!=null})&&ix.pu==null){RK.push('pu');wR.push(13)}
+    MC.forEach(function(p){if(ix[p[0]]!=null&&ix[p[1]]==null){RK.push(p[1]);wR.push(15)}});
+    var nR=RK.length,MET={met:1,metF:1,metM:1,metA:1,metAM:1,metR:1,metRF:1};
+    var cols2='<cols>'+wR.map(function(wc,i){return '<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+wc+'" customWidth="1"/>'}).join('')+'</cols>';
+    var f2=[],r2=1,hdr='';RK.forEach(function(k,i){hdr+=celT(colL(i)+r2,nomCol[k]||k,xRH)});
+    f2.push('<row r="1" ht="'+Math.max(30,Math.round(Math.max.apply(null,RK.map(function(k,i){return lineas(nomCol[k]||k,wR[i])}))*13+4))+'" customHeight="1">'+hdr+'</row>');r2++;var r2a=r2;
     var TCOL=[['FF1F3864','FFFFFFFF'],['FF2E5496','FFFFFFFF'],['FF8EA9DB','FF000000'],['FFB4C6E7','FF000000'],['FFD9E1F2','FF000000']],tSt={},mg2=[];
     var estTit=function(lv){lv=Math.max(0,Math.min(TCOL.length-1,lv||0));if(tSt[lv]!=null)return tSt[lv];fonts.push('<font><sz val="10"/><name val="Calibri"/><b/><color rgb="'+TCOL[lv][1]+'"/></font>');var fo=fonts.length-1;
       fills.push('<fill><patternFill patternType="solid"><fgColor rgb="'+TCOL[lv][0]+'"/><bgColor indexed="64"/></patternFill></fill>');var fi=fills.length-1;
       xfs.push('<xf numFmtId="0" fontId="'+fo+'" fillId="'+fi+'" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" indent="'+Math.min(lv||0,6)+'"/></xf>');return tSt[lv]=xfs.length-1};
-    resSeq.forEach(function(g){if(g.t==='tit'){var sT=estTit(g.lv),ht9='';for(var i9=0;i9<nC;i9++)ht9+=(i9===0)?celT('A'+r2,g.lab,sT):('<c r="'+colL(i9)+r2+'" s="'+sT+'"/>');f2.push('<row r="'+r2+'" ht="18" customHeight="1">'+ht9+'</row>');if(nC>1)mg2.push('A'+r2+':'+colL(nC-1)+r2);r2++;return}
-      var rows=g.rows,ci=rows[rows.length-1],h='';
+    var nv=function(v){var n=Number(v);return (v!=null&&v!==''&&isFinite(n))?n:null};
+    resSeq.forEach(function(g){if(g.t==='tit'){var sT=estTit(g.lv),ht9='';for(var i9=0;i9<nR;i9++)ht9+=(i9===0)?celT('A'+r2,g.lab,sT):('<c r="'+colL(i9)+r2+'" s="'+sT+'"/>');f2.push('<row r="'+r2+'" ht="18" customHeight="1">'+ht9+'</row>');if(nR>1)mg2.push('A'+r2+':'+colL(nR-1)+r2);r2++;return}
+      var rows=g.rows,ci=rows[rows.length-1],h='',grp=!!(g.partes&&rows.length>=2);
+      /* la parte que lleva el metrado de la partida (la de mayor metrado; la ultima puede ser un restante sin metrado) */
+      var cM=ci;if(grp)rows.forEach(function(q){if((nv(q.m.met)||0)>(nv(cM.m.met)||0))cM=q});
       /* pP: % del agrupado de la parte (0-100); si esa columna no se exporta, su base / suma de la base x 100, o su peso */
       var pP=function(row){if(ix.pctAg!=null)return ref('pctAg',row.r);if(ix[agB]!=null)return '('+ref(agB,row.r)+'/('+rows.map(function(q){return ref(agB,q.r)}).join('+')+')*100)';return String(Number(row.m.peso)||0)};
-      var wRef=function(row){if(ix.pctAg!=null)return '('+ref('pctAg',row.r)+'/100)';
-        if(ix[agB]!=null)return '('+ref(agB,row.r)+'/('+rows.map(function(q){return ref(agB,q.r)}).join('+')+'))';
-        return String((Number(row.m.peso)||0)/100)};
       var metRef=function(row){return (ix.met!=null)?ref('met',row.r):String(Number(row.m.met)||0)};
-      keys.forEach(function(k,i){var cr=colL(i)+r2,num=!!_TB_NUM[k],st=num?(esPct[k]?xRP:xRN):xRT,f;
-        /* COSTOS: los unicos que dependen de otras columnas del Resumen: su metrado x el costo unitario del Resumen
-           (en partidas con partes el metrado de avance es %: metrado contratado x % / 100 x costo unitario) */
-        var ri=function(x){var j=keys.indexOf(x);return j>=0?(colL(j)+r2):null},grp=!!(g.partes&&rows.length>=2);
+      /* METRADOS: SOLO VALORES. Con partes: contratado/forecast/mayor = el de la partida; actual = ese metrado x
+         suma(metrado actual de la parte / su metrado x su % del agrupado); restantes = metrado - actual */
+      var sB=0;rows.forEach(function(q){sB+=nv(q.m[agB])||0});
+      var wP=function(q){return (sB>0)?((nv(q.m[agB])||0)/sB):((nv(q.m.peso)||0)/100)};
+      var eq=function(qk){var s9=0,hay=false;rows.forEach(function(q){var a=nv(q.m[qk]),b=nv(q.m.met);if(a!=null)hay=true;if(a!=null&&b)s9+=a/b*wP(q)});var M=nv(cM.m.met);return hay?((M!=null)?M*s9:0):null};
+      var metV=function(k){if(!grp)return nv(ci.m[k]);
+        if(k==='met'||k==='metF'||k==='metM')return nv(cM.m[k]);
+        if(k==='metA'||k==='metAM')return eq(k);
+        var A9=eq('metA')||0,M9=nv(cM.m[k==='metR'?'met':'metF']);return (M9==null)?null:Math.max(0,M9-A9)};
+      var puV=function(){if(grp){var cT=0;rows.forEach(function(q){cT+=nv(q.m.costo)||0});var M=nv(cM.m.met);return (M&&M>0)?cT/M:null}
+        var mt=nv(ci.m.met),co=nv(ci.m.costo);return (mt>0&&co>0)?co/mt:nv(ci.m.pu)};
+      var rd=function(v){return Math.round(v*1e10)/1e10};
+      RK.forEach(function(k,i){var cr=colL(i)+r2,num=!!_TB_NUM[k],st=num?(esPct[k]?xRP:xRN):xRT,f;
+        var ri=function(x){var j9=RK.indexOf(x);return j9>=0?(colL(j9)+r2):null};
+        if(MET[k]){var v9=metV(k);h+=(v9==null)?('<c r="'+cr+'" s="'+xRN+'"/>'):celN(cr,rd(v9),xRN);return}
+        /* COSTOS: los unicos que dependen de otras columnas del Resumen: su metrado x el costo unitario del Resumen */
         var COSTM={costo:'met',costoC:'metF',costoM:'metM',costoA:'metA',costoAM:'metAM',costoR:'metR',costoRF:'metRF'};
-        if(COSTM[k]){var mk=COSTM[k],rm=ri(mk),rp=ri('pu'),rM=ri('met');
-          if(rp&&rm&&(!grp||mk==='met'))f='IFERROR('+rm+'*'+rp+',0)';
-          else if(rp&&rm&&rM)f='IFERROR('+rM+'*'+rm+'/100*'+rp+',0)';
+        if(COSTM[k]){var rm=ri(COSTM[k]),rp=ri('pu');
+          if(rp&&rm)f='IFERROR('+rm+'*'+rp+',0)';
           else f=grp?('SUM('+rows.map(function(q){return ref(k,q.r)}).join(',')+')'):ref(k,ci.r);
           h+=celF(cr,f,xRN);return}
-        /* costo unitario de una partida con partes: el costo de todas sus partes / su metrado (de la hoja de fotos) */
-        if(k==='pu'&&grp){var cT=0;rows.forEach(function(q){cT+=Number(q.m.costo)||0});var mC=Number(ci.m.met)||0;
-          f=(ix.costo!=null&&ix.met!=null)?('IFERROR(SUM('+rows.map(function(q){return ref('costo',q.r)}).join(',')+')/'+ref('met',ci.r)+',0)'):String(mC>0?Math.round(cT/mC*1e6)/1e6:0);
-          h+=celF(cr,f,xRN);return}
-        if(!g.partes||rows.length<2){f=num?ref(k,ci.r):('IF('+ref(k,ci.r)+'="","",'+ref(k,ci.r)+')')}
+        /* costo unitario: el de la hoja de fotos; con partes, el costo de todas sus partes / el metrado de la partida;
+           si no se exporto, va como valor */
+        if(k==='pu'){if(ix.pu==null||(grp&&(ix.costo==null||ix.met==null))){var p9=puV();h+=(p9==null)?('<c r="'+cr+'" s="'+xRN+'"/>'):celN(cr,rd(p9),xRN);return}
+          if(grp){h+=celF(cr,'IFERROR(SUM('+rows.map(function(q){return ref('costo',q.r)}).join(',')+')/'+ref('met',cM.r)+',0)',xRN);return}}
+        /* estado de una partida con partes: si todas dicen lo mismo, eso; si no, el de cada parte */
+        if(k==='est'&&grp){var es9=rows.map(function(q){return String(q.m.est==null?'':q.m.est)});
+          if(es9.every(function(e){return e===es9[0]}))f='IF('+ref(k,ci.r)+'="","",'+ref(k,ci.r)+')';
+          else f=rows.map(function(q){return '"'+String(q.m.pert||'Parte').replace(/"/g,'""')+': "&'+ref(k,q.r)}).join('&" · "&');
+          h+=celF(cr,f,xRT);return}
+        if(!grp){f=num?ref(k,ci.r):('IF('+ref(k,ci.r)+'="","",'+ref(k,ci.r)+')')}
         else if(k==='pert'){h+=celT(cr,'',xRT);return}
         else if(ADD[k])f='SUM('+rows.map(function(q){return ref(k,q.r)}).join(',')+')';
         else if(k==='pctAg')f='SUM('+rows.map(function(q){return ref(k,q.r)}).join(',')+')';
         else if(QW[k]){f=rows.map(function(q){return 'IFERROR('+ref(k,q.r)+'/'+metRef(q)+'*'+pP(q)+',0)'}).join('+');st=xRP}
         else if(PW[k])f=rows.map(function(q){return 'IFERROR('+ref(k,q.r)+'*'+pP(q)+'/100,0)'}).join('+');
-        else f=num?ref(k,ci.r):('IF('+ref(k,ci.r)+'="","",'+ref(k,ci.r)+')');
+        else f=num?ref(k,cM.r):('IF('+ref(k,cM.r)+'="","",'+ref(k,cM.r)+')');
         h+=celF(cr,f,st)});
       f2.push('<row r="'+r2+'">'+h+'</row>');r2++});
-    var ht2='';keys.forEach(function(k,i){var cr=colL(i)+r2;if(i===0)ht2+=celT(cr,'TOTAL',xRTB);else if(ADD[k])ht2+=celF(cr,'SUM('+colL(i)+r2a+':'+colL(i)+(r2-1)+')',xRNB);else ht2+=celT(cr,'',xRTB)});
+    var ht2='';RK.forEach(function(k,i){var cr=colL(i)+r2;if(i===0)ht2+=celT(cr,'TOTAL',xRTB);else if(ADD[k])ht2+=celF(cr,'SUM('+colL(i)+r2a+':'+colL(i)+(r2-1)+')',xRNB);else ht2+=celT(cr,'',xRTB)});
     f2.push('<row r="'+r2+'" ht="18" customHeight="1">'+ht2+'</row>');
     hoja2='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
-      '<dimension ref="A1:'+colL(nC-1)+r2+'"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'+
-      '<sheetFormatPr defaultRowHeight="15"/>'+cols+'<sheetData>'+f2.join('')+'</sheetData>'+(mg2.length?('<mergeCells count="'+mg2.length+'">'+mg2.map(function(x){return '<mergeCell ref="'+x+'"/>'}).join('')+'</mergeCells>'):'')+'</worksheet>'}
+      '<dimension ref="A1:'+colL(nR-1)+r2+'"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'+
+      '<sheetFormatPr defaultRowHeight="15"/>'+cols2+'<sheetData>'+f2.join('')+'</sheetData>'+(mg2.length?('<mergeCells count="'+mg2.length+'">'+mg2.map(function(x){return '<mergeCell ref="'+x+'"/>'}).join('')+'</mergeCells>'):'')+'</worksheet>'}
   var estilos='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
     '<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/><numFmt numFmtId="166" formatCode="&quot;− &quot;#,##0.00;&quot;+ &quot;#,##0.00;0.00"/></numFmts>'+
