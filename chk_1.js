@@ -20827,21 +20827,48 @@ function _cgDifHTML(p,ps){var M=_cgMeta(p);if(!M)return '';try{if(typeof _fzDe==
   else{st='color:#8A4B00;background:#FCEFD9;border:1px solid #EFC98A';tx='m\u00e1s '+qtyX(-d)+' '+M.u+' sobre el 100%'}
   return '<span title="'+esc(tit)+'" style="display:inline-block;font-size:11px;font-weight:800;border-radius:20px;padding:2px 9px;'+st+'">'+tx+'</span>'}
 /* off = {k:1} cargas apagadas (gris) en esta vista: no suman. Es solo para ver la cuenta;
-   no cambia nada guardado y se olvida al cerrar el menu. */
+   no cambia nada guardado y se olvida al cerrar el menu.
+   Sin partes: un solo cuadro con todas las cargas. CON PARTES (apartados): un cuadro por
+   parte, cada uno con sus cargas, su acumulado y su suma independientes, y su diferencia
+   contra el 100% de ESA parte (su cantidad, menos lo retirado de ella). */
+function _cgDifTxt(d,u){return Math.abs(d)<1e-9?'exacto al 100%':(d>0?('dif '+qtyX(d)+' '+u+' para el 100%'):('m\u00e1s '+qtyX(-d)+' '+u+' sobre el 100%'))}
+function _cgDifSt(d){return Math.abs(d)<1e-9?'color:#0C5132;background:#E7F6EC;border:1px solid #9CD3AE':(d>0?'color:#1F3864;background:#EAF1FB;border:1px solid #BFD3EE':'color:#8A4B00;background:#FCEFD9;border:1px solid #EFC98A')}
+/* un cuadro de suma: filas [{k,fecha,v}], meta = {obj,u,tit} o null */
+function _cgTablaHTML(filas,off,uU,meta,titulo){var ac=0,nOn=0,nOff=0;
+  var H='<table style="width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums"><thead><tr style="color:#5C6779;font-size:10.5px;text-align:right"><th style="text-align:left;font-weight:800;padding:3px 0">Fecha</th><th style="font-weight:800">Carga</th><th style="font-weight:800">Acumulado</th></tr></thead><tbody>';
+  filas.forEach(function(r){var ex=!!off[r.k];if(ex)nOff++;else{nOn++;ac+=r.v}
+    var chip=ex?'border:1.5px solid #C9CED6;background:#E5E7EB;color:#8A93A0;text-decoration:line-through':'border:1.5px solid #9CD3AE;background:#EAF7EF;color:#1E7A46';
+    H+='<tr style="border-top:1px solid #E4EAF3;text-align:right'+(ex?';opacity:.75':'')+'"><td style="text-align:left;padding:4px 0;color:'+(ex?'#9AA3AF':'#34496a')+'">'+esc(r.fecha||'')+'</td>'+
+      '<td><span class="_cgChip" data-k="'+r.k+'" role="button" tabindex="0" title="'+(ex?'Volver a sumar esta carga':'Quitar esta carga de la suma')+'" style="display:inline-block;cursor:pointer;user-select:none;border-radius:7px;padding:1px 8px;font-weight:800;'+chip+'">+'+qtyX(r.v)+'</span></td>'+
+      '<td style="color:'+(ex?'#9AA3AF':'#1F3864')+'">'+(ex?String.fromCharCode(8212):qtyX(ac))+'</td></tr>'});
+  ac=Math.round(ac*1e6)/1e6;
+  H+='</tbody><tfoot><tr style="border-top:2px solid #1F3864;text-align:right"><td colspan="2" style="text-align:left;padding:6px 0;font-weight:900;color:#1F3864">Suma de '+(nOff?(nOn+' de '+filas.length):filas.length)+' carga'+(filas.length>1?'s':'')+(titulo?(' '+esc(titulo)):'')+'</td><td style="font-weight:900;color:#1F3864;font-size:13.5px">'+qtyX(ac)+' '+esc(uU)+'</td></tr></tfoot></table>';
+  if(meta){var d=Math.round((meta.obj-ac)*1e6)/1e6;
+    if(nOff)H+='<div style="margin-top:6px;font-size:11.5px;font-weight:800;color:'+(d<-1e-9?'#8A4B00':'#1F3864')+'">Con esta selecci\u00f3n: '+_cgDifTxt(d,esc(meta.u))+'</div>';
+    H+='<div style="margin-top:4px;font-size:11px;color:#5C6779">Con dos decimales: <b>'+qty(ac)+' / '+qty(meta.obj)+' '+esc(meta.u)+'</b>'+(nOff?' (sin las cargas en gris)':'')+'</div>'}
+  return {html:H,ac:ac,nOff:nOff}}
 function _cgSumaHTML(p,ps,uU,off){off=off||{};var M=_cgMeta(p);var cs=ps.filter(function(x){return x.tipo==='cant'}).slice().sort(function(a,b){return String(a.fecha).localeCompare(String(b.fecha))||((a.ts||0)-(b.ts||0))});
   if(!cs.length)return '<div style="font-size:12px;color:#5C6779;padding:8px 0">Esta actividad no tiene cargas de cantidad para sumar.</div>';
-  var fz=null;try{fz=(typeof _fzDe==='function')?_fzDe(p.id):null}catch(e){}var sub={},ord=[],nOn=0,nOff=0;
-  var ac=0,H='<table style="width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums"><thead><tr style="color:#5C6779;font-size:10.5px;text-align:right"><th style="text-align:left;font-weight:800;padding:3px 0">Fecha</th>'+(fz?'<th style="text-align:left;font-weight:800">Parte</th>':'')+'<th style="font-weight:800">Carga</th><th style="font-weight:800">Acumulado</th></tr></thead><tbody>';
-  cs.forEach(function(x,k){var v=+x.cant||0,ex=!!off[k];if(ex)nOff++;else{nOn++;ac+=v}var pn='';if(fz){try{var f=_fzParteDeCid(p.id,x.client_id);pn=f?String(f.nombre):'sin parte'}catch(e){pn=''}if(!(pn in sub)){sub[pn]=0;ord.push(pn)}if(!ex)sub[pn]+=v}
-    var chip=ex?'border:1.5px solid #C9CED6;background:#E5E7EB;color:#8A93A0;text-decoration:line-through':'border:1.5px solid #9CD3AE;background:#EAF7EF;color:#1E7A46';
-    H+='<tr style="border-top:1px solid #E4EAF3;text-align:right'+(ex?';opacity:.75':'')+'"><td style="text-align:left;padding:4px 0;color:'+(ex?'#9AA3AF':'#34496a')+'">'+esc(x.fecha||'')+'</td>'+(fz?'<td style="text-align:left;color:'+(ex?'#9AA3AF':'#34496a')+'">'+esc(pn)+'</td>':'')+
-      '<td><span class="_cgChip" data-k="'+k+'" role="button" tabindex="0" title="'+(ex?'Volver a sumar esta carga':'Quitar esta carga de la suma')+'" style="display:inline-block;cursor:pointer;user-select:none;border-radius:7px;padding:1px 8px;font-weight:800;'+chip+'">+'+qtyX(v)+'</span></td>'+
-      '<td style="color:'+(ex?'#9AA3AF':'#1F3864')+'">'+(ex?String.fromCharCode(8212):qtyX(ac))+'</td></tr>'});
-  H+='</tbody><tfoot><tr style="border-top:2px solid #1F3864;text-align:right"><td colspan="'+(fz?3:2)+'" style="text-align:left;padding:6px 0;font-weight:900;color:#1F3864">Suma de '+(nOff?(nOn+' de '+cs.length):cs.length)+' carga'+(cs.length>1?'s':'')+'</td><td style="font-weight:900;color:#1F3864;font-size:13.5px">'+qtyX(ac)+' '+esc(uU)+'</td></tr></tfoot></table>';
-  if(fz&&ord.length>1)H+='<div style="margin-top:6px;font-size:11.5px;color:#34496a">'+ord.map(function(k){return '<div style="display:flex;justify-content:space-between;padding:2px 0"><span>Subtotal '+esc(k)+'</span><b style="font-variant-numeric:tabular-nums">'+qtyX(sub[k])+' '+esc(uU)+'</b></div>'}).join('')+'</div>';
-  if(M&&nOff&&!fz){var d=Math.round((M.mT-Math.round(ac*1e6)/1e6)*1e6)/1e6;H+='<div style="margin-top:6px;font-size:11.5px;font-weight:800;color:'+(d<-1e-9?'#8A4B00':'#1F3864')+'">Con esta selecci\u00f3n: '+(Math.abs(d)<1e-9?'exacto al 100%':(d>0?('dif '+qtyX(d)+' '+esc(uU)+' para el 100%'):('m\u00e1s '+qtyX(-d)+' '+esc(uU)+' sobre el 100%')))+'</div>'}
-  if(M)H+='<div style="margin-top:6px;font-size:11px;color:#5C6779">Con dos decimales (como en la tabla y en la tarjeta): <b>'+qty(ac)+' / '+qty(M.mT)+' '+esc(uU)+'</b>'+(nOff?' (sin las cargas en gris)':'')+'</div>';
-  H+='<div style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:10.5px;color:#8A93A0"><span style="flex:1">Toca una carga para quitarla de la suma (queda en gris) o volver a sumarla. Solo se ve aqu\u00ed; no cambia nada guardado.</span>'+(nOff?'<button type="button" class="_cgTodas" style="background:#fff;color:#1F3864;border:1.5px solid #1F3864;border-radius:8px;padding:3px 9px;font-weight:800;font-size:11px;cursor:pointer">Sumar todas</button>':'')+'</div>';
+  var fz=null;try{fz=(typeof _fzDe==='function')?_fzDe(p.id):null}catch(e){}var H='',algunaOff=false;
+  if(fz&&(fz.fases||[]).length){
+    /* un cuadro por parte, en el orden de las partes; lo que no cae en ninguna, al final */
+    var grupos=(fz.fases||[]).map(function(x){return {x:x,filas:[]}}),sinP={x:null,filas:[]};
+    cs.forEach(function(c,k){var g=null,v=+c.cant||0;
+      grupos.forEach(function(G){if(g)return;var mv=(G.x.movs||[]).filter(function(m){return m.cid&&m.cid===c.client_id});if(mv.length){g=G;v=mv.reduce(function(t,m){return t+(Number(m.c)||0)},0)}});
+      (g||sinP).filas.push({k:k,fecha:c.fecha,v:v})});
+    if(sinP.filas.length)grupos.push(sinP);
+    grupos.forEach(function(G){var x=G.x,u=(x&&x.unidad)||uU,nom=x?String(x.nombre||'Parte'):'Sin parte';
+      var obj=x?Math.max(0,(Number(x.cantidad)||0)-(Number(x._ret)||0)):0;var meta=(x&&obj>0)?{obj:obj,u:u}:null;
+      var T=G.filas.length?_cgTablaHTML(G.filas,off,u,meta,''):null;if(T&&T.nOff)algunaOff=true;
+      var acR=G.filas.reduce(function(t,r){return t+r.v},0);var d=T&&meta?Math.round((meta.obj-Math.round(acR*1e6)/1e6)*1e6)/1e6:null;
+      var tit=x?('Cantidad de la parte '+qtyX(Number(x.cantidad)||0)+' '+u+((Number(x._ret)||0)?(' '+String.fromCharCode(8722)+' retirado '+qtyX(x._ret)):'')+(x.cierra?' \u00b7 cierra la actividad':'')):'Cargas que no est\u00e1n asignadas a ninguna parte';
+      H+='<div style="background:#fff;border:1.5px solid '+(x&&x.cierra?'#BFD3EE':'#D7E0EC')+';border-radius:10px;padding:7px 9px;margin-bottom:8px">'+
+        '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:3px" title="'+esc(tit)+'"><b style="flex:1;min-width:120px;font-size:12.5px;color:'+(x?'#1F3864':'#8A4B00')+'">'+esc(nom)+(x&&x.cierra?' <span style="font-size:10px;font-weight:700;color:#5C6779">\u00b7 cierra la actividad</span>':'')+'</b>'+
+        (meta&&d!=null?'<span style="display:inline-block;font-size:11px;font-weight:800;border-radius:20px;padding:2px 9px;'+_cgDifSt(d)+'">'+_cgDifTxt(d,esc(u))+'</span>':'')+'</div>'+
+        (T?T.html:'<div style="font-size:11.5px;color:#8A93A0;padding:4px 0">Sin cargas en esta parte todav\u00eda.</div>')+'</div>'});
+  }else{
+    var T1=_cgTablaHTML(cs.map(function(c,k){return {k:k,fecha:c.fecha,v:+c.cant||0}}),off,uU,M?{obj:M.mT,u:M.u}:null,'');algunaOff=!!T1.nOff;H+=T1.html}
+  H+='<div style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:10.5px;color:#8A93A0"><span style="flex:1">Toca una carga para quitarla de la suma (queda en gris) o volver a sumarla. Solo se ve aqu\u00ed; no cambia nada guardado.</span>'+(algunaOff?'<button type="button" class="_cgTodas" style="background:#fff;color:#1F3864;border:1.5px solid #1F3864;border-radius:8px;padding:3px 9px;font-weight:800;font-size:11px;cursor:pointer">Sumar todas</button>':'')+'</div>';
   return H}
 function _cgCajaHTML(p,ps,rows,uU){var on=_cgSumaOn();var dif=_cgDifHTML(p,ps);
   return '<div style="background:#F4F7FB;border:1.5px solid #D7E0EC;border-radius:12px;padding:8px 12px 6px;margin-bottom:10px">'+
@@ -21046,7 +21073,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b61';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b62';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
