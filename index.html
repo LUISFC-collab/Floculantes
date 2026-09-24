@@ -21824,7 +21824,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b80';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b81';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28355,6 +28355,12 @@ function _tbSustBtn(doc){var bx=doc.getElementById('_tbXls');if(!bx||doc.getElem
    que se usaron la vez pasada (cfg.sustCols, se guarda en Supabase con la configuracion de la
    tabla); la primera vez, las que se ven. Marcar todas / Quitar todas. Solo cambia el Excel:
    las fotos se reparten a lo ancho de ESAS columnas. */
+/* Medidas de las fotos del Excel con sustentos (px): altura de la fila de fotos y ancho x alto
+   para fotos HORIZONTALES y para VERTICALES; cada foto se pone con la medida de su orientacion,
+   entera y sin deformar. La fila nunca es mas baja que la foto mas alta (+8 px de margen).
+   Se guardan en la configuracion de la tabla (cfg.sustFoto -> Supabase). */
+function _tbSustFoto(o){o=o||{};var n=function(v,d,mi,ma){v=Math.round(Number(v));return (isFinite(v)&&v>=mi&&v<=ma)?v:d};
+  return {fila:n(o.fila,120,40,800),hW:n(o.hW,160,40,800),hH:n(o.hH,120,30,800),vW:n(o.vW,90,30,800),vH:n(o.vH,120,40,800)}}
 function _tbSustPop(doc,b){try{var ya=doc.getElementById('_tbSustPop');if(ya){ya.remove();return}
   var cfg=_tbCfg(),by={};_TB_COLS.forEach(function(x){by[x[0]]=x});
   var ord=[];(cfg.orden||[]).forEach(function(k){if(by[k]&&ord.indexOf(k)<0)ord.push(k)});_TB_COLS.forEach(function(x){if(ord.indexOf(x[0])<0)ord.push(x[0])});
@@ -28362,24 +28368,35 @@ function _tbSustPop(doc,b){try{var ya=doc.getElementById('_tbSustPop');if(ya){ya
   var p=doc.createElement('div');p.id='_tbSustPop';var r=b.getBoundingClientRect(),W=(doc.defaultView&&doc.defaultView.innerWidth)||1200,H=(doc.defaultView&&doc.defaultView.innerHeight)||800;
   p.style.cssText='position:fixed;z-index:2147483647;background:#152436;border:1px solid #1d3550;border-radius:10px;padding:10px 12px;font-size:12px;color:#cfe3ff;box-shadow:0 10px 30px rgba(0,0,0,.5);width:min(460px,94vw);max-height:'+Math.max(260,H-40)+'px;display:flex;flex-direction:column;gap:8px;left:'+Math.max(8,Math.min(r.left,W-470))+'px;top:'+Math.max(8,Math.min(r.bottom+4,H-300))+'px';
   var bt='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer;font-size:12px';
+  var ni='width:62px;background:#0d1117;color:#cfe3ff;border:1px solid #2d4a6e;border-radius:6px;padding:3px 5px;font-size:12px';
   p.innerHTML='<div style="font-weight:800;color:#8ECBF5">\ud83d\uddbc Columnas del Excel con sustentos</div>'+
     '<div style="font-size:11px;color:#9db4d6">Solo cambia el Excel, no la tabla. Las fotos se reparten a lo ancho de las columnas marcadas (varias filas de fotos si no caben).</div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" data-a="todas" style="'+bt+'">\u2611 Marcar todas</button><button type="button" data-a="ninguna" style="'+bt+'">\u2610 Quitar todas</button><button type="button" data-a="tabla" style="'+bt+'" title="Las mismas columnas que se ven en la tabla">\u21ba Como la tabla</button></div>'+
     '<div id="_tbSustLst" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;overflow:auto;min-height:0;flex:1;padding:2px 0">'+ord.map(function(k){return '<label style="white-space:nowrap;cursor:pointer;overflow:hidden;text-overflow:ellipsis"><input type="checkbox" data-k="'+k+'"'+(sel[k]?' checked':'')+'> '+esc(by[k][1])+'</label>'}).join('')+'</div>'+
     '<div id="_tbSustN" style="font-size:11px;color:#9FE8B0"></div>'+
+    '<div id="_tbSustF" style="border-top:1px solid #1d3550;padding-top:8px;display:grid;grid-template-columns:auto auto auto auto;gap:6px 8px;align-items:center;font-size:11.5px">'+
+      '<b style="grid-column:1/-1;color:#8ECBF5">Fotos (en p\u00edxeles)</b>'+
+      '<span>Altura de la fila de fotos</span><input data-f="fila" type="number" min="40" max="800" step="10" style="'+ni+'"><span style="grid-column:3/-1;color:#9db4d6;font-size:10.5px">crece sola si una foto no cabe</span>'+
+      '<span>Fotos horizontales</span><span style="display:flex;gap:4px;align-items:center"><input data-f="hW" type="number" min="40" max="800" step="10" style="'+ni+'" title="ancho">\u00d7<input data-f="hH" type="number" min="30" max="800" step="10" style="'+ni+'" title="alto"></span><span style="grid-column:3/-1;color:#9db4d6;font-size:10.5px">ancho \u00d7 alto</span>'+
+      '<span>Fotos verticales</span><span style="display:flex;gap:4px;align-items:center"><input data-f="vW" type="number" min="30" max="800" step="10" style="'+ni+'" title="ancho">\u00d7<input data-f="vH" type="number" min="40" max="800" step="10" style="'+ni+'" title="alto"></span><span style="grid-column:3/-1;color:#9db4d6;font-size:10.5px">ancho \u00d7 alto</span>'+
+      '<button type="button" data-a="altura" style="'+bt+';grid-column:1/-1" title="Pone la fila a la altura de la foto m\u00e1s alta (horizontal o vertical) + 8 px">\u2195 Ajustar la fila a la foto m\u00e1s alta</button>'+
+    '</div>'+
     '<div style="display:flex;gap:8px"><button type="button" data-a="no" style="'+bt+';flex:1">Cancelar</button><button type="button" data-a="si" style="'+bt+';flex:2;background:#1E7A46;color:#fff">\u2b07 Exportar con sustentos</button></div>';
   doc.body.appendChild(p);
   var cks=function(){return Array.prototype.slice.call(p.querySelectorAll('#_tbSustLst input'))};
   var cuenta=function(){var n=cks().filter(function(c){return c.checked}).length;p.querySelector('#_tbSustN').textContent=n+' de '+ord.length+' columnas';p.querySelector('[data-a="si"]').disabled=!n};
   var guarda=function(){var c2=_tbCfg();c2.sustCols=cks().filter(function(c){return c.checked}).map(function(c){return c.getAttribute('data-k')});_tbCfgSave(c2)};
   cks().forEach(function(c){c.onchange=function(){cuenta();guarda()}});cuenta();
+  var fo=_tbSustFoto(cfg.sustFoto),fins=function(){return Array.prototype.slice.call(p.querySelectorAll('#_tbSustF input[data-f]'))};
+  fins().forEach(function(x){x.value=fo[x.getAttribute('data-f')];x.onchange=function(){var o={};fins().forEach(function(y){o[y.getAttribute('data-f')]=y.value});fo=_tbSustFoto(o);fins().forEach(function(y){y.value=fo[y.getAttribute('data-f')]});var c3=_tbCfg();c3.sustFoto=fo;_tbCfgSave(c3)}});
   var cierra=function(){try{p.remove()}catch(_e){}doc.removeEventListener('mousedown',fuera,true)};var fuera=function(ev){if(!p.contains(ev.target)&&ev.target!==b)cierra()};setTimeout(function(){doc.addEventListener('mousedown',fuera,true)},0);
   p.onclick=async function(ev){var x=ev.target&&ev.target.closest&&ev.target.closest('button[data-a]');if(!x)return;var ac=x.getAttribute('data-a');
     if(ac==='todas'||ac==='ninguna'||ac==='tabla'){cks().forEach(function(c){var k=c.getAttribute('data-k');c.checked=(ac==='todas')?true:(ac==='ninguna'?false:!(cfg.ocultas&&cfg.ocultas[k]))});cuenta();guarda();return}
+    if(ac==='altura'){var fi=p.querySelector('#_tbSustF input[data-f="fila"]');fi.value=Math.max(fo.hH,fo.vH)+8;fi.onchange();return}
     if(ac==='no'){cierra();return}
     if(ac==='si'){var cols=cks().filter(function(c){return c.checked}).map(function(c){return c.getAttribute('data-k')});if(!cols.length)return;cierra();
       var rt=window._nav_tbRoot;if(!rt)return;b.disabled=true;var t0=b.textContent;b.textContent='Preparando\u2026';
-      try{var R=await _tbExportarXlsx(rt,doc,{sust:true,cols:cols,onProg:function(t){b.textContent=t}});try{var r9=doc.getElementById('_tbRes');if(r9)r9.textContent='Excel con sustentos: '+cols.length+' columnas \u00b7 '+((R&&R.fotos)||0)+' fotos'}catch(_e){}}
+      try{var R=await _tbExportarXlsx(rt,doc,{sust:true,cols:cols,foto:fo,onProg:function(t){b.textContent=t}});try{var r9=doc.getElementById('_tbRes');if(r9)r9.textContent='Excel con sustentos: '+cols.length+' columnas \u00b7 '+((R&&R.fotos)||0)+' fotos'}catch(_e){}}
       catch(e){try{alert('No se pudo exportar: '+((e&&e.message)||e))}catch(_e){}}b.disabled=false;b.textContent=t0}}}catch(e){}}
 function _tbCalZoomBtns(d,bar,antes,getEl,getZ,setZ){try{
   var mk=function(t,tit,f){var b=d.createElement('button');b.type='button';b.textContent=t;b.title=tit;b.style.cssText='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:5px 9px;font-weight:800;cursor:pointer;flex:none';b.onmousedown=function(e){e.stopPropagation()};
@@ -29340,7 +29357,7 @@ async function _tbExportarXlsx2(root,doc,opt){
   /* ===== CON SUSTENTOS: debajo de cada fila de partida, una fila de FOTOS de sus cargas
      (todas del mismo tamano, en espacios iguales a lo ancho de las columnas visibles) y otra
      con la fecha, el avance y el total. Las partes (apartados) llevan solo sus cargas. ===== */
-  var SUST=!!(opt&&opt.sust),prog=(opt&&opt.onProg)||function(){},IW=144,IH=108,imgs=[],anchors=[],fotoBy={},slots=[],xfCap=0,xfPic=0;
+  var SUST=!!(opt&&opt.sust),prog=(opt&&opt.onProg)||function(){},FO=_tbSustFoto(opt&&opt.foto),IW=Math.max(FO.hW,FO.vW),FILA=Math.max(FO.fila,FO.hH+8,FO.vH+8),imgs=[],anchors=[],fotoBy={},slots=[],xfCap=0,xfPic=0;
   var itemsDe=function(m){try{if(!m||!m.id)return [];var id=m.id;var ps=((typeof partesOf==='function')?partesOf(id):[]).filter(function(x){return x&&(x.tipo==='cant'||x.tipo==='glb')}).slice().sort(function(a,b){return String(a.fecha).localeCompare(String(b.fecha))||((a.ts||0)-(b.ts||0))});
       var me=(typeof metaOf==='function')?metaOf(id):null,u=(me&&me.unidad)||'',tot=null,fase=null;
       try{var fz=(typeof _fzDe==='function')?_fzDe(id):null;if(fz&&m.pert){var pn=String(m.pert).trim().toLowerCase();(fz.fases||[]).forEach(function(f){if(String(f.nombre||'').trim().toLowerCase()===pn)fase=f})}}catch(_e){}
@@ -29362,18 +29379,18 @@ async function _tbExportarXlsx2(root,doc,opt){
     var urls={};trs.forEach(function(tr){var m=(window._tbLineas||{})[tr.getAttribute('data-rk')||''];if(!m)return;itemsDe(m).forEach(function(it){if(it.url)urls[it.url]=1})});
     var lista=Object.keys(urls),hechas=0,fondo=(typeof _tabTemaClaro==='function'&&_tabTemaClaro())?'#ffffff':'#0b1220';
     var prep=async function(url){try{var ctl=new AbortController(),to=setTimeout(function(){ctl.abort()},25000);var res=await fetch(url,{mode:'cors',signal:ctl.signal});clearTimeout(to);if(!res.ok)return null;
-        var bm=await createImageBitmap(await res.blob());var W=IW*2,H=IH*2,cv=document.createElement('canvas');cv.width=W;cv.height=H;var cx=cv.getContext('2d');cx.fillStyle=fondo;cx.fillRect(0,0,W,H);
+        var bm=await createImageBitmap(await res.blob());var hor=(bm.width>=bm.height),ow=hor?FO.hW:FO.vW,oh=hor?FO.hH:FO.vH;var W=ow*2,H=oh*2,cv=document.createElement('canvas');cv.width=W;cv.height=H;var cx=cv.getContext('2d');cx.fillStyle=fondo;cx.fillRect(0,0,W,H);
         var sc=Math.min(W/bm.width,H/bm.height),dw=bm.width*sc,dh=bm.height*sc;cx.drawImage(bm,(W-dw)/2,(H-dh)/2,dw,dh);try{bm.close()}catch(_e){}
-        var jb=await new Promise(function(ok){cv.toBlob(ok,'image/jpeg',0.82)});return jb?new Uint8Array(await jb.arrayBuffer()):null}catch(e){return null}};
-    var pos=0;var obrero=async function(){while(pos<lista.length){var u9=lista[pos++];var b9=await prep(u9);if(b9){imgs.push(b9);fotoBy[u9]=imgs.length}hechas++;prog('Fotos '+hechas+'/'+lista.length+'\u2026')}};
+        var jb=await new Promise(function(ok){cv.toBlob(ok,'image/jpeg',0.82)});return jb?{b:new Uint8Array(await jb.arrayBuffer()),w:ow,h:oh}:null}catch(e){return null}};
+    var pos=0;var obrero=async function(){while(pos<lista.length){var u9=lista[pos++];var b9=await prep(u9);if(b9){imgs.push(b9.b);fotoBy[u9]={i:imgs.length,w:b9.w,h:b9.h}}hechas++;prog('Fotos '+hechas+'/'+lista.length+'\u2026')}};
     var ps9=[];for(var w9=0;w9<Math.min(6,lista.length);w9++)ps9.push(obrero());await Promise.all(ps9);prog('Armando el Excel\u2026')}
   var sustFilas=function(m){var its=itemsDe(m);
     if(!its.length){filas.push('<row r="'+r+'" ht="16" customHeight="1">'+celT('A'+r,'Sin avances reportados',xfCap)+'</row>');merges.push('A'+r+':'+colL(nC-1)+r);r++;return}
     for(var k=0;k<its.length;k+=slots.length){var ch=its.slice(k,k+slots.length),hp='',hc='';
       ch.forEach(function(it,j){var sl=slots[j],c0=colL(sl[0]),c1=colL(sl[1]);hp+=celT(c0+r,it.url&&!fotoBy[it.url]?'(foto no disponible)':'',xfPic);hc+=celT(c0+(r+1),it.cap,xfCap);
         if(sl[1]>sl[0]){merges.push(c0+r+':'+c1+r);merges.push(c0+(r+1)+':'+c1+(r+1))}
-        if(it.url&&fotoBy[it.url])anchors.push({col:sl[0],row:r-1,img:fotoBy[it.url]})});
-      filas.push('<row r="'+r+'" ht="'+Math.round((IH+8)*0.75)+'" customHeight="1">'+hp+'</row>');filas.push('<row r="'+(r+1)+'" ht="30" customHeight="1">'+hc+'</row>');r+=2}};
+        if(it.url&&fotoBy[it.url]){var fb=fotoBy[it.url];anchors.push({col:sl[0],row:r-1,img:fb.i,w:fb.w,h:fb.h,dx:Math.max(4,Math.round(((sl[2]||IW)-fb.w)/2)),dy:Math.max(4,Math.round((FILA-fb.h)/2))})}});
+      filas.push('<row r="'+r+'" ht="'+Math.round(FILA*0.75)+'" customHeight="1">'+hp+'</row>');filas.push('<row r="'+(r+1)+'" ht="30" customHeight="1">'+hc+'</row>');r+=2}};
   trs.forEach(function(tr){
     if(cs(tr).display==='none')return;
     var tds=Array.prototype.slice.call(tr.children).filter(function(x){return !(x.classList&&x.classList.contains('_tbEx'))});   /* sin la columna de numeros */
@@ -29497,9 +29514,9 @@ async function _tbExportarXlsx2(root,doc,opt){
     ['xl/styles.xml',estilos],
     ['xl/worksheets/sheet1.xml',hoja]];
   if(anchors.length){var EMU=9525,dr='',rl='';
-    anchors.forEach(function(a,n){var id=n+1;dr+='<xdr:oneCellAnchor><xdr:from><xdr:col>'+a.col+'</xdr:col><xdr:colOff>'+(4*EMU)+'</xdr:colOff><xdr:row>'+a.row+'</xdr:row><xdr:rowOff>'+(4*EMU)+'</xdr:rowOff></xdr:from><xdr:ext cx="'+(IW*EMU)+'" cy="'+(IH*EMU)+'"/>'+
+    anchors.forEach(function(a,n){var id=n+1;dr+='<xdr:oneCellAnchor><xdr:from><xdr:col>'+a.col+'</xdr:col><xdr:colOff>'+(a.dx*EMU)+'</xdr:colOff><xdr:row>'+a.row+'</xdr:row><xdr:rowOff>'+(a.dy*EMU)+'</xdr:rowOff></xdr:from><xdr:ext cx="'+(a.w*EMU)+'" cy="'+(a.h*EMU)+'"/>'+
       '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="'+(id+1)+'" name="Foto '+id+'"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId'+id+'"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>'+
-      '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+(IW*EMU)+'" cy="'+(IH*EMU)+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>';
+      '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+(a.w*EMU)+'" cy="'+(a.h*EMU)+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>';
       rl+='<Relationship Id="rId'+id+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image'+a.img+'.jpeg"/>'});
     partes.push(['xl/drawings/drawing1.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+dr+'</xdr:wsDr>']);
     partes.push(['xl/drawings/_rels/drawing1.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+rl+'</Relationships>']);
