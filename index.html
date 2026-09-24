@@ -21824,7 +21824,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b77';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b78';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28344,6 +28344,15 @@ function _tbCalPip(p,doc,full){try{
 /* Ventana de dias con avance: zoom propio (A-/A+ y Ctrl+rueda, sin tocar la tabla) y sin
    botones de borrar por error: se ocultan la X de cada foto y el 📷; quedan 📅 (cambiar dia),
    Mod (metrado) y la X de la carga, que antes de borrar pide un aviso de advertencia propio. */
+/* boton "Exportar a Excel con sustentos" (Tabla 1): independiente del exportar de siempre */
+function _tbSustBtn(doc){var bx=doc.getElementById('_tbXls');if(!bx||doc.getElementById('_tbXlsS'))return;
+  var b=doc.createElement('button');b.id='_tbXlsS';b.type='button';b.textContent='\ud83d\uddbc Exportar a Excel con sustentos';
+  b.title='Otro Excel: debajo de cada partida, las fotos de sus cargas (todas del mismo tama\u00f1o) y una fila con fecha, avance y total. La exportaci\u00f3n de siempre no cambia';
+  b.style.cssText=bx.getAttribute('style')||'background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer';
+  bx.parentNode.insertBefore(b,bx.nextSibling);
+  b.onclick=async function(){var rt=window._nav_tbRoot;if(!rt)return;b.disabled=true;var t0=b.textContent;b.textContent='Preparando\u2026';
+    try{var R=await _tbExportarXlsx(rt,doc,{sust:true,onProg:function(t){b.textContent=t}});try{var r9=doc.getElementById('_tbRes');if(r9)r9.textContent='Excel con sustentos: '+((R&&R.fotos)||0)+' fotos'}catch(_e){}}
+    catch(e){try{alert('No se pudo exportar: '+((e&&e.message)||e))}catch(_e){}}b.disabled=false;b.textContent=t0}}
 function _tbCalZoomBtns(d,bar,antes,getEl,getZ,setZ){try{
   var mk=function(t,tit,f){var b=d.createElement('button');b.type='button';b.textContent=t;b.title=tit;b.style.cssText='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:5px 9px;font-weight:800;cursor:pointer;flex:none';b.onmousedown=function(e){e.stopPropagation()};
     b.onclick=function(e){e.stopPropagation();var z=Math.max(.4,Math.min(3,f(getZ()||1)));setZ(z);var el=getEl();if(el)el.style.zoom=z};if(antes&&antes.parentNode===bar)bar.insertBefore(b,antes);else bar.appendChild(b)};
@@ -28427,7 +28436,7 @@ function _tabLimpioCk(doc,top,pfx,antes){try{if(!top||top.querySelector('#'+pfx+
 function _tabNavBind(doc,root,pfx){try{
   window['_nav'+pfx+'Root']=root;
   try{_tabLimpioAplica(doc,root,pfx)}catch(_elp){}
-  if(pfx==='_tb'){try{_tbDotBind(doc,root)}catch(_edt){}}
+  if(pfx==='_tb'){try{_tbDotBind(doc,root)}catch(_edt){}try{_tbSustBtn(doc)}catch(_esb){}}
   try{_tabRowBind(doc,root,pfx)}catch(_er){}setTimeout(function(){try{_tabClrMenu(doc,pfx)}catch(_ec){}},0);try{_tabDecAplica(root,pfx)}catch(_ed){}
   if(doc['_nav'+pfx+'On'])return;doc['_nav'+pfx+'On']=1;
   doc.addEventListener('keydown',function(e){try{
@@ -29219,7 +29228,7 @@ function _tbXlsRgb(c){
   if(m[4]!=null&&Number(m[4])===0)return null;
   var h=function(n){var x=Number(n).toString(16).toUpperCase();return x.length<2?('0'+x):x};
   return 'FF'+h(m[1])+h(m[2])+h(m[3])}
-async function _tbExportarXlsx(root,doc){
+async function _tbExportarXlsx(root,doc,opt){
   /* se exporta el cuadro ENTERO aunque haya titulos WBS plegados en pantalla:
      si no, la SUMA del TOTAL del Excel no seria la del TOTAL de la tabla */
   var full=null;
@@ -29230,9 +29239,9 @@ async function _tbExportarXlsx(root,doc){
       full=doc.createElement('div');full.style.cssText='position:fixed;left:0;top:0;width:1600px;height:800px;overflow:auto;visibility:hidden;background:#0b1220';
       full.innerHTML=html;doc.body.appendChild(full);try{_tbAplicaFijas(full)}catch(_e2){}}}
   catch(_e3){try{if(full)full.remove()}catch(_e4){}full=null}
-  try{return await _tbExportarXlsx2(full||root,doc)}
+  try{return await _tbExportarXlsx2(full||root,doc,opt)}
   finally{if(full){try{full.remove()}catch(_e5){}}}}
-async function _tbExportarXlsx2(root,doc){
+async function _tbExportarXlsx2(root,doc,opt){
   var tb=root.querySelector('table');if(!tb)throw new Error('no hay tabla pintada');
   var w=(doc&&doc.defaultView)||window,cs=function(el){return w.getComputedStyle(el)};
   var ths=Array.prototype.slice.call(tb.querySelectorAll('thead th'));
@@ -29275,6 +29284,43 @@ async function _tbExportarXlsx2(root,doc){
   var esPct={pct:1,noHace:1};
   var sumables={hhC:1,hh:1,costo:1,costoC:1,dCosto:1,hhM:1,costoM:1,hhA:1,costoA:1,hhAM:1,costoAM:1,hhR:1,hhRF:1,costoR:1,costoRF:1};
   var trs=Array.prototype.slice.call(tb.querySelectorAll('tbody tr'));
+  /* ===== CON SUSTENTOS: debajo de cada fila de partida, una fila de FOTOS de sus cargas
+     (todas del mismo tamano, en espacios iguales a lo ancho de las columnas visibles) y otra
+     con la fecha, el avance y el total. Las partes (apartados) llevan solo sus cargas. ===== */
+  var SUST=!!(opt&&opt.sust),prog=(opt&&opt.onProg)||function(){},IW=144,IH=108,imgs=[],anchors=[],fotoBy={},slots=[],xfCap=0,xfPic=0;
+  var itemsDe=function(m){try{if(!m||!m.id)return [];var id=m.id;var ps=((typeof partesOf==='function')?partesOf(id):[]).filter(function(x){return x&&(x.tipo==='cant'||x.tipo==='glb')}).slice().sort(function(a,b){return String(a.fecha).localeCompare(String(b.fecha))||((a.ts||0)-(b.ts||0))});
+      var me=(typeof metaOf==='function')?metaOf(id):null,u=(me&&me.unidad)||'',tot=null,fase=null;
+      try{var fz=(typeof _fzDe==='function')?_fzDe(id):null;if(fz&&m.pert){var pn=String(m.pert).trim().toLowerCase();(fz.fases||[]).forEach(function(f){if(String(f.nombre||'').trim().toLowerCase()===pn)fase=f})}}catch(_e){}
+      if(fase){var cids={};(fase.movs||[]).forEach(function(mv){if(mv.cid)cids[mv.cid]=(cids[mv.cid]||0)+(Number(mv.c)||0)});ps=ps.filter(function(x){return cids[x.client_id]!=null}).map(function(x){var y={};for(var k in x)y[k]=x[k];y._v=cids[x.client_id];return y});u=fase.unidad||u;tot=Number(fase.cantidad)||null}
+      else{var M9=(typeof _cgMeta==='function')?_cgMeta({id:id}):null;tot=M9?M9.mT:((me&&me.total)||null)}
+      var ac=0,out=[];ps.forEach(function(x){var ff=String(x.fecha||'').split('-');var fe=(ff.length===3)?(ff[2]+'/'+ff[1]+'/'+ff[0]):String(x.fecha||'');var cap;
+        if(x.tipo==='glb'){cap=fe+' \u00b7 avance al '+(Number(x.pctGlb)||0)+'%'}
+        else if(u==='na'){cap=fe+' \u00b7 constancia (no aporta avance)'}
+        else{var v=(x._v!=null)?x._v:(Number(x.cant)||0);ac+=v;cap=fe+' \u00b7 +'+qtyX(v)+' '+u+' \u00b7 total '+qtyX(ac)+(tot?('/'+qtyX(tot)):'')+' '+u}
+        var fs=(x.fotos||[]).filter(Boolean);if(!fs.length)out.push({url:null,cap:cap+' \u00b7 sin foto'});else fs.forEach(function(fu,j){out.push({url:fu,cap:cap+(fs.length>1?(' \u00b7 foto '+(j+1)+'/'+fs.length):'')})})});
+      return out}catch(e){return []}};
+  if(SUST){
+    /* espacios iguales: se juntan columnas visibles hasta tener el ancho de una foto */
+    var acc=0,s0=0;ths.forEach(function(th,i){acc+=(th.offsetWidth||90);if(acc>=IW+10){slots.push([s0,i,acc]);s0=i+1;acc=0}});if(!slots.length)slots.push([0,nC-1,acc]);
+    var fo9=font('FFCFE3FF',false),fi9=fill('FF101A2A'),fi8=fill('FF0B1220');
+    xfs.push('<xf numFmtId="0" fontId="'+fo9+'" fillId="'+fi9+'" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top" wrapText="1"/></xf>');xfCap=xfs.length-1;
+    xfs.push('<xf numFmtId="0" fontId="'+fo9+'" fillId="'+fi8+'" borderId="1" applyFont="1" applyFill="1" applyBorder="1"/>');xfPic=xfs.length-1;
+    /* las fotos: se bajan una vez, se ajustan a una misma medida (entera, sin recortar) y se comprimen */
+    var urls={};trs.forEach(function(tr){var m=(window._tbLineas||{})[tr.getAttribute('data-rk')||''];if(!m)return;itemsDe(m).forEach(function(it){if(it.url)urls[it.url]=1})});
+    var lista=Object.keys(urls),hechas=0,fondo=(typeof _tabTemaClaro==='function'&&_tabTemaClaro())?'#ffffff':'#0b1220';
+    var prep=async function(url){try{var ctl=new AbortController(),to=setTimeout(function(){ctl.abort()},25000);var res=await fetch(url,{mode:'cors',signal:ctl.signal});clearTimeout(to);if(!res.ok)return null;
+        var bm=await createImageBitmap(await res.blob());var W=IW*2,H=IH*2,cv=document.createElement('canvas');cv.width=W;cv.height=H;var cx=cv.getContext('2d');cx.fillStyle=fondo;cx.fillRect(0,0,W,H);
+        var sc=Math.min(W/bm.width,H/bm.height),dw=bm.width*sc,dh=bm.height*sc;cx.drawImage(bm,(W-dw)/2,(H-dh)/2,dw,dh);try{bm.close()}catch(_e){}
+        var jb=await new Promise(function(ok){cv.toBlob(ok,'image/jpeg',0.82)});return jb?new Uint8Array(await jb.arrayBuffer()):null}catch(e){return null}};
+    var pos=0;var obrero=async function(){while(pos<lista.length){var u9=lista[pos++];var b9=await prep(u9);if(b9){imgs.push(b9);fotoBy[u9]=imgs.length}hechas++;prog('Fotos '+hechas+'/'+lista.length+'\u2026')}};
+    var ps9=[];for(var w9=0;w9<Math.min(6,lista.length);w9++)ps9.push(obrero());await Promise.all(ps9);prog('Armando el Excel\u2026')}
+  var sustFilas=function(m){var its=itemsDe(m);
+    if(!its.length){filas.push('<row r="'+r+'" ht="16" customHeight="1">'+celT('A'+r,'Sin avances reportados',xfCap)+'</row>');merges.push('A'+r+':'+colL(nC-1)+r);r++;return}
+    for(var k=0;k<its.length;k+=slots.length){var ch=its.slice(k,k+slots.length),hp='',hc='';
+      ch.forEach(function(it,j){var sl=slots[j],c0=colL(sl[0]),c1=colL(sl[1]);hp+=celT(c0+r,it.url&&!fotoBy[it.url]?'(foto no disponible)':'',xfPic);hc+=celT(c0+(r+1),it.cap,xfCap);
+        if(sl[1]>sl[0]){merges.push(c0+r+':'+c1+r);merges.push(c0+(r+1)+':'+c1+(r+1))}
+        if(it.url&&fotoBy[it.url])anchors.push({col:sl[0],row:r-1,img:fotoBy[it.url]})});
+      filas.push('<row r="'+r+'" ht="'+Math.round((IH+8)*0.75)+'" customHeight="1">'+hp+'</row>');filas.push('<row r="'+(r+1)+'" ht="30" customHeight="1">'+hc+'</row>');r+=2}};
   trs.forEach(function(tr){
     if(cs(tr).display==='none')return;
     var tds=Array.prototype.slice.call(tr.children).filter(function(x){return !(x.classList&&x.classList.contains('_tbEx'))});   /* sin la columna de numeros */
@@ -29349,7 +29395,7 @@ async function _tbExportarXlsx2(root,doc){
         var a3=refX(FX9[0]),b3=refX(FX9[2]);if(a3!=null&&b3!=null){h2+=celF(ref,a3+FX9[1]+b3,estiloDe(td,tr,NUM,'right'));return}}
       if(isFinite(num)&&(_TB_NUM[k]||raw!=null)){h2+=celN(ref,num,estiloDe(td,tr,(k==='dCosto')?DIF:(esPct[k]?PCT:NUM),'right'));return}
       h2+=celT(ref,txt(td),estiloDe(td,tr,0,'left'))});
-    filas.push('<row r="'+r+'">'+h2+'</row>');r++});
+    filas.push('<row r="'+r+'">'+h2+'</row>');r++;if(SUST&&m)sustFilas(m)});
   /* --- TOTAL: SUMA de cada columna sumable sobre las filas de datos --- */
   var tf=tb.querySelector('tfoot tr');
   if(tf){var tds2=Array.prototype.slice.call(tf.children).filter(function(x){return !(x.classList&&x.classList.contains('_tbEx'))}),ci=0,h3='',ini=null;
@@ -29372,7 +29418,7 @@ async function _tbExportarXlsx2(root,doc){
     '<sheetFormatPr defaultRowHeight="15"/>'+cols+
     '<sheetData>'+filas.join('')+'</sheetData>'+
     (merges.length?('<mergeCells count="'+merges.length+'">'+merges.map(function(x){return '<mergeCell ref="'+x+'"/>'}).join('')+'</mergeCells>'):'')+
-    '</worksheet>';
+    (anchors.length?'<drawing r:id="rId1"/>':'')+'</worksheet>';
   var estilos='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
     '<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/><numFmt numFmtId="166" formatCode="&quot;− &quot;#,##0.00;&quot;+ &quot;#,##0.00;0.00"/></numFmts>'+
@@ -29393,15 +29439,25 @@ async function _tbExportarXlsx2(root,doc){
     ['xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
     ['xl/styles.xml',estilos],
     ['xl/worksheets/sheet1.xml',hoja]];
+  if(anchors.length){var EMU=9525,dr='',rl='';
+    anchors.forEach(function(a,n){var id=n+1;dr+='<xdr:oneCellAnchor><xdr:from><xdr:col>'+a.col+'</xdr:col><xdr:colOff>'+(4*EMU)+'</xdr:colOff><xdr:row>'+a.row+'</xdr:row><xdr:rowOff>'+(4*EMU)+'</xdr:rowOff></xdr:from><xdr:ext cx="'+(IW*EMU)+'" cy="'+(IH*EMU)+'"/>'+
+      '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="'+(id+1)+'" name="Foto '+id+'"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId'+id+'"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>'+
+      '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+(IW*EMU)+'" cy="'+(IH*EMU)+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>';
+      rl+='<Relationship Id="rId'+id+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image'+a.img+'.jpeg"/>'});
+    partes.push(['xl/drawings/drawing1.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+dr+'</xdr:wsDr>']);
+    partes.push(['xl/drawings/_rels/drawing1.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+rl+'</Relationships>']);
+    partes.push(['xl/worksheets/_rels/sheet1.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>']);
+    partes[0][1]=partes[0][1].replace('<Default Extension="xml" ContentType="application/xml"/>','<Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/>').replace('</Types>','<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>')}
   var enc=new TextEncoder(),entradas=[];
   for(var i=0;i<partes.length;i++){var u8=enc.encode(partes[i][1]);
     entradas.push({nombre:partes[i][0],metodo:8,tiempo:(typeof _crZipTs==='function')?_crZipTs():0,crc:_wkCrc32(u8),usz:u8.length,datos:await _wkDeflar(u8)})}
+  imgs.forEach(function(b,n){entradas.push({nombre:'xl/media/image'+(n+1)+'.jpeg',metodo:0,tiempo:(typeof _crZipTs==='function')?_crZipTs():0,crc:_wkCrc32(b),usz:b.length,datos:b})});
   var blob=_wkZipArmar(entradas);
   var url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download='Tabla del alcance - '+String(nomC).replace(/[\\\/:*?"<>|]+/g,'_')+' - '+((typeof todayISO==='function')?todayISO():'')+'.xlsx';
+  a.href=url;a.download='Tabla del alcance'+(SUST?' con sustentos':'')+' - '+String(nomC).replace(/[\\\/:*?"<>|]+/g,'_')+' - '+((typeof todayISO==='function')?todayISO():'')+'.xlsx';
   document.body.appendChild(a);a.click();
   setTimeout(function(){try{URL.revokeObjectURL(url);a.remove()}catch(e){}},4000);
-  return {filas:r-1,columnas:nC}}
+  return {filas:r-1,columnas:nC,fotos:anchors.length}}
 function _crTablaDocHTML(titulo){
   return '<!doctype html><html><head><meta charset="utf-8"><title>'+esc(titulo||'Tabla')+'</title><style>'+
     'html,body{margin:0;height:100%;background:#0b1220;color:#cfe3ff;font:12px system-ui,-apple-system,Segoe UI,Roboto,Arial}'+
