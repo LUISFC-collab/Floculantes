@@ -21824,7 +21824,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b90';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b91';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28489,6 +28489,17 @@ function _tbCalZoomBtns(d,bar,antes,getEl,getZ,setZ){try{
   mk('A\u2212','Achicar esta ventana (no cambia la tabla)',function(z){return z/1.1});mk('A+','Agrandar esta ventana (no cambia la tabla)',function(z){return z*1.1})}catch(e){}}
 function _tbCalArma(x,d){try{
   Array.prototype.forEach.call(x.querySelectorAll('._amFotoX,[id^="_amFotP"]'),function(b){b.style.display='none'});
+  /* cada foto con su casilla "va al Excel con sustentos": es la MISMA seleccion del listado de fotos
+     de ese Excel (cfg.sustFotoOff, guardada en Supabase), asi lo que se decide aqui se ve alla y al reves */
+  Array.prototype.forEach.call(x.querySelectorAll('img._amFoto'),function(im){if(im._ckSust)return;im._ckSust=1;var u=im.getAttribute('data-src')||im.src;if(!u)return;
+    var box=im.parentNode;if(!box||box.tagName!=='SPAN'||box.querySelector('img._amFoto')!==im){box=d.createElement('span');im.parentNode.insertBefore(box,im);box.appendChild(im)}
+    box.style.position='relative';box.style.display='inline-block';box.style.lineHeight='0';
+    var ck=d.createElement('input');ck.type='checkbox';ck.title='Considerar esta foto en el Excel con sustentos (la misma selecci\u00f3n del listado de fotos del Excel)';
+    ck.style.cssText='position:absolute;top:3px;left:3px;width:16px;height:16px;margin:0;cursor:pointer;z-index:2;accent-color:#1E7A46';box.appendChild(ck);
+    var pinta=function(on){ck.checked=on;im.style.filter=on?'':'grayscale(1)';im.style.opacity=on?'1':'.45';im.style.outline=on?'2px solid #3FB950':'2px solid #9AA3AF';im.style.outlineOffset='-2px'};
+    var off0=((_tbCfg()||{}).sustFotoOff)||{};pinta(!off0[u]);
+    ck.onclick=function(e){e.stopPropagation()};
+    ck.onchange=function(){var c=_tbCfg(),o=c.sustFotoOff||{};if(ck.checked)delete o[u];else o[u]=1;c.sustFotoOff=o;_tbCfgSave(c);pinta(ck.checked)}});
   Array.prototype.forEach.call(x.querySelectorAll('[id^="_amDelP"]'),function(b){if(b._guard)return;var orig=b.onclick;if(typeof orig!=='function')return;b._guard=1;b.title='Borrar esta carga (pide confirmaci\u00f3n)';
     b.onclick=function(ev){try{if(ev&&ev.stopPropagation)ev.stopPropagation()}catch(_e){}var i=String(b.id).replace('_amDelP','');
       var v=(x.querySelector('#_amVal'+i)||{}).textContent||'',f=(x.querySelector('#_amFch'+i)||{}).textContent||'';
