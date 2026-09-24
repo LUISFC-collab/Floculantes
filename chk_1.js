@@ -21073,7 +21073,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b74';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b75';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -27630,7 +27630,7 @@ var _TAB_ABREV=[[/\bmayor metrado\b/gi,'MM'],[/\bMetrado mayor\b/g,'Met. MM'],[/
   [/\bSuma de metrado\b/g,'\u03a3 met.'],[/\bRestricci\u00f3n\b/g,'Restr.'],[/\bResponsable\b/g,'Resp.'],[/\bAcci\u00f3n\b/g,'Acc.']];
 function _tabAbrev(t){var x=String(t||'');_TAB_ABREV.forEach(function(r){x=x.replace(r[0],r[1])});return x}
 function _tabLimpioCss(doc){if(doc.getElementById('_tabLimpioCss'))return;var st=doc.createElement('style');st.id='_tabLimpioCss';
-  st.textContent=['_tb','_tq','_tv','_tx'].map(function(p){return '.'+p+'Limpio .'+p+'Pin:not([style*="opacity:1"]),.'+p+'Limpio .'+p+'Clr:not([style*="opacity:1"]),.'+p+'Limpio .'+p+'Fnt:not([style*="opacity:1"]),.'+p+'Limpio ._fltBtn:not([style*="opacity:1"])'}).join(',')+'{display:none!important}';
+  st.textContent=['_tb','_tq','_tv','_tx'].map(function(p){return '.'+p+'Limpio .'+p+'Pin,.'+p+'Limpio .'+p+'Clr,.'+p+'Limpio .'+p+'Fnt,.'+p+'Limpio ._fltBtn'}).join(',')+'{display:none!important}';
   (doc.head||doc.documentElement).appendChild(st)}
 function _tabLimpioOn(pfx){try{var cf=window[pfx+'Cfg'];return !!((typeof cf==='function')&&cf().limpio)}catch(e){return false}}
 function _tabLimpioAplica(doc,rt,pfx){try{if(!rt)return;_tabLimpioCss(doc);var on=_tabLimpioOn(pfx);rt.classList.toggle(pfx+'Limpio',on);
@@ -27699,6 +27699,13 @@ function _tabNavVer(rt,dest,pfx){
    colores en su version oscura. Un solo ajuste para las cuatro tablas, en este equipo. */
 window._tabTemaReg=window._tabTemaReg||[];
 function _tabTemaClaro(){try{return localStorage.getItem('obf4_tab_tema')==='claro'}catch(e){return false}}
+/* Excel con el TEMA de la pantalla: en modo claro cada color del libro (relleno, letra y borde)
+   pasa por la misma cuenta que el filtro de la pantalla (invertir + girar el tono 180 grados),
+   asi el Excel sale claro como se ve; en oscuro, los colores tal cual. */
+function _tabXlsTema(argb){try{if(!argb||!_tabTemaClaro())return argb;var h=String(argb).replace(/^#/,'');if(h.length===8)h=h.slice(2);if(!/^[0-9a-fA-F]{6}$/.test(h))return argb;
+  var r=1-parseInt(h.slice(0,2),16)/255,g=1-parseInt(h.slice(2,4),16)/255,b=1-parseInt(h.slice(4,6),16)/255;
+  var R=-0.574*r+1.43*g+0.144*b,G=0.426*r+0.43*g+0.144*b,B=0.426*r+1.43*g-0.856*b;
+  var x=function(v){v=Math.round(Math.max(0,Math.min(1,v))*255);var t=v.toString(16).toUpperCase();return t.length<2?'0'+t:t};return 'FF'+x(R)+x(G)+x(B)}catch(e){return argb}}
 function _tabTemaPinta(){var cl=_tabTemaClaro();window._tabTemaReg=window._tabTemaReg.filter(function(o){return o.el&&o.el.isConnected});
   window._tabTemaReg.forEach(function(o){o.el.style.filter=cl?'invert(1) hue-rotate(180deg)':'';try{Array.prototype.forEach.call(o.el.querySelectorAll('#_tbCalPip,._tbCalLb'),function(x){x.style.filter=cl?'invert(1) hue-rotate(180deg)':''})}catch(_ef){}try{o.el.style.colorScheme=cl?'light':''}catch(e){}
     if(o.btn){o.btn.textContent=cl?'\u263e Oscuro':'\u2600 Claro';o.btn.title=cl?'Volver al modo oscuro':'Modo claro: fondo blanco y letras oscuras'}})}
@@ -28457,8 +28464,8 @@ async function _tbExportarXlsx2(root,doc){
   var ix={};keys.forEach(function(k,i){ix[k]=i});
   /* --- estilos: fuentes, rellenos y formatos que hagan falta, sin repetir --- */
   var fonts=[],fills=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>'],xfs=[],fK={},fiK={},xK={};
-  var font=function(color,bold){var k=color+'|'+(bold?1:0);if(fK[k]!=null)return fK[k];fonts.push('<font><sz val="10"/><name val="Calibri"/>'+(bold?'<b/>':'')+'<color rgb="'+color+'"/></font>');return fK[k]=fonts.length-1};
-  var fill=function(color){if(!color)return 0;if(fiK[color]!=null)return fiK[color];fills.push('<fill><patternFill patternType="solid"><fgColor rgb="'+color+'"/><bgColor indexed="64"/></patternFill></fill>');return fiK[color]=fills.length-1};
+  var font=function(color,bold){color=_tabXlsTema(color);var k=color+'|'+(bold?1:0);if(fK[k]!=null)return fK[k];fonts.push('<font><sz val="10"/><name val="Calibri"/>'+(bold?'<b/>':'')+'<color rgb="'+color+'"/></font>');return fK[k]=fonts.length-1};
+  var fill=function(color){if(!color)return 0;color=_tabXlsTema(color);if(fiK[color]!=null)return fiK[color];fills.push('<fill><patternFill patternType="solid"><fgColor rgb="'+color+'"/><bgColor indexed="64"/></patternFill></fill>');return fiK[color]=fills.length-1};
   var xf=function(fo,fi,nf,al){var k=fo+'|'+fi+'|'+nf+'|'+al;if(xK[k]!=null)return xK[k];
     xfs.push('<xf numFmtId="'+nf+'" fontId="'+fo+'" fillId="'+fi+'" borderId="1" applyFont="1" applyFill="1" applyBorder="1"'+(nf?' applyNumberFormat="1"':'')+' applyAlignment="1"><alignment horizontal="'+al+'" vertical="center"/></xf>');return xK[k]=xfs.length-1};
   xf(font('FF000000',false),0,0,'left');   /* el estilo 0, neutro */
@@ -28594,7 +28601,7 @@ async function _tbExportarXlsx2(root,doc){
     '<fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts>'+
     '<fills count="'+fills.length+'">'+fills.join('')+'</fills>'+
     '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+
-    '<border><left style="thin"><color rgb="FF3A4A66"/></left><right style="thin"><color rgb="FF3A4A66"/></right><top style="thin"><color rgb="FF3A4A66"/></top><bottom style="thin"><color rgb="FF3A4A66"/></bottom><diagonal/></border></borders>'+
+    '<border><left style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></left><right style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></right><top style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></top><bottom style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></bottom><diagonal/></border></borders>'+
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
     '<cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs>'+
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
@@ -29762,8 +29769,8 @@ async function _tqExportarXlsx2(root,doc){
   var ix={};keys.forEach(function(k,i){ix[k]=i});
   /* --- estilos: fuentes, rellenos y formatos que hagan falta, sin repetir --- */
   var fonts=[],fills=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>'],xfs=[],fK={},fiK={},xK={};
-  var font=function(color,bold){var k=color+'|'+(bold?1:0);if(fK[k]!=null)return fK[k];fonts.push('<font><sz val="10"/><name val="Calibri"/>'+(bold?'<b/>':'')+'<color rgb="'+color+'"/></font>');return fK[k]=fonts.length-1};
-  var fill=function(color){if(!color)return 0;if(fiK[color]!=null)return fiK[color];fills.push('<fill><patternFill patternType="solid"><fgColor rgb="'+color+'"/><bgColor indexed="64"/></patternFill></fill>');return fiK[color]=fills.length-1};
+  var font=function(color,bold){color=_tabXlsTema(color);var k=color+'|'+(bold?1:0);if(fK[k]!=null)return fK[k];fonts.push('<font><sz val="10"/><name val="Calibri"/>'+(bold?'<b/>':'')+'<color rgb="'+color+'"/></font>');return fK[k]=fonts.length-1};
+  var fill=function(color){if(!color)return 0;color=_tabXlsTema(color);if(fiK[color]!=null)return fiK[color];fills.push('<fill><patternFill patternType="solid"><fgColor rgb="'+color+'"/><bgColor indexed="64"/></patternFill></fill>');return fiK[color]=fills.length-1};
   var xf=function(fo,fi,nf,al){var k=fo+'|'+fi+'|'+nf+'|'+al;if(xK[k]!=null)return xK[k];
     xfs.push('<xf numFmtId="'+nf+'" fontId="'+fo+'" fillId="'+fi+'" borderId="1" applyFont="1" applyFill="1" applyBorder="1"'+(nf?' applyNumberFormat="1"':'')+' applyAlignment="1"><alignment horizontal="'+al+'" vertical="center"/></xf>');return xK[k]=xfs.length-1};
   xf(font('FF000000',false),0,0,'left');   /* el estilo 0, neutro */
@@ -29913,7 +29920,7 @@ async function _tqExportarXlsx2(root,doc){
     '<fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts>'+
     '<fills count="'+fills.length+'">'+fills.join('')+'</fills>'+
     '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+
-    '<border><left style="thin"><color rgb="FF3A4A66"/></left><right style="thin"><color rgb="FF3A4A66"/></right><top style="thin"><color rgb="FF3A4A66"/></top><bottom style="thin"><color rgb="FF3A4A66"/></bottom><diagonal/></border></borders>'+
+    '<border><left style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></left><right style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></right><top style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></top><bottom style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></bottom><diagonal/></border></borders>'+
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
     '<cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs>'+
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
@@ -30748,8 +30755,8 @@ async function _tvExportarXlsx2(root,doc){
   var ix={};keys.forEach(function(k,i){ix[k]=i});
   /* --- estilos: fuentes, rellenos y formatos que hagan falta, sin repetir --- */
   var fonts=[],fills=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>'],xfs=[],fK={},fiK={},xK={};
-  var font=function(color,bold){var k=color+'|'+(bold?1:0);if(fK[k]!=null)return fK[k];fonts.push('<font><sz val="10"/><name val="Calibri"/>'+(bold?'<b/>':'')+'<color rgb="'+color+'"/></font>');return fK[k]=fonts.length-1};
-  var fill=function(color){if(!color)return 0;if(fiK[color]!=null)return fiK[color];fills.push('<fill><patternFill patternType="solid"><fgColor rgb="'+color+'"/><bgColor indexed="64"/></patternFill></fill>');return fiK[color]=fills.length-1};
+  var font=function(color,bold){color=_tabXlsTema(color);var k=color+'|'+(bold?1:0);if(fK[k]!=null)return fK[k];fonts.push('<font><sz val="10"/><name val="Calibri"/>'+(bold?'<b/>':'')+'<color rgb="'+color+'"/></font>');return fK[k]=fonts.length-1};
+  var fill=function(color){if(!color)return 0;color=_tabXlsTema(color);if(fiK[color]!=null)return fiK[color];fills.push('<fill><patternFill patternType="solid"><fgColor rgb="'+color+'"/><bgColor indexed="64"/></patternFill></fill>');return fiK[color]=fills.length-1};
   var xf=function(fo,fi,nf,al){var k=fo+'|'+fi+'|'+nf+'|'+al;if(xK[k]!=null)return xK[k];
     xfs.push('<xf numFmtId="'+nf+'" fontId="'+fo+'" fillId="'+fi+'" borderId="1" applyFont="1" applyFill="1" applyBorder="1"'+(nf?' applyNumberFormat="1"':'')+' applyAlignment="1"><alignment horizontal="'+al+'" vertical="center"/></xf>');return xK[k]=xfs.length-1};
   xf(font('FF000000',false),0,0,'left');   /* el estilo 0, neutro */
@@ -30902,7 +30909,7 @@ async function _tvExportarXlsx2(root,doc){
     '<fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts>'+
     '<fills count="'+fills.length+'">'+fills.join('')+'</fills>'+
     '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+
-    '<border><left style="thin"><color rgb="FF3A4A66"/></left><right style="thin"><color rgb="FF3A4A66"/></right><top style="thin"><color rgb="FF3A4A66"/></top><bottom style="thin"><color rgb="FF3A4A66"/></bottom><diagonal/></border></borders>'+
+    '<border><left style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></left><right style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></right><top style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></top><bottom style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></bottom><diagonal/></border></borders>'+
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
     '<cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs>'+
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
@@ -31977,8 +31984,8 @@ async function _txExportarXlsx2(root,doc){
   var ix={};keys.forEach(function(k,i){ix[k]=i});
   /* --- estilos: fuentes, rellenos y formatos que hagan falta, sin repetir --- */
   var fonts=[],fills=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>'],xfs=[],fK={},fiK={},xK={};
-  var font=function(color,bold){var k=color+'|'+(bold?1:0);if(fK[k]!=null)return fK[k];fonts.push('<font><sz val="10"/><name val="Calibri"/>'+(bold?'<b/>':'')+'<color rgb="'+color+'"/></font>');return fK[k]=fonts.length-1};
-  var fill=function(color){if(!color)return 0;if(fiK[color]!=null)return fiK[color];fills.push('<fill><patternFill patternType="solid"><fgColor rgb="'+color+'"/><bgColor indexed="64"/></patternFill></fill>');return fiK[color]=fills.length-1};
+  var font=function(color,bold){color=_tabXlsTema(color);var k=color+'|'+(bold?1:0);if(fK[k]!=null)return fK[k];fonts.push('<font><sz val="10"/><name val="Calibri"/>'+(bold?'<b/>':'')+'<color rgb="'+color+'"/></font>');return fK[k]=fonts.length-1};
+  var fill=function(color){if(!color)return 0;color=_tabXlsTema(color);if(fiK[color]!=null)return fiK[color];fills.push('<fill><patternFill patternType="solid"><fgColor rgb="'+color+'"/><bgColor indexed="64"/></patternFill></fill>');return fiK[color]=fills.length-1};
   var xf=function(fo,fi,nf,al){var k=fo+'|'+fi+'|'+nf+'|'+al;if(xK[k]!=null)return xK[k];
     xfs.push('<xf numFmtId="'+nf+'" fontId="'+fo+'" fillId="'+fi+'" borderId="1" applyFont="1" applyFill="1" applyBorder="1"'+(nf?' applyNumberFormat="1"':'')+' applyAlignment="1"><alignment horizontal="'+al+'" vertical="center"/></xf>');return xK[k]=xfs.length-1};
   xf(font('FF000000',false),0,0,'left');   /* el estilo 0, neutro */
@@ -32137,7 +32144,7 @@ async function _txExportarXlsx2(root,doc){
     '<fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts>'+
     '<fills count="'+fills.length+'">'+fills.join('')+'</fills>'+
     '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+
-    '<border><left style="thin"><color rgb="FF3A4A66"/></left><right style="thin"><color rgb="FF3A4A66"/></right><top style="thin"><color rgb="FF3A4A66"/></top><bottom style="thin"><color rgb="FF3A4A66"/></bottom><diagonal/></border></borders>'+
+    '<border><left style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></left><right style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></right><top style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></top><bottom style="thin"><color rgb="'+_tabXlsTema('FF3A4A66')+'"/></bottom><diagonal/></border></borders>'+
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
     '<cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs>'+
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
