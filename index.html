@@ -21824,7 +21824,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b87';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b88';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28359,6 +28359,11 @@ function _tbSustBtn(doc){var bx=doc.getElementById('_tbXls');if(!bx||doc.getElem
    para fotos HORIZONTALES y para VERTICALES; cada foto se pone con la medida de su orientacion,
    entera y sin deformar. La fila nunca es mas baja que la foto mas alta (+8 px de margen).
    Se guardan en la configuracion de la tabla (cfg.sustFoto -> Supabase). */
+/* orientacion EXIF de un JPEG (bytes): 1 = normal; 2..8 = la camara la guardo girada/espejada */
+function _jpgOri(u){try{if(!(u[0]===0xFF&&u[1]===0xD8))return 1;var i=2,n=u.length;while(i+4<n){if(u[i]!==0xFF)return 1;var m=u[i+1],L=(u[i+2]<<8)|u[i+3];
+    if(m===0xE1&&u[i+4]===0x45&&u[i+5]===0x78&&u[i+6]===0x69&&u[i+7]===0x66){var t=i+10,le=(u[t]===0x49);var r16=function(p){return le?(u[p]|(u[p+1]<<8)):((u[p]<<8)|u[p+1])};var r32=function(p){return le?((u[p]|(u[p+1]<<8)|(u[p+2]<<16)|(u[p+3]<<24))>>>0):(((u[p]<<24)|(u[p+1]<<16)|(u[p+2]<<8)|u[p+3])>>>0)};
+      var ifd=t+r32(t+4),ne=r16(ifd);for(var k=0;k<ne;k++){var e=ifd+2+k*12;if(r16(e)===0x0112)return r16(e+8)||1}return 1}
+    if(m===0xDA||m===0xD9)return 1;i+=2+L}return 1}catch(e){return 1}}
 function _tbSustFoto(o){o=o||{};var n=function(v,d,mi,ma){v=Math.round(Number(v));return (isFinite(v)&&v>=mi&&v<=ma)?v:d};
   return {fila:n(o.fila,120,40,800),hW:n(o.hW,160,40,800),hH:n(o.hH,120,30,800),vW:n(o.vW,90,30,800),vH:n(o.vH,120,40,800),lkH:o.lkH!==false,lkV:o.lkV!==false}}
 function _tbSustPop(doc,b){try{var ya=doc.getElementById('_tbSustPop');if(ya){ya.remove();return}
@@ -29371,7 +29376,7 @@ async function _tbExportarXlsx2(root,doc,opt){
   /* ===== CON SUSTENTOS: debajo de cada fila de partida, una fila de FOTOS de sus cargas
      (todas del mismo tamano, en espacios iguales a lo ancho de las columnas visibles) y otra
      con la fecha, el avance y el total. Las partes (apartados) llevan solo sus cargas. ===== */
-  var SUST=!!(opt&&opt.sust),prog=(opt&&opt.onProg)||function(){},FO=_tbSustFoto(opt&&opt.foto),IW=Math.max(FO.hW,FO.vW),FILA=Math.max(FO.fila,FO.hH+8,FO.vH+8),imgs=[],anchors=[],fotoBy={},slots=[],xfCap=0,xfPic=0;
+  var imgExt=[],SUST=!!(opt&&opt.sust),prog=(opt&&opt.onProg)||function(){},FO=_tbSustFoto(opt&&opt.foto),IW=Math.max(FO.hW,FO.vW),FILA=Math.max(FO.fila,FO.hH+8,FO.vH+8),imgs=[],anchors=[],fotoBy={},slots=[],xfCap=0,xfPic=0;
   var itemsDe=function(m){try{if(!m||!m.id)return [];var id=m.id;var ps=((typeof partesOf==='function')?partesOf(id):[]).filter(function(x){return x&&(x.tipo==='cant'||x.tipo==='glb')}).slice().sort(function(a,b){return String(a.fecha).localeCompare(String(b.fecha))||((a.ts||0)-(b.ts||0))});
       var me=(typeof metaOf==='function')?metaOf(id):null,u=(me&&me.unidad)||'',tot=null,fase=null;
       try{var fz=(typeof _fzDe==='function')?_fzDe(id):null;if(fz&&m.pert){var pn=String(m.pert).trim().toLowerCase();(fz.fases||[]).forEach(function(f){if(String(f.nombre||'').trim().toLowerCase()===pn)fase=f})}}catch(_e){}
@@ -29392,11 +29397,18 @@ async function _tbExportarXlsx2(root,doc,opt){
     /* las fotos: se bajan una vez, se ajustan a una misma medida (entera, sin recortar) y se comprimen */
     var urls={};trs.forEach(function(tr){var m=(window._tbLineas||{})[tr.getAttribute('data-rk')||''];if(!m)return;itemsDe(m).forEach(function(it){if(it.url)urls[it.url]=1})});
     var lista=Object.keys(urls),hechas=0,fondo='#ffffff';
-    var prep=async function(url){try{var ctl=new AbortController(),to=setTimeout(function(){ctl.abort()},25000);var res=await fetch(url,{mode:'cors',signal:ctl.signal});clearTimeout(to);if(!res.ok)return null;
-        var bm=await createImageBitmap(await res.blob());var hor=(bm.width>=bm.height),ow=hor?FO.hW:FO.vW,oh=hor?FO.hH:FO.vH;var W=ow*2,H=oh*2,cv=document.createElement('canvas');cv.width=W;cv.height=H;var cx=cv.getContext('2d');cx.fillStyle=fondo;cx.fillRect(0,0,W,H);
-        var sc=Math.min(W/bm.width,H/bm.height),dw=bm.width*sc,dh=bm.height*sc;cx.drawImage(bm,(W-dw)/2,(H-dh)/2,dw,dh);try{bm.close()}catch(_e){}
-        var jb=await new Promise(function(ok){cv.toBlob(ok,'image/jpeg',0.82)});return jb?{b:new Uint8Array(await jb.arrayBuffer()),w:ow,h:oh}:null}catch(e){return null}};
-    var pos=0;var obrero=async function(){while(pos<lista.length){var u9=lista[pos++];var b9=await prep(u9);if(b9){imgs.push(b9.b);fotoBy[u9]={i:imgs.length,w:b9.w,h:b9.h}}hechas++;prog('Fotos '+hechas+'/'+lista.length+'\u2026')}};
+    /* cada foto va con SU proporcion y SU resolucion: el archivo original tal cual (JPEG o PNG);
+       solo si la camara la guardo girada (dato EXIF, que Excel no aplica) o viene en otro formato,
+       se regraba a resolucion completa. En la hoja se muestra encajada en la medida configurada
+       (horizontal o vertical) sin deformarse ni bandas. */
+    var prep=async function(url){try{var ctl=new AbortController(),to=setTimeout(function(){ctl.abort()},45000);var res=await fetch(url,{mode:'cors',signal:ctl.signal});clearTimeout(to);if(!res.ok)return null;
+        var bl=await res.blob(),raw=new Uint8Array(await bl.arrayBuffer());var bm=await createImageBitmap(bl);var iw=bm.width,ih=bm.height;if(!(iw>0&&ih>0))return null;
+        var hor=(iw>=ih),bw=hor?FO.hW:FO.vW,bh=hor?FO.hH:FO.vH,sc=Math.min(bw/iw,bh/ih),dw=Math.max(1,Math.round(iw*sc)),dh=Math.max(1,Math.round(ih*sc));
+        var esJpg=(raw[0]===0xFF&&raw[1]===0xD8),esPng=(raw[0]===0x89&&raw[1]===0x50&&raw[2]===0x4E),bytes=null,ext='jpeg';
+        if(esPng){bytes=raw;ext='png'}else if(esJpg&&_jpgOri(raw)<=1){bytes=raw}
+        else{var cv=document.createElement('canvas');cv.width=iw;cv.height=ih;cv.getContext('2d').drawImage(bm,0,0);var jb=await new Promise(function(ok){cv.toBlob(ok,'image/jpeg',0.95)});if(!jb)return null;bytes=new Uint8Array(await jb.arrayBuffer())}
+        try{bm.close()}catch(_e){}return {b:bytes,w:dw,h:dh,ext:ext}}catch(e){return null}};
+    var pos=0;var obrero=async function(){while(pos<lista.length){var u9=lista[pos++];var b9=await prep(u9);if(b9){imgs.push(b9.b);imgExt.push(b9.ext);fotoBy[u9]={i:imgs.length,w:b9.w,h:b9.h}}hechas++;prog('Fotos '+hechas+'/'+lista.length+'\u2026')}};
     var ps9=[];for(var w9=0;w9<Math.min(6,lista.length);w9++)ps9.push(obrero());await Promise.all(ps9);prog('Armando el Excel\u2026')}
   var sustFilas=function(m){var its=itemsDe(m);
     if(!its.length){filas.push('<row r="'+r+'" ht="16" customHeight="1">'+celT('A'+r,'Sin avances reportados',xfCap)+'</row>');merges.push('A'+r+':'+colL(nC-1)+r);r++;return}
@@ -29532,15 +29544,15 @@ async function _tbExportarXlsx2(root,doc,opt){
     anchors.forEach(function(a,n){var id=n+1;dr+='<xdr:oneCellAnchor><xdr:from><xdr:col>'+a.col+'</xdr:col><xdr:colOff>'+(a.dx*EMU)+'</xdr:colOff><xdr:row>'+a.row+'</xdr:row><xdr:rowOff>'+(a.dy*EMU)+'</xdr:rowOff></xdr:from><xdr:ext cx="'+(a.w*EMU)+'" cy="'+(a.h*EMU)+'"/>'+
       '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="'+(id+1)+'" name="Foto '+id+'"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId'+id+'"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>'+
       '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+(a.w*EMU)+'" cy="'+(a.h*EMU)+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:ln w="19050"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:prstDash val="solid"/></a:ln></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>';
-      rl+='<Relationship Id="rId'+id+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image'+a.img+'.jpeg"/>'});
+      rl+='<Relationship Id="rId'+id+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image'+a.img+'.'+(imgExt[a.img-1]||'jpeg')+'"/>'});
     partes.push(['xl/drawings/drawing1.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+dr+'</xdr:wsDr>']);
     partes.push(['xl/drawings/_rels/drawing1.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+rl+'</Relationships>']);
     partes.push(['xl/worksheets/_rels/sheet1.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>']);
-    partes[0][1]=partes[0][1].replace('<Default Extension="xml" ContentType="application/xml"/>','<Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/>').replace('</Types>','<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>')}
+    partes[0][1]=partes[0][1].replace('<Default Extension="xml" ContentType="application/xml"/>','<Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/>').replace('</Types>','<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>')}
   var enc=new TextEncoder(),entradas=[];
   for(var i=0;i<partes.length;i++){var u8=enc.encode(partes[i][1]);
     entradas.push({nombre:partes[i][0],metodo:8,tiempo:(typeof _crZipTs==='function')?_crZipTs():0,crc:_wkCrc32(u8),usz:u8.length,datos:await _wkDeflar(u8)})}
-  imgs.forEach(function(b,n){entradas.push({nombre:'xl/media/image'+(n+1)+'.jpeg',metodo:0,tiempo:(typeof _crZipTs==='function')?_crZipTs():0,crc:_wkCrc32(b),usz:b.length,datos:b})});
+  imgs.forEach(function(b,n){entradas.push({nombre:'xl/media/image'+(n+1)+'.'+(imgExt[n]||'jpeg'),metodo:0,tiempo:(typeof _crZipTs==='function')?_crZipTs():0,crc:_wkCrc32(b),usz:b.length,datos:b})});
   var blob=_wkZipArmar(entradas);
   var url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download='Tabla del alcance'+(SUST?' con sustentos':'')+' - '+String(nomC).replace(/[\\\/:*?"<>|]+/g,'_')+' - '+((typeof todayISO==='function')?todayISO():'')+'.xlsx';
