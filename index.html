@@ -21824,7 +21824,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b96';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b97';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -29649,6 +29649,8 @@ async function _tbExportarXlsx2(root,doc,opt){
       xfs.push('<xf numFmtId="0" fontId="'+fo+'" fillId="'+fi+'" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" indent="'+Math.min(lv||0,6)+'"/></xf>');return tSt[lv]=xfs.length-1};
     resSeq.forEach(function(g){if(g.t==='tit'){var sT=estTit(g.lv),ht9='';for(var i9=0;i9<nC;i9++)ht9+=(i9===0)?celT('A'+r2,g.lab,sT):('<c r="'+colL(i9)+r2+'" s="'+sT+'"/>');f2.push('<row r="'+r2+'" ht="18" customHeight="1">'+ht9+'</row>');if(nC>1)mg2.push('A'+r2+':'+colL(nC-1)+r2);r2++;return}
       var rows=g.rows,ci=rows[rows.length-1],h='';
+      /* pP: % del agrupado de la parte (0-100); si esa columna no se exporta, su base / suma de la base x 100, o su peso */
+      var pP=function(row){if(ix.pctAg!=null)return ref('pctAg',row.r);if(ix[agB]!=null)return '('+ref(agB,row.r)+'/('+rows.map(function(q){return ref(agB,q.r)}).join('+')+')*100)';return String(Number(row.m.peso)||0)};
       var wRef=function(row){if(ix.pctAg!=null)return '('+ref('pctAg',row.r)+'/100)';
         if(ix[agB]!=null)return '('+ref(agB,row.r)+'/('+rows.map(function(q){return ref(agB,q.r)}).join('+')+'))';
         return String((Number(row.m.peso)||0)/100)};
@@ -29658,8 +29660,8 @@ async function _tbExportarXlsx2(root,doc,opt){
         else if(k==='pert'){h+=celT(cr,'',xRT);return}
         else if(ADD[k])f='SUM('+rows.map(function(q){return ref(k,q.r)}).join(',')+')';
         else if(k==='pctAg')f='SUM('+rows.map(function(q){return ref(k,q.r)}).join(',')+')';
-        else if(QW[k])f=metRef(ci)+'*('+rows.map(function(q){return 'IFERROR('+ref(k,q.r)+'/'+metRef(q)+',0)*'+wRef(q)}).join('+')+')';
-        else if(PW[k])f=rows.map(function(q){return 'IFERROR('+ref(k,q.r)+',0)*'+wRef(q)}).join('+');
+        else if(QW[k]){f=rows.map(function(q){return 'IFERROR('+ref(k,q.r)+'/'+metRef(q)+'*'+pP(q)+',0)'}).join('+');st=xRP}
+        else if(PW[k])f=rows.map(function(q){return 'IFERROR('+ref(k,q.r)+'*'+pP(q)+'/100,0)'}).join('+');
         else f=num?ref(k,ci.r):('IF('+ref(k,ci.r)+'="","",'+ref(k,ci.r)+')');
         h+=celF(cr,f,st)});
       f2.push('<row r="'+r2+'">'+h+'</row>');r2++});
