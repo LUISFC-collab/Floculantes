@@ -21073,7 +21073,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b77';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b78';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -27599,9 +27599,37 @@ function _tbSustBtn(doc){var bx=doc.getElementById('_tbXls');if(!bx||doc.getElem
   b.title='Otro Excel: debajo de cada partida, las fotos de sus cargas (todas del mismo tama\u00f1o) y una fila con fecha, avance y total. La exportaci\u00f3n de siempre no cambia';
   b.style.cssText=bx.getAttribute('style')||'background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer';
   bx.parentNode.insertBefore(b,bx.nextSibling);
-  b.onclick=async function(){var rt=window._nav_tbRoot;if(!rt)return;b.disabled=true;var t0=b.textContent;b.textContent='Preparando\u2026';
-    try{var R=await _tbExportarXlsx(rt,doc,{sust:true,onProg:function(t){b.textContent=t}});try{var r9=doc.getElementById('_tbRes');if(r9)r9.textContent='Excel con sustentos: '+((R&&R.fotos)||0)+' fotos'}catch(_e){}}
-    catch(e){try{alert('No se pudo exportar: '+((e&&e.message)||e))}catch(_e){}}b.disabled=false;b.textContent=t0}}
+  b.onclick=function(){_tbSustPop(doc,b)}}
+/* Selector de columnas del Excel con sustentos: todas las columnas de la tabla, marcadas las
+   que se usaron la vez pasada (cfg.sustCols, se guarda en Supabase con la configuracion de la
+   tabla); la primera vez, las que se ven. Marcar todas / Quitar todas. Solo cambia el Excel:
+   las fotos se reparten a lo ancho de ESAS columnas. */
+function _tbSustPop(doc,b){try{var ya=doc.getElementById('_tbSustPop');if(ya){ya.remove();return}
+  var cfg=_tbCfg(),by={};_TB_COLS.forEach(function(x){by[x[0]]=x});
+  var ord=[];(cfg.orden||[]).forEach(function(k){if(by[k]&&ord.indexOf(k)<0)ord.push(k)});_TB_COLS.forEach(function(x){if(ord.indexOf(x[0])<0)ord.push(x[0])});
+  var guard=Array.isArray(cfg.sustCols)?cfg.sustCols:null,sel={};if(guard)guard.forEach(function(k){sel[k]=1});else ord.forEach(function(k){if(!(cfg.ocultas&&cfg.ocultas[k]))sel[k]=1});
+  var p=doc.createElement('div');p.id='_tbSustPop';var r=b.getBoundingClientRect(),W=(doc.defaultView&&doc.defaultView.innerWidth)||1200,H=(doc.defaultView&&doc.defaultView.innerHeight)||800;
+  p.style.cssText='position:fixed;z-index:2147483647;background:#152436;border:1px solid #1d3550;border-radius:10px;padding:10px 12px;font-size:12px;color:#cfe3ff;box-shadow:0 10px 30px rgba(0,0,0,.5);width:min(460px,94vw);max-height:'+Math.max(260,H-40)+'px;display:flex;flex-direction:column;gap:8px;left:'+Math.max(8,Math.min(r.left,W-470))+'px;top:'+Math.max(8,Math.min(r.bottom+4,H-300))+'px';
+  var bt='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer;font-size:12px';
+  p.innerHTML='<div style="font-weight:800;color:#8ECBF5">\ud83d\uddbc Columnas del Excel con sustentos</div>'+
+    '<div style="font-size:11px;color:#9db4d6">Solo cambia el Excel, no la tabla. Las fotos se reparten a lo ancho de las columnas marcadas (varias filas de fotos si no caben).</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" data-a="todas" style="'+bt+'">\u2611 Marcar todas</button><button type="button" data-a="ninguna" style="'+bt+'">\u2610 Quitar todas</button><button type="button" data-a="tabla" style="'+bt+'" title="Las mismas columnas que se ven en la tabla">\u21ba Como la tabla</button></div>'+
+    '<div id="_tbSustLst" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;overflow:auto;min-height:0;flex:1;padding:2px 0">'+ord.map(function(k){return '<label style="white-space:nowrap;cursor:pointer;overflow:hidden;text-overflow:ellipsis"><input type="checkbox" data-k="'+k+'"'+(sel[k]?' checked':'')+'> '+esc(by[k][1])+'</label>'}).join('')+'</div>'+
+    '<div id="_tbSustN" style="font-size:11px;color:#9FE8B0"></div>'+
+    '<div style="display:flex;gap:8px"><button type="button" data-a="no" style="'+bt+';flex:1">Cancelar</button><button type="button" data-a="si" style="'+bt+';flex:2;background:#1E7A46;color:#fff">\u2b07 Exportar con sustentos</button></div>';
+  doc.body.appendChild(p);
+  var cks=function(){return Array.prototype.slice.call(p.querySelectorAll('#_tbSustLst input'))};
+  var cuenta=function(){var n=cks().filter(function(c){return c.checked}).length;p.querySelector('#_tbSustN').textContent=n+' de '+ord.length+' columnas';p.querySelector('[data-a="si"]').disabled=!n};
+  var guarda=function(){var c2=_tbCfg();c2.sustCols=cks().filter(function(c){return c.checked}).map(function(c){return c.getAttribute('data-k')});_tbCfgSave(c2)};
+  cks().forEach(function(c){c.onchange=function(){cuenta();guarda()}});cuenta();
+  var cierra=function(){try{p.remove()}catch(_e){}doc.removeEventListener('mousedown',fuera,true)};var fuera=function(ev){if(!p.contains(ev.target)&&ev.target!==b)cierra()};setTimeout(function(){doc.addEventListener('mousedown',fuera,true)},0);
+  p.onclick=async function(ev){var x=ev.target&&ev.target.closest&&ev.target.closest('button[data-a]');if(!x)return;var ac=x.getAttribute('data-a');
+    if(ac==='todas'||ac==='ninguna'||ac==='tabla'){cks().forEach(function(c){var k=c.getAttribute('data-k');c.checked=(ac==='todas')?true:(ac==='ninguna'?false:!(cfg.ocultas&&cfg.ocultas[k]))});cuenta();guarda();return}
+    if(ac==='no'){cierra();return}
+    if(ac==='si'){var cols=cks().filter(function(c){return c.checked}).map(function(c){return c.getAttribute('data-k')});if(!cols.length)return;cierra();
+      var rt=window._nav_tbRoot;if(!rt)return;b.disabled=true;var t0=b.textContent;b.textContent='Preparando\u2026';
+      try{var R=await _tbExportarXlsx(rt,doc,{sust:true,cols:cols,onProg:function(t){b.textContent=t}});try{var r9=doc.getElementById('_tbRes');if(r9)r9.textContent='Excel con sustentos: '+cols.length+' columnas \u00b7 '+((R&&R.fotos)||0)+' fotos'}catch(_e){}}
+      catch(e){try{alert('No se pudo exportar: '+((e&&e.message)||e))}catch(_e){}}b.disabled=false;b.textContent=t0}}}catch(e){}}
 function _tbCalZoomBtns(d,bar,antes,getEl,getZ,setZ){try{
   var mk=function(t,tit,f){var b=d.createElement('button');b.type='button';b.textContent=t;b.title=tit;b.style.cssText='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:5px 9px;font-weight:800;cursor:pointer;flex:none';b.onmousedown=function(e){e.stopPropagation()};
     b.onclick=function(e){e.stopPropagation();var z=Math.max(.4,Math.min(3,f(getZ()||1)));setZ(z);var el=getEl();if(el)el.style.zoom=z};if(antes&&antes.parentNode===bar)bar.insertBefore(b,antes);else bar.appendChild(b)};
@@ -28483,7 +28511,7 @@ async function _tbExportarXlsx(root,doc,opt){
   var full=null;
   try{var U=window._tbUltimo;
     if(U&&U.D){var raw=null;try{raw=localStorage.getItem('obf4_tabla_cols')}catch(_e){}
-      var base=JSON.parse(JSON.stringify(_tbCfg()));base.pleg={};window._tbCfgMem={str:raw,obj:base};
+      var base=JSON.parse(JSON.stringify(_tbCfg()));base.pleg={};if(opt&&opt.cols&&opt.cols.length){var sel9={};opt.cols.forEach(function(k){sel9[k]=1});base.ocultas={};_TB_COLS.forEach(function(x){if(!sel9[x[0]])base.ocultas[x[0]]=1})}window._tbCfgMem={str:raw,obj:base};
       var html;try{html=_crTablaHTML(U.D,U.q,U.ord)}finally{window._tbCfgMem=null}
       full=doc.createElement('div');full.style.cssText='position:fixed;left:0;top:0;width:1600px;height:800px;overflow:auto;visibility:hidden;background:#0b1220';
       full.innerHTML=html;doc.body.appendChild(full);try{_tbAplicaFijas(full)}catch(_e2){}}}
