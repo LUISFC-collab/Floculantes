@@ -21073,7 +21073,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b69';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b70';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -27516,22 +27516,52 @@ function _tabClrMenu(doc,pfx){try{var rt=window['_nav'+pfx+'Root'];if(!rt)return
    boton 📅 de la tarjeta: los dias con avance, cada carga con sus fotos, la suma (Σ) y la
    diferencia contra el 100%. El punto es un ::before de CSS: no agrega nodos a la tabla. */
 function _tbDotCss(doc){if(doc.getElementById('_tbDotCss'))return;var st=doc.createElement('style');st.id='_tbDotCss';
-  st.textContent='._tbDots tbody tr[data-rk]>td:not(._tbEx){position:relative}'+
-    '._tbDots tbody tr[data-rk]>td:not(._tbEx)::before{content:"";position:absolute;left:2px;top:2px;width:5px;height:5px;border-radius:50%;background:#6b7c95;opacity:.55;pointer-events:none;z-index:1}'+
-    '._tbDots tbody tr[data-rk]._tbConAv>td:not(._tbEx)::before{background:#3FB950;opacity:.85}'+
-    '._tbDots tbody tr[data-rk]>td:not(._tbEx):hover::before{opacity:1;width:7px;height:7px;left:1px;top:1px;box-shadow:0 0 0 2px rgba(142,203,245,.45)}';
+  st.textContent='._tbDots tbody tr[data-rk]>td._tbDotC{position:relative}'+
+    '._tbDots tbody tr[data-rk]>td._tbDotC::before{content:"";position:absolute;left:2px;top:2px;width:5px;height:5px;border-radius:50%;background:#6b7c95;opacity:.55;pointer-events:none;z-index:1}'+
+    '._tbDots tbody tr[data-rk]._tbConAv>td._tbDotC::before{background:#3FB950;opacity:.85}'+
+    '._tbDots tbody tr[data-rk]>td._tbDotC:hover::before{opacity:1;width:7px;height:7px;left:1px;top:1px;box-shadow:0 0 0 2px rgba(142,203,245,.45)}';
   (doc.head||doc.documentElement).appendChild(st)}
 function _tbDotId(tr){try{var m=(window._tbLineas||{})[tr.getAttribute('data-rk')];return (m&&m.id)?String(m.id):null}catch(e){return null}}
 function _tbDotBind(doc,rt){try{if(!rt)return;_tbDotCss(doc);rt.classList.add('_tbDots');
-  Array.prototype.forEach.call(rt.querySelectorAll('tbody tr[data-rk]'),function(tr){var id=_tbDotId(tr);var n=0;try{n=id&&typeof partesOf==='function'?partesOf(id).length:0}catch(e){}tr.classList.toggle('_tbConAv',n>0)});
+  var keysD=_tabKeys(rt);
+  Array.prototype.forEach.call(rt.querySelectorAll('tbody tr[data-rk]'),function(tr){_tabCeldas(tr,keysD,'_tb',function(td,k){if(k==='metA')td.classList.add('_tbDotC')});var id=_tbDotId(tr);var n=0;try{n=id&&typeof partesOf==='function'?partesOf(id).length:0}catch(e){}tr.classList.toggle('_tbConAv',n>0)});
   if(rt._dotClk)return;rt._dotClk=1;
-  var enPunto=function(e){var t=e.target,td=t&&t.closest&&t.closest('td');if(!td||td.classList.contains('_tbEx'))return null;var tr=td.parentNode;if(!tr||!tr.getAttribute||!tr.getAttribute('data-rk')||!tr.parentNode||tr.parentNode.tagName!=='TBODY')return null;
+  var enPunto=function(e){var t=e.target,td=t&&t.closest&&t.closest('td');if(!td||!td.classList.contains('_tbDotC'))return null;var tr=td.parentNode;if(!tr||!tr.getAttribute||!tr.getAttribute('data-rk')||!tr.parentNode||tr.parentNode.tagName!=='TBODY')return null;
     var r=td.getBoundingClientRect();if(e.clientX-r.left>11||e.clientY-r.top>11)return null;return _tbDotId(tr)};
   rt.addEventListener('mousemove',function(e){var td=e.target&&e.target.closest&&e.target.closest('td');if(!td)return;var si=!!enPunto(e);if(si!==!!td._dotHov){td._dotHov=si;td.style.cursor=si?'pointer':'';td.title=si?'Ver los d\u00edas con avance de esta actividad (fotos, cargas y suma)':(td._dotT0||'')}},true);
   rt.addEventListener('click',function(e){var id=enPunto(e);if(!id)return;e.preventDefault();e.stopPropagation();_tbCalFlot(id,doc)},true)}catch(e){}}
+/* La Tabla 1 suele vivir en una ventana propia (Picture-in-Picture: siempre encima de todo);
+   ahi la vista de dias con avance se abre DENTRO de esa ventana, encima de la tabla. La vista
+   es la misma de openActMenu: se crea en la app y se muda a la ventana; mientras esta abierta,
+   document.getElementById tambien busca en esa ventana para que sus botones sigan funcionando. */
+function _tbCalPipGid(on,pdoc){try{if(!window._gidOrig)window._gidOrig=document.getElementById;
+  if(on){window._calPipDoc=pdoc;document.getElementById=function(id){var r=window._gidOrig.call(document,id);if(r)return r;var d=window._calPipDoc;try{if(d&&d.defaultView&&!d.defaultView.closed)return d.getElementById(id)}catch(e){}return null}}
+  else{window._calPipDoc=null;document.getElementById=window._gidOrig}}catch(e){}}
+function _tbCalPip(p,doc){try{
+  var ya=doc.getElementById('_tbCalPip');if(ya&&ya._cierra)ya._cierra();
+  openActMenu(p,true);var am=window._gidOrig?window._gidOrig.call(document,'_actMenu'):document.getElementById('_actMenu');if(!am)return;
+  var W=doc.createElement('div');W.id='_tbCalPip';
+  W.style.cssText='position:fixed;top:8px;right:8px;bottom:8px;width:min(560px,94vw);z-index:2147483647;display:flex;flex-direction:column;background:#EEF2F8;border:1px solid #9fb3d1;border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.45);overflow:hidden;font:13px system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#1B2433';
+  /* las variables de color de la app, para que la vista se vea igual que en la tarjeta */
+  try{var cs=getComputedStyle(document.documentElement);['--brand','--brand2','--accent','--accent-d','--bg','--card','--line','--muted','--green','--danger','--done','--done-bg','--warn-bg','--ink','--text'].forEach(function(v){var x=cs.getPropertyValue(v);if(x)W.style.setProperty(v,x.trim())})}catch(_e){}
+  var H=doc.createElement('div');H.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 10px;background:#1F3864;color:#fff;flex:none';
+  H.innerHTML='<b style="flex:1;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\ud83d\udcc5 D\u00edas con avance \u00b7 ['+esc((typeof codeOf==='function')?codeOf(p):p.id)+'] '+esc(p.nombre||'')+'</b><button type="button" title="Cerrar" style="background:#8A2018;color:#fff;border:0;border-radius:8px;padding:5px 11px;font-weight:800;cursor:pointer">\u2715</button>';
+  var B=doc.createElement('div');B.style.cssText='flex:1;min-height:0;overflow:auto';W.appendChild(H);W.appendChild(B);doc.body.appendChild(W);
+  var adopta=function(x){try{x=doc.adoptNode(x)}catch(_e){}x.style.cssText='position:static;display:block;background:transparent';
+    var panel=x.firstElementChild;if(panel){panel.style.maxWidth='none';panel.style.width='100%';panel.style.maxHeight='none';panel.style.borderRadius='0';panel.style.boxSizing='border-box'}
+    x.onclick=null;B.appendChild(x);am=x;
+    /* fotos: se amplian aqui mismo (el visor de la app queda detras de esta ventana) */
+    Array.prototype.forEach.call(x.querySelectorAll('img._amFoto'),function(im){im.onclick=function(ev){ev.stopPropagation();var lb=doc.createElement('div');lb.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(10,15,25,.88);display:flex;align-items:center;justify-content:center;cursor:zoom-out';lb.innerHTML='<img src="'+esc(im.getAttribute('data-src')||im.src)+'" style="max-width:96vw;max-height:94vh;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.6)">';lb.onclick=function(){lb.remove()};doc.body.appendChild(lb)}})};
+  _tbCalPipGid(true,doc);adopta(am);
+  var mo=new MutationObserver(function(){if(B.contains(am))return;var nu=window._gidOrig?window._gidOrig.call(document,'_actMenu'):null;if(nu&&nu.parentNode===document.body){adopta(nu);return}W._cierra()});mo.observe(B,{childList:true});
+  W._cierra=function(){try{mo.disconnect()}catch(_e){}_tbCalPipGid(false);try{W.remove()}catch(_e2){}try{var m2=window._gidOrig?window._gidOrig.call(document,'_actMenu'):null;if(m2)m2.remove()}catch(_e3){}};
+  H.querySelector('button').onclick=function(){W._cierra()};
+  try{doc.defaultView.addEventListener('pagehide',function(){try{W._cierra()}catch(_e){}},{once:true})}catch(_e4){}
+}catch(e){try{_tbCalPipGid(false)}catch(_e){}try{if(typeof toast==='function')toast('\u26a0 '+((e&&e.message)||e))}catch(_e2){}}}
 function _tbCalFlot(id,doc){try{
   var base=(DATA._byId&&DATA._byId[id])||((typeof _nuevaDe==='function')?_nuevaDe(id):null);if(!base){if(typeof toast==='function')toast('No encuentro esa actividad');return}
   var p=(typeof applyEdit==='function')?applyEdit(base):base;
+  if(doc&&doc!==document&&doc.defaultView&&!doc.defaultView.closed){_tbCalPip(p,doc);return}
   var ya=document.getElementById('_tbCalFlot');if(ya){try{if(ya._alCerrar)ya._alCerrar()}catch(_e){}ya.remove()}
   openActMenu(p,true);var am=document.getElementById('_actMenu');if(!am)return;
   var W=_flotVentana('_tbCalFlot','D\u00edas con avance \u00b7 ['+((typeof codeOf==='function')?codeOf(p):id)+'] '+String(p.nombre||''),'\ud83d\udcc5');
