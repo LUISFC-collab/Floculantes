@@ -888,6 +888,8 @@ function qtyX(n){n=+n;if(!isFinite(n))return '0.00';n=Math.round(n*1e10)/1e10;va
 /* quita SOLO el ruido de la coma flotante (7.000000000000001 -> 7 ; 0.30000000000000004 -> 0.3 ;
    1.0930000000000002 -> 1.093) y deja intacto todo decimal real (14.55666666666667 sigue igual) */
 function _nLimpio(v){v=Number(v);if(!isFinite(v)||v===0)return v;var s=Number(v.toPrecision(15));return (s!==v&&String(s).length<=String(v).length-3)?s:v}
+/* literal de formula que Excel lee igual con sus 15 cifras: si hace falta una 16a, lo escribe como fraccion exacta (14.55666666666667 -> (8748.55666666667/601)) */
+function _lit15(v){v=Number(v);var s=String(_nLimpio(v));if(!isFinite(v)||/e/i.test(s)||Number(Number(s).toPrecision(15))===Number(s))return s;for(var d=2;d<=1000;d++){var n=Number((v*d).toPrecision(15));if(n/d===v)return '('+n+'/'+d+')'}return s}
 const WD=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],MO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 function fmtF(iso){const[y,m,d]=iso.split('-').map(Number);const dt=new Date(y,m-1,d);return WD[dt.getDay()]+' '+d+' '+MO[m-1]}
 function esAdminReal(){var n=(state.user&&state.user.supervisor)||'';if(n==='Luis Antonio Focon Colina')return true;try{var r=(state.roles||{})[n];return !!(r&&r.rol==='admin'&&!r.bloqueado&&state.user&&state.user._adminOk)}catch(e){return false}}
@@ -1824,10 +1826,10 @@ function leaf(p,num){
   el.innerHTML='<div class="lr"><div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:none"><span class="lnum">'+num+'</span></div><span class="cname">'+esc(p.nombre)+_nomBadge(p.id)+((typeof _alcBadge==='function')?_alcBadge(p.id):'')+((typeof _cnxPadre==='function'&&_cnxPadre(p.id))?'<span class="rel-badge" data-relhijo="'+esc(p.id)+'" title="Ir a la actividad de la que cuelga" style="font-size:10px;font-weight:800;color:#1F6FE0;background:#E7F0FE;border:1px solid #B7D0F5;border-radius:5px;padding:2px 5px;margin-left:4px;cursor:pointer">🔗 RELACIONADA</span>':'')+(m?'<span style="display:block;margin-top:3px"><span class="cq'+(m.unidad==='na'?' _ficChip" data-ficid="'+esc(p.id)+'" title="Tocar para definir una unidad y un % ficticios" style="margin-left:0;cursor:pointer;color:#7A4B00;background:#FCEFD9;border:1px solid #EFC98A"':'" style="margin-left:0"')+'>'+esc(mt)+(dias?(' · '+(diasRest!=null?(diasRest+'/'+dias):('≈'+dias))+'d'):'')+'</span></span>':'')+(nres?'<span class="res-badge" title="Tiene restricción por levantar">!</span>':'')+(sobre?'<span class="sobre-badge">+'+_nMil2(pctR-100)+'% sobre</span>':'')+_lfProgHTML(p,s)+'</span><div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none;margin-right:-6px"><span class="chip '+((s==='done'&&_fzCerr(p.id))?'cerr':s)+'">'+lbl((s==='done'&&_fzCerr(p.id))?'cerr':s)+'</span>'+(s==='prog'?('<div style="display:flex;align-items:center;gap:5px">'+'<span class="tnum" style="font-size:12.5px;font-weight:800;color:'+pcCol(pctR)+'">'+(+pctR).toFixed(2)+'%</span>'):'')+'<button class="_lfGear" title="Modificar actividad" style="background:#fff;border:1.5px solid #1F6FE0;color:#1F6FE0;border-radius:8px;width:25px;height:25px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none;padding:0;font-size:15px;line-height:1">⚙</button>'+_cnxBotonHTML(p.id)+((typeof esAdmin==='function'&&esAdmin())?'<button class="_lfMove" title="Mover a otra área / sistema (admin)" style="background:#fff;border:1.5px solid #7A4A00;color:#7A4A00;border-radius:8px;width:25px;height:25px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none;padding:0;font-size:13px;line-height:1;margin-left:4px">📦</button><button class="_lfEye" title="Visibilidad: quién puede ver esta actividad (admin)" style="'+_visBtnCss(!!(_visRule('act',p.id)||{}).activo)+'">👁</button>':'')+(s==='prog'?'</div>':'')+(_nap?'<span class="chip prog" data-apr-pid="'+esc(p.id)+'" title="Solicitudes de cambio de esta actividad \u2014 toca para aprobar (admin)" style="cursor:pointer">\u23f3 '+_nap+'</span>':'')+'</div></div>'+
     '<div class="bars2x2"'+((m&&m.unidad==='na')?' style="display:none"':'')+'>'+
     '<div class="b2"><span class="b2l">Programado</span><span class="b2bar"><i style="width:'+prog+'%;background:var(--brand2)"></i></span><span class="b2v">'+prog+'%</span></div>'+
-    '<div class="b2"><span class="b2l" style="color:var(--danger);font-size:10px" title="Avance del '+esc(fmtF(refD))+'">'+((refD===((typeof todayISO==='function')?todayISO():''))?'Hoy':('Del '+esc(refD.split('-').reverse().join('/'))))+'</span><span class="b2bar"><i style="width:'+_delDia+'%;background:var(--danger)"></i></span><span class="b2v" style="color:var(--danger)">+'+_delDia+'%'+((m&&m.unidad!=='glb')?' (+'+qty(_dQty9)+' '+m.unidad+')':'')+'</span></div>'+
-    '<div class="b2"><span class="b2l">Real</span><span class="b2bar"><i style="width:'+Math.min(100,pctR)+'%;background:'+(sobre?'#7A4B00':barCol(s))+'"></i></span><span class="b2v"'+(sobre?' style="color:#7A4B00"':'')+'>'+pctR+'%'+((m&&m.unidad!=='glb')?' ('+qty(acumCantAt(p.id,refD))+' '+m.unidad+')':'')+'</span></div>'+
+    '<div class="b2"><span class="b2l" style="color:var(--danger);font-size:10px" title="Avance del '+esc(fmtF(refD))+'">'+((refD===((typeof todayISO==='function')?todayISO():''))?'Hoy':('Del '+esc(refD.split('-').reverse().join('/'))))+'</span><span class="b2bar"><i style="width:'+_delDia+'%;background:var(--danger)"></i></span><span class="b2v" style="color:var(--danger)">+'+_delDia+'%'+((m&&m.unidad!=='glb')?' (+'+qtyX(_dQty9)+' '+m.unidad+')':'')+'</span></div>'+
+    '<div class="b2"><span class="b2l">Real</span><span class="b2bar"><i style="width:'+Math.min(100,pctR)+'%;background:'+(sobre?'#7A4B00':barCol(s))+'"></i></span><span class="b2v"'+(sobre?' style="color:#7A4B00"':'')+'>'+pctR+'%'+((m&&m.unidad!=='glb')?' ('+qtyX(acumCantAt(p.id,refD))+' '+m.unidad+')':'')+'</span></div>'+
     /* la del dia anterior va SIEMPRE, para que el cuadro quede 2x2 parejo */
-    ('<div class="b2"'+(hAyer?'':' style="opacity:.55"')+'><span class="b2l" style="font-size:10px" title="Acumulado hasta el '+esc(fmtF(ayerD))+(hAyer?'':' — ese dia no se reporto avance')+'">'+esc(ayerD.split('-').reverse().join('/'))+'</span><span class="b2bar"><i style="width:'+pAyer+'%;background:#1E7A46"></i></span><span class="b2v" style="color:#1E7A46">'+pAyer+'%'+((m&&m.unidad!=='glb')?' ('+qty(acumCantAt(p.id,yi))+' '+m.unidad+')':'')+'</span></div>')+
+    ('<div class="b2"'+(hAyer?'':' style="opacity:.55"')+'><span class="b2l" style="font-size:10px" title="Acumulado hasta el '+esc(fmtF(ayerD))+(hAyer?'':' — ese dia no se reporto avance')+'">'+esc(ayerD.split('-').reverse().join('/'))+'</span><span class="b2bar"><i style="width:'+pAyer+'%;background:#1E7A46"></i></span><span class="b2v" style="color:#1E7A46">'+pAyer+'%'+((m&&m.unidad!=='glb')?' ('+qtyX(acumCantAt(p.id,yi))+' '+m.unidad+')':'')+'</span></div>')+
     '</div>'+
     '<div class="pmeta"><span><span class="cuad-chip">'+esc(codeOf(p))+'</span>'+'</span><span class="pct tnum">'+((m&&m.unidad==='na')?'no aporta avance':(pct>=prog?'al día':(Number(prog-pct)||0).toFixed(2)+'% atrasado'))+'</span></div>'+
     '<div style="margin-top:8px;display:flex;gap:5px" onclick="event.stopPropagation()"><button class="_lfDato" title="Def Metrados (unidad·total·rend·inicial)" style="flex:1;background:#1F3864;color:#fff;border:0;border-radius:9px;padding:6px 3px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px"><span style="border:1.5px solid #fff;border-radius:6px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;flex:none">⚙</span><span style="font-weight:800;font-size:11.5px;white-space:nowrap">UND</span></button><button class="_lfAv" title="Reportar metrado (cuadrilla·foto·obs)" style="flex:1;background:#1E7A46;color:#fff;border:0;border-radius:9px;padding:6px 3px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px"><span style="border:1.5px solid #fff;border-radius:6px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;line-height:1;flex:none">⚙</span><span style="font-weight:800;font-size:11.5px;white-space:nowrap">MET</span></button><button class="_lfInt" title="Restricción interna" style="flex:1;background:#1F6FE0;color:#fff;border:0;border-radius:9px;padding:7px 0;font-size:16px;font-weight:900;cursor:pointer">!</button><button class="_lfMina" title="Restricción de mina" style="flex:1;background:#D8442F;color:#fff;border:0;border-radius:9px;padding:7px 0;font-size:16px;font-weight:900;cursor:pointer">!</button><button class="_lfCal" title="Días con avance reportado" style="flex:1;background:#fff;color:#1F6FE0;border:1.5px solid #1F6FE0;border-radius:9px;padding:6px 0;font-size:15px;cursor:pointer">📅</button></div>';
@@ -1964,7 +1966,7 @@ function _startDrag(e,lf,kids){if(!window._reorderOn)return;if(e.button!=null&&e
 // metrado
 function buildUnits(sel){const g=$('unitGrid');g.innerHTML='';UNITS.forEach(x=>{const b=document.createElement('button');b.type='button';b.className='ubtn'+(sel===x.u?' sel':'');b.innerHTML='<span class="u">'+x.u+'</span><span class="l">'+x.l+'</span>';b.onclick=()=>{metUnit=x.u;buildUnits(metUnit);tglTot()};g.appendChild(b)})}
 function tglTot(){const glb=metUnit==='glb';const na=metUnit==='na';$('totWrap').classList.toggle('hidden',glb||na);$('iniWrap').classList.toggle('hidden',glb||na);$('rendWrap').classList.toggle('hidden',glb||na);var _dw=$('diasWrap');if(_dw)_dw.classList.toggle('hidden',!glb||na);try{var _mi=$('metIntro');if(_mi&&na)_mi.textContent='Esta partida NO aporta al avance: solo se deja constancia de que se hizo (con fotos y observaciones). No pide metrado ni rendimiento.'}catch(e){}}
-function openMetrado(p,then){if(typeof diaCerrado==='function'&&diaCerrado(activeDate)){if(typeof toast==='function')toast('Día bloqueado: el administrador debe habilitar este día para modificar');return}metId=p.id;metThen=!!then;if($('metZero'))$('metZero').checked=false;const m=metaOf(p.id);metUnit=m?m.unidad:null;$('metId').textContent=p.id;$('metName').textContent=p.nombre;$('metIntro').textContent=m?'Ajusta la unidad o la meta.':'Primero define cómo se mide esta partida.';buildUnits(metUnit);tglTot();$('metTot').value=m?m.total:'';$('metRend').value=m&&m.rend?m.rend:'';try{var _tn=$('metTotNow'),_rn=$('metRendNow');if(_tn){if(m&&m.total>0&&m.unidad!=='glb'){_tn.textContent='· asignado: '+qty(m.total)+' '+(m.unidad||'');_tn.style.color='#1E7A46'}else{_tn.textContent='· sin asignar';_tn.style.color='#8A94A6'}}if(_rn){if(m&&m.rend>0&&m.unidad!=='glb'){_rn.textContent='· asignado: '+qty(m.rend)+' '+(m.unidad||'')+'/día';_rn.style.color='#1E7A46'}else{_rn.textContent='· sin asignar';_rn.style.color='#8A94A6'}}}catch(_e){}if($('metDias'))$('metDias').value=(m&&m.dias)?m.dias:'';$('metIni').value=(function(){var _a=state.partes.filter(function(x){return x.id===p.id&&x.obs&&x.obs.indexOf('Avance inicial')===0}).reduce(function(s2,x){return s2+(+x.cant||0)},0);return _a>0?qty(_a):''})();$('metHint').innerHTML=(function(){var _ac=(typeof acumCant==='function')?acumCant(p.id):0;var _mm=(typeof metaOf==='function')?metaOf(p.id):null;var _u=(_mm&&_mm.unidad)||'';var _pc=(typeof pctOf==='function')?pctOf(p):0;var _s=(_ac>0||_pc>0)?('<b style="color:#1E7A46">Ejecutado real a la fecha: '+qty(_ac)+' '+esc(_u)+' ('+_pc+'%)</b>'):'';if(_mm&&_mm.quien){_s+=(_s?'<br>':'')+'📌 Def Metrados: '+qty(_mm.total||0)+' '+esc(_u)+' · por <b>'+esc(_mm.quien)+'</b>'+(_mm.fecha?(' · '+esc(_mm.fecha)):'')}if(p.ini)_s+=(_s?'<br>':'')+'El cronograma marca '+p.ini+'% ejecutado.';return _s})();$('metTot').oninput=()=>{const t=+$('metTot').value;if(p.ini&&t>0&&!$('metIni').value&&!(state.meta&&state.meta[p.id]))$('metIni').value=qty(t*p.ini/100)};openSheet('mMet')}
+function openMetrado(p,then){if(typeof diaCerrado==='function'&&diaCerrado(activeDate)){if(typeof toast==='function')toast('Día bloqueado: el administrador debe habilitar este día para modificar');return}metId=p.id;metThen=!!then;if($('metZero'))$('metZero').checked=false;const m=metaOf(p.id);metUnit=m?m.unidad:null;$('metId').textContent=p.id;$('metName').textContent=p.nombre;$('metIntro').textContent=m?'Ajusta la unidad o la meta.':'Primero define cómo se mide esta partida.';buildUnits(metUnit);tglTot();$('metTot').value=m?m.total:'';$('metRend').value=m&&m.rend?m.rend:'';try{var _tn=$('metTotNow'),_rn=$('metRendNow');if(_tn){if(m&&m.total>0&&m.unidad!=='glb'){_tn.textContent='· asignado: '+qtyX(m.total)+' '+(m.unidad||'');_tn.style.color='#1E7A46'}else{_tn.textContent='· sin asignar';_tn.style.color='#8A94A6'}}if(_rn){if(m&&m.rend>0&&m.unidad!=='glb'){_rn.textContent='· asignado: '+qty(m.rend)+' '+(m.unidad||'')+'/día';_rn.style.color='#1E7A46'}else{_rn.textContent='· sin asignar';_rn.style.color='#8A94A6'}}}catch(_e){}if($('metDias'))$('metDias').value=(m&&m.dias)?m.dias:'';$('metIni').value=(function(){var _a=state.partes.filter(function(x){return x.id===p.id&&x.obs&&x.obs.indexOf('Avance inicial')===0}).reduce(function(s2,x){return s2+(+x.cant||0)},0);return _a>0?String(_nLimpio(_a)):''})();$('metHint').innerHTML=(function(){var _ac=(typeof acumCant==='function')?acumCant(p.id):0;var _mm=(typeof metaOf==='function')?metaOf(p.id):null;var _u=(_mm&&_mm.unidad)||'';var _pc=(typeof pctOf==='function')?pctOf(p):0;var _s=(_ac>0||_pc>0)?('<b style="color:#1E7A46">Ejecutado real a la fecha: '+qtyX(_ac)+' '+esc(_u)+' ('+_pc+'%)</b>'):'';if(_mm&&_mm.quien){_s+=(_s?'<br>':'')+'📌 Def Metrados: '+qty(_mm.total||0)+' '+esc(_u)+' · por <b>'+esc(_mm.quien)+'</b>'+(_mm.fecha?(' · '+esc(_mm.fecha)):'')}if(p.ini)_s+=(_s?'<br>':'')+'El cronograma marca '+p.ini+'% ejecutado.';return _s})();$('metTot').oninput=()=>{const t=+$('metTot').value;if(p.ini&&t>0&&!$('metIni').value&&!(state.meta&&state.meta[p.id]))$('metIni').value=String(_nLimpio(t*p.ini/100))};openSheet('mMet')}
 $('metSave').onclick=()=>{if(typeof puedeAcc==='function'){var _mEx=(typeof metaOf==='function'&&metId&&metaOf(metId));if(_mEx&&!puedeAcc('met_cambiar')){if(typeof toast==='function')toast('⛔ No tienes permiso para esto');return;}if(!_mEx&&!puedeAcc('met_definir')){if(typeof toast==='function')toast('⛔ No tienes permiso para esto');return;}}if(typeof _gateW==='function'&&!_gateW())return;if(typeof _gateAcc==='function'&&!_gateAcc((typeof metaOf==='function'&&metId&&metaOf(metId))?'met_cambiar':'met_definir','Metrado/UND'))return;if(!metUnit){toast('Elige una unidad');return}const glb=metUnit==='glb';const _na=metUnit==='na';const tot=_na?0:(glb?100:+$('metTot').value);var _dias=glb?(parseInt($('metDias').value,10)||0):0;if(glb&&_dias<1){toast('Indica cuántos días considerar');return}if(!glb&&!_na&&($('metTot').value.trim()===''||isNaN(+$('metTot').value)||(+$('metTot').value)<0)){toast('Ingresa el metrado total');return}
   var _oldM=state.meta[metId]?JSON.parse(JSON.stringify(state.meta[metId])):null;state.meta[metId]={cell_at:Date.now(),ts:(typeof nowSrv==='function'?nowSrv():Date.now()),unidad:metUnit,total:tot,rend:_na?0:(+$('metRend').value||0),dias:_dias,quien:(state.user&&state.user.supervisor)||'',fecha:todayISO()};if(typeof tombClr==='function')tombClr('metrados',metId);if(typeof tombShareDel==='function')tombShareDel('metrados',metId);if(!store.set(KM,state.meta)){toast('⚠ NO se guardó el metrado: memoria del equipo llena. Libera espacio e intenta de nuevo.');return}if(typeof logCambio==='function')logCambio('metrado',metId,'unidad='+metUnit+' total='+tot+' rend='+(+$('metRend').value||0));try{if(!(typeof esAdmin==='function'&&esAdmin())&&_mEx){var _bpM=DATA._byId&&DATA._byId[metId];var _peM=_bpM?((typeof applyEdit==='function')?applyEdit(_bpM):_bpM):{id:metId};var _cdM=(typeof codeOf==='function')?codeOf(_peM):metId;state.pend=state.pend||[];state.pend.push({id:uuid(),proyecto:DATA.proyecto,tipo:'metrado',descripcion:'⚙ Cambio de UND/metrado ['+_cdM+'] '+((_peM&&_peM.nombre)||'')+': '+(_na?'ahora NO APORTA AVANCE (solo constancia)':(metUnit+' · total '+tot+(glb?'':(' · rend '+(+$('metRend').value||0))))),supervisor:(state.user&&state.user.supervisor)||'',disciplina:(state.user&&state.user.disc)||'',ts:(typeof nowSrv==='function'?nowSrv():Date.now()),fecha:todayISO(),coments:[{k:'payload',pid:metId,old:_oldM}],critico:false,resuelto:false,synced:false});if(typeof pendSave==='function')pendSave();else store.set(KPEN,state.pend);toast('⚙ Cambio aplicado ✓ — aviso enviado al admin');}}catch(_me){}const ini=+$('metIni').value;var _iniRaw=$('metIni').value.trim();var _zChk=($('metZero')&&$('metZero').checked);var _touchIni=((_iniRaw!==''&&ini>0)||_zChk);var _aold=(_touchIni?state.partes.filter(function(x){return x.id===metId&&x.obs&&x.obs.indexOf('Avance inicial')===0}):[]);if(_touchIni&&_aold.length){_aold.forEach(function(x){if(x.client_id&&typeof tombParte==='function')tombParte(x.client_id)});state.partes=state.partes.filter(function(x){return !(x.id===metId&&x.obs&&x.obs.indexOf('Avance inicial')===0)});store.set(KP,state.partes);}
   if(!glb&&!_na&&ini>0){var _pAI=null;try{_pAI=acts(state.user.disc).find(function(x){return x.id===metId})}catch(_e9){}state.partes.push({id:metId,nombre:((_pAI&&_pAI.nombre)||(DATA._byId&&DATA._byId[metId]?DATA._byId[metId].nombre:'')),sistema:((_pAI&&_pAI.sistema)||''),cuadre:1,fecha:todayISO(),disc:state.user.disc,supervisor:state.user.supervisor,tipo:'cant',cant:ini,incidencia:'Ninguna',obs:'Avance inicial',personal:[],fotos:[],cell_at:Date.now(),ts:(typeof nowSrv==='function'?nowSrv():Date.now()),client_id:uuid(),synced:false});store.set(KP,state.partes)}
@@ -1974,7 +1976,7 @@ $('metSave').onclick=()=>{if(typeof puedeAcc==='function'){var _mEx=(typeof meta
 function updDnote(p){var _cerr=diaCerrado(activeDate);$('rDnote').innerHTML='Reportando: <b>'+fmtF(activeDate)+(activeDate===todayISO()?' · disponible hoy':'')+'</b>'+(activeDate!==todayISO()?(_cerr?' — 🔒 día cerrado (solo admin)':' — día anterior'):'');if($('rSave'))$('rSave').disabled=_cerr;}
 
 // registrar
-function renderBars(p){const real=pctOf(p),prog=progOf(p);const dif=real-prog;var _bm=metaOf(p.id);var _rest=(_bm&&_bm.unidad!=='glb'&&_bm.total>0)?Math.max(0,(+_bm.total)-acumCant(p.id)):0;var _rpc=(_bm&&_bm.unidad!=='glb'&&_bm.total>0)?Math.max(0,Math.round(_rest/_bm.total*100)):0;var _restPill=(_bm&&_bm.unidad!=='glb'&&_bm.total>0)?('<span style="font-weight:900;font-size:11px;color:'+(_rest>0?'#8A4F0B':'#0C5132')+';background:'+(_rest>0?'#FAEEDA':'#DFF3E7')+';border-radius:99px;padding:2px 9px;white-space:nowrap">'+(_rest>0?('Restan '+qty(_rest)+' '+_bm.unidad+' \u00b7 '+_rpc+'%'):'\u2713 Completo')+'</span>'):'';
+function renderBars(p){const real=pctOf(p),prog=progOf(p);const dif=real-prog;var _bm=metaOf(p.id);var _rest=(_bm&&_bm.unidad!=='glb'&&_bm.total>0)?Math.max(0,(+_bm.total)-acumCant(p.id)):0;var _rpc=(_bm&&_bm.unidad!=='glb'&&_bm.total>0)?Math.max(0,Math.round(_rest/_bm.total*100)):0;var _restPill=(_bm&&_bm.unidad!=='glb'&&_bm.total>0)?('<span style="font-weight:900;font-size:11px;color:'+(_rest>0?'#8A4F0B':'#0C5132')+';background:'+(_rest>0?'#FAEEDA':'#DFF3E7')+';border-radius:99px;padding:2px 9px;white-space:nowrap">'+(_rest>0?('Restan '+qtyX(_rest)+' '+_bm.unidad+' \u00b7 '+_rpc+'%'):'\u2713 Completo')+'</span>'):'';
   $('rBars').innerHTML='<div class="tbrow"><span class="tl">Programado</span><span class="pbar"><i style="width:'+prog+'%;background:var(--brand2)"></i></span><span class="tv">'+prog+'%</span></div>'+
     '<div class="tbrow"><span class="tl">Real</span><span class="pbar"><i style="width:'+real+'%;background:'+pcCol(real)+'"></i></span><span class="tv">'+real+'%</span></div>'+
     '<div class="tbrow"><span class="tl"></span><span style="flex:1;font-weight:700;color:'+(dif>=0?'var(--green)':'var(--danger)')+'">'+(dif>=0?'Al día o adelantado':((Number(prog-real)||0).toFixed(2)+'% atrasado'))+'</span>'+_restPill+'</div>'}
@@ -1990,13 +1992,13 @@ function renderMeta(p){const m=metaOf(p.id);const box=$('rMeta');
     var _fzr=(typeof _fzDe==='function')?_fzDe(p.id):null;
     if(_fzr&&(_fzr.fases||[]).length){
       var H2='<div class="row"><span>Unidad del contrato</span><b>'+m.unidad+'</b></div>'+
-             '<div class="row"><span>Meta total</span><b>'+qty(m.total)+' '+m.unidad+'</b></div>'+
+             '<div class="row"><span>Meta total</span><b>'+qtyX(m.total)+' '+m.unidad+'</b></div>'+
              '<div style="margin-top:9px;padding-top:8px;border-top:1px dashed rgba(0,0,0,.14)">'+
              '<div style="font-size:11px;font-weight:800;color:#1F3864;margin-bottom:6px">Detalle por parte</div>';
       var apTot=0;
       (_fzr.fases||[]).forEach(function(x){
         var pcx=(typeof _fzPctParte==='function')?_fzPctParte(x):0;
-        var ap=Math.round((Number(x.peso)||0)*pcx)/100;apTot+=ap;
+        var ap=(Number(x.peso)||0)*pcx/100;apTot+=ap;
         var col=x.cierra?'#1F3864':'#0C5132';
         H2+='<div style="margin-bottom:7px">'+
           '<div style="display:flex;align-items:baseline;gap:7px">'+
@@ -2005,16 +2007,16 @@ function renderMeta(p){const m=metaOf(p.id);const box=$('rMeta');
           '<div style="display:flex;align-items:center;gap:7px;margin-top:3px">'+
           '<span style="flex:1;height:6px;background:#EAEEF5;border-radius:4px;overflow:hidden;border:1px solid #DBE2EC"><i style="display:block;height:100%;width:'+Math.round(pcx)+'%;background:'+col+'"></i></span>'+
           '<span style="font-size:10.5px;color:#5C6779;flex:none">'+Math.round(pcx)+'%</span>'+
-          '<b style="font-size:11.5px;color:'+col+';flex:none;min-width:78px;text-align:right">aporta '+ap.toFixed(1)+'%</b></div>'+
-          '<div style="font-size:10px;color:var(--muted);margin-top:1px">de los '+(Math.round((Number(x.peso)||0)*10)/10)+'% que vale · <b style="color:'+col+'">le quedan '+(Math.max(0,Math.round(((Number(x.peso)||0)-ap)*10)/10))+'% por aportar</b>'+(x.cierra?' · cierra la actividad':'')+'</div>'+
+          '<b style="font-size:11.5px;color:'+col+';flex:none;min-width:78px;text-align:right">aporta '+qtyX(ap)+'%</b></div>'+
+          '<div style="font-size:10px;color:var(--muted);margin-top:1px">de los '+qtyX(Number(x.peso)||0)+'% que vale · <b style="color:'+col+'">le quedan '+qtyX(Math.max(0,(Number(x.peso)||0)-ap))+'% por aportar</b>'+(x.cierra?' · cierra la actividad':'')+'</div>'+
           '</div>'});
       H2+='<div style="display:flex;align-items:baseline;gap:7px;padding-top:6px;border-top:1px solid rgba(0,0,0,.10)">'+
           '<b style="flex:1;font-size:12px;color:#1B2433">Avance de la actividad</b>'+
-          '<b style="font-size:15px;color:#1E7A46">'+Math.round(apTot)+'%</b></div>'+
-          '<div style="font-size:10.5px;color:var(--muted);text-align:right">le quedan '+Math.max(0,Math.round(100-apTot))+'% repartidos entre las partes de arriba</div></div>';
+          '<b style="font-size:15px;color:#1E7A46">'+qtyX(apTot)+'%</b></div>'+
+          '<div style="font-size:10.5px;color:var(--muted);text-align:right">le quedan '+qtyX(Math.max(0,100-apTot))+'% repartidos entre las partes de arriba</div></div>';
       box.innerHTML=H2;
     }else{
-      box.innerHTML='<div class="row"><span>Unidad</span><b>'+m.unidad+'</b></div><div class="row"><span>Meta total</span><b>'+qty(m.total)+' '+m.unidad+'</b></div><div class="row"><span>Acumulado histórico</span><b class="big">'+qty(ac)+' '+m.unidad+' · '+pctOf(p)+'%</b></div>';
+      box.innerHTML='<div class="row"><span>Unidad</span><b>'+m.unidad+'</b></div><div class="row"><span>Meta total</span><b>'+qtyX(m.total)+' '+m.unidad+'</b></div><div class="row"><span>Acumulado histórico</span><b class="big">'+qtyX(ac)+' '+m.unidad+' · '+pctOf(p)+'%</b></div>';
     }
     $('rGlbBlock').classList.add('hidden');$('rCantBlock').classList.remove('hidden');$('rCantLbl').textContent='Avance del día ('+m.unidad+')';$('rCant').value='';updLive(p)}}
 /* Si la partida esta dividida en partes y hay una elegida, los numeros de arriba
@@ -2030,14 +2032,14 @@ function _fzLive(p){try{
   var pc=tot>0?Math.min(100,Math.round(nv/tot*100)):0;
   var rest=Math.max(0,tot-nv);
   var rpc=tot>0?Math.max(0,Math.round(rest/tot*100)):0;
-  var aporte=Math.round((Number(f.peso)||0)*pc)/100;
+  var aporte=(Number(f.peso)||0)*(tot>0?Math.min(100,nv/tot*100):0)/100;
   $('rLive').innerHTML='<b class="tnum">'+pc+'%</b>'+
-    '<div class="s">'+esc(f.nombre)+': '+nv+' / '+tot+' '+esc(f.unidad||'')+'</div>'+
+    '<div class="s">'+esc(f.nombre)+': '+qtyX(nv)+' / '+qtyX(tot)+' '+esc(f.unidad||'')+'</div>'+
     '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(0,0,0,.14);display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap">'+
-    (rest>0?('<span style="font-weight:800;color:#5C6779">Le falta</span><span style="font-weight:800;color:#1F3864">'+rest+' '+esc(f.unidad||'')+' · '+rpc+'%</span>')
+    (rest>0?('<span style="font-weight:800;color:#5C6779">Le falta</span><span style="font-weight:800;color:#1F3864">'+qtyX(rest)+' '+esc(f.unidad||'')+' · '+rpc+'%</span>')
            :('<span style="font-weight:800;color:#1E7A46">Parte completa</span>'))+
     '</div>'+
-    '<div style="margin-top:6px;font-size:11px;color:#5C6779">Esta parte vale '+(Math.round((Number(f.peso)||0)*10)/10)+'% de la actividad — con esto aporta <b style="color:#1F3864">'+aporte.toFixed(1)+'%</b>'+
+    '<div style="margin-top:6px;font-size:11px;color:#5C6779">Esta parte vale '+qtyX(Number(f.peso)||0)+'% de la actividad — con esto aporta <b style="color:#1F3864">'+qtyX(aporte)+'%</b>'+
     (f.cierra?' · es la que la lleva al 100%':'')+'</div>';
   return true}catch(e){return null}}
 /* En Glb. la gente escribe a veces el porcentaje (5) y a veces la fraccion
@@ -2047,9 +2049,9 @@ function _glbListo(v,total,unidad){
   v=Number(v)||0;total=Number(total)||0;
   if(!(v>0)||!(total>0))return v;
   if(!/glb/i.test(String(unidad||'')))return v;
-  if(v>total&&v<=100)return Math.round(v/100*total*1e6)/1e6;
+  if(v>total&&v<=100)return _nLimpio(v/100*total);
   return v}
-function updLive(p){if(_fzLive(p))return;const m=metaOf(p.id);const _crudo=+$('rCant').value||0;const add=_glbListo(_crudo,m.total,m.unidad);const nv=acumCant(p.id)+add;const pc=m.total>0?Math.min(100,Math.round(nv/m.total*100)):0;const rest=Math.max(0,(+m.total||0)-nv);const rpc=m.total>0?Math.max(0,Math.round(rest/m.total*100)):0;$('rLive').innerHTML=(add!==_crudo?('<div class="s" style="color:#7A4B00;font-weight:800;margin-bottom:4px">'+_crudo+' se entendió como '+_crudo+'% = '+qty(add)+' '+m.unidad+'</div>'):'')+'<b class="tnum">'+pc+'%</b><div class="s">nuevo acumulado: '+qty(nv)+' / '+qty(m.total)+' '+m.unidad+'</div>'+'<div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(0,0,0,.14);display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap">'+(rest>0?('<span style="font-weight:800;color:#5C6779">Restante</span><span style="font-weight:800;color:#1F3864">'+qty(rest)+' '+m.unidad+'</span><span style="font-weight:900;color:#8A4F0B;background:#FAEEDA;border-radius:99px;padding:2px 10px">'+rpc+'% por hacer</span>'):'<span style="font-weight:900;color:#0C5132;background:#DFF3E7;border-radius:99px;padding:2px 12px">\u2713 Completo \u00b7 0% por hacer</span>')+'</div>'}
+function updLive(p){if(_fzLive(p))return;const m=metaOf(p.id);const _crudo=+$('rCant').value||0;const add=_glbListo(_crudo,m.total,m.unidad);const nv=acumCant(p.id)+add;const pc=m.total>0?Math.min(100,Math.round(nv/m.total*100)):0;const rest=Math.max(0,(+m.total||0)-nv);const rpc=m.total>0?Math.max(0,Math.round(rest/m.total*100)):0;$('rLive').innerHTML=(add!==_crudo?('<div class="s" style="color:#7A4B00;font-weight:800;margin-bottom:4px">'+_crudo+' se entendió como '+_crudo+'% = '+qtyX(add)+' '+m.unidad+'</div>'):'')+'<b class="tnum">'+pc+'%</b><div class="s">nuevo acumulado: '+qtyX(nv)+' / '+qtyX(m.total)+' '+m.unidad+'</div>'+'<div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(0,0,0,.14);display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap">'+(rest>0?('<span style="font-weight:800;color:#5C6779">Restante</span><span style="font-weight:800;color:#1F3864">'+qtyX(rest)+' '+m.unidad+'</span><span style="font-weight:900;color:#8A4F0B;background:#FAEEDA;border-radius:99px;padding:2px 10px">'+rpc+'% por hacer</span>'):'<span style="font-weight:900;color:#0C5132;background:#DFF3E7;border-radius:99px;padding:2px 12px">\u2713 Completo \u00b7 0% por hacer</span>')+'</div>'}
 function _updSaveGate(){try{var b=$('rSave');if(!b)return;if(!regCuad){b.textContent='\ud83d\udd12 Elige una cuadrilla';b.style.background='#C7CDD8';b.style.color='#fff'}else{b.textContent='Guardar metrado';b.style.background='';b.style.color=''}}catch(e){}}
 /* === CUADRILLAS: definibles (cargos + nombres), versión interna N.V, los días pasados no se tocan === */
 var KCU='obf4_cuadrillas';try{if(!state.cuadrillas)state.cuadrillas=store.get(KCU)||{}}catch(e){state.cuadrillas={}}
@@ -3881,11 +3883,11 @@ async function _crAlcanceUI(c){
           if(r&&r.fases&&r.fases.length){var rm=_retMapa(p.id,c.cron_id),tot=0;r.fases.forEach(function(x){tot+=Number(x.peso)||0});
             var hhB=((offC(p)||retC(p))?0:(propio?hhx[p.id]:p.hh))||0;
             r.fases.forEach(function(x,ix){var w=Number(x.peso)||0,cq=Number(x.cantidad)||0,av=Number(x.avance)||0,e=rm[_retNk(x.nombre)],rq=e?((Number(e.cant)||0)<0?(Number(e.cant)||0):Math.max(0,Math.min(Number(e.cant)||0,Math.max(0,cq-av)))):0;
-              var hhP0=tot>0?Math.round(hhB*w/tot*100)/100:0,saldo=Math.max(0,cq-av);
+              var hhP0=tot>0?hhB*w/tot:0,saldo=Math.max(0,cq-av);
               var g=gs.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0];if(g)usados[g.id]=1;var go=g?_apuGOffEf(p.id,g,c.cron_id):false;
               /* las HH del apartado ya descontadas: 0 si esta apagado; menos lo retirado si tiene retiro */
-              var hhP=go?0:((cq>0&&rq!==0)?Math.round(hhP0*(1-Math.min(1,rq/cq))*100)/100:hhP0);
-              H2+='<div class="_crNoTog" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;font-size:10px;margin:3px 0 0 4px;color:'+((rq!==0||go)?'#E8C9A0':'#7d8590')+'"><span>\u21b3 <b style="color:'+((rq!==0||go)?'#E8C9A0':'#9db4d6')+'">'+esc(x.nombre||'')+'</b> \u00b7 '+(tot>0?_apuCant(w/tot*100):'0')+'% \u00b7 '+hhP+' hh'+((go||rq!==0)&&hhP!==hhP0?(' <s>'+hhP0+'</s>'):'')+
+              var hhP=go?0:((cq>0&&rq!==0)?hhP0*(1-Math.min(1,rq/cq)):hhP0);
+              H2+='<div class="_crNoTog" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;font-size:10px;margin:3px 0 0 4px;color:'+((rq!==0||go)?'#E8C9A0':'#7d8590')+'"><span>\u21b3 <b style="color:'+((rq!==0||go)?'#E8C9A0':'#9db4d6')+'">'+esc(x.nombre||'')+'</b> \u00b7 '+(tot>0?_apuCant(w/tot*100):'0')+'% \u00b7 '+_apuCant(hhP)+' hh'+((go||rq!==0)&&hhP!==hhP0?(' <s>'+_apuCant(hhP0)+'</s>'):'')+
                 (rq<0?(' \u00b7 <b>se har\u00e1n '+_apuCant(-rq)+' '+esc(x.unidad||'')+' m\u00e1s \u00b7 metrado final '+_apuCant(cq-rq)+' '+esc(x.unidad||'')+'</b>'):'')+
                 (cq>0?(' \u00b7 '+_apuCant(av)+' / '+_apuCant(cq)+' '+esc(x.unidad||'')):'')+
                 (rq>0?(' \u00b7 <b>'+((rq>=saldo-1e-9)?('todo el saldo retirado ('+_apuCant(rq)+' '+esc(x.unidad||'')+')'):('ya no se har\u00e1n '+_apuCant(rq)+' '+esc(x.unidad||'')+' \u00b7 metrado final '+_apuCant(Math.max(0,cq-rq))+' '+esc(x.unidad||'')))+'</b>'):'')+(go?' \u00b7 <b>apagado</b>':'')+'</span>'+
@@ -3893,8 +3895,8 @@ async function _crAlcanceUI(c){
                   ((rq!==0)?(btn('_crBRp','data-id="'+esc(p.id)+'" data-n="'+ix+'" data-acc="poner"','\u270e Cambiar l\u00edmite','#26456F','#E3EEF9',';border:1px solid #B7CDE8')+btn('_crBRp','data-id="'+esc(p.id)+'" data-n="'+ix+'" data-acc="devolver"','\u25b6 Devolver saldo','#fff','#1E7A46')):'')+(g?bApu(g):'')):'')+'</div>'})}
           if(!(r&&r.fases&&r.fases.length)){try{var xi=_retParteImplicita(p.id);if(xi){var rmI=_retMapa(p.id,c.cron_id),eI=rmI[_retNk(xi.nombre)],cqI=xi.cantidad,avI=xi.avance,saldoI=Math.max(0,cqI-avI);
             var rqI=eI?((Number(eI.cant)||0)<0?(Number(eI.cant)||0):Math.max(0,Math.min(Number(eI.cant)||0,saldoI))):0;
-            var hhBI=((offC(p)||retC(p))?0:(propio?hhx[p.id]:p.hh))||0,hhI=(cqI>0&&rqI!==0)?Math.round(hhBI*(1-Math.min(1,rqI/cqI))*100)/100:hhBI;
-            H2+='<div class="_crNoTog" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;font-size:10px;margin:3px 0 0 4px;color:'+(rqI!==0?'#E8C9A0':'#7d8590')+'"><span>\u21b3 <b style="color:'+(rqI!==0?'#E8C9A0':'#9db4d6')+'">Partida completa</b> \u00b7 '+hhI+' hh'+(rqI!==0&&hhI!==hhBI?(' <s>'+hhBI+'</s>'):'')+' \u00b7 '+_apuCant(avI)+' / '+_apuCant(cqI)+' '+esc(xi.unidad||'')+
+            var hhBI=((offC(p)||retC(p))?0:(propio?hhx[p.id]:p.hh))||0,hhI=(cqI>0&&rqI!==0)?hhBI*(1-Math.min(1,rqI/cqI)):hhBI;
+            H2+='<div class="_crNoTog" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;font-size:10px;margin:3px 0 0 4px;color:'+(rqI!==0?'#E8C9A0':'#7d8590')+'"><span>\u21b3 <b style="color:'+(rqI!==0?'#E8C9A0':'#9db4d6')+'">Partida completa</b> \u00b7 '+_apuCant(hhI)+' hh'+(rqI!==0&&hhI!==hhBI?(' <s>'+_apuCant(hhBI)+'</s>'):'')+' \u00b7 '+_apuCant(avI)+' / '+_apuCant(cqI)+' '+esc(xi.unidad||'')+
               (rqI>0?(' \u00b7 <b>'+((rqI>=saldoI-1e-9)?('todo el saldo retirado ('+_apuCant(rqI)+' '+esc(xi.unidad||'')+')'):('ya no se har\u00e1n '+_apuCant(rqI)+' '+esc(xi.unidad||'')+' \u00b7 metrado final '+_apuCant(Math.max(0,cqI-rqI))+' '+esc(xi.unidad||'')))+'</b>'):'')+
               (rqI<0?(' \u00b7 <b>se har\u00e1n '+_apuCant(-rqI)+' '+esc(xi.unidad||'')+' m\u00e1s \u00b7 metrado final '+_apuCant(cqI-rqI)+' '+esc(xi.unidad||'')+'</b>'):'')+'</span>'+
               (puede?(((!(rqI!==0))?btn('_crBRp','data-id="'+esc(p.id)+'" data-n="-1" data-acc="poner"','\u23f8 Retirar saldo / nuevo metrado','#7A4B00','#FCEFD9',';border:1px solid #EFC98A'):'')+
@@ -3940,7 +3942,7 @@ async function _crAlcanceUI(c){
             (otras.length-8)+' más</span>';
           return h})()+
         '</span></span>'+
-        '<span style="flex:none;color:'+(on?(propio?'#C39BD3':'#9FE8B0'):'#7d8590')+';font-size:11px;font-weight:800">'+(on?((Math.round(Number(hMe)*100)/100)+' hh'):('0 hh <s style="font-weight:600">'+(Math.round(Number(hMe)*100)/100)+'</s>'))+'</span>'+
+        '<span style="flex:none;color:'+(on?(propio?'#C39BD3':'#9FE8B0'):'#7d8590')+';font-size:11px;font-weight:800">'+(on?(_apuCant(hMe)+' hh'):('0 hh <s style="font-weight:600">'+_apuCant(hMe)+'</s>'))+'</span>'+
         /* De un vistazo: si entra en el alcance y si de verdad pesa.
            Son dos cosas distintas y antes se decia solo la primera: la marca
            del alcance vale para el coste, pero para el peso del avance hace
@@ -5889,8 +5891,8 @@ function _crCurvaReal(u,semanas,filas){
     var pts=0;
     for(var it in u.items)pts+=u.items[it]*_crFracHechaAt(porId[it],semanas[i].fin);
     var v=hhT>0?(pts/hhT):0;
-    acum.push(v);sem.push(Math.round((v-prev)*1e6)/1e6);prev=v}
-  return {acum:acum,porSem:sem,hh:Math.round(hhT*100)/100}}
+    acum.push(v);sem.push(v-prev);prev=v}
+  return {acum:acum,porSem:sem,hh:hhT}}
 /* ---------- la curva PROGRAMADA de una REPROGRAMACION ----------
    Un cronograma con fecha de datos (un .xer exportado "para reprogramacion"
    y vuelto a cargar, o uno de P6 con avance) ya no se reparte lineal: el
@@ -6013,9 +6015,9 @@ async function _crPlanGuardar(cronId,sem,cur,u,nivel){
     acHH+=hhSem;
     filas.push({proyecto:DATA.proyecto,cron_id:cronId,semana:sem[i].n,
       ini:sem[i].ini,fin:sem[i].fin,serial_jue:sem[i].serial||0,
-      pct_sem:Math.round((cur.pesoTot>0?cur.porSem[i]/cur.pesoTot:0)*1e6)/1e6,
-      pct_acum:Math.round(cur.acum[i]*1e6)/1e6,
-      hh_sem:Math.round(hhSem*100)/100,hh_acum:Math.round(acHH*100)/100,
+      pct_sem:(cur.pesoTot>0?cur.porSem[i]/cur.pesoTot:0),
+      pct_acum:cur.acum[i],
+      hh_sem:hhSem,hh_acum:acHH,
       hh_universo:u.hh,nivel:nivel||'',
       quien:yo,ts:t,cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0})}
   for(var j=0;j<filas.length;j+=100)
@@ -6292,7 +6294,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
         'Al cierre de la S'+sem[iHoy].n+' ('+esc(sem[iHoy].fin)+'): programado <b>'+(Math.round(pr*1000)/10)+'%</b> · '+
         'real <b>'+(Math.round(re*1000)/10)+'%</b> · '+(d>=0?'adelanto':'atraso')+' de <b>'+
         (Math.round(Math.abs(d)*1000)/10)+' puntos</b>'+hoyTxt+
-        '<br><span style="font-weight:400;color:#9db4d6;font-size:11px">medido sobre las '+real.hh+' hh del alcance de este cronograma</span>')})():'')+
+        '<br><span style="font-weight:400;color:#9db4d6;font-size:11px">medido sobre las '+_nMil(_apuCant(real.hh))+' hh del alcance de este cronograma</span>')})():'')+
     '<div id="_crGraf" style="background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:8px;overflow-x:auto">'+
     '<svg width="'+W+'" height="'+H+'" style="display:block">'+ejes+barras+
     '<path d="'+linea+'" fill="none" stroke="'+esc(c.color||'#2E86C1')+'" stroke-width="2.2" stroke-linejoin="round"/>'+
@@ -6906,7 +6908,7 @@ function _crPlanSemanal(tar,uItems,semanas,alc){
   var plegadoFin=0,plegadoIni=0;
   (tar||[]).forEach(function(t){
     var hh=0;(t.items||[]).forEach(function(i){hh+=(Number(uItems[i])||0)/_crVeces(rp,i)});
-    hh=Math.round(hh*1e6)/1e6;
+    
     var sem=semanas.map(function(){return 0}),nd=0,pleg=0;
     /* la tarea se reparte por tramos: cada partida con su fecha efectiva
        (la del alcance manda sobre la del .xer) */
@@ -6929,7 +6931,7 @@ function _crPlanSemanal(tar,uItems,semanas,alc){
     out.push({cod:String(t.task_code||''),nom:String(t.nombre||''),
       hh:hh,ini:fT.ini||'',fin:fT.fin||'',dias:nd,
       pleg:Math.round(pleg*100)/100,
-      sem:sem.map(function(v){return Math.round(v*1e6)/1e6})})});
+      sem:sem})});
   out.plegadoFin=Math.round(plegadoFin*100)/100;
   out.plegadoIni=Math.round(plegadoIni*100)/100;
   return out}
@@ -6982,10 +6984,10 @@ function _crHojaPlan(cron,filas,semanas,est){
   /* el total, para poder comprobar de un vistazo que no se perdio nada */
   var tot='';
   tot+=_crXlsCel('C',n,'TOTAL '+cron.cron_id,true,E.total);
-  tot+=_crXlsCel('F',n,Math.round(filas.reduce(function(a,f){return a+f.hh},0)*100)/100,false,E.totalNum);
+  tot+=_crXlsCel('F',n,filas.reduce(function(a,f){return a+f.hh},0),false,E.totalNum);
   semanas.forEach(function(s,i){
     var v=filas.reduce(function(a,f){return a+f.sem[i]},0);
-    tot+=_crXlsCel(s.col,n,v>0?(Math.round(v*1e6)/1e6):'',false,E.totalNum)});
+    tot+=_crXlsCel(s.col,n,v>0?v:'',false,E.totalNum)});
   r.push('<row r="'+n+'">'+tot+'</row>');
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
@@ -8586,15 +8588,15 @@ function _wkAcum(cutISO){
       var g=partesOf(p.id).filter(function(x){return x.tipo==='glb'&&isFinite(Number(x.pctGlb))&&String(x.fecha||'')<=cutISO})
         .sort(function(a2,b2){return a2.fecha<b2.fecha?-1:a2.fecha>b2.fecha?1:((a2.ts||0)-(b2.ts||0))});
       var pct=g.length?Number(g[g.length-1].pctGlb):(m._baked?(p.ini||0):0);
-      tot=Number(m.total)||0;a=Math.round(pct/100*tot*1e4)/1e4;
+      tot=Number(m.total)||0;a=pct/100*tot;
     }else if(m&&m.unidad!=='na'){
       a=(typeof acumCantAt==='function')?acumCantAt(p.id,cutISO):0;tot=Number(m.total)||0;
     }else return;
     /* el % de la actividad con la MISMA vara del panel (pondera las partes) */
     var pca=0;try{pca=Number(pctOfAt(p,cutISO))||0}catch(_ep){try{pca=(tot>0)?Math.min(100,a/tot*100):0}catch(_e2){}}
-    if(a>0||hh>0||pca>0)out[p.id]=[Math.round(a*1e4)/1e4,Math.round(tot*1e4)/1e4,Math.round(hh*100)/100,nuevasIds[p.id]?1:0,
+    if(a>0||hh>0||pca>0)out[p.id]=[a,tot,hh,nuevasIds[p.id]?1:0,
       String((m&&m.unidad)||p.unidad||'UND'),String((typeof _nomAct==='function'?_nomAct(p):p.nombre)||p.id).slice(0,90),
-      Math.round(pca*100)/100];
+      pca];
   }catch(e){}});
   _wkAcum.apagadas=apagadas;
   return out}
@@ -11389,15 +11391,15 @@ function _wkHojaP6Esp(bl,semanas,ib){
     c+=_crXlsCel(P.nom,n,f.nom,true,S.desc);
     c+=_crXlsCel(P.cant,n,(f.cant===''||f.cant==null)?'':f.cant,false,S.num);
     c+=_crXlsCel(P.und,n,f.und||'',true,S.texto);
-    c+=_crXlsCel(P.hh,n,Math.round(f.hh*100)/100,false,S.num);
-    c+=_crXlsCel(P.costo,n,Math.round((f.costo||0)*100)/100,false,S.num);
+    c+=_crXlsCel(P.hh,n,f.hh,false,S.num);
+    c+=_crXlsCel(P.costo,n,(f.costo||0),false,S.num);
     c+=_crXlsCel(P.dias,n,f.dias||'',false,S.ent);
     c+=_crXlsCel(P.ini,n,f.ini?_crASerial(f.ini):'',false,S.fecha);
     c+=_crXlsCel(P.fin,n,f.fin?_crASerial(f.fin):'',false,S.fecha);
     /* el avance real de esta actividad, semana a semana: va aqui mismo para
        que la lista de una linea base sea UNA sola hoja */
     (semanas||[]).forEach(function(s2,i){
-      var v=(f.semReal&&f.semReal[i])?Math.round(f.semReal[i]*1e6)/1e6:'';
+      var v=(f.semReal&&f.semReal[i])?f.semReal[i]:'';
       c+=_crXlsCel(_wkP6Col(i),n,v,false,S.num)});
     r.push('<row r="'+n+'">'+c+'</row>')});
   return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
@@ -11448,21 +11450,21 @@ function _wkFeederEsp(bloques,semanas,real){
       c+=_crXlsCel(F.clave,m,f.clave,true,S.texto);
       c+=_crXlsCel(F.cod,m,f.cod,true,S.texto);
       c+=_crXlsCel(F.nom,m,f.nom,true,S.desc);
-      c+=_crXlsCel(F.hh,m,Math.round(hh*100)/100,false,S.num);
+      c+=_crXlsCel(F.hh,m,hh,false,S.num);
       c+=_crXlsCel(F.ini,m,(!real&&f.ini)?_crASerial(f.ini):'',false,S.fecha);
       c+=_crXlsCel(F.fin,m,(!real&&f.fin)?_crASerial(f.fin):'',false,S.fecha);
       c+=_crXlsCel(F.dias,m,real?'':(f.dias||''),false,S.ent);
       semanas.forEach(function(s2,i){
-        var v=(ss&&ss[i])?Math.round(ss[i]*1e6)/1e6:'';
+        var v=(ss&&ss[i])?ss[i]:'';
         if(v!=='')tot[i]+=v;
         c+=_crXlsCel(_wkFCol(i),m,v,false,S.num)});
       tH+=hh;
       r.push('<row r="'+m+'">'+c+'</row>')});
     n=E.ultima+1;
     var ct=_crXlsCel(F.nom,n,'TOTAL '+bl.id,true,S.total)+
-      _crXlsCel(F.hh,n,Math.round(tH*100)/100,false,S.totalNum)+
+      _crXlsCel(F.hh,n,tH,false,S.totalNum)+
       semanas.map(function(s2,i){return _crXlsCel(_wkFCol(i),n,
-        Math.round(tot[i]*1e6)/1e6,false,S.totalNum)}).join('');
+        tot[i],false,S.totalNum)}).join('');
     r.push('<row r="'+n+'">'+ct+'</row>');n++});
   return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
@@ -11746,7 +11748,7 @@ function _wkBloquesDe(C,esp,sem,corte,porId,pctA){
           v+=_crGanadas(cc.rp,i,t.task_code,Number(cc.u.items[i])||0,pctA(i,s2.fin))});
         return Math.min(1,v/hh)});
       var semReal=acumReal.map(function(a,i){
-        return Math.max(0,Math.round(((a-(i?acumReal[i-1]:0))*hh)*1e6)/1e6)});
+        return Math.max(0,(a-(i?acumReal[i-1]:0))*hh)});
       var pr=0;if(hh>0)ms.forEach(function(i){
         pr+=_crGanadas(cc.rp,i,t.task_code,Number(cc.u.items[i])||0,pctA(i,corte))});
       /* el costo va por lo que el alcance incluye, no por lo que tiene horas */
@@ -11768,7 +11770,7 @@ function _wkBloquesDe(C,esp,sem,corte,porId,pctA){
         itsQ.forEach(function(i){var q=porId[i],u9=String(q.und||'').trim();
           if(!u9||!(Number(q.cant)>0)){okQ=false;return}
           us[u9.toLowerCase()]=u9;totQ+=Number(q.cant)/_crVeces(cc.rp,i)});
-        if(okQ&&Object.keys(us).length===1){cant=Math.round(totQ*100)/100;und=us[Object.keys(us)[0]];
+        if(okQ&&Object.keys(us).length===1){cant=totQ;und=us[Object.keys(us)[0]];
           if(!qps)qps=itsQ.length===1?itsQ[0]:('('+itsQ.length+')')}}
       filas.push({clave:cc.id+'-'+t.task_code, cod:t.task_code, qps:qps,
         items:(t.items||[]).slice(),
@@ -13149,7 +13151,8 @@ function _mjNum(v, dec) {
   if (typeof v === 'string') return v;
   var x = Number(v);
   if (!isFinite(x)) x = 0;
-  var s = x.toFixed(dec == null ? 6 : dec);
+  var s = String(_nLimpio(x));
+  if (/e/i.test(s)) s = x.toFixed(20).replace(/[.]?0+$/, '');
   if (s === '-0' || /^-0\.0*$/.test(s)) s = s.replace('-', '');
   return s;
 }
@@ -14186,9 +14189,10 @@ function _mjHojaAvance(datos, semanas, ids) {
   var sN_txt = e.clon(s718, F_BAN, null), sN_hh = e.clon(sHH, F_BAN, null),
       sN_pct = e.clon(s718, F_BAN, NF), sN_del = e.clon(s718, F_BAN, 10);
 
-  function pc(v) { return (Math.round(v * 100 * 100) / 100 / 100).toFixed(4); }
+  function pc(v) { return _mjNum(v); }
   function dpc(v, vp) {
-    return pc((Math.round(v * 100 * 100) / 100 - Math.round((vp || 0) * 100 * 100) / 100) / 100);
+    var d = v - (vp || 0); if (Math.abs(d) < 1e-12) d = 0;
+    return pc(d);
   }
 
   /* ---- bloques por especialidad (orden de primera aparicion) ------------ */
@@ -14482,7 +14486,7 @@ async function _mjDatos(semanas){
   (DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id&&!vivas[p.id])vivas[p.id]=p});
   var enCat={};cat.forEach(function(r){if(r.item)enCat[String(r.item).trim()]=1});
   function pctEn(p,iso){
-    try{return Math.round((Number(pctOfAt(p,iso))||0)*100)/100}catch(e){return 0}}
+    try{return Number(pctOfAt(p,iso))||0}catch(e){return 0}}
   function fila(it,nom,esp,und,lb0,hh,estado,tit,orden){
     var p=vivas[it];
     var apag=false;try{apag=(typeof _hhOff==='function')&&!!_hhOff(it)}catch(e){}
@@ -14492,9 +14496,9 @@ async function _mjDatos(semanas){
         var v=pctEn(p,semanas[i].fin);
         ps[String(semanas[i].n)]=v;ult=v}}
     var hhg=0;
-    if(!apag&&hh>0&&estado==='En alcance')hhg=Math.round(hh*Math.min(100,ult)/100*100)/100;
+    if(!apag&&hh>0&&estado==='En alcance')hhg=hh*Math.min(100,ult)/100;
     var cant=0;
-    if(p&&!tit){try{cant=Math.round((Number(acumCantAt(it,semanas[semanas.length-1].fin))||0)*100)/100}catch(e){}}
+    if(p&&!tit){try{cant=Number(acumCantAt(it,semanas[semanas.length-1].fin))||0}catch(e){}}
     return {it:it,nom:nom,esp:esp,und:und,lb0:lb0,hh:hh,estado:estado,sin_hh:apag,tit:!!tit,
       orden:orden,pct_sem:ps,pct:ult,hhg:hhg,cant:cant}}
   var partidas=[];
@@ -16539,7 +16543,7 @@ function _wgBloqueDe(CTX,cc){
     filas.push({
       clave:cc.id+'-'+cod, cod:cod, qps:qps, items:its.slice(),
       nom:String(t.nombre||''), wbs:String(t.wbs||''),
-      cant:(cantOk&&isFinite(cant))?(Math.round(cant*100)/100):'',
+      cant:(cantOk&&isFinite(cant))?cant:'',
       und:undU, costo:costo, hh:hh,
       sem:s, acum:_wkAcumDe(s,hh),
       ini:ini, fin:fin, dias:dias,
@@ -20547,7 +20551,7 @@ function _wkExcel(){
             var _tt=await _crTareas(_cc.cron_id),_aa=await _crAlc(_cc.cron_id);
             var _uu=_crUniverso(_cc.cron_id,_aa);
             var _fil=_crPlanSemanal(_tt,_uu.items,_rej,_aa);
-            _tot[_cc.cron_id]=Math.round(_fil.reduce(function(a,f){return a+f.hh},0)*100)/100;
+            _tot[_cc.cron_id]=_fil.reduce(function(a,f){return a+f.hh},0);
             if(_fil.plegadoFin>0)_pleg[_cc.cron_id]=_fil.plegadoFin;
             _curvasCron.push({id:_cc.cron_id,
               nom:(typeof _crNomVis==='function'?_crNomVis(_cc):_cc.cron_id),
@@ -22051,7 +22055,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c14';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c15';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -22165,8 +22169,8 @@ function _elimCatHTML(R){
     var det=[];
     if(r.cantidad!=null)det.push(_nNum(r.cantidad)+' '+esc(r.unidad||''));
     if(r.hh_t!=null)det.push(_nNum(r.hh_t,1)+' hh');
-    if(r.precio_unitario!=null)det.push('PU '+_nMon(r.precio_unitario));
-    if(r.oferta_total!=null)det.push('Total '+_nMon(r.oferta_total));
+    if(r.precio_unitario!=null)det.push('PU '+_nMil(_apuCant(r.precio_unitario)));
+    if(r.oferta_total!=null)det.push('Total '+_nMil(_apuCant(r.oferta_total)));
     if(det.length)H+='<div style="color:#9db4d6;font-size:10.5px;margin-top:3px">'+det.join(' · ')+'</div>';
     var _bots='';
     _bots+='<button class="_elApu" data-pid="'+esc(r.partida_id)+'" style="background:#0C5132;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11px;cursor:pointer">📊 APU</button>';
@@ -26046,8 +26050,8 @@ var _pw='';try{
   if(_hh9>0){
     var _pv=_pgPeso(p);
     var _pb=_U9?true:_pgBaseProy();
-    _pw='<div title="Terminada al 100% aporta este porcentaje '+(_U9?('al avance del cronograma '+String((_pgUnivRec()||{}).cid||'')+' ('+_nMil2(_U9.hh)+' hh del alcance)'):(_pb?'al avance de TODO el proyecto':'al avance de su especialidad'))+
-      ' ('+(Math.round(_hh9*100)/100)+' hh)" style="font-size:10.5px;background:rgba(255,255,255,.22);'+
+    _pw='<div title="Terminada al 100% aporta este porcentaje '+(_U9?('al avance del cronograma '+String((_pgUnivRec()||{}).cid||'')+' ('+_nMil(_apuCant(_U9.hh))+' hh del alcance)'):(_pb?'al avance de TODO el proyecto':'al avance de su especialidad'))+
+      ' ('+_apuCant(_hh9)+' hh)" style="font-size:10.5px;background:rgba(255,255,255,.22);'+
       'border-radius:6px;padding:2px 7px;margin-top:4px;margin-left:5px;display:inline-block">'+
       'vale '+_hhPct(_pv)+' <span style="opacity:.8">'+(_U9?'del alcance del cronograma':(_pb?'de las 3 especialidades':'de la especialidad'))+'</span></div>'}
 }catch(_epw){}
@@ -26761,7 +26765,7 @@ function _fzCierre(id){
   return f||((r.fases||[])[(r.fases||[]).length-1])||null}
 function _fzResumen(id){
   var r=_fzDe(id);if(!r)return '';
-  return (r.fases||[]).map(function(x){return x.nombre+' '+(Math.round((Number(x.peso)||0)*10)/10)+'%'}).join(' · ')}
+  return (r.fases||[]).map(function(x){return x.nombre+' '+qtyX(Number(x.peso)||0)+'%'}).join(' · ')}
 async function _fzGuardar(id,fases,borrar,origen){var r9=await _fzGuardar0(id,fases,borrar,origen);try{_hhMemoTira()}catch(e){}try{_retLimpiaHuerfanos(id)}catch(e){}try{_retRefresca()}catch(e){}return r9}
 async function _fzGuardar0(id,fases,borrar,origen){
   var t=(typeof nowSrv==='function'?nowSrv():Date.now());
@@ -26860,7 +26864,7 @@ function _fzUI(p){
   var m=(typeof metaOf==='function')?metaOf(id):null;
   var undBase=(m&&m.unidad)||p.unidad||'UND';
   var cantBase=(m&&m.total)||p.metrado||0;
-  var actual=_fzAll()[id];
+  var actual=_fzAll()[id];try{if(actual&&!actual.eliminado)_fzDeRaw(id)}catch(_eA){}
   var fases=(actual&&actual.fases&&!actual.eliminado)?JSON.parse(JSON.stringify(actual.fases)):[
     {id:_fzNuevoId(),nombre:'Suministro',unidad:undBase,cantidad:cantBase,peso:30,avance:0},
     {id:_fzNuevoId(),nombre:'Montaje',unidad:undBase,cantidad:cantBase,peso:70,avance:0}];
@@ -26956,23 +26960,23 @@ function _fzUI(p){
       /* entra antes de la ultima, que es la que cierra la cadena */
       fases.splice(Math.max(0,fases.length-1),0,{id:_fzNuevoId(),nombre:'',unidad:undBase,cantidad:cantBase,peso:0,avance:0});pinta()};
     document.getElementById('_fzEq').onclick=function(){leer();
-      var n=fases.length;var base=Math.floor(10000/n)/100;
+      var n=fases.length;var base=100/n;
       fases.forEach(function(x){x.peso=base});
-      fases[n-1].peso=Math.round((100-base*(n-1))*100)/100;pinta()};
+      fases[n-1].peso=100-base*(n-1);pinta()};
     document.getElementById('_fzProp').onclick=function(){leer();
       var t=0;fases.forEach(function(x){t+=Math.abs(Number(x.cantidad)||0)});
       if(!t){if(typeof toast==='function')toast('Pon primero las cantidades');return}
       var acum=0;
       fases.forEach(function(x,i){
-        if(i<fases.length-1){x.peso=Math.round(Math.abs(Number(x.cantidad)||0)/t*10000)/100;acum+=x.peso}
-        else x.peso=Math.round((100-acum)*100)/100});
+        if(i<fases.length-1){x.peso=Math.abs(Number(x.cantidad)||0)/t*100;acum+=x.peso}
+        else x.peso=100-acum});
       pinta()};
     document.getElementById('_fzAj').onclick=function(){leer();
-      var t=suma();if(t<=0){if(typeof toast==='function')toast('Pon algun peso primero');return}
+      var t=0;fases.forEach(function(x){t+=Number(x.peso)||0});if(t<=0){if(typeof toast==='function')toast('Pon algun peso primero');return}
       var acum=0;
       fases.forEach(function(x,i){
-        if(i<fases.length-1){x.peso=Math.round((Number(x.peso)||0)/t*10000)/100;acum+=x.peso}
-        else x.peso=Math.round((100-acum)*100)/100});
+        if(i<fases.length-1){x.peso=(Number(x.peso)||0)/t*100;acum+=x.peso}
+        else x.peso=100-acum});
       pinta()};
     var ok2=document.getElementById('_fzOk');
     if(ok2)ok2.onclick=async function(){
@@ -27038,26 +27042,26 @@ function _fzInject(){try{
       ln.style.cssText='display:block;margin-top:3px;font-size:10.5px;line-height:1.5';
       var H='';
       (r.fases||[]).forEach(function(x){
-        var pc=Math.round(_fzPctParte(x)*100)/100;
+        var pc=_fzPctParte(x);
         /* lo fisico de verdad y lo retirado, aparte */
         var cF=Number(x.cantidad)||0,aF=Number(x.avance)||0;
         var qR=(typeof _retCantDe==='function')?_retCantDe(x):0;
         /* con saldo retirado, el metrado que vale es el final (lo que si se hara) */
         var cFin=Math.max(0,cF-qR);   /* retirado resta, ampliado suma */
-        var pcF=cFin>0?Math.round(Math.min(100,aF/cFin*100)*100)/100:(cF>0?Math.round(Math.min(100,aF/cF*100)*100)/100:pc);
+        var pcF=cFin>0?Math.min(100,aF/cFin*100):(cF>0?Math.min(100,aF/cF*100):pc);
         var col=x.cierra?'#1F3864':'#0C5132';
         var pesoP=Number(x.peso)||0;
         var aporta=qtyX(_fzPctParte(x)*pesoP/100);   /* lo ganado de su peso en la actividad */
         /* si la parte paso su cantidad, el sobremetrado se ve como en las tarjetas */
         var cantP=(qR!==0?cFin:(Number(x.cantidad)||0));
-        var pcRaw=cantP>0?Math.round((Number(x.avance)||0)/cantP*10000)/100:0;
+        var pcRaw=cantP>0?(Number(x.avance)||0)/cantP*100:0;
         H+='<span style="display:block"><b style="color:'+col+'">'+esc(x.nombre)+'</b>'+
            ' <span style="color:#1B2433;font-weight:700">'+qtyX(Number(x.avance)||0)+' / '+qtyX(qR!==0?cFin:(Number(x.cantidad)||0))+' '+esc(x.unidad||'')+'</span>'+
 
-           ' <span style="color:'+col+';font-weight:800">'+pcF+'% hecho</span>'+
+           ' <span style="color:'+col+';font-weight:800">'+qtyX(pcF)+'% hecho</span>'+
            (qR<0?(' <span style="color:#26456F;font-weight:800">\u2795 '+_apuCant(-qR)+' '+esc(x.unidad||'')+' m\u00e1s</span>'):'')+
            (qR>0?(' <span style="color:#7A4B00;font-weight:800">\u23f8 '+_apuCant(qR)+' '+esc(x.unidad||'')+' retiradas \u00b7 cuenta como hecho</span>'):'')+
-           (pcRaw>100.005?(' <span style="background:#FDEAD7;color:#B45309;border:1px solid #F0B879;border-radius:5px;padding:0 4px;font-weight:800">+'+(Math.round((pcRaw-100)*100)/100)+'% sobre</span>'):'')+
+           (pcRaw>100.005?(' <span style="background:#FDEAD7;color:#B45309;border:1px solid #F0B879;border-radius:5px;padding:0 4px;font-weight:800">+'+qtyX(pcRaw-100)+'% sobre</span>'):'')+
            ' <span style="color:var(--muted)">· aporta '+aporta+'% de sus '+qtyX(pesoP)+'%</span></span>'});
       try{var _fo=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;
         if(_fo>0){var _rA=_apuDe(id);var _nO=((_rA&&_rA.grupos)||[]).filter(function(g){return g&&g.off}).map(function(g){return String(g.nombre||'').toUpperCase()}).join(', ');
@@ -27103,11 +27107,11 @@ function _fzRegUI(){try{
         (window._regFase?'A que parte va este avance?':'Elige a que parte va este avance')+'</div>';
   H+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
   fs.forEach(function(x){
-    var on=(x.id===window._regFase);var pc=Math.round(_fzPctParte(x)*100)/100;
+    var on=(x.id===window._regFase);var pc=_fzPctParte(x);
     var falta=Math.max(0,(Number(x.cantidad)||0)-(Number(x.avance)||0));
     H+='<button class="_fzRegB" data-f="'+esc(x.id)+'" style="flex:1;min-width:44%;text-align:left;padding:9px 10px;border-radius:9px;border:1.5px solid '+(on?'#1F3864':'#C9D2E0')+';background:'+(on?'#1F3864':'#fff')+';color:'+(on?'#fff':'#1B2433')+';cursor:pointer">'+
        '<div style="font-size:12px;font-weight:800">'+esc(x.nombre||'')+'</div>'+
-       '<div style="font-size:10px;opacity:.85;margin-top:2px">'+pc+'% hecho · faltan '+qtyX(falta)+' '+esc(x.unidad||'')+' · vale '+qtyX(Number(x.peso)||0)+'%</div>'+
+       '<div style="font-size:10px;opacity:.85;margin-top:2px">'+qtyX(pc)+'% hecho · faltan '+qtyX(falta)+' '+esc(x.unidad||'')+' · vale '+qtyX(Number(x.peso)||0)+'%</div>'+
        (x.cierra?'<div style="font-size:9.5px;opacity:.85;margin-top:2px">se mide en la unidad del contrato y lleva la actividad al 100%</div>':'')+'</button>'});
   H+='</div>';
   caja.innerHTML=H;
@@ -27271,7 +27275,7 @@ function _fzDesgloseHTML(id){
      '<span id="_fzDesgC" style="font-size:13px;color:#1F3864;transition:transform .15s">&#9656;</span></div>';
   H+='<div id="_fzDesgB" style="display:none;padding:0 12px 11px">';
   fs.forEach(function(x){
-    var pc=Math.round(_fzPctParte(x)*100)/100;
+    var pc=_fzPctParte(x);
     var movs=(x.movs||[]).slice().sort(function(a,b){return String(b.f).localeCompare(String(a.f))});
     H+='<div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:7px">'+
        '<div style="display:flex;align-items:center;gap:7px">'+
@@ -27279,7 +27283,7 @@ function _fzDesgloseHTML(id){
        '<span style="font-size:10.5px;color:var(--muted)">vale '+qtyX(Number(x.peso)||0)+'%</span></div>'+
        '<div style="display:flex;align-items:center;gap:7px;margin-top:5px">'+
        '<span style="flex:1;height:7px;background:#EAEEF5;border-radius:4px;overflow:hidden;border:1px solid #DBE2EC"><i style="display:block;height:100%;width:'+pc+'%;background:'+(x.cierra?'#1F3864':'#1E7A46')+'"></i></span>'+
-       '<b style="font-size:11.5px;color:'+(x.cierra?'#1F3864':'#1E7A46')+';flex:none">'+pc+'%</b></div>'+
+       '<b style="font-size:11.5px;color:'+(x.cierra?'#1F3864':'#1E7A46')+';flex:none">'+qtyX(pc)+'%</b></div>'+
        '<div style="font-size:10.5px;color:var(--muted);margin-top:3px">'+(Number(x.avance)||0)+' de '+(Number(x.cantidad)||0)+' '+esc(x.unidad||'')+
        (x.cierra?' &middot; cierra la actividad':'')+'</div>';
     if(movs.length){
@@ -27343,7 +27347,7 @@ function _apuParcial(x){
   /* vista en horas-hombre: solo mientras se pinta el panel */
   if(window._apuVistaHH)return _apuHHde(x);
   if(x.parcial!=null&&x.parcial!=='')return _apuNum(x.parcial);
-  return Math.round(_apuNum(x.cantidad)*_apuNum(x.precio)*1e6)/1e6}
+  return _apuNum(x.cantidad)*_apuNum(x.precio)}
 function _apuTotal(r){var G={},o=[];((r&&r.insumos)||[]).forEach(function(x){if(x.eliminado)return;var g=String(x.grupo||'MAT');if(!(g in G)){G[g]=0;o.push(g)}G[g]+=_apuParcial(x)});var t=0;o.forEach(function(g){t+=G[g]});return t}
 /* los repartos de un insumo: {apartado: porcentaje}. Un insumo puede estar
    en varios apartados mientras la suma no pase de 100; lo grabado antes
@@ -27352,7 +27356,7 @@ function _apuRep(x){
   if(!x)return {};
   if(x.repartos&&typeof x.repartos==='object'){
     var o={};Object.keys(x.repartos).forEach(function(g){var v=Number(x.repartos[g]);
-      if(g&&isFinite(v)&&v>0)o[g]=Math.min(100,Math.round(v*100)/100)});
+      if(g&&isFinite(v)&&v>0)o[g]=Math.min(100,v)});
     return o}
   if(x.grupo_id){var o1={};
     var pv=Number(x.grupo_pct);
@@ -27360,15 +27364,15 @@ function _apuRep(x){
     return o1}
   return {}}
 function _apuRepUsado(x,sinGid){var t=0,R=_apuRep(x);
-  Object.keys(R).forEach(function(g){if(g!==sinGid)t+=R[g]});return Math.round(t*100)/100}
+  Object.keys(R).forEach(function(g){if(g!==sinGid)t+=R[g]});return Math.round(t*1e9)/1e9}
 /* lo que le queda libre al insumo, sin contar lo que ya tiene en gid */
-function _apuRepSaldo(x,gid){return Math.max(0,Math.round((100-_apuRepUsado(x,gid))*100)/100)}
+function _apuRepSaldo(x,gid){var t=0,R=_apuRep(x);Object.keys(R).forEach(function(g){if(g!==gid)t+=R[g]});var s=100-t;return (s<1e-9)?0:s}
 function _apuFracDe(x,gid){var R=_apuRep(x);return (R[gid]||0)/100}
 /* escribe un reparto (pct nulo o 0 lo saca) y deja los campos viejos
    coherentes con el primer reparto para quien aun los lea */
 function _apuRepSet(r,x,gid,pct){
   var R=_apuRep(x);
-  if(pct==null||!(Number(pct)>0))delete R[gid];else R[gid]=Math.min(100,Math.round(Number(pct)*100)/100);
+  if(pct==null||!(Number(pct)>0))delete R[gid];else R[gid]=Math.min(100,Number(pct));
   x.repartos=R;
   var gids=Object.keys(R);
   x.grupo_id=gids[0]||'';
@@ -27541,7 +27545,7 @@ async function _fzDesdeApu(id,p,silencioso){
     var cant=(m&&Number(m.total))||(p&&Number(p.metrado))||0;
     /* los apartados que no se realizan recortan el metrado a ejecutar: con
        lo hecho sobre lo que SI se hace, la actividad puede llegar al 100% */
-    var cantH=null;try{var fo=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;if(fo>0)cantH=Math.round(cant*(1-fo)*100)/100}catch(_eo){}
+    var cantH=null;try{var fo=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;if(fo>0)cantH=cant*(1-fo)}catch(_eo){}
     var undC=(m&&m.unidad)||r.unidad||(p&&p.unidad)||'UND';
     var und=r.unidad||undC;
     var prev={};try{((_fzDe(id)||{}).fases||[]).forEach(function(q){
@@ -27575,7 +27579,7 @@ async function _fzDesdeApu(id,p,silencioso){
         peso:z.p,avance:(vj?(Number(vj.avance)||0):0),
         movs:(vj&&vj.movs)?vj.movs:[],cierra:esUlt}});
     /* lo que SI se realiza, por parte: su cantidad menos los apartados apagados */
-    if(cantH!=null&&cant>0){var _fH=cantH/cant;fases.forEach(function(f){var cq=Number(f.cantidad)||0;if(cq>0)f.cant_hacer=Math.round(cq*_fH*100)/100})}
+    if(cantH!=null&&cant>0){var _fH=cantH/cant;fases.forEach(function(f){var cq=Number(f.cantidad)||0;if(cq>0)f.cant_hacer=cq*_fH})}
     var huerf=[];
     for(var k in prev){if(!lista.some(function(z){return String(z.n||'').trim().toLowerCase()===k})){
       if((Number(prev[k].avance)||0)>0)huerf.push(prev[k].nombre)}}
@@ -27739,7 +27743,7 @@ function _apuUI(p){
             var cg=_apuGrupoCol(gg),frg=Rx[gid];
             H+='<span style="color:'+cg[0]+';display:inline-flex;gap:5px;align-items:center'+(_apuGOffEf(id,gg)?';opacity:.65':'')+'">'+esc(String(gg.nombre).toUpperCase())+(_apuGOffEf(id,gg)?' · \u23f8 no se considera':(' · '+(tot>0?_apuCant(par*frg/tot):0)+(window._apuVistaHH?'% de las hh':'% del costo')))+
               '<button class="_apuPct" data-i="'+i+'" data-g="'+esc(gid)+'" title="Qué porcentaje de este insumo se considera en '+esc(gg.nombre)+' (0 lo saca)" style="background:#fff;color:'+cg[0]+';border:1.5px solid '+cg[0]+';border-radius:7px;padding:1px 7px;font-weight:900;font-size:10px;cursor:pointer">'+_apuCant(frg)+'% del insumo</button></span>'});
-          if(usadoX<100)H+='<span style="color:#5C6779">libre '+_apuCant(Math.round((100-usadoX)*100)/100)+'%</span>';
+          if(usadoX<100)H+='<span style="color:#5C6779">libre '+_apuCant(100-usadoX)+'%</span>';
           H+='</div>'}
         H+='</div>';
         if(adm)H+='<div style="flex:none;display:flex;flex-direction:column;gap:5px">'+
@@ -27778,7 +27782,7 @@ function _apuUI(p){
       resumenG+='</div>'}
     pie.innerHTML='<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:7px">'+
       '<span style="font-size:11.5px;color:#5C6779;font-weight:700">'+(window._apuVistaHH?'Horas-hombre del APU':'Costo del APU')+'</span>'+
-      '<b style="font-size:17px;color:#0C5132">'+_apuMon(tot)+'</b>'+((typeof _apuTotalCons==='function'&&_apuTotalCons(r)<tot-1e-9)?('<span style="font-size:11px;color:#8A4B00;margin-left:6px">de contrato · cuentan <b style="color:#1E7A46">'+_apuMon(_apuTotalCons(r))+'</b></span>'):'')+
+      '<b style="font-size:17px;color:#0C5132">'+_apuMon(tot)+'</b>'+((typeof _apuTotalCons==='function'&&_apuTotalCons(r)*fac()<tot-1e-9)?('<span style="font-size:11px;color:#8A4B00;margin-left:6px">de contrato · cuentan <b style="color:#1E7A46">'+_apuMon(_apuTotalCons(r)*fac())+'</b></span>'):'')+
       '<span style="font-size:11px;color:#5C6779">'+(window._apuXMet&&metQ()>0?('por las '+_apuCant(metQ())+' '+esc(metU())):('por '+esc(r.unidad||p.unidad||'und')))+'</span>'+
       '<span style="margin-left:auto;font-size:10.5px">'+difTxt+'</span></div>'+
       '<div style="background:'+(gsp.length?'#F7FAFC':'#F4F7FB')+';border:1px solid var(--line);border-radius:11px;padding:9px 11px">'+
@@ -27825,7 +27829,7 @@ function _apuUI(p){
       var v=prompt(txt,def);if(v==null)return null;
       v=Number(String(v).replace('%','').replace(',','.').trim());
       if(!isFinite(v)||v<0||v>100){if(typeof toast==='function')toast('Pon un porcentaje entre 0 y 100');return null}
-      return Math.round(v*100)/100};
+      return v};
     var _guardaPct=async function(){
       try{await _apuGuardar(id,r,false)}catch(e){}
       try{if(_fzVieneDelApu(id))await _fzDesdeApu(id,p,true)}catch(e){}};
@@ -27836,7 +27840,7 @@ function _apuUI(p){
       var v=Number(String(pcC.value).replace(',','.'));
       if(!isFinite(v)||v<0||v>100){if(typeof toast==='function')toast('Pon un porcentaje entre 0 y 100');
         pcC.value=_apuCant(window._apuPctComun==null?100:window._apuPctComun);return}
-      v=Math.round(v*100)/100;window._apuPctComun=v;
+      window._apuPctComun=v;
       var n=0,topados=0;
       if(window._apuGSel)vivos().forEach(function(x){
         if(!_apuRep(x)[window._apuGSel])return;
@@ -27853,7 +27857,7 @@ function _apuUI(p){
       var tope=_apuRepSaldo(x,gid);
       var v=_leePct('¿Qué % de "'+String(x.descripcion||'').slice(0,50)+'" se considera en "'+((gq&&gq.nombre)||'el apartado')+'"?\n(máximo '+_apuCant(tope)+'% disponible · 0 lo saca del apartado)',_apuCant(_apuFracDe(x,gid)*100));
       if(v==null)return;
-      if(v>tope){if(typeof toast==='function')toast('Solo hay '+_apuCant(tope)+'% disponible de este insumo — bájale en los otros apartados');return}
+      if(v>tope+1e-9){if(typeof toast==='function')toast('Solo hay '+_apuCant(tope)+'% disponible de este insumo — bájale en los otros apartados');return}
       _apuRepSet(r,x,gid,v);pinta();await _guardaPct()}});
     var goff=document.getElementById('_apuGOff');
     if(goff)goff.onclick=async function(){
@@ -27947,7 +27951,7 @@ function _apuUI(p){
       var gsx=_apuGrupos(r).filter(function(g){return !g.off&&_apuGrupoTot(r,g.id)>0});
       if(gsx.length){
         var cant=(typeof metaOf==='function'&&metaOf(id))?metaOf(id).total:(p.metrado||0);
-        var cantH=null;try{var fo=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;if(fo>0)cantH=Math.round(cant*(1-fo)*100)/100}catch(_eo){}
+        var cantH=null;try{var fo=(typeof _apuOffFrac==='function')?_apuOffFrac(id):0;if(fo>0)cantH=cant*(1-fo)}catch(_eo){}
         var und=r.unidad||p.unidad||'UND';
         var undC=((typeof metaOf==='function'&&metaOf(id))?metaOf(id).unidad:'')||und;
         /* cada apartado se lleva SU porcentaje real del costo; lo que no esta en
@@ -27973,7 +27977,7 @@ function _apuUI(p){
               avance:(vj?(Number(vj.avance)||0):0),
               movs:(vj&&vj.movs)?vj.movs:[],cierra:esUlt}});
     /* lo que SI se realiza, por parte: su cantidad menos los apartados apagados */
-    if(cantH!=null&&cant>0){var _fH=cantH/cant;fases.forEach(function(f){var cq=Number(f.cantidad)||0;if(cq>0)f.cant_hacer=Math.round(cq*_fH*100)/100})}
+    if(cantH!=null&&cant>0){var _fH=cantH/cant;fases.forEach(function(f){var cq=Number(f.cantidad)||0;if(cq>0)f.cant_hacer=cq*_fH})}
           await _fzGuardar(id,fases,false,'apu');
           if(adm)await _apuGuardar(id,r,false);
           try{if(typeof renderList==='function')renderList()}catch(e){}
@@ -28236,7 +28240,7 @@ Array.prototype.forEach.call(w.querySelectorAll('.leaf[data-id]'),function(el){
   var b=document.createElement('span');b.className='_hhTag';
   b.title='HH que cuentan: '+_hhDe(p)+' hh (contrato: '+(Number(p.hh)||0)+' hh'+(_hhEnTarea(p.id)?'':' · sin tarea en el cronograma ACTUAL: atala en Mapeo')+'). Terminada al 100%, aporta este porcentaje al avance de '+esc(_hhBase()==='proy'?'TODO el proyecto':p.esp)+' ('+_nNum(_hhTotDisc(p.esp))+' hh en total).';
   b.style.cssText='display:inline-block;margin-left:6px;font-size:9.5px;font-weight:800;color:#0C5132;background:#EAF3EC;border:1px solid #BFD8C6;border-radius:5px;padding:1px 5px;white-space:nowrap;vertical-align:middle';
-  b.textContent='Al 100% vale '+_hhPct(pe)+(_hhBase()==='proy'?' del proyecto':'');
+  b.textContent='Al 100% vale '+qtyX(pe)+'%'+(_hhBase()==='proy'?' del proyecto':'');
   nm.appendChild(b)});
 /* cada sistema: lo que lleva y lo que vale. Lo escribe SOLO esta funcion —
    antes tambien lo tocaba _pesoInject y el texto parpadeaba entre las dos. */
@@ -28405,7 +28409,7 @@ function _tabDecCelda(td,d){
   var m=/\d[\d',]*(?:\.\d+)?/.exec(o.t);if(!m)return;var sx=m[0],sd=(sx.split('.')[1]||'').length,shown=Number(sx.replace(/[',]/g,''));if(!isFinite(shown))return;
   var sep=(sx.indexOf(',')>=0)?',':"'";var v=shown,raw=td.getAttribute('data-num');
   if(raw!=null&&raw!==''&&isFinite(Number(raw))){var r=Math.abs(Number(raw)),tol=0.5*Math.pow(10,-sd)+1e-9;[r,r*100,r/100].some(function(c){if(Math.abs(Math.round(c*Math.pow(10,sd))/Math.pow(10,sd)-shown)<=tol||Math.abs(c-shown)<=tol){v=c;return true}return false})}
-  d=Math.max(0,Math.min(8,Math.round(d)));var f=(Math.round(Number((v*Math.pow(10,d)).toPrecision(15)))/Math.pow(10,d)).toFixed(d),q=f.split('.');q[0]=q[0].replace(/\B(?=(\d{3})+(?!\d))/g,sep);
+  d=Math.max(0,Math.min(15,Math.round(d)));var f=(Math.round(Number((v*Math.pow(10,d)).toPrecision(15)))/Math.pow(10,d)).toFixed(d),q=f.split('.');if(d>8){var s15=String(Number(Number(v).toPrecision(15)));if(!/e/i.test(s15)){var p15=s15.split('.'),e15=p15[1]||'';if(e15.length<=d)q=[p15[0],(e15+'000000000000000').slice(0,d)]}}q[0]=q[0].replace(/\B(?=(\d{3})+(?!\d))/g,sep);
   var nt=o.t.slice(0,m.index)+q.join('.')+o.t.slice(m.index+sx.length);if(o.n.nodeValue!==nt)o.n.nodeValue=nt}
 /* decimales que se ven hoy en una celda (su formato o su texto original) */
 function _tabDecVisto(td,dec,rk,k){var d=_tabDecDe(dec,rk,k);if(d!=null)return d;var t=(td._d0&&td._d0.t)||_tabNumTxt(td);var m=/\d[\d',]*(?:\.(\d+))?/.exec(t);return m&&m[1]?m[1].length:0}
@@ -28463,7 +28467,7 @@ function _tabDecOp(doc,pfx,op){try{var rt=window['_nav'+pfx+'Root'];if(!rt||!doc
   if(!celdas.length){msg('En '+que+' no hay n\u00fameros ni porcentajes: los decimales solo cambian en ellos');return}
   /* base de +1/-1: el formato ya puesto a esta seleccion o, si no hay, los decimales mas comunes en ella */
   var cur,ya=dec[key];if(ya!=null)cur=_tabDecVal(ya).d;else{var cnt={};celdas.forEach(function(c){var v=_tabDecVisto(c[0],dec,c[1],c[2]);cnt[v]=(cnt[v]||0)+1});cur=Number(Object.keys(cnt).sort(function(a,b){return (cnt[b]-cnt[a])||(a-b)})[0])||0}
-  var nd=(op==='2')?2:(op==='+'?Math.min(8,cur+1):Math.max(0,cur-1));
+  var nd=(op==='2')?2:(op==='+'?Math.min(15,cur+1):Math.max(0,cur-1));
   /* lo mas amplio manda sobre lo de adentro: al formatear la columna se sueltan sus celdas; la fila, las suyas; la tabla, todo */
   if(key==='*')dec={};
   else if(key.indexOf('c:')===0){var kk=key.slice(2);Object.keys(dec).forEach(function(z){if(z.indexOf('x:')===0&&z.slice(z.lastIndexOf('|')+1)===kk)delete dec[z]})}
@@ -29045,7 +29049,7 @@ function _tbFxDe(k){var o=null;try{var cfg=_tbCfg();o=cfg.formulas&&cfg.formulas
 function _tbFxCambiada(k){var o=_tbFxDe(k),d=_TB_FX[k];if(!o)return false;if(!d)return true;return o[0]!==d[0]||o[1]!==d[1]||o[2]!==d[2]}
 function _tbFxCalc(a,op,b){if(a==null||a===''||b==null||b==='')return null;var x=Number(a),y=Number(b);if(!isFinite(x)||!isFinite(y))return null;if(op==='+')return x+y;if(op==='-')return x-y;if(op==='*')return x*y;if(op==='/')return (y!==0)?x/y:null;return null}
 /* una linea de la tabla con las columnas de formula cambiada recalculadas */
-function _tbFxAplica(m){try{_TB_COLS.forEach(function(cl){var k=cl[0];if(!_tbFxCambiada(k))return;var F=_tbFxDe(k);m[k]=_tbFxCalc(m[F[0]],F[1],m[F[2]])})}catch(e){}return m}
+function _tbFxAplica(m){try{var S={},FF={},n=1;_TB_COLS.forEach(function(cl){var k=cl[0];FF[k]=_tbFxDe(k);if(_tbFxCambiada(k))S[k]=1});while(n){n=0;_TB_COLS.forEach(function(cl){var k=cl[0],F=FF[k];if(!S[k]&&F&&(S[F[0]]||S[F[2]])){S[k]=1;n=1}})}for(var p=0;p<4;p++)_TB_COLS.forEach(function(cl){var k=cl[0],F=FF[k];if(S[k]&&F)m[k]=_tbFxCalc(m[F[0]],F[1],m[F[2]])})}catch(e){}return m}
 function _tbFxSimb(op){return op==='*'?'\u00d7':(op==='/'?'\u00f7':(op==='-'?'\u2212':'+'))}
 async function _crTablaDatos(c,corte){
   try{await _crCatOk()}catch(e){}
@@ -29419,7 +29423,7 @@ function _crTablaHTML(D,q,ord){
     /* si los apartados no cubren toda la partida (p. ej. solo un apartado del
        APU apagado al 58 %), el resto va en una linea "(sin apartado)": asi las
        lineas suman la partida completa y el TOTAL es el del contrato */
-    var K=['costo','costoC','dCosto','hhC','hh','hhM','costoM','hhA','costoA','hhAM','costoAM'],KB={costo:1,costoC:1,dCosto:1,hhC:1,hh:1},resto={},hay=false;K.forEach(function(k){var sm=0;L.forEach(function(m){sm+=Number(m[k])||0});var d=(Number(r[k])||0)-sm;resto[k]=d>1e-9?d:0;if(d>0.05&&KB[k])hay=true});   /* solo las columnas base deciden si hay resto: las de mayor metrado/actual no cuadran por definicion */
+    var K=['costo','costoC','dCosto','hhC','hh','hhM','costoM','hhA','costoA','hhAM','costoAM'],KB={costo:1,costoC:1,dCosto:1,hhC:1,hh:1},resto={},hay=false;K.forEach(function(k){var sm=0;L.forEach(function(m){sm+=Number(m[k])||0});var d=(Number(r[k])||0)-sm;resto[k]=d>1e-9?d:0;if(d>1e-6&&KB[k])hay=true});   /* solo las columnas base deciden si hay resto: las de mayor metrado/actual no cuadran por definicion */
     if(hay){var m2={};for(var k3 in r)if(k3!=='partes')m2[k3]=r[k3];K.forEach(function(k){m2[k]=resto[k]});
         /* el resto nunca lleva mayor metrado: sus columnas (MM) repiten las de forecast/actual */
         m2.hhM=m2.hh;m2.costoM=m2.costoC;m2.hhAM=m2.hhA;m2.costoAM=m2.costoA;m2.pert='Resto de la partida';m2.met=null;m2.metF=null;m2.metM=null;m2.metA=null;m2.metAM=null;m2.av=null;m2.pu=null;m2.hhu=null;m2.pct=null;m2.metR=null;m2.metRF=null;m2.hhR=null;m2.hhRF=null;m2.costoR=null;m2.costoRF=null;m2.rendQ=null;m2.rend=null;m2.durC=null;m2.durF=null;m2.durM=null;m2.durR=null;m2.dur=null;m2.ret='';m2.apOff='';m2._np=L.length+1;L.push(m2)}
@@ -29434,8 +29438,8 @@ function _crTablaHTML(D,q,ord){
     var resto=(m.pert==='Resto de la partida');
     if(m.pert&&!resto){var q9=Number(m.met);
       if(q9>0&&Math.abs(q9-M)>1e-9){var k9=M/q9,rd9=function(v){return _nLimpio(v)},nn9=function(v){return (v!=null&&v!==''&&isFinite(Number(v)))?Number(v):null};
-        /* contrato y forecast a la escala del QPS; lo cargado (avance, metrado actual) queda tal cual se cargo */
-        var avF9=(nn9(m.metAM)!=null)?nn9(m.metAM):nn9(m.metA),mF9=(nn9(m.metF)!=null)?rd9(nn9(m.metF)*k9):null;
+        /* contrato, forecast y lo cargado (avance, metrado actual) a la escala del QPS: si no, 552 de 579.6 salia al 100 % */
+        var avF9=(nn9(m.metAM)!=null)?nn9(m.metAM):nn9(m.metA),mF9=(nn9(m.metF)!=null)?rd9(nn9(m.metF)*k9):null;if(avF9!=null)avF9=rd9(avF9*k9);if(nn9(m.av)!=null)m.av=rd9(nn9(m.av)*k9);m._k9=k9;
         m.met=M;m.metF=mF9;if(nn9(m.retN)!=null)m.retN=rd9(nn9(m.retN)*k9);if(nn9(m.rend)>0)m.rend=rd9(nn9(m.rend)*k9);
         if(mF9!=null){var mM9=Math.max(mF9,avF9||0),cC9=Number(m.costoC)||0,hF9=Number(m.hh)||0,eM9=(mF9>0)?mM9/mF9:1;
           m.metM=rd9(mM9);if(avF9!=null){m.metA=rd9(Math.min(avF9,mF9));m.metAM=rd9(Math.min(avF9,mM9))}
@@ -29863,9 +29867,11 @@ async function _tbExportarXlsx2(root,doc,opt){
     var noForm={};
     for(var kx in metX){var shown=Number(m&&m[kx]);if(!isFinite(shown)){metX[kx]=_nLimpio(metX[kx]);continue}
       if(Math.abs(metX[kx]-shown)<=1e-9*Math.max(1,Math.abs(shown)))metX[kx]=shown;else{delete metX[kx];noForm[kx]=1}}
-    var refMet=function(k){if(ix[k]!=null)return colL(ix[k])+r;var v=metX[k];return (v!=null&&isFinite(v))?String(v):null};
-    var refPu=(ix.pu!=null)?(colL(ix.pu)+r):((pu!=null)?String(pu):null);
-    var refHhu=(ix.hhu!=null)?(colL(ix.hhu)+r):((hhu!=null)?String(hhu):null);
+    var refMet=function(k){if(ix[k]!=null)return colL(ix[k])+r;var v=metX[k];return (v!=null&&isFinite(v))?_lit15(v):null};
+    /* literal del unitario: corto si lo es (0.84); si no, como fraccion exacta (costo/metrado): Excel lee solo 15 cifras de una constante */
+    var _lit9=function(v,a,b){var s=String(_nLimpio(v));if(/^-?[0-9]+([.][0-9]{1,8})?$/.test(s))return s;return (isFinite(a)&&isFinite(b)&&a>0&&b>0&&Math.abs(a/b-v)<=1e-12*Math.max(1,Math.abs(v)))?('('+_lit15(a)+'/'+_lit15(b)+')'):s};
+    var refPu=(ix.pu!=null)?(colL(ix.pu)+r):((pu!=null)?_lit9(pu,co,mt):null);
+    var refHhu=(ix.hhu!=null)?(colL(ix.hhu)+r):((hhu!=null)?_lit9(hhu,hc,mt2):null);
     var refCol=function(kk,v){if(ix[kk]!=null)return colL(ix[kk])+r;var n9=Number(v);return (v!=null&&v!==''&&isFinite(n9))?String(_nLimpio(n9)):null};
     var h2='';
     tds.forEach(function(td,i){
@@ -30885,7 +30891,7 @@ function _crTablaQHTML(D,q,ord){
     /* si los apartados no cubren toda la partida (p. ej. solo un apartado del
        APU apagado al 58 %), el resto va en una linea "(sin apartado)": asi las
        lineas suman la partida completa y el TOTAL es el del contrato */
-    var K=['costo','costoC','dCosto','hhC','hh','hhM','costoM','hhA','costoA','hhAM','costoAM'],KB={costo:1,costoC:1,dCosto:1,hhC:1,hh:1},resto={},hay=false;K.forEach(function(k){var sm=0;L.forEach(function(m){sm+=Number(m[k])||0});var d=(Number(r[k])||0)-sm;resto[k]=d>1e-9?d:0;if(d>0.05&&KB[k])hay=true});   /* solo las columnas base deciden si hay resto: las de mayor metrado/actual no cuadran por definicion */
+    var K=['costo','costoC','dCosto','hhC','hh','hhM','costoM','hhA','costoA','hhAM','costoAM'],KB={costo:1,costoC:1,dCosto:1,hhC:1,hh:1},resto={},hay=false;K.forEach(function(k){var sm=0;L.forEach(function(m){sm+=Number(m[k])||0});var d=(Number(r[k])||0)-sm;resto[k]=d>1e-9?d:0;if(d>1e-6&&KB[k])hay=true});   /* solo las columnas base deciden si hay resto: las de mayor metrado/actual no cuadran por definicion */
     if(hay){var m2={};for(var k3 in r)if(k3!=='partes')m2[k3]=r[k3];K.forEach(function(k){m2[k]=resto[k]});
         /* el resto nunca lleva mayor metrado: sus columnas (MM) repiten las de forecast/actual */
         m2.hhM=m2.hh;m2.costoM=m2.costoC;m2.hhAM=m2.hhA;m2.costoAM=m2.costoA;m2.pert='Resto de la partida';m2.pctAv=null;m2.met=null;m2.metF=null;m2.metM=null;m2.metA=null;m2.metAM=null;m2.av=null;m2.pu=null;m2.hhu=null;m2.pct=null;m2.metR=null;m2.metRF=null;m2.hhR=null;m2.hhRF=null;m2.costoR=null;m2.costoRF=null;m2.rendQ=null;m2.rend=null;m2.durC=null;m2.durF=null;m2.durM=null;m2.durR=null;m2.dur=null;m2.ret='';m2.apOff='';m2._np=L.length+1;
@@ -30902,8 +30908,8 @@ function _crTablaQHTML(D,q,ord){
     var resto=(m.pert==='Resto de la partida');
     if(m.pert&&!resto){var q9=Number(m.met);
       if(q9>0&&Math.abs(q9-M)>1e-9){var k9=M/q9,rd9=function(v){return _nLimpio(v)},nn9=function(v){return (v!=null&&v!==''&&isFinite(Number(v)))?Number(v):null};
-        /* contrato y forecast a la escala del QPS; lo cargado (avance, metrado actual) queda tal cual se cargo */
-        var avF9=(nn9(m.metAM)!=null)?nn9(m.metAM):nn9(m.metA),mF9=(nn9(m.metF)!=null)?rd9(nn9(m.metF)*k9):null;
+        /* contrato, forecast y lo cargado (avance, metrado actual) a la escala del QPS: si no, 552 de 579.6 salia al 100 % */
+        var avF9=(nn9(m.metAM)!=null)?nn9(m.metAM):nn9(m.metA),mF9=(nn9(m.metF)!=null)?rd9(nn9(m.metF)*k9):null;if(avF9!=null)avF9=rd9(avF9*k9);if(nn9(m.av)!=null)m.av=rd9(nn9(m.av)*k9);m._k9=k9;
         m.met=M;m.metF=mF9;if(nn9(m.retN)!=null)m.retN=rd9(nn9(m.retN)*k9);if(nn9(m.rend)>0)m.rend=rd9(nn9(m.rend)*k9);
         if(mF9!=null){var mM9=Math.max(mF9,avF9||0),cC9=Number(m.costoC)||0,hF9=Number(m.hh)||0,eM9=(mF9>0)?mM9/mF9:1;
           m.metM=rd9(mM9);if(avF9!=null){m.metA=rd9(Math.min(avF9,mF9));m.metAM=rd9(Math.min(avF9,mM9))}
@@ -30913,7 +30919,7 @@ function _crTablaQHTML(D,q,ord){
       else if(!(q9>0)&&m.apOff){m.met=M;m.metF=0;m.metM=0;m.metA=0;m.metAM=0;if(r.und)m.und=r.und}}
     var co=Number(m.costo),mt=Number(m.met);if(!resto&&mt>0&&isFinite(co)&&m.costo!=null){m.pu=(!m.pert&&Number(m.pu)*mt===co)?Number(m.pu):co/mt;if(Number(m.hhC)>0)m.hhu=Number(m.hhC)/mt}
     return m})};
-  var vis0=vis;vis=function(r){var L0=vis0(r);if(!_hayFx)return L0;return L0.map(function(m){var c={};for(var k in m)c[k]=m[k];return _tqFxAplica(c)})};   /* sobre copias: la fila original de la tabla no se toca */
+  var vis0=vis;vis=function(r){var L0=vis0(r);if(window._tqUniM)L0.forEach(function(m){var k9=Number(m._k9);if(!(k9>0)||k9===1)return;var P9={};for(var kp in (m.p||{}))P9[kp]=(Number(m.p[kp])||0)*k9;m.p=P9;m.suma=(Number(m.suma)||0)*k9});if(!_hayFx)return L0;return L0.map(function(m){var c={};for(var k in m)c[k]=m[k];return _tqFxAplica(c)})};   /* sobre copias: la fila original de la tabla no se toca */
   var _dzPrev=null,_dzOff=0,_dzCnt=_tbDiscCnt(porSis,orden);
   orden.forEach(function(sis){var L=porSis[sis],LV=L.map(function(r9){var v9=vis(r9);for(var j9=0;j9<v9.length;j9++)_todas.push(v9[j9]);return v9});
     /* con filtros de columna: fuera las lineas que no pasan; un sistema sin
@@ -31315,9 +31321,11 @@ async function _tqExportarXlsx2(root,doc){
     var noForm={};
     for(var kx in metX){var shown=Number(m&&m[kx]);if(!isFinite(shown)){metX[kx]=_nLimpio(metX[kx]);continue}
       if(Math.abs(metX[kx]-shown)<=1e-9*Math.max(1,Math.abs(shown)))metX[kx]=shown;else{delete metX[kx];noForm[kx]=1}}
-    var refMet=function(k){if(ix[k]!=null)return colL(ix[k])+r;var v=metX[k];return (v!=null&&isFinite(v))?String(v):null};
-    var refPu=(ix.pu!=null)?(colL(ix.pu)+r):((pu!=null)?String(pu):null);
-    var refHhu=(ix.hhu!=null)?(colL(ix.hhu)+r):((hhu!=null)?String(hhu):null);
+    var refMet=function(k){if(ix[k]!=null)return colL(ix[k])+r;var v=metX[k];return (v!=null&&isFinite(v))?_lit15(v):null};
+    /* literal del unitario: corto si lo es (0.84); si no, como fraccion exacta (costo/metrado): Excel lee solo 15 cifras de una constante */
+    var _lit9=function(v,a,b){var s=String(_nLimpio(v));if(/^-?[0-9]+([.][0-9]{1,8})?$/.test(s))return s;return (isFinite(a)&&isFinite(b)&&a>0&&b>0&&Math.abs(a/b-v)<=1e-12*Math.max(1,Math.abs(v)))?('('+_lit15(a)+'/'+_lit15(b)+')'):s};
+    var refPu=(ix.pu!=null)?(colL(ix.pu)+r):((pu!=null)?_lit9(pu,co,mt):null);
+    var refHhu=(ix.hhu!=null)?(colL(ix.hhu)+r):((hhu!=null)?_lit9(hhu,hc,mt2):null);
     var refCol=function(kk,v){if(ix[kk]!=null)return colL(ix[kk])+r;var n9=Number(v);return (v!=null&&v!==''&&isFinite(n9))?String(_nLimpio(n9)):null};
     var h2='';
     tds.forEach(function(td,i){
@@ -31872,7 +31880,7 @@ function _crTablaVHTML(D,q,ord){
     /* si los apartados no cubren toda la partida (p. ej. solo un apartado del
        APU apagado al 58 %), el resto va en una linea "(sin apartado)": asi las
        lineas suman la partida completa y el TOTAL es el del contrato */
-    var K=['costo','costoC','dCosto','hhC','hh','hhM','costoM','hhA','costoA','hhAM','costoAM'],KB={costo:1,costoC:1,dCosto:1,hhC:1,hh:1},resto={},hay=false;K.forEach(function(k){var sm=0;L.forEach(function(m){sm+=Number(m[k])||0});var d=(Number(r[k])||0)-sm;resto[k]=d>1e-9?d:0;if(d>0.05&&KB[k])hay=true});   /* solo las columnas base deciden si hay resto: las de mayor metrado/actual no cuadran por definicion */
+    var K=['costo','costoC','dCosto','hhC','hh','hhM','costoM','hhA','costoA','hhAM','costoAM'],KB={costo:1,costoC:1,dCosto:1,hhC:1,hh:1},resto={},hay=false;K.forEach(function(k){var sm=0;L.forEach(function(m){sm+=Number(m[k])||0});var d=(Number(r[k])||0)-sm;resto[k]=d>1e-9?d:0;if(d>1e-6&&KB[k])hay=true});   /* solo las columnas base deciden si hay resto: las de mayor metrado/actual no cuadran por definicion */
     if(hay){var m2={};for(var k3 in r)if(k3!=='partes')m2[k3]=r[k3];K.forEach(function(k){m2[k]=resto[k]});
         /* el resto nunca lleva mayor metrado: sus columnas (MM) repiten las de forecast/actual */
         m2.hhM=m2.hh;m2.costoM=m2.costoC;m2.hhAM=m2.hhA;m2.costoAM=m2.costoA;m2.pert='Resto de la partida';m2.met=null;m2.metF=null;m2.metM=null;m2.metA=null;m2.metAM=null;m2.av=null;m2.pu=null;m2.hhu=null;m2.pct=null;m2.metR=null;m2.metRF=null;m2.hhR=null;m2.hhRF=null;m2.costoR=null;m2.costoRF=null;m2.rendQ=null;m2.rend=null;m2.durC=null;m2.durF=null;m2.durM=null;m2.durR=null;m2.dur=null;m2.ret='';m2.apOff='';m2._np=L.length+1;
@@ -31889,8 +31897,8 @@ function _crTablaVHTML(D,q,ord){
     var resto=(m.pert==='Resto de la partida');
     if(m.pert&&!resto){var q9=Number(m.met);
       if(q9>0&&Math.abs(q9-M)>1e-9){var k9=M/q9,rd9=function(v){return _nLimpio(v)},nn9=function(v){return (v!=null&&v!==''&&isFinite(Number(v)))?Number(v):null};
-        /* contrato y forecast a la escala del QPS; lo cargado (avance, metrado actual) queda tal cual se cargo */
-        var avF9=(nn9(m.metAM)!=null)?nn9(m.metAM):nn9(m.metA),mF9=(nn9(m.metF)!=null)?rd9(nn9(m.metF)*k9):null;
+        /* contrato, forecast y lo cargado (avance, metrado actual) a la escala del QPS: si no, 552 de 579.6 salia al 100 % */
+        var avF9=(nn9(m.metAM)!=null)?nn9(m.metAM):nn9(m.metA),mF9=(nn9(m.metF)!=null)?rd9(nn9(m.metF)*k9):null;if(avF9!=null)avF9=rd9(avF9*k9);if(nn9(m.av)!=null)m.av=rd9(nn9(m.av)*k9);m._k9=k9;
         m.met=M;m.metF=mF9;if(nn9(m.retN)!=null)m.retN=rd9(nn9(m.retN)*k9);if(nn9(m.rend)>0)m.rend=rd9(nn9(m.rend)*k9);
         if(mF9!=null){var mM9=Math.max(mF9,avF9||0),cC9=Number(m.costoC)||0,hF9=Number(m.hh)||0,eM9=(mF9>0)?mM9/mF9:1;
           m.metM=rd9(mM9);if(avF9!=null){m.metA=rd9(Math.min(avF9,mF9));m.metAM=rd9(Math.min(avF9,mM9))}
@@ -32324,9 +32332,11 @@ async function _tvExportarXlsx2(root,doc){
     var noForm={};
     for(var kx in metX){var shown=Number(m&&m[kx]);if(!isFinite(shown)){metX[kx]=_nLimpio(metX[kx]);continue}
       if(Math.abs(metX[kx]-shown)<=1e-9*Math.max(1,Math.abs(shown)))metX[kx]=shown;else{delete metX[kx];noForm[kx]=1}}
-    var refMet=function(k){if(ix[k]!=null)return colL(ix[k])+r;var v=metX[k];return (v!=null&&isFinite(v))?String(v):null};
-    var refPu=(ix.pu!=null)?(colL(ix.pu)+r):((pu!=null)?String(pu):null);
-    var refHhu=(ix.hhu!=null)?(colL(ix.hhu)+r):((hhu!=null)?String(hhu):null);
+    var refMet=function(k){if(ix[k]!=null)return colL(ix[k])+r;var v=metX[k];return (v!=null&&isFinite(v))?_lit15(v):null};
+    /* literal del unitario: corto si lo es (0.84); si no, como fraccion exacta (costo/metrado): Excel lee solo 15 cifras de una constante */
+    var _lit9=function(v,a,b){var s=String(_nLimpio(v));if(/^-?[0-9]+([.][0-9]{1,8})?$/.test(s))return s;return (isFinite(a)&&isFinite(b)&&a>0&&b>0&&Math.abs(a/b-v)<=1e-12*Math.max(1,Math.abs(v)))?('('+_lit15(a)+'/'+_lit15(b)+')'):s};
+    var refPu=(ix.pu!=null)?(colL(ix.pu)+r):((pu!=null)?_lit9(pu,co,mt):null);
+    var refHhu=(ix.hhu!=null)?(colL(ix.hhu)+r):((hhu!=null)?_lit9(hhu,hc,mt2):null);
     var refCol=function(kk,v){if(ix[kk]!=null)return colL(ix[kk])+r;var n9=Number(v);return (v!=null&&v!==''&&isFinite(n9))?String(_nLimpio(n9)):null};
     var h2='';
     tds.forEach(function(td,i){
@@ -32363,9 +32373,11 @@ async function _tvExportarXlsx2(root,doc){
   /* --- TOTAL: SUMA de cada columna sumable sobre las filas de datos --- */
   var tf=tb.querySelector('tfoot tr');
   if(tf){var tds2=Array.prototype.slice.call(tf.children).filter(function(x){return !(x.classList&&x.classList.contains('_tvEx'))}),ci=0,h3='',ini=null;
+    /* con la fila de la curva S del .xer entre las partidas, la SUMA de los periodos la contaria dos veces: van como valor (el TOTAL exacto de la tabla) */
+    var _pl9=false;for(var _k9 in L)if(L[_k9]&&L[_k9]._tipo){_pl9=true;break}
     tds2.forEach(function(td){var span=parseInt(td.getAttribute('colspan'),10)||1;var k=keys[ci],ref=colL(ci)+r;
       if(span>1){h3+=celT(ref,txt(td),estiloDe(td,tf,0,'left'));merges.push(ref+':'+colL(ci+span-1)+r)}
-      else if(sumables[k]&&primera){h3+=celF(ref,'SUM('+colL(ci)+primera+':'+colL(ci)+ultima+')',estiloDe(td,tf,(k==='dCosto')?DIF:NUM,'right'))}
+      else if(sumables[k]&&primera&&!(_pl9&&(_tvEsPer(k)||k==='suma'))){h3+=celF(ref,'SUM('+colL(ci)+primera+':'+colL(ci)+ultima+')',estiloDe(td,tf,(k==='dCosto')?DIF:NUM,'right'))}
       else{var raw=td.getAttribute('data-num'),t=txt(td);
         if(raw!=null&&raw!=='')h3+=celN(ref,raw,estiloDe(td,tf,NUM,'right'));
         else if(t)h3+=celT(ref,t,estiloDe(td,tf,0,'left'))}
@@ -33017,7 +33029,7 @@ function _crTablaRHTML(D,q,ord){
       var colP=_txColTipo(r._tipo,!!(pP&&pP.fut));   /* programado o hecho; en cursiva si la semana es futura */
       return td(txtP?('<span style="color:'+colP+((pP&&pP.fut)?';font-style:italic':'')+'">'+txtP+'</span>'):'',1,(pP&&pP.hoy)?'box-shadow:inset 0 0 0 1px #FFD37A;':'',vP)}
     if(k==='suma'){var perK=cols.filter(function(c9){return _txEsPer(c9[0])}).map(function(c9){return c9[0]});
-      var fS=(perK.length&&LET[perK[0]]&&LET[perK[perK.length-1]])?('=SUM('+LET[perK[0]]+_rn+':'+LET[perK[perK.length-1]]+_rn+')'):'';
+      var fS=(perK.length&&perK.length===((D&&D.per)||[]).length&&LET[perK[0]]&&LET[perK[perK.length-1]])?('=SUM('+LET[perK[0]]+_rn+':'+LET[perK[perK.length-1]]+_rn+')'):'';
       return td('<b style="color:'+_txColTipo(r._tipo)+'">'+_nMil2(r.suma||0)+'</b>',1,'',Number(r.suma)||0,fS)}
     switch(k){
       case 'num':return td('<b style="color:'+(esParte?'#9db4d6':'#cfe3ff')+'">'+num+'</b>');
@@ -33121,7 +33133,7 @@ function _crTablaRHTML(D,q,ord){
     /* si los apartados no cubren toda la partida (p. ej. solo un apartado del
        APU apagado al 58 %), el resto va en una linea "(sin apartado)": asi las
        lineas suman la partida completa y el TOTAL es el del contrato */
-    var K=['costo','costoC','dCosto','hhC','hh','hhM','costoM','hhA','costoA','hhAM','costoAM'],KB={costo:1,costoC:1,dCosto:1,hhC:1,hh:1},resto={},hay=false;K.forEach(function(k){var sm=0;L.forEach(function(m){sm+=Number(m[k])||0});var d=(Number(r[k])||0)-sm;resto[k]=d>1e-9?d:0;if(d>0.05&&KB[k])hay=true});   /* solo las columnas base deciden si hay resto: las de mayor metrado/actual no cuadran por definicion */
+    var K=['costo','costoC','dCosto','hhC','hh','hhM','costoM','hhA','costoA','hhAM','costoAM'],KB={costo:1,costoC:1,dCosto:1,hhC:1,hh:1},resto={},hay=false;K.forEach(function(k){var sm=0;L.forEach(function(m){sm+=Number(m[k])||0});var d=(Number(r[k])||0)-sm;resto[k]=d>1e-9?d:0;if(d>1e-6&&KB[k])hay=true});   /* solo las columnas base deciden si hay resto: las de mayor metrado/actual no cuadran por definicion */
     if(hay){var m2={};for(var k3 in r)if(k3!=='partes')m2[k3]=r[k3];K.forEach(function(k){m2[k]=resto[k]});
         /* el resto nunca lleva mayor metrado: sus columnas (MM) repiten las de forecast/actual */
         m2.hhM=m2.hh;m2.costoM=m2.costoC;m2.hhAM=m2.hhA;m2.costoAM=m2.costoA;m2.pert='Resto de la partida · '+((r._tipo==='hc')?'hecho':'programado');m2.met=null;m2.metF=null;m2.metM=null;m2.metA=null;m2.metAM=null;m2.av=null;m2.pu=null;m2.hhu=null;m2.pct=null;m2.metR=null;m2.metRF=null;m2.hhR=null;m2.hhRF=null;m2.costoR=null;m2.costoRF=null;m2.rendQ=null;m2.rend=null;m2.durC=null;m2.durF=null;m2.durM=null;m2.durR=null;m2.dur=null;m2.ret='';m2.apOff='';m2._np=L.length+1;
@@ -33138,8 +33150,8 @@ function _crTablaRHTML(D,q,ord){
     var resto=(m.pert==='Resto de la partida');
     if(m.pert&&!resto){var q9=Number(m.met);
       if(q9>0&&Math.abs(q9-M)>1e-9){var k9=M/q9,rd9=function(v){return _nLimpio(v)},nn9=function(v){return (v!=null&&v!==''&&isFinite(Number(v)))?Number(v):null};
-        /* contrato y forecast a la escala del QPS; lo cargado (avance, metrado actual) queda tal cual se cargo */
-        var avF9=(nn9(m.metAM)!=null)?nn9(m.metAM):nn9(m.metA),mF9=(nn9(m.metF)!=null)?rd9(nn9(m.metF)*k9):null;
+        /* contrato, forecast y lo cargado (avance, metrado actual) a la escala del QPS: si no, 552 de 579.6 salia al 100 % */
+        var avF9=(nn9(m.metAM)!=null)?nn9(m.metAM):nn9(m.metA),mF9=(nn9(m.metF)!=null)?rd9(nn9(m.metF)*k9):null;if(avF9!=null)avF9=rd9(avF9*k9);if(nn9(m.av)!=null)m.av=rd9(nn9(m.av)*k9);m._k9=k9;
         m.met=M;m.metF=mF9;if(nn9(m.retN)!=null)m.retN=rd9(nn9(m.retN)*k9);if(nn9(m.rend)>0)m.rend=rd9(nn9(m.rend)*k9);
         if(mF9!=null){var mM9=Math.max(mF9,avF9||0),cC9=Number(m.costoC)||0,hF9=Number(m.hh)||0,eM9=(mF9>0)?mM9/mF9:1;
           m.metM=rd9(mM9);if(avF9!=null){m.metA=rd9(Math.min(avF9,mF9));m.metAM=rd9(Math.min(avF9,mM9))}
@@ -33534,7 +33546,7 @@ async function _txExportarXlsx2(root,doc){
   var esPct={pct:1,noHace:1};
   var sumables={hhC:1,hh:1,costo:1,costoC:1,dCosto:1,hhM:1,costoM:1,hhA:1,costoA:1,hhAM:1,costoAM:1,hhR:1,hhRF:1,costoR:1,costoRF:1};
   keys.forEach(function(k){if(_txEsPer(k)||k==='suma')sumables[k]=1});
-  var perKs=keys.filter(_txEsPer),ixP0=perKs.length?keys.indexOf(perKs[0]):null,ixPn=perKs.length?keys.indexOf(perKs[perKs.length-1]):null,ixSuma=keys.indexOf('suma');
+  var perKs=keys.filter(_txEsPer),ixP0=perKs.length?keys.indexOf(perKs[0]):null,ixPn=perKs.length?keys.indexOf(perKs[perKs.length-1]):null,ixSuma=keys.indexOf('suma'),perTodas=(perKs.length===((((window._txUltimo||{}).D||{}).per)||[]).length);
   var prR=[],hcR=[];   /* las filas de datos por tipo: las suma el pie */
   var trs=Array.prototype.slice.call(tb.querySelectorAll('tbody tr'));
   trs.forEach(function(tr){
@@ -33577,9 +33589,11 @@ async function _txExportarXlsx2(root,doc){
     var noForm={};
     for(var kx in metX){var shown=Number(m&&m[kx]);if(!isFinite(shown)){metX[kx]=_nLimpio(metX[kx]);continue}
       if(Math.abs(metX[kx]-shown)<=1e-9*Math.max(1,Math.abs(shown)))metX[kx]=shown;else{delete metX[kx];noForm[kx]=1}}
-    var refMet=function(k){if(ix[k]!=null)return colL(ix[k])+r;var v=metX[k];return (v!=null&&isFinite(v))?String(v):null};
-    var refPu=(ix.pu!=null)?(colL(ix.pu)+r):((pu!=null)?String(pu):null);
-    var refHhu=(ix.hhu!=null)?(colL(ix.hhu)+r):((hhu!=null)?String(hhu):null);
+    var refMet=function(k){if(ix[k]!=null)return colL(ix[k])+r;var v=metX[k];return (v!=null&&isFinite(v))?_lit15(v):null};
+    /* literal del unitario: corto si lo es (0.84); si no, como fraccion exacta (costo/metrado): Excel lee solo 15 cifras de una constante */
+    var _lit9=function(v,a,b){var s=String(_nLimpio(v));if(/^-?[0-9]+([.][0-9]{1,8})?$/.test(s))return s;return (isFinite(a)&&isFinite(b)&&a>0&&b>0&&Math.abs(a/b-v)<=1e-12*Math.max(1,Math.abs(v)))?('('+_lit15(a)+'/'+_lit15(b)+')'):s};
+    var refPu=(ix.pu!=null)?(colL(ix.pu)+r):((pu!=null)?_lit9(pu,co,mt):null);
+    var refHhu=(ix.hhu!=null)?(colL(ix.hhu)+r):((hhu!=null)?_lit9(hhu,hc,mt2):null);
     var refCol=function(kk,v){if(ix[kk]!=null)return colL(ix[kk])+r;var n9=Number(v);return (v!=null&&v!==''&&isFinite(n9))?String(_nLimpio(n9)):null};
     var h2='';
     tds.forEach(function(td,i){
@@ -33589,7 +33603,7 @@ async function _txExportarXlsx2(root,doc){
       /* formula cambiada por el usuario para esta columna: manda sobre las de siempre */
       if(m&&_txFxCambiada(k)&&isFinite(num)){var OV=_txFxDe(k),refX9=function(kk){if(kk==='pu')return refPu;if(kk==='hhu')return refHhu;if(kk==='met'||kk==='metF'||kk==='metM'||kk==='metA'||kk==='metAM'){var q9=refMet(kk);if(q9!=null)return q9}return refCol(kk,m[kk])};
         var a9=refX9(OV[0]),b9=refX9(OV[2]);if(a9!=null&&b9!=null){h2+=celF(ref,a9+OV[1]+b9,estiloDe(td,tr,(k==='dCosto')?DIF:NUM,'right'));return}}
-      if(m&&k==='suma'&&ixP0!=null&&ixPn!=null&&!tr.hasAttribute('data-nosum')){h2+=celF(ref,'SUM('+colL(ixP0)+r+':'+colL(ixPn)+r+')',estiloDe(td,tr,NUM,'right'));return}
+      if(m&&k==='suma'&&perTodas&&ixP0!=null&&ixPn!=null&&!tr.hasAttribute('data-nosum')){h2+=celF(ref,'SUM('+colL(ixP0)+r+':'+colL(ixPn)+r+')',estiloDe(td,tr,NUM,'right'));return}
       if(m&&k==='pu'&&pu!=null){h2+=celN(ref,pu,estiloDe(td,tr,NUM,'right'));return}
       if(m&&k==='met'&&metX.met!=null){h2+=celN(ref,metX.met,estiloDe(td,tr,NUM,'right'));return}
       if(m&&(k==='metF'||k==='metM'||k==='metA'||k==='metAM')&&metX[k]!=null){h2+=celN(ref,metX[k],estiloDe(td,tr,NUM,'right'));return}
@@ -33636,7 +33650,7 @@ async function _txExportarXlsx2(root,doc){
           else if(t)h3+=celT(ref,t,estiloDe(td,tf,0,'left'))}}
       else if(_txEsPer(k)||k==='suma'){var dn9=Number(tf.getAttribute('data-den')),lit9=(isFinite(dn9)&&dn9>0);
         var den=lit9?String(dn9):((ixSuma>=0&&rTot)?('$'+colL(ixSuma)+'$'+rTot):'');
-        if(den&&rTot){var f9=(modo==='acum'&&_txEsPer(k)&&ixP0!=null)?('SUM($'+colL(ixP0)+'$'+rTot+':'+colL(ci)+rTot+')/'+den+'*100'):(colL(ci)+rTot+'/'+den+'*100');
+        if(den&&rTot&&(perTodas||modo!=='acum'||!_txEsPer(k))){var f9=(modo==='acum'&&_txEsPer(k)&&ixP0!=null)?('SUM($'+colL(ixP0)+'$'+rTot+':'+colL(ci)+rTot+')/'+den+'*100'):(colL(ci)+rTot+'/'+den+'*100');
           h3+=celF(ref,lit9?f9:('IF('+den+'=0,0,'+f9+')'),estiloDe(td,tf,PCT,'right'))}
         else{var raw9=td.getAttribute('data-num');if(raw9!=null&&raw9!=='')h3+=celN(ref,raw9,estiloDe(td,tf,PCT,'right'))}}
       ci+=span});
@@ -34390,12 +34404,12 @@ function _retFichaUI(id,cronId){
   else fs.forEach(function(x,i){
     var c=Number(x.cantidad)||0,a=Number(x.avance)||0,saldo=Math.max(0,c-a);
     var e=_retParte(id,x.nombre,cronId),act=e?(Number(e.cant)||0):0,u=x.unidad||'';
-    var pc=c>0?Math.round(Math.min(100,(act<0?(a/(c-act)):((a+act)/c))*100)*10)/10:0;
+    var pc=c>0?Math.min(100,(act<0?(a/(c-act)):((a+act)/c))*100):0;
     H+='<div style="border:1px solid '+(act?'#EFC98A':'#E1E7F0')+';background:'+(act?'#FFF9E3':'#fff')+';border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="color:#1B2433;font-size:13px;flex:1;min-width:120px">'+esc(String(x.nombre||''))+'</b>'+
-      '<span style="font-size:10.5px;font-weight:800;color:#26456F;background:#E3EAF6;border-radius:6px;padding:2px 7px">peso '+(Math.round((Number(x.peso)||0)*10)/10)+'%</span>'+
+      '<span style="font-size:10.5px;font-weight:800;color:#26456F;background:#E3EAF6;border-radius:6px;padding:2px 7px">peso '+qtyX(Number(x.peso)||0)+'%</span>'+
       (act?'<span style="font-size:10.5px;font-weight:800;color:'+(act<0?'#26456F':'#7A4B00')+';background:'+(act<0?'#E3EAF6':'#FCEFD9')+';border:1px solid '+(act<0?'#BFD3EE':'#EFC98A')+';border-radius:6px;padding:2px 7px">'+(act<0?('\u2795 '+_apuCant(-act)+' '+esc(u)+' m\u00e1s'):('\u23f8 retirado '+_apuCant(act)+' '+esc(u)))+'</span>':'')+'</div>'+
-      '<div style="font-size:12px;color:#5C6779;margin:5px 0 8px">Contemplado <b>'+_apuCant(c)+' '+esc(u)+'</b> \u00b7 hecho <b>'+_apuCant(a)+'</b> \u00b7 saldo <b>'+_apuCant(saldo)+'</b>'+(act?(' \u00b7 queda por hacer <b>'+_apuCant(Math.max(0,saldo-act))+'</b>'):'')+' \u00b7 '+pc+'% con lo retirado</div>'+
+      '<div style="font-size:12px;color:#5C6779;margin:5px 0 8px">Contemplado <b>'+_apuCant(c)+' '+esc(u)+'</b> \u00b7 hecho <b>'+_apuCant(a)+'</b> \u00b7 saldo <b>'+_apuCant(saldo)+'</b>'+(act?(' \u00b7 queda por hacer <b>'+_apuCant(Math.max(0,saldo-act))+'</b>'):'')+' \u00b7 '+qtyX(pc)+'% con lo retirado</div>'+
       '<div style="display:flex;gap:8px">'+
       ((saldo>0||act||c>0)?('<button class="_rfRet" data-n="'+i+'" style="flex:1;background:#8A4B00;color:#fff;border:0;border-radius:9px;padding:9px;font-weight:800;font-size:12px;cursor:pointer">\u23f8 Retirar\u2026</button>'):'<span style="flex:1;font-size:11.5px;color:#0C5132;font-weight:800;padding:9px 0">\u2713 al 100%</span>')+
       (act?'<button class="_rfDev" data-n="'+i+'" style="flex:1;background:#1E7A46;color:#fff;border:0;border-radius:9px;padding:9px;font-weight:800;font-size:12px;cursor:pointer">\u25b6 Devolver</button>':'')+
@@ -34482,9 +34496,13 @@ function _actDetalle(id){window._actIdAbierta=id;
   H+='<div style="font-weight:800;color:#1F3864;font-size:13px;margin-bottom:4px">💰 Costos del contrato</div>';
   H+=fila('Precio unitario',(isFinite(pu)?_nMil(_apuCant(pu)):'—')+(p.unidad?(' <span style="font-weight:600;color:#8A94A6">/ '+esc(p.unidad)+'</span>'):''));
   H+=fila('Metrado contratado',_nNum(cant)+' '+esc(p.unidad||''));
+  /* la formula del QPS (cantidad_formula / hh_formula), solo si viene en la fila y es una operacion con numeros (no =T198) */
+  var _fq9=function(f){f=String(f||'').replace(/^=+/,'');return (f&&(/[-+*(]/.test(f)||f.indexOf('/')>=0)&&!/[A-Za-z]/.test(f))?f:''},_fqC9=_fq9(p.fCant),_fqH9=_fq9(p.fHh);
+  if(_fqC9)H+='<div style="font-size:10.5px;color:#8A94A6;padding:0 0 6px;text-align:right;overflow-wrap:anywhere">Metrado = '+esc(_fqC9)+'</div>';
   H+=fila('Costo total',(isFinite(tot)?_nMil(_apuCant(tot)):'—'),'#0C5132');
   if(isFinite(hh)&&hh>0&&isFinite(tot))H+=fila('Costo por hora-hombre',_nMil(_apuCant(tot/hh)));
   if(isFinite(hh)&&hh>0&&isFinite(cant)&&cant>0)H+=fila('HH por '+esc(p.unidad||'unidad'),_nNum(hh/cant,2)+' hh');
+  if(_fqH9)H+='<div style="font-size:10.5px;color:#8A94A6;padding:0 0 6px;text-align:right;overflow-wrap:anywhere">HH de contrato = '+esc(_fqH9)+'</div>';
   H+='<div style="font-weight:800;color:#1F3864;font-size:13px;margin:16px 0 4px">⚖ Peso en el avance</div>';
   (function(){var a=(typeof _ctActiva==='function')?_ctActiva():null;
     H+='<div style="font-size:11px;color:'+(a?'#0C5132':'#8A94A6')+';margin-bottom:6px">'+(a?('\u2699 Configuraci\u00f3n ACTUAL: <b>'+esc(_ctNombre())+'</b> \u2014 lo que cambies aqu\u00ed se guarda en ese cronograma'):'Sin cronograma cargado todav\u00eda: los cambios van a los ajustes globales')+'</div>'})();
@@ -34492,7 +34510,7 @@ function _actDetalle(id){window._actIdAbierta=id;
   if(off){
     H+='<div style="font-size:12.5px;color:#5C6779;line-height:1.5">Sus <b>'+(isFinite(hh)?_nNum(hh,1):'—')+' hh</b> están <b>apagadas</b>: no entran al total de '+esc(p.esp||'')+', así que esta actividad <b>no aporta nada</b> al avance y su peso se reparte entre las demás.</div>';
   }else{
-    H+='<div style="font-size:12.5px;color:#0C5132;line-height:1.5">Terminada al 100% aporta <b>'+_hhPct(peso)+'</b> del avance de <b>'+esc(p.esp||'')+'</b>, según sus '+(isFinite(hh)?_nNum(hh,1):'—')+' hh de contrato ('+_nNum((typeof _hhDe==='function')?(Number(_hhDe(p))||0):0,1)+' hh que cuentan) sobre el total de la especialidad.</div>';
+    H+='<div style="font-size:12.5px;color:#0C5132;line-height:1.5">Terminada al 100% aporta <b>'+(peso>0?qtyX(peso):'0.00')+'%</b> del avance de <b>'+esc(p.esp||'')+'</b>, según sus '+(isFinite(hh)?_nNum(hh,1):'—')+' hh de contrato ('+_nNum((typeof _hhDe==='function')?(Number(_hhDe(p))||0):0,1)+' hh que cuentan) sobre el total de la especialidad.</div>';
   }
   H+='<button id="_actHH" style="width:100%;margin-top:10px;border:0;border-radius:10px;padding:12px;font-weight:800;font-size:13px;cursor:pointer;color:#fff;background:'+(off?'#1E7A46':'#8A4B00')+'">'+
      (off?'▶ Volver a contar sus HH para los pesos':'⏸ No usar sus HH para los pesos')+'</button>';
@@ -34579,7 +34597,7 @@ function _catMapea(rows){
       item:r.item||'',articulo:r.articulo_pago||'',tag:r.tag||'',
       subsistema:r.subsistema||'',orden:(r.orden==null?null:Number(r.orden)),dias:(r.duracion_dias==null?null:Number(r.duracion_dias)),
       hh:(r.hh_t==null?null:Number(r.hh_t)),pu:(r.precio_unitario==null?null:Number(r.precio_unitario)),
-      total:(r.oferta_total==null?null:Number(r.oferta_total)),alcance:r.estado_alcance||''};
+      total:(r.oferta_total==null?null:Number(r.oferta_total)),alcance:r.estado_alcance||'',fCant:(r.cantidad_formula==null?'':String(r.cantidad_formula)),fHh:(r.hh_formula==null?'':String(r.hh_formula))};
   });
 }
 try{var _cat0=JSON.parse(localStorage.getItem(KCAT)||'null');
