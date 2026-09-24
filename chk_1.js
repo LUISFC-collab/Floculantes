@@ -21073,7 +21073,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c09';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c10';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28338,12 +28338,12 @@ function _crTablaHTML(D,q,ord){
       case 'tareas':return td(esParte?'':(esc(r.tareas)||'<span style="color:#F0A3A3">\u2014</span>'),0,(W||!_aj)?'':'min-width:90px;');
       case 'grupo':return td(esParte?'':esc(r.grupo));
       case 'est':return td('<b style="color:'+(colEst[r.est]||'#cfe3ff')+'">'+esc(r.est)+'</b>');
-      case 'av':return td(r.av!=null?_nMil(_apuCant(r.av)):'',1);
-      case 'met':return td(r.met!=null?_nMil(_apuCant(r.met)):'',1);
-      case 'metF':return td(r.metF!=null?('<b style="color:'+(r.metF>0?'#9FE8B0':'#7d8590')+'">'+_nMil(_apuCant(r.metF))+'</b>'):'',1);
+      case 'av':return td(r.av!=null?_nMil(_apuCant(r.av)):'',1,'',r.av);
+      case 'met':return td(r.met!=null?_nMil(_apuCant(r.met)):'',1,'',r.met);
+      case 'metF':return td(r.metF!=null?('<b style="color:'+(r.metF>0?'#9FE8B0':'#7d8590')+'">'+_nMil(_apuCant(r.metF))+'</b>'):'',1,'',r.metF);
       case 'und':return td(esc(r.und||''));
-      case 'pct':return td((r.pct!=null&&(r.met!=null||!r.pert))?(r.pct+'%'):'',1);
-      case 'pu':return td(r.pu!=null?_nMon(r.pu):'',1);
+      case 'pct':return td((r.pct!=null&&(r.met!=null||!r.pert))?(r.pct+'%'):'',1,'',(r.pct!=null&&(r.met!=null||!r.pert))?r.pct:null);
+      case 'pu':return td(r.pu!=null?_nMon(r.pu):'',1,'',r.pu);
       case 'hhu':return td(r.hhu!=null?_nMil2(r.hhu):'',1,'',r.hhu);
       case 'dCosto':return td(r.dCosto>0?('<b style="color:#FFB4A8">\u2212 '+_nMon(r.dCosto)+'</b>'):(r.dCosto<0?('<b style="color:#9FE8B0">+ '+_nMon(-r.dCosto)+'</b>'):(r.dCosto!=null?_nMon(0):'')),1,'',r.dCosto,fxK(k,r));
       case 'hhC':return td(_nMil2(r.hhC),1,'',r.hhC,fxK(k,r));
@@ -29810,12 +29810,12 @@ function _crTablaQHTML(D,q,ord){
       case 'tareas':return td(esParte?'':(esc(r.tareas)||'<span style="color:#F0A3A3">\u2014</span>'),0,(W||!_aj)?'':'min-width:90px;');
       case 'grupo':return td(esParte?'':esc(r.grupo));
       case 'est':return td('<b style="color:'+(colEst[r.est]||'#cfe3ff')+'">'+esc(r.est)+'</b>');
-      case 'av':return td(r.av!=null?_nMil(_apuCant(r.av)):'',1);
-      case 'met':return td(r.met!=null?_nMil(_apuCant(r.met)):'',1);
-      case 'metF':return td(r.metF!=null?('<b style="color:'+(r.metF>0?'#9FE8B0':'#7d8590')+'">'+_nMil(_apuCant(r.metF))+'</b>'):'',1);
+      case 'av':return td(r.av!=null?_nMil(_apuCant(r.av)):'',1,'',r.av);
+      case 'met':return td(r.met!=null?_nMil(_apuCant(r.met)):'',1,'',r.met);
+      case 'metF':return td(r.metF!=null?('<b style="color:'+(r.metF>0?'#9FE8B0':'#7d8590')+'">'+_nMil(_apuCant(r.metF))+'</b>'):'',1,'',r.metF);
       case 'und':return td(esc(r.und||''));
-      case 'pct':return td((r.pct!=null&&(r.met!=null||!r.pert))?(r.pct+'%'):'',1);
-      case 'pu':return td(r.pu!=null?_nMon(r.pu):'',1);
+      case 'pct':return td((r.pct!=null&&(r.met!=null||!r.pert))?(r.pct+'%'):'',1,'',(r.pct!=null&&(r.met!=null||!r.pert))?r.pct:null);
+      case 'pu':return td(r.pu!=null?_nMon(r.pu):'',1,'',r.pu);
       case 'hhu':return td(r.hhu!=null?_nMil2(r.hhu):'',1,'',r.hhu);
       case 'dCosto':return td(r.dCosto>0?('<b style="color:#FFB4A8">\u2212 '+_nMon(r.dCosto)+'</b>'):(r.dCosto<0?('<b style="color:#9FE8B0">+ '+_nMon(-r.dCosto)+'</b>'):(r.dCosto!=null?_nMon(0):'')),1,'',r.dCosto,fxK(k,r));
       case 'pctAv':{var bc9=_tqBaseCol();var fP9=(r.pctAv!=null&&LET.suma&&LET[bc9])?('=IFERROR('+LET.suma+_rn+'/'+LET[bc9]+_rn+'*100,0)'):'';
@@ -30800,12 +30800,12 @@ function _crTablaVHTML(D,q,ord){
       case 'tareas':return td(esParte?'':(esc(r.tareas)||'<span style="color:#F0A3A3">\u2014</span>'),0,(W||!_aj)?'':'min-width:90px;');
       case 'grupo':return td(esParte?'':esc(r.grupo));
       case 'est':return td('<b style="color:'+(colEst[r.est]||'#cfe3ff')+'">'+esc(r.est)+'</b>');
-      case 'av':return td(r.av!=null?_nMil(_apuCant(r.av)):'',1);
-      case 'met':return td(r.met!=null?_nMil(_apuCant(r.met)):'',1);
-      case 'metF':return td(r.metF!=null?('<b style="color:'+(r.metF>0?'#9FE8B0':'#7d8590')+'">'+_nMil(_apuCant(r.metF))+'</b>'):'',1);
+      case 'av':return td(r.av!=null?_nMil(_apuCant(r.av)):'',1,'',r.av);
+      case 'met':return td(r.met!=null?_nMil(_apuCant(r.met)):'',1,'',r.met);
+      case 'metF':return td(r.metF!=null?('<b style="color:'+(r.metF>0?'#9FE8B0':'#7d8590')+'">'+_nMil(_apuCant(r.metF))+'</b>'):'',1,'',r.metF);
       case 'und':return td(esc(r.und||''));
-      case 'pct':return td((r.pct!=null&&(r.met!=null||!r.pert))?(r.pct+'%'):'',1);
-      case 'pu':return td(r.pu!=null?_nMon(r.pu):'',1);
+      case 'pct':return td((r.pct!=null&&(r.met!=null||!r.pert))?(r.pct+'%'):'',1,'',(r.pct!=null&&(r.met!=null||!r.pert))?r.pct:null);
+      case 'pu':return td(r.pu!=null?_nMon(r.pu):'',1,'',r.pu);
       case 'hhu':return td(r.hhu!=null?_nMil2(r.hhu):'',1,'',r.hhu);
       case 'dCosto':return td(r.dCosto>0?('<b style="color:#FFB4A8">\u2212 '+_nMon(r.dCosto)+'</b>'):(r.dCosto<0?('<b style="color:#9FE8B0">+ '+_nMon(-r.dCosto)+'</b>'):(r.dCosto!=null?_nMon(0):'')),1,'',r.dCosto,fxK(k,r));
       case 'hhC':return td(_nMil2(r.hhC),1,'',r.hhC,fxK(k,r));
@@ -32047,12 +32047,12 @@ function _crTablaRHTML(D,q,ord){
       case 'tareas':return td(esParte?'':(esc(r.tareas)||'<span style="color:#F0A3A3">\u2014</span>'),0,(W||!_aj)?'':'min-width:90px;');
       case 'grupo':return td(esParte?'':esc(r.grupo));
       case 'est':return td('<b style="color:'+(colEst[r.est]||'#cfe3ff')+'">'+esc(r.est)+'</b>');
-      case 'av':return td(r.av!=null?_nMil(_apuCant(r.av)):'',1);
-      case 'met':return td(r.met!=null?_nMil(_apuCant(r.met)):'',1);
-      case 'metF':return td(r.metF!=null?('<b style="color:'+(r.metF>0?'#9FE8B0':'#7d8590')+'">'+_nMil(_apuCant(r.metF))+'</b>'):'',1);
+      case 'av':return td(r.av!=null?_nMil(_apuCant(r.av)):'',1,'',r.av);
+      case 'met':return td(r.met!=null?_nMil(_apuCant(r.met)):'',1,'',r.met);
+      case 'metF':return td(r.metF!=null?('<b style="color:'+(r.metF>0?'#9FE8B0':'#7d8590')+'">'+_nMil(_apuCant(r.metF))+'</b>'):'',1,'',r.metF);
       case 'und':return td(esc(r.und||''));
-      case 'pct':return td((r.pct!=null&&(r.met!=null||!r.pert))?(r.pct+'%'):'',1);
-      case 'pu':return td(r.pu!=null?_nMon(r.pu):'',1);
+      case 'pct':return td((r.pct!=null&&(r.met!=null||!r.pert))?(r.pct+'%'):'',1,'',(r.pct!=null&&(r.met!=null||!r.pert))?r.pct:null);
+      case 'pu':return td(r.pu!=null?_nMon(r.pu):'',1,'',r.pu);
       case 'hhu':return td(r.hhu!=null?_nMil2(r.hhu):'',1,'',r.hhu);
       case 'dCosto':return td(r.dCosto>0?('<b style="color:#FFB4A8">\u2212 '+_nMon(r.dCosto)+'</b>'):(r.dCosto<0?('<b style="color:#9FE8B0">+ '+_nMon(-r.dCosto)+'</b>'):(r.dCosto!=null?_nMon(0):'')),1,'',r.dCosto,fxK(k,r));
       case 'hhC':return td(_nMil2(r.hhC),1,'',r.hhC,fxK(k,r));
