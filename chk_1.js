@@ -21073,7 +21073,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b65';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b66';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -27524,10 +27524,27 @@ function _tabNavVer(rt,dest,pfx){
    estado, botones y segmentos). Queda siempre visible la barra de formulas (fx).
    Se recuerda por tabla en el equipo (localStorage). Vale para la ventana flotante y
    para la ventana aparte. */
+/* ===== MODO CLARO / OSCURO de las Tablas 1, 2, 3 y R =====
+   Las tablas se pintan en oscuro. En modo CLARO se invierte la luminosidad de toda la
+   ventana de la tabla conservando el tono de cada color (invert + giro de 180 grados):
+   fondo blanco, letras oscuras, y los verdes/amarillos/rojos siguen siendo los mismos
+   colores en su version oscura. Un solo ajuste para las cuatro tablas, en este equipo. */
+window._tabTemaReg=window._tabTemaReg||[];
+function _tabTemaClaro(){try{return localStorage.getItem('obf4_tab_tema')==='claro'}catch(e){return false}}
+function _tabTemaPinta(){var cl=_tabTemaClaro();window._tabTemaReg=window._tabTemaReg.filter(function(o){return o.el&&o.el.isConnected});
+  window._tabTemaReg.forEach(function(o){o.el.style.filter=cl?'invert(1) hue-rotate(180deg)':'';try{o.el.style.colorScheme=cl?'light':''}catch(e){}
+    if(o.btn){o.btn.textContent=cl?'\u263e Oscuro':'\u2600 Claro';o.btn.title=cl?'Volver al modo oscuro':'Modo claro: fondo blanco y letras oscuras'}})}
+function _tabTemaBtn(doc,top,pfx,antes){try{if(!top||top.querySelector('#'+pfx+'Tema'))return;
+  var el=(top.closest&&top.closest('[data-flot]'))||((doc!==document)?doc.documentElement:null);if(!el)return;
+  var b=doc.createElement('button');b.id=pfx+'Tema';b.type='button';
+  b.style.cssText='background:#243b55;color:#FFD37A;border:0;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer;flex:none;font-size:12px';
+  if(antes&&antes.parentNode===top)top.insertBefore(b,antes.nextSibling);else top.appendChild(b);
+  b.onclick=function(e){e.stopPropagation();try{localStorage.setItem('obf4_tab_tema',_tabTemaClaro()?'oscuro':'claro')}catch(_e){}_tabTemaPinta()};
+  window._tabTemaReg.push({el:el,btn:b});_tabTemaPinta()}catch(e){}}
 function _tabOpcToggle(doc,top,pfx){try{if(!top||top.querySelector('#'+pfx+'OpcTg'))return;
   var key='obf4_tab_opc_'+pfx;var b=doc.createElement('button');b.id=pfx+'OpcTg';b.type='button';
   b.style.cssText='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 9px;font-weight:800;cursor:pointer;flex:none;font-size:12px';
-  top.insertBefore(b,top.firstChild);try{_tabDecBar(doc,top,pfx,b)}catch(_edb){}
+  top.insertBefore(b,top.firstChild);try{_tabDecBar(doc,top,pfx,b)}catch(_edb){}try{_tabTemaBtn(doc,top,pfx,top.querySelector('#'+pfx+'Dec')||b)}catch(_etm){}
   var lee=function(){try{return localStorage.getItem(key)==='1'}catch(e){return false}};
   var aplica=function(){var oc=lee();
     Array.prototype.forEach.call(top.children,function(el){if(el===b||(el.id||'')===pfx+'Fx')return;
