@@ -21824,7 +21824,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b67';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b68';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28231,9 +28231,38 @@ function _tabDecOp(doc,pfx,op){try{var rt=window['_nav'+pfx+'Root'];if(!rt||!doc
   else if(key.indexOf('r:')===0){var rr=key.slice(2);Object.keys(dec).forEach(function(z){if(z.indexOf('x:'+rr+'|')===0)delete dec[z]})}
   dec[key]={d:nd,t:Date.now()};cfg.dec=dec;cs(cfg);_tabDecAplica(rt,pfx);
   msg(nd+' decimal'+(nd===1?'':'es')+' en '+que+(key==='*'?'':' \u00b7 sin nada elegido se aplica a toda la tabla'))}catch(e){}}
+/* ===== MENU DE LOS BOTONES DE COLOR (relleno y fuente) de las Tablas 1, 2, 3 y R =====
+   El 🎨 y la A ya no abren el selector de golpe: sale un menu con "Elegir color...",
+   "Volver a lo normal (esta columna)" y "Volver a lo normal (todas las columnas)". Todo va a la
+   configuracion de la tabla (cfg.colores / cfg.fuentes), que se guarda en Supabase como siempre.
+   Se engancha sobre los manejadores de cada tabla (el clic original abre el selector y el
+   doble clic original quita el color de la columna y repinta). */
+function _tabClrMenu(doc,pfx){try{var rt=window['_nav'+pfx+'Root'];if(!rt)return;
+  [['Clr','colores','relleno'],['Fnt','fuentes','fuente']].forEach(function(T){
+    Array.prototype.forEach.call(rt.querySelectorAll('.'+pfx+T[0]),function(b){if(b._clrMenu)return;var pick=b.onclick,quita=b.ondblclick;if(typeof pick!=='function')return;b._clrMenu=1;
+      b.title=(T[0]==='Clr'?'Color de relleno de la columna':'Color de la fuente de la columna')+': elegir o volver a lo normal';
+      b.ondblclick=function(e){e.stopPropagation();e.preventDefault()};
+      b.onclick=function(e){e.stopPropagation();e.preventDefault();var k=b.getAttribute('data-k');var cf=window[pfx+'Cfg'],cs=window[pfx+'CfgSave'];var cfg=(typeof cf==='function')?cf():{};var mapa=cfg[T[1]]||{};var tiene=!!mapa[k],alguna=Object.keys(mapa).length>0;
+        var ya=doc.getElementById('_tabClrPop');if(ya)ya.remove();
+        var pop=doc.createElement('div');pop.id='_tabClrPop';var r=b.getBoundingClientRect();var W=(doc.defaultView&&doc.defaultView.innerWidth)||1200;
+        pop.style.cssText='position:fixed;z-index:2147483647;left:'+Math.max(6,Math.min(r.left,W-250))+'px;top:'+(r.bottom+4)+'px;min-width:230px;background:#152436;border:1px solid #2d4a6e;border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.45);padding:5px;font:12px system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#cfe3ff';
+        var it=function(id,txt,on,col){return '<button type="button" data-a="'+id+'" '+(on?'':'disabled ')+'style="display:block;width:100%;text-align:left;background:transparent;border:0;border-radius:7px;padding:8px 10px;font-weight:700;font-size:12px;cursor:'+(on?'pointer':'default')+';color:'+(on?(col||'#cfe3ff'):'#5d7392')+'">'+txt+'</button>'};
+        pop.innerHTML='<div style="padding:4px 10px 6px;font-size:10.5px;font-weight:800;color:#8ECBF5">'+(T[0]==='Clr'?'RELLENO':'FUENTE')+' \u00b7 columna '+String((b.parentNode&&b.parentNode.firstChild&&b.parentNode.firstChild.textContent)||k).trim()+'</div>'+
+          it('pick',(T[0]==='Clr'?'\ud83c\udfa8':'A')+'  Elegir color\u2026',true)+
+          it('una','\u21ba  Volver a lo normal (esta columna)',tiene,'#FFD37A')+
+          it('todas','\u21ba  Volver a lo normal (todas las columnas)',alguna,'#FFB4A8');
+        doc.body.appendChild(pop);
+        Array.prototype.forEach.call(pop.querySelectorAll('button:not([disabled])'),function(x){x.onmouseenter=function(){x.style.background='#243b55'};x.onmouseleave=function(){x.style.background='transparent'}});
+        var fake={stopPropagation:function(){},preventDefault:function(){}};var cierra=function(){try{pop.remove()}catch(_e){}doc.removeEventListener('mousedown',fuera,true);doc.removeEventListener('keydown',esc9,true)};
+        var fuera=function(ev){if(!pop.contains(ev.target))cierra()};var esc9=function(ev){if(ev.key==='Escape')cierra()};
+        setTimeout(function(){doc.addEventListener('mousedown',fuera,true);doc.addEventListener('keydown',esc9,true)},0);
+        pop.onclick=function(ev){var a=ev.target&&ev.target.closest&&ev.target.closest('button[data-a]');if(!a||a.disabled)return;ev.stopPropagation();var ac=a.getAttribute('data-a');cierra();
+          if(ac==='pick')pick.call(b,fake);
+          else if(ac==='una'){if(typeof quita==='function')quita.call(b,fake)}
+          else if(ac==='todas'&&typeof cf==='function'&&typeof cs==='function'){var c2=cf();c2[T[1]]={};c2[T[1]][k]='#000000';cs(c2);if(typeof quita==='function')quita.call(b,fake)}}}})})}catch(e){}}
 function _tabNavBind(doc,root,pfx){try{
   window['_nav'+pfx+'Root']=root;
-  try{_tabRowBind(doc,root,pfx)}catch(_er){}try{_tabDecAplica(root,pfx)}catch(_ed){}
+  try{_tabRowBind(doc,root,pfx)}catch(_er){}setTimeout(function(){try{_tabClrMenu(doc,pfx)}catch(_ec){}},0);try{_tabDecAplica(root,pfx)}catch(_ed){}
   if(doc['_nav'+pfx+'On'])return;doc['_nav'+pfx+'On']=1;
   doc.addEventListener('keydown',function(e){try{
     var k=e.key;if(k!=='ArrowLeft'&&k!=='ArrowRight'&&k!=='ArrowUp'&&k!=='ArrowDown'&&k!=='Tab')return;
