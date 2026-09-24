@@ -21073,7 +21073,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b99';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c00';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28896,7 +28896,7 @@ async function _tbExportarXlsx2(root,doc,opt){
     var RK=keys.slice(),wR=wch.slice();
     if(MC.some(function(p){return ix[p[0]]!=null})&&ix.pu==null){RK.push('pu');wR.push(13)}
     MC.forEach(function(p){if(ix[p[0]]!=null&&ix[p[1]]==null){RK.push(p[1]);wR.push(15)}});
-    var nR=RK.length,MET={met:1,metF:1,metM:1,metA:1,metAM:1,metR:1,metRF:1};
+    var nR=RK.length,MET={met:1,metF:1,metM:1,metA:1,metAM:1,metR:1,metRF:1},FQ={metF:1,metM:1,metA:1,metAM:1};
     var cols2='<cols>'+wR.map(function(wc,i){return '<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+wc+'" customWidth="1"/>'}).join('')+'</cols>';
     var f2=[],r2=1,hdr='';RK.forEach(function(k,i){hdr+=celT(colL(i)+r2,nomCol[k]||k,xRH)});
     f2.push('<row r="1" ht="'+Math.max(30,Math.round(Math.max.apply(null,RK.map(function(k,i){return lineas(nomCol[k]||k,wR[i])}))*13+4))+'" customHeight="1">'+hdr+'</row>');r2++;var r2a=r2;
@@ -28927,11 +28927,17 @@ async function _tbExportarXlsx2(root,doc,opt){
       var rd=function(v){return Math.round(v*1e10)/1e10};
       RK.forEach(function(k,i){var cr=colL(i)+r2,num=!!_TB_NUM[k],st=num?(esPct[k]?xRP:xRN):xRT,f;
         var ri=function(x){var j9=RK.indexOf(x);return j9>=0?(colL(j9)+r2):null};
+        /* metrado forecast / mayor / actual: FORMULA de la hoja de fotos. Con partes: suma de
+           SI.ERROR(metrado de la parte / su metrado contrato x su % del agrupado; 0) (resulta en %) */
+        if(FQ[k]&&ix[k]!=null){if(!grp)h+=celF(cr,ref(k,ci.r),xRN);
+          else h+=celF(cr,rows.map(function(q){return 'IFERROR('+ref(k,q.r)+'/'+metRef(q)+'*'+pP(q)+',0)'}).join('+'),xRP);return}
         if(MET[k]){var v9=metV(k);h+=(v9==null)?('<c r="'+cr+'" s="'+xRN+'"/>'):celN(cr,rd(v9),xRN);return}
         /* COSTOS: los unicos que dependen de otras columnas del Resumen: su metrado x el costo unitario del Resumen */
         var COSTM={costo:'met',costoC:'metF',costoM:'metM',costoA:'metA',costoAM:'metAM',costoR:'metR',costoRF:'metRF'};
         if(COSTM[k]){var rm=ri(COSTM[k]),rp=ri('pu');
-          if(rp&&rm)f='IFERROR('+rm+'*'+rp+',0)';
+          /* con partes esos metrados estan en %: metrado contrato x % / 100 x costo unitario */
+          if(rp&&rm&&grp&&FQ[COSTM[k]]&&ix[COSTM[k]]!=null){var rM9=ri('met')||String(nv(cM.m.met)||0);f='IFERROR('+rM9+'*'+rm+'/100*'+rp+',0)'}
+          else if(rp&&rm)f='IFERROR('+rm+'*'+rp+',0)';
           else f=grp?('SUM('+rows.map(function(q){return ref(k,q.r)}).join(',')+')'):ref(k,ci.r);
           h+=celF(cr,f,xRN);return}
         /* costo unitario: el de la hoja de fotos; con partes, el costo de todas sus partes / el metrado de la partida;
