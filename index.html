@@ -21824,7 +21824,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b94';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b95';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -26288,9 +26288,9 @@ function _busqMapa(txt){
 /* pinta de amarillo la coincidencia dentro de los nodos de texto de `raiz` */
 function _busqResalta(raiz,q){try{
   var nq=_busqNrm(String(q||'').trim());if(!nq||!raiz)return;
-  var tw=document.createTreeWalker(raiz,NodeFilter.SHOW_TEXT,null);
+  var tw=(raiz.ownerDocument||document).createTreeWalker(raiz,NodeFilter.SHOW_TEXT,null);
   var nodos=[],nd;
-  while((nd=tw.nextNode()))nodos.push(nd);
+  while((nd=tw.nextNode())){if(nd.parentNode&&nd.parentNode.nodeName==='MARK')continue;nodos.push(nd)}
   nodos.forEach(function(n){
     var txt=n.nodeValue;if(!txt)return;
     var M=_busqMapa(txt);
@@ -26298,13 +26298,13 @@ function _busqResalta(raiz,q){try{
     var frag=document.createDocumentFragment(),pos=0;
     while(i>=0){
       var a=M.m[i],b=M.m[i+nq.length-1]+1;
-      if(a>pos)frag.appendChild(document.createTextNode(txt.slice(pos,a)));
-      var mk=document.createElement('mark');
+      if(a>pos)frag.appendChild((n.ownerDocument||document).createTextNode(txt.slice(pos,a)));
+      var mk=(n.ownerDocument||document).createElement('mark');
       mk.style.cssText='background:#FFE58F;color:#1B2433;padding:0 1px;border-radius:3px';
       mk.textContent=txt.slice(a,b);
       frag.appendChild(mk);pos=b;
       i=M.n.indexOf(nq,i+nq.length)}
-    if(pos<txt.length)frag.appendChild(document.createTextNode(txt.slice(pos)));
+    if(pos<txt.length)frag.appendChild((n.ownerDocument||document).createTextNode(txt.slice(pos)));
     n.parentNode.replaceChild(frag,n)})}catch(e){}}
 function _busqArt(p){try{
   var bp=(DATA._byId&&DATA._byId[p.id])||p;
@@ -26345,6 +26345,14 @@ function _busqBarra(){
   document.getElementById('_busqX').onclick=function(){
     var t=document.getElementById('_busqTxt');if(t)t.value='';_busqAplica();_busqToggle(false)};
   return b}
+/* el amarillo de la busqueda de la lista se QUEDA: la lista se repinta sola (sincronizacion,
+   realtime, filtros...) y antes volvia sin marcas; un vigilante sobre #list lo vuelve a pintar */
+function _busqReResalta(){try{var t=document.getElementById('_busqTxt');var bar=document.getElementById('_busqBar');if(!t||!t.value.trim()||(bar&&bar.style.display==='none'))return;
+  Array.prototype.forEach.call(document.querySelectorAll('#list .leaf .cname, #list .leaf .cuad-chip'),function(el){_busqResalta(el,t.value)})}catch(e){}}
+(function(){var arma=function(){try{var L=document.getElementById('list');if(!L||L._busqObs)return;var tm=null;
+  var mo=new MutationObserver(function(){if(tm)return;tm=setTimeout(function(){tm=null;mo.disconnect();try{_busqReResalta()}finally{mo.observe(L,{childList:true,subtree:true})}},40)});
+  mo.observe(L,{childList:true,subtree:true});L._busqObs=mo}catch(e){}};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',arma);else arma();setTimeout(arma,1500)})();
 function _busqAplica(){
   var t=document.getElementById('_busqTxt');
   var s=$('inSearch');if(s){s.value=t?t.value:'';}
@@ -28484,7 +28492,7 @@ function _tbSustFotosPop(doc,b,cols,fo){try{var ya=doc.getElementById('_tbSustFP
   var tg=null;var guarda=function(){clearTimeout(tg);tg=setTimeout(function(){var c2=_tbCfg();c2.sustFotoOff=off;_tbCfgSave(c2)},400)};
   /* busqueda: oculta las actividades que no coinciden; Considerar todas / ninguna actuan sobre las que se ven */
   var visibles=function(){return cajas().filter(function(c){var bl=c.closest('._sfA');return !bl||bl.style.display!=='none'})};
-  var q9=p.querySelector('#_tbSustFQ');if(q9)q9.oninput=function(){var t=nrm(q9.value).trim(),n=0;Array.prototype.forEach.call(p.querySelectorAll('._sfA'),function(bl){var ok=!t||bl.getAttribute('data-q').indexOf(t)>=0;bl.style.display=ok?'':'none';if(ok)n++});var e9=p.querySelector('#_tbSustFN');if(e9&&t)e9.textContent=e9.textContent.split(' · ')[0]+' · '+n+' actividades encontradas'};
+  var q9=p.querySelector('#_tbSustFQ');if(q9)q9.oninput=function(){var t=nrm(q9.value).trim(),n=0;Array.prototype.forEach.call(p.querySelectorAll('._sfA'),function(bl){var ok=!t||bl.getAttribute('data-q').indexOf(t)>=0;bl.style.display=ok?'':'none';if(ok)n++;var tb9=bl.querySelector('b');if(tb9){if(tb9._h0==null)tb9._h0=tb9.innerHTML;tb9.innerHTML=tb9._h0;if(ok&&t&&typeof _busqResalta==='function')_busqResalta(tb9,q9.value)}});var e9=p.querySelector('#_tbSustFN');if(e9&&t)e9.textContent=e9.textContent.split(' · ')[0]+' · '+n+' actividades encontradas'};
   cajas().forEach(function(c){c.onchange=function(){var u=c.getAttribute('data-u');if(c.checked)delete off[u];else off[u]=1;pinta();guarda()}});pinta();
   var cierra=function(){try{p.remove()}catch(_e){}};
   p.onclick=async function(ev){var x=ev.target&&ev.target.closest&&ev.target.closest('button');if(!x)return;
