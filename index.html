@@ -21824,7 +21824,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b97';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b98';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -29656,6 +29656,19 @@ async function _tbExportarXlsx2(root,doc,opt){
         return String((Number(row.m.peso)||0)/100)};
       var metRef=function(row){return (ix.met!=null)?ref('met',row.r):String(Number(row.m.met)||0)};
       keys.forEach(function(k,i){var cr=colL(i)+r2,num=!!_TB_NUM[k],st=num?(esPct[k]?xRP:xRN):xRT,f;
+        /* COSTOS: los unicos que dependen de otras columnas del Resumen: su metrado x el costo unitario del Resumen
+           (en partidas con partes el metrado de avance es %: metrado contratado x % / 100 x costo unitario) */
+        var ri=function(x){var j=keys.indexOf(x);return j>=0?(colL(j)+r2):null},grp=!!(g.partes&&rows.length>=2);
+        var COSTM={costo:'met',costoC:'metF',costoM:'metM',costoA:'metA',costoAM:'metAM',costoR:'metR',costoRF:'metRF'};
+        if(COSTM[k]){var mk=COSTM[k],rm=ri(mk),rp=ri('pu'),rM=ri('met');
+          if(rp&&rm&&(!grp||mk==='met'))f='IFERROR('+rm+'*'+rp+',0)';
+          else if(rp&&rm&&rM)f='IFERROR('+rM+'*'+rm+'/100*'+rp+',0)';
+          else f=grp?('SUM('+rows.map(function(q){return ref(k,q.r)}).join(',')+')'):ref(k,ci.r);
+          h+=celF(cr,f,xRN);return}
+        /* costo unitario de una partida con partes: el costo de todas sus partes / su metrado (de la hoja de fotos) */
+        if(k==='pu'&&grp){var cT=0;rows.forEach(function(q){cT+=Number(q.m.costo)||0});var mC=Number(ci.m.met)||0;
+          f=(ix.costo!=null&&ix.met!=null)?('IFERROR(SUM('+rows.map(function(q){return ref('costo',q.r)}).join(',')+')/'+ref('met',ci.r)+',0)'):String(mC>0?Math.round(cT/mC*1e6)/1e6:0);
+          h+=celF(cr,f,xRN);return}
         if(!g.partes||rows.length<2){f=num?ref(k,ci.r):('IF('+ref(k,ci.r)+'="","",'+ref(k,ci.r)+')')}
         else if(k==='pert'){h+=celT(cr,'',xRT);return}
         else if(ADD[k])f='SUM('+rows.map(function(q){return ref(k,q.r)}).join(',')+')';
@@ -29692,7 +29705,7 @@ async function _tbExportarXlsx2(root,doc,opt){
     ['xl/worksheets/sheet1.xml',hoja]];
   if(hoja2){partes.push(['xl/worksheets/sheet2.xml',hoja2]);
     partes[0][1]=partes[0][1].replace('</Types>','<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
-    partes.forEach(function(pp){if(pp[0]==='xl/workbook.xml')pp[1]=pp[1].replace('</sheets>','<sheet name="Resumen" sheetId="2" r:id="rId3"/></sheets>');
+    partes.forEach(function(pp){if(pp[0]==='xl/workbook.xml')pp[1]=pp[1].replace('<sheets>','<sheets><sheet name="Resumen" sheetId="2" r:id="rId3"/>');
       if(pp[0]==='xl/_rels/workbook.xml.rels')pp[1]=pp[1].replace('</Relationships>','<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>')})}
   if(anchors.length){var EMU=9525,dr='',rl='';
     anchors.forEach(function(a,n){var id=n+1;dr+='<xdr:oneCellAnchor><xdr:from><xdr:col>'+a.col+'</xdr:col><xdr:colOff>'+(a.dx*EMU)+'</xdr:colOff><xdr:row>'+a.row+'</xdr:row><xdr:rowOff>'+(a.dy*EMU)+'</xdr:rowOff></xdr:from><xdr:ext cx="'+(a.w*EMU)+'" cy="'+(a.h*EMU)+'"/>'+
