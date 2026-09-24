@@ -21824,7 +21824,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c05';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c06';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28598,11 +28598,54 @@ function _tabLimpioCk(doc,top,pfx,antes){try{if(!top||top.querySelector('#'+pfx+
   if(antes&&antes.parentNode===top)top.insertBefore(w,antes.nextSibling);else top.appendChild(w);
   var ck=w.querySelector('input');ck.onchange=function(){var cf=window[pfx+'Cfg'],cs=window[pfx+'CfgSave'];if(typeof cf!=='function'||typeof cs!=='function')return;var c=cf();c.limpio=!ck.checked;cs(c);
     var rt=window['_nav'+pfx+'Root'];if(rt){_tabLimpioAplica(doc,rt,pfx);try{var af=window[pfx+'AplicaFijas'];if(typeof af==='function')af(rt)}catch(_e){}}}}catch(e){}}
+/* FILAS OCULTAS (clic derecho en una fila de las Tablas 1, 2, 3 y R): partidas y titulos WBS. Se guardan en la
+   configuracion de cada tabla (filasOc, en Supabase como columnas, colores y pliegues), asi que siguen ocultas en
+   las siguientes sesiones, y lo oculto NO sale en la exportacion. Un titulo se oculta solo o con todo lo que tiene
+   debajo. "Mostrar ocultas" (arriba) las devuelve todas. */
+function _tabOcKey(tr,pfx){if(!tr||!tr.getAttribute)return null;var wk=tr.getAttribute('data-wk');if(wk!=null&&tr.classList&&tr.classList.contains(pfx+'Tit'))return 't:'+wk;var rk=tr.getAttribute('data-rk');return rk?('r:'+rk):null}
+function _tabOcCfg(pfx){try{var cf=window[pfx+'Cfg'];var c=(typeof cf==='function')?(cf()||{}):{};return c.filasOc||{}}catch(e){return {}}}
+function _tabOcAplica(doc,rt,pfx){try{if(!rt)return;var oc=_tabOcCfg(pfx),secLv=null;
+  Array.prototype.forEach.call(rt.querySelectorAll('tbody tr'),function(tr){var k=_tabOcKey(tr,pfx),esT=!!(k&&k.charAt(0)==='t'),lv=esT?(Number(tr.getAttribute('data-lv'))||0):null;
+    if(esT&&secLv!=null&&lv<=secLv)secLv=null;
+    var ocu=(secLv!=null)||!!(k&&oc[k]);
+    if(esT&&oc['T'+k.slice(1)]){ocu=true;if(secLv==null)secLv=lv}
+    if(ocu){if(!tr._tabOc){tr._tabOcD=tr.style.display;tr._tabOc=1}tr.style.display='none'}
+    else if(tr._tabOc){tr.style.display=tr._tabOcD||'';tr._tabOc=0}});
+  var n=Object.keys(oc).length,b=doc.getElementById(pfx+'OcTodo');
+  if(b){b.textContent='👁 Mostrar ocultas'+(n?(' ('+n+')'):'');b.disabled=!n;b.style.opacity=n?'1':'.5';b.style.cursor=n?'pointer':'default'}}catch(e){}}
+function _tabOcBtn(doc,pfx){try{if(doc.getElementById(pfx+'OcTodo'))return;var lw=doc.getElementById(pfx+'LimpioW');if(!lw||!lw.parentNode)return;
+  var b=doc.createElement('button');b.id=pfx+'OcTodo';b.type='button';b.title='Vuelve a mostrar todas las partidas y titulos WBS ocultados con clic derecho';
+  b.style.cssText='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;flex:none;font-size:12px';
+  lw.parentNode.insertBefore(b,lw.nextSibling);
+  b.onclick=function(){var cf=window[pfx+'Cfg'],cs=window[pfx+'CfgSave'];if(typeof cf!=='function'||typeof cs!=='function')return;var c=cf();c.filasOc={};cs(c);_tabOcAplica(doc,window['_nav'+pfx+'Root'],pfx)}}catch(e){}}
+function _tabOcMenu(doc,rt,pfx,tr,x,y){try{var ya=doc.getElementById('_tabOcMn');if(ya)ya.remove();var k=_tabOcKey(tr,pfx);if(!k)return;var esT=(k.charAt(0)==='t');
+  var m=doc.createElement('div');m.id='_tabOcMn';
+  m.style.cssText='position:fixed;z-index:2147483600;left:'+x+'px;top:'+y+'px;background:#0f1a2a;border:1px solid #2d4a6e;border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.45);padding:5px;min-width:220px;font:12.5px system-ui,Segoe UI,sans-serif;color:#cfe3ff';
+  var ops=esT?[['t','Ocultar solo este título'],['T','Ocultar el título y todo lo que tiene debajo']]:[['r','Ocultar esta partida']];
+  m.innerHTML=ops.map(function(o){return '<div data-o="'+o[0]+'" style="padding:7px 10px;border-radius:6px;cursor:pointer;font-weight:700">'+o[1]+'</div>'}).join('');
+  doc.body.appendChild(m);
+  var W=(doc.defaultView&&doc.defaultView.innerWidth)||1200,Hh=(doc.defaultView&&doc.defaultView.innerHeight)||800;
+  if(x+m.offsetWidth>W-6)m.style.left=Math.max(6,W-m.offsetWidth-6)+'px';if(y+m.offsetHeight>Hh-6)m.style.top=Math.max(6,Hh-m.offsetHeight-6)+'px';
+  Array.prototype.forEach.call(m.querySelectorAll('[data-o]'),function(el){el.onmouseenter=function(){el.style.background='#1B5E8A'};el.onmouseleave=function(){el.style.background=''}});
+  var cierra=function(){try{m.remove()}catch(_e){}doc.removeEventListener('mousedown',fuera,true);doc.removeEventListener('keydown',esc9,true)};
+  var fuera=function(e){if(!m.contains(e.target))cierra()};var esc9=function(e){if(e.key==='Escape')cierra()};
+  setTimeout(function(){doc.addEventListener('mousedown',fuera,true);doc.addEventListener('keydown',esc9,true)},0);
+  m.onclick=function(e){var el=e.target.closest&&e.target.closest('[data-o]');if(!el)return;var o=el.getAttribute('data-o');var key=(o==='T')?('T'+k.slice(1)):k;
+    var cf=window[pfx+'Cfg'],cs=window[pfx+'CfgSave'];if(typeof cf!=='function'||typeof cs!=='function'){cierra();return}
+    var c=cf();c.filasOc=c.filasOc||{};if(o==='T')delete c.filasOc[k];c.filasOc[key]=1;cs(c);cierra();_tabOcAplica(doc,rt,pfx)}}catch(e){}}
+function _tabOcBind(doc,rt,pfx){try{if(!rt)return;_tabOcBtn(doc,pfx);_tabOcAplica(doc,rt,pfx);
+  if(rt._ocB)return;rt._ocB=1;
+  rt.addEventListener('contextmenu',function(e){try{var t=e.target;if(!t||!t.closest||t.closest('input,textarea,select'))return;var tr=t.closest('tr');
+    if(!tr||!tr.parentNode||tr.parentNode.tagName!=='TBODY'||!rt.contains(tr))return;if(!_tabOcKey(tr,pfx))return;
+    e.preventDefault();_tabOcMenu(doc,rt,pfx,tr,e.clientX,e.clientY)}catch(_e){}})}catch(e){}}
+/* ZOOM de cada tabla: se recuerda en este equipo para la proxima vez */
+function _tabZoomGet(pfx){try{var o=JSON.parse(localStorage.getItem('obf4_tab_zoom')||'{}');var z=Number(o[pfx]);return (z>=.4&&z<=3)?z:1}catch(e){return 1}}
+function _tabZoomSet(pfx,z){try{var o=JSON.parse(localStorage.getItem('obf4_tab_zoom')||'{}');o[pfx]=Math.round(Number(z)*1000)/1000;localStorage.setItem('obf4_tab_zoom',JSON.stringify(o))}catch(e){}}
 function _tabNavBind(doc,root,pfx){try{
   window['_nav'+pfx+'Root']=root;
   try{_tabLimpioAplica(doc,root,pfx)}catch(_elp){}
   if(pfx==='_tb'){try{_tbDotBind(doc,root)}catch(_edt){}try{_tbSustBtn(doc)}catch(_esb){}}
-  try{_tabRowBind(doc,root,pfx)}catch(_er){}setTimeout(function(){try{_tabClrMenu(doc,pfx)}catch(_ec){}},0);try{_tabDecAplica(root,pfx)}catch(_ed){}
+  try{_tabRowBind(doc,root,pfx)}catch(_er){}try{_tabOcBind(doc,root,pfx)}catch(_eoc){}setTimeout(function(){try{_tabClrMenu(doc,pfx)}catch(_ec){}},0);try{_tabDecAplica(root,pfx)}catch(_ed){}
   if(doc['_nav'+pfx+'On'])return;doc['_nav'+pfx+'On']=1;
   doc.addEventListener('keydown',function(e){try{
     var k=e.key;if(k!=='ArrowLeft'&&k!=='ArrowRight'&&k!=='ArrowUp'&&k!=='ArrowDown'&&k!=='Tab')return;
@@ -28674,7 +28717,7 @@ function _tabOpcToggle(doc,top,pfx){try{if(!top||top.querySelector('#'+pfx+'OpcT
   top.insertBefore(b,top.firstChild);try{_tabLimpioCk(doc,top,pfx,b)}catch(_elk){}try{_tabDecBar(doc,top,pfx,top.querySelector('#'+pfx+'LimpioW')||b)}catch(_edb){}try{_tabTemaBtn(doc,top,pfx,top.querySelector('#'+pfx+'Dec')||b)}catch(_etm){}
   var lee=function(){try{return localStorage.getItem(key)==='1'}catch(e){return false}};
   var aplica=function(){var oc=lee();
-    Array.prototype.forEach.call(top.children,function(el){if(el===b||(el.id||'')===pfx+'Fx'||(el.id||'')===pfx+'LimpioW')return;
+    Array.prototype.forEach.call(top.children,function(el){if(el===b||(el.id||'')===pfx+'Fx'||(el.id||'')===pfx+'LimpioW'||(el.id||'')===pfx+'OcTodo')return;
       if(oc){if(el.getAttribute('data-opc-disp')==null)el.setAttribute('data-opc-disp',el.style.display||'');el.style.display='none'}
       else if(el.getAttribute('data-opc-disp')!=null){el.style.display=el.getAttribute('data-opc-disp');el.removeAttribute('data-opc-disp')}});
     b.textContent=oc?'\u25be Opciones':'\u25b4';b.title=oc?'Mostrar las opciones de la tabla':'Ocultar las opciones (queda solo la barra de f\u00f3rmulas)'};
@@ -29800,7 +29843,7 @@ async function _crTablaUI(c){
   try{await _trPull()}catch(e){}   /* y los rendimientos APP escritos en la tabla */
   var titulo='Tabla del alcance · '+_crNomVis(c);
   window._crTablaCron=c;
-  var q='',ordRef={v:null},D=null,zoom=1;
+  var q='',ordRef={v:null},D=null,zoom=_tabZoomGet('_tb');
   /* 1) ventana propia: una ventana NORMAL del navegador, a toda la pantalla,
      que se maximiza y se agranda sin tope (la de Picture-in-Picture tiene
      tamano maximo; queda solo como respaldo). Se pide de inmediato porque
@@ -29818,11 +29861,11 @@ async function _crTablaUI(c){
     try{_tabOpcToggle(doc,doc.getElementById('top'),'_tb')}catch(_eo){}
     doc.getElementById('_tbCols').onclick=function(){_crTablaColsUI(doc,this,pintaHTML)};
     var bAj=doc.getElementById('_tbAj');var pintaAj=function(){bAj.textContent=(_tbAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAj();bAj.onclick=function(){var c2=_tbCfg();c2.ajustar=!_tbAjusta();_tbCfgSave(c2);pintaAj();pintaHTML()};
-    doc.getElementById('_tbMas').onclick=function(){zoom=Math.min(3,zoom*1.1);cuerpo.style.zoom=zoom};
-    doc.getElementById('_tbMenos').onclick=function(){zoom=Math.max(.4,zoom/1.1);cuerpo.style.zoom=zoom};
+    doc.getElementById('_tbMas').onclick=function(){zoom=Math.min(3,zoom*1.1);cuerpo.style.zoom=zoom;_tabZoomSet('_tb',zoom)};
+    doc.getElementById('_tbMenos').onclick=function(){zoom=Math.max(.4,zoom/1.1);cuerpo.style.zoom=zoom;_tabZoomSet('_tb',zoom)};
     var bMax=doc.getElementById('_tbMax');if(bMax)bMax.onclick=function(){try{pw.moveTo(0,0);pw.resizeTo(screen.availWidth||_sw,screen.availHeight||_sh)}catch(e){}};
     try{pw.moveTo(0,0);pw.resizeTo(_sw,_sh)}catch(e){}
-    doc.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();zoom=Math.max(.4,Math.min(3,zoom*(e.deltaY<0?1.1:1/1.1)));cuerpo.style.zoom=zoom},{passive:false});
+    doc.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();zoom=Math.max(.4,Math.min(3,zoom*(e.deltaY<0?1.1:1/1.1)));cuerpo.style.zoom=zoom;_tabZoomSet('_tb',zoom)},{passive:false});
     doc.getElementById('_tbCopiar').onclick=function(){try{var t=cuerpo.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_tbEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});(pw.navigator.clipboard||navigator.clipboard).writeText(out.join('\n')).then(function(){setRes('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){setRes('No se pudo copiar')})}catch(e){}};
     var pinta=async function(){try{var seq=(window._tbSeq=(window._tbSeq||0)+1);var D2=await _crTablaDatos(c);if(seq!==window._tbSeq||cerrada)return;D=D2;pintaHTML();setRes(D.u.pend?'cargando tareas\u2026':(D.u.n+' partidas cuentan \u00b7 '+D.u.hh+' hh'));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaRepinta==='function')window._crTablaRepinta()}catch(e){}},2500)}catch(e){try{cuerpo.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}catch(_e){}}};
     window._crTablaRepinta=function(){try{if(cerrada||pw.closed){window._crTablaRepinta=null;return}if(window._tbT)clearTimeout(window._tbT);window._tbT=setTimeout(function(){window._tbT=null;pinta()},150)}catch(e){}};
@@ -29841,14 +29884,14 @@ async function _crTablaUI(c){
     '<button id="_tbCopiar" style="'+bst+'">\ud83d\udccb Copiar como tabla</button><button id="_tbXls" style="'+bst+'" title="Descarga el cuadro tal como se ve (columnas, colores, t\u00edtulos WBS y TOTAL) con los costos como f\u00f3rmulas">\u2b07 Exportar a Excel</button><div id="_tbFx" title="Barra de f\u00f3rmulas: toca una celda y aqu\u00ed sale su referencia y, si es f\u00f3rmula, la f\u00f3rmula con sus celdas marcadas" style="flex-basis:100%;display:flex;align-items:center;gap:6px;background:#0d1117;border:1px solid #1d3550;border-radius:8px;padding:3px 6px;font-size:12px"><span id="_tbFxRef" style="min-width:52px;text-align:center;font-weight:800;color:#8ECBF5;border-right:1px solid #1d3550;padding-right:6px">&nbsp;</span><span style="color:#7d8590;font-style:italic;font-weight:800">fx</span><span id="_tbFxVal" style="flex:1;font-family:Consolas,monospace;color:#cfe3ff;white-space:normal;overflow-wrap:anywhere;min-height:16px"></span></div>';
   ov.insertBefore(top,body);try{_tabOpcToggle(document,top,'_tb')}catch(_eo){}
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
-  var pintaHTMLF=function(){if(!D)return;var _sT=body.scrollTop,_sL=body.scrollLeft;wrap.innerHTML=_crTablaHTML(D,q,ordRef.v);wrap.style.zoom=ov._zoom||1;body.scrollTop=_sT;body.scrollLeft=_sL;_crTablaBind(wrap,ordRef,pintaHTMLF)};
+  var pintaHTMLF=function(){if(!D)return;var _sT=body.scrollTop,_sL=body.scrollLeft;wrap.innerHTML=_crTablaHTML(D,q,ordRef.v);wrap.style.zoom=ov._zoom||(ov._zoom=_tabZoomGet('_tb'));body.scrollTop=_sT;body.scrollLeft=_sL;_crTablaBind(wrap,ordRef,pintaHTMLF)};
   var pintaF=async function(){try{var seq=(window._tbSeq=(window._tbSeq||0)+1);var D2=await _crTablaDatos(c);if(seq!==window._tbSeq)return;D=D2;if(!document.getElementById('_crTabOv'))return;pintaHTMLF();
       var r=document.getElementById('_tbRes');if(r)r.textContent=(D.u.pend?'cargando tareas\u2026':(D.u.n+' partidas cuentan \u00b7 '+D.u.hh+' hh'));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaRepinta==='function')window._crTablaRepinta()}catch(e){}},2500)}catch(e){wrap.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}};
   top.querySelector('#_tbBus').oninput=function(){q=this.value;pintaHTMLF()};
   top.querySelector('#_tbCols').onclick=function(){_crTablaColsUI(document,this,pintaHTMLF)};
   var bAjF=top.querySelector('#_tbAj');var pintaAjF=function(){bAjF.textContent=(_tbAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAjF();bAjF.onclick=function(){var c2=_tbCfg();c2.ajustar=!_tbAjusta();_tbCfgSave(c2);pintaAjF();pintaHTMLF()};
-  top.querySelector('#_tbMas').onclick=function(){ov._zoom=Math.min(3,(ov._zoom||1)*1.1);wrap.style.zoom=ov._zoom};
-  top.querySelector('#_tbMenos').onclick=function(){ov._zoom=Math.max(.4,(ov._zoom||1)/1.1);wrap.style.zoom=ov._zoom};
+  top.querySelector('#_tbMas').onclick=function(){ov._zoom=Math.min(3,(ov._zoom||1)*1.1);wrap.style.zoom=ov._zoom;_tabZoomSet('_tb',ov._zoom)};
+  top.querySelector('#_tbMenos').onclick=function(){ov._zoom=Math.max(.4,(ov._zoom||1)/1.1);wrap.style.zoom=ov._zoom;_tabZoomSet('_tb',ov._zoom)};
   top.querySelector('#_tbCopiar').onclick=function(){try{var t=wrap.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_tbEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});navigator.clipboard.writeText(out.join('\n')).then(function(){toast('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){toast('No se pudo copiar')})}catch(e){}};
   ov._sacar=function(){ov.remove();try{ov._alCerrar()}catch(e){}window._crTablaRepinta=null;_crTablaUI(c)};
   window._crTablaRepinta=function(){try{if(!document.getElementById('_crTabOv'))return;if(window._tbT)clearTimeout(window._tbT);window._tbT=setTimeout(function(){window._tbT=null;pintaF()},150)}catch(e){}};
@@ -31124,7 +31167,7 @@ async function _crTablaQUI(c){
   try{await _trPull()}catch(e){}   /* y los rendimientos APP escritos en la tabla */
   var titulo=_TQ_TIT+' \u00b7 '+_crNomVis(c);
   window._crTablaQCron=c;
-  var q='',ordRef={v:null},D=null,zoom=1;
+  var q='',ordRef={v:null},D=null,zoom=_tabZoomGet('_tq');
   /* 1) ventana propia: una ventana NORMAL del navegador, a toda la pantalla,
      que se maximiza y se agranda sin tope (la de Picture-in-Picture tiene
      tamano maximo; queda solo como respaldo). Se pide de inmediato porque
@@ -31143,11 +31186,11 @@ async function _crTablaQUI(c){
     doc.getElementById('_tqCols').onclick=function(){_crTablaQColsUI(doc,this,pintaHTML)};
     var _bSem9=doc.getElementById('_tqSem');if(_bSem9)_bSem9.onclick=function(){_crTablaQSemUI(doc,this,pintaHTML)};
     var bAj=doc.getElementById('_tqAj');var pintaAj=function(){bAj.textContent=(_tqAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAj();bAj.onclick=function(){var c2=_tqCfg();c2.ajustar=!_tqAjusta();_tqCfgSave(c2);pintaAj();pintaHTML()};
-    doc.getElementById('_tqMas').onclick=function(){zoom=Math.min(3,zoom*1.1);cuerpo.style.zoom=zoom};
-    doc.getElementById('_tqMenos').onclick=function(){zoom=Math.max(.4,zoom/1.1);cuerpo.style.zoom=zoom};
+    doc.getElementById('_tqMas').onclick=function(){zoom=Math.min(3,zoom*1.1);cuerpo.style.zoom=zoom;_tabZoomSet('_tq',zoom)};
+    doc.getElementById('_tqMenos').onclick=function(){zoom=Math.max(.4,zoom/1.1);cuerpo.style.zoom=zoom;_tabZoomSet('_tq',zoom)};
     var bMax=doc.getElementById('_tqMax');if(bMax)bMax.onclick=function(){try{pw.moveTo(0,0);pw.resizeTo(screen.availWidth||_sw,screen.availHeight||_sh)}catch(e){}};
     try{pw.moveTo(0,0);pw.resizeTo(_sw,_sh)}catch(e){}
-    doc.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();zoom=Math.max(.4,Math.min(3,zoom*(e.deltaY<0?1.1:1/1.1)));cuerpo.style.zoom=zoom},{passive:false});
+    doc.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();zoom=Math.max(.4,Math.min(3,zoom*(e.deltaY<0?1.1:1/1.1)));cuerpo.style.zoom=zoom;_tabZoomSet('_tq',zoom)},{passive:false});
     doc.getElementById('_tqCopiar').onclick=function(){try{var t=cuerpo.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_tqEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});(pw.navigator.clipboard||navigator.clipboard).writeText(out.join('\n')).then(function(){setRes('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){setRes('No se pudo copiar')})}catch(e){}};
     var pinta=async function(){try{var seq=(window._tqSeq=(window._tqSeq||0)+1);var D2=await _tqDatos(c);if(seq!==window._tqSeq||cerrada)return;D=D2;var _f9=_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TQ_LS)||''}catch(e){return ''}})());if(_f9===pw._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaQRepinta==='function')window._crTablaQRepinta()}catch(e){}},2500);return}pw._t23FirmaUlt=_f9;pintaHTML();setRes(D.u.pend?'cargando tareas\u2026':_tqInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaQRepinta==='function')window._crTablaQRepinta()}catch(e){}},2500)}catch(e){try{cuerpo.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}catch(_e){}}};
     window._crTablaQRepinta=function(){try{if(cerrada||pw.closed){window._crTablaQRepinta=null;return}if(window._tqT)clearTimeout(window._tqT);window._tqT=setTimeout(function(){window._tqT=null;pinta()},150)}catch(e){}};
@@ -31166,7 +31209,7 @@ async function _crTablaQUI(c){
     '<button id="_tqCopiar" style="'+bst+'">\ud83d\udccb Copiar como tabla</button><button id="_tqXls" style="'+bst+'" title="Descarga el cuadro tal como se ve (columnas, colores, t\u00edtulos WBS y TOTAL) con los costos como f\u00f3rmulas">\u2b07 Exportar a Excel</button>'+_tqBarraHTML()+'<div id="_tqFx" title="Barra de f\u00f3rmulas: toca una celda y aqu\u00ed sale su referencia y, si es f\u00f3rmula, la f\u00f3rmula con sus celdas marcadas" style="flex-basis:100%;display:flex;align-items:center;gap:6px;background:#0d1117;border:1px solid #1d3550;border-radius:8px;padding:3px 6px;font-size:12px"><span id="_tqFxRef" style="min-width:52px;text-align:center;font-weight:800;color:#8ECBF5;border-right:1px solid #1d3550;padding-right:6px">&nbsp;</span><span style="color:#7d8590;font-style:italic;font-weight:800">fx</span><span id="_tqFxVal" style="flex:1;font-family:Consolas,monospace;color:#cfe3ff;white-space:normal;overflow-wrap:anywhere;min-height:16px"></span></div>';
   ov.insertBefore(top,body);try{_tabOpcToggle(document,top,'_tq')}catch(_eo){}
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
-  var pintaHTMLF=function(){if(!D)return;var _sT=body.scrollTop,_sL=body.scrollLeft;wrap.innerHTML=_crTablaQHTML(D,q,ordRef.v);wrap.style.zoom=ov._zoom||1;body.scrollTop=_sT;body.scrollLeft=_sL;_crTablaQBind(wrap,ordRef,pintaHTMLF);try{var _r9=document.getElementById('_tqRes');if(_r9)_r9.textContent=_tqInfoTxt(D)}catch(e){}};
+  var pintaHTMLF=function(){if(!D)return;var _sT=body.scrollTop,_sL=body.scrollLeft;wrap.innerHTML=_crTablaQHTML(D,q,ordRef.v);wrap.style.zoom=ov._zoom||(ov._zoom=_tabZoomGet('_tq'));body.scrollTop=_sT;body.scrollLeft=_sL;_crTablaQBind(wrap,ordRef,pintaHTMLF);try{var _r9=document.getElementById('_tqRes');if(_r9)_r9.textContent=_tqInfoTxt(D)}catch(e){}};
   var pintaF=async function(){try{var seq=(window._tqSeq=(window._tqSeq||0)+1);var D2=await _tqDatos(c);if(seq!==window._tqSeq)return;D=D2;if(!document.getElementById('_crTabQOv'))return;var _f9=_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TQ_LS)||''}catch(e){return ''}})());if(_f9===ov._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaQRepinta==='function')window._crTablaQRepinta()}catch(e){}},2500);return}ov._t23FirmaUlt=_f9;pintaHTMLF();
       var r=document.getElementById('_tqRes');if(r)r.textContent=(D.u.pend?'cargando tareas\u2026':_tqInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaQRepinta==='function')window._crTablaQRepinta()}catch(e){}},2500)}catch(e){wrap.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}};
   top.querySelector('#_tqBus').oninput=function(){q=this.value;pintaHTMLF()};
@@ -31174,8 +31217,8 @@ async function _crTablaQUI(c){
   top.querySelector('#_tqCols').onclick=function(){_crTablaQColsUI(document,this,pintaHTMLF)};
   var _bSem9=top.querySelector('#_tqSem');if(_bSem9)_bSem9.onclick=function(){_crTablaQSemUI(document,this,pintaHTMLF)};
   var bAjF=top.querySelector('#_tqAj');var pintaAjF=function(){bAjF.textContent=(_tqAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAjF();bAjF.onclick=function(){var c2=_tqCfg();c2.ajustar=!_tqAjusta();_tqCfgSave(c2);pintaAjF();pintaHTMLF()};
-  top.querySelector('#_tqMas').onclick=function(){ov._zoom=Math.min(3,(ov._zoom||1)*1.1);wrap.style.zoom=ov._zoom};
-  top.querySelector('#_tqMenos').onclick=function(){ov._zoom=Math.max(.4,(ov._zoom||1)/1.1);wrap.style.zoom=ov._zoom};
+  top.querySelector('#_tqMas').onclick=function(){ov._zoom=Math.min(3,(ov._zoom||1)*1.1);wrap.style.zoom=ov._zoom;_tabZoomSet('_tq',ov._zoom)};
+  top.querySelector('#_tqMenos').onclick=function(){ov._zoom=Math.max(.4,(ov._zoom||1)/1.1);wrap.style.zoom=ov._zoom;_tabZoomSet('_tq',ov._zoom)};
   top.querySelector('#_tqCopiar').onclick=function(){try{var t=wrap.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_tqEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});navigator.clipboard.writeText(out.join('\n')).then(function(){toast('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){toast('No se pudo copiar')})}catch(e){}};
   ov._sacar=function(){ov.remove();try{ov._alCerrar()}catch(e){}window._crTablaQRepinta=null;_crTablaQUI(c)};
   window._crTablaQRepinta=function(){try{if(!document.getElementById('_crTabQOv'))return;if(window._tqT)clearTimeout(window._tqT);window._tqT=setTimeout(function(){window._tqT=null;pintaF()},150)}catch(e){}};
@@ -32117,7 +32160,7 @@ async function _crTablaVUI(c){
   try{await _trPull()}catch(e){}   /* y los rendimientos APP escritos en la tabla */
   var titulo=_TV_TIT+' \u00b7 '+_crNomVis(c);
   window._crTablaVCron=c;
-  var q='',ordRef={v:null},D=null,zoom=1;
+  var q='',ordRef={v:null},D=null,zoom=_tabZoomGet('_tv');
   /* 1) ventana propia: una ventana NORMAL del navegador, a toda la pantalla,
      que se maximiza y se agranda sin tope (la de Picture-in-Picture tiene
      tamano maximo; queda solo como respaldo). Se pide de inmediato porque
@@ -32136,11 +32179,11 @@ async function _crTablaVUI(c){
     doc.getElementById('_tvCols').onclick=function(){_crTablaVColsUI(doc,this,pintaHTML)};
     var _bSem9=doc.getElementById('_tvSem');if(_bSem9)_bSem9.onclick=function(){_crTablaVSemUI(doc,this,pintaHTML)};
     var bAj=doc.getElementById('_tvAj');var pintaAj=function(){bAj.textContent=(_tvAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAj();bAj.onclick=function(){var c2=_tvCfg();c2.ajustar=!_tvAjusta();_tvCfgSave(c2);pintaAj();pintaHTML()};
-    doc.getElementById('_tvMas').onclick=function(){zoom=Math.min(3,zoom*1.1);cuerpo.style.zoom=zoom};
-    doc.getElementById('_tvMenos').onclick=function(){zoom=Math.max(.4,zoom/1.1);cuerpo.style.zoom=zoom};
+    doc.getElementById('_tvMas').onclick=function(){zoom=Math.min(3,zoom*1.1);cuerpo.style.zoom=zoom;_tabZoomSet('_tv',zoom)};
+    doc.getElementById('_tvMenos').onclick=function(){zoom=Math.max(.4,zoom/1.1);cuerpo.style.zoom=zoom;_tabZoomSet('_tv',zoom)};
     var bMax=doc.getElementById('_tvMax');if(bMax)bMax.onclick=function(){try{pw.moveTo(0,0);pw.resizeTo(screen.availWidth||_sw,screen.availHeight||_sh)}catch(e){}};
     try{pw.moveTo(0,0);pw.resizeTo(_sw,_sh)}catch(e){}
-    doc.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();zoom=Math.max(.4,Math.min(3,zoom*(e.deltaY<0?1.1:1/1.1)));cuerpo.style.zoom=zoom},{passive:false});
+    doc.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();zoom=Math.max(.4,Math.min(3,zoom*(e.deltaY<0?1.1:1/1.1)));cuerpo.style.zoom=zoom;_tabZoomSet('_tv',zoom)},{passive:false});
     doc.getElementById('_tvCopiar').onclick=function(){try{var t=cuerpo.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_tvEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});(pw.navigator.clipboard||navigator.clipboard).writeText(out.join('\n')).then(function(){setRes('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){setRes('No se pudo copiar')})}catch(e){}};
     var pinta=async function(){try{var seq=(window._tvSeq=(window._tvSeq||0)+1);var D2=await _tvDatos(c);if(seq!==window._tvSeq||cerrada)return;D=D2;var _f9=_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TV_LS)||''}catch(e){return ''}})());if(_f9===pw._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaVRepinta==='function')window._crTablaVRepinta()}catch(e){}},2500);return}pw._t23FirmaUlt=_f9;pintaHTML();setRes(D.u.pend?'cargando tareas\u2026':_tvInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaVRepinta==='function')window._crTablaVRepinta()}catch(e){}},2500)}catch(e){try{cuerpo.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}catch(_e){}}};
     window._crTablaVRepinta=function(){try{if(cerrada||pw.closed){window._crTablaVRepinta=null;return}if(window._tvT)clearTimeout(window._tvT);window._tvT=setTimeout(function(){window._tvT=null;pinta()},150)}catch(e){}};
@@ -32159,7 +32202,7 @@ async function _crTablaVUI(c){
     '<button id="_tvCopiar" style="'+bst+'">\ud83d\udccb Copiar como tabla</button><button id="_tvXls" style="'+bst+'" title="Descarga el cuadro tal como se ve (columnas, colores, t\u00edtulos WBS y TOTAL) con los costos como f\u00f3rmulas">\u2b07 Exportar a Excel</button>'+_tvBarraHTML()+'<div id="_tvFx" title="Barra de f\u00f3rmulas: toca una celda y aqu\u00ed sale su referencia y, si es f\u00f3rmula, la f\u00f3rmula con sus celdas marcadas" style="flex-basis:100%;display:flex;align-items:center;gap:6px;background:#0d1117;border:1px solid #1d3550;border-radius:8px;padding:3px 6px;font-size:12px"><span id="_tvFxRef" style="min-width:52px;text-align:center;font-weight:800;color:#8ECBF5;border-right:1px solid #1d3550;padding-right:6px">&nbsp;</span><span style="color:#7d8590;font-style:italic;font-weight:800">fx</span><span id="_tvFxVal" style="flex:1;font-family:Consolas,monospace;color:#cfe3ff;white-space:normal;overflow-wrap:anywhere;min-height:16px"></span></div>';
   ov.insertBefore(top,body);try{_tabOpcToggle(document,top,'_tv')}catch(_eo){}
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
-  var pintaHTMLF=function(){if(!D)return;var _sT=body.scrollTop,_sL=body.scrollLeft;wrap.innerHTML=_crTablaVHTML(D,q,ordRef.v);wrap.style.zoom=ov._zoom||1;body.scrollTop=_sT;body.scrollLeft=_sL;_crTablaVBind(wrap,ordRef,pintaHTMLF);try{var _r9=document.getElementById('_tvRes');if(_r9)_r9.textContent=_tvInfoTxt(D)}catch(e){}};
+  var pintaHTMLF=function(){if(!D)return;var _sT=body.scrollTop,_sL=body.scrollLeft;wrap.innerHTML=_crTablaVHTML(D,q,ordRef.v);wrap.style.zoom=ov._zoom||(ov._zoom=_tabZoomGet('_tv'));body.scrollTop=_sT;body.scrollLeft=_sL;_crTablaVBind(wrap,ordRef,pintaHTMLF);try{var _r9=document.getElementById('_tvRes');if(_r9)_r9.textContent=_tvInfoTxt(D)}catch(e){}};
   var pintaF=async function(){try{var seq=(window._tvSeq=(window._tvSeq||0)+1);var D2=await _tvDatos(c);if(seq!==window._tvSeq)return;D=D2;if(!document.getElementById('_crTabVOv'))return;var _f9=_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TV_LS)||''}catch(e){return ''}})());if(_f9===ov._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaVRepinta==='function')window._crTablaVRepinta()}catch(e){}},2500);return}ov._t23FirmaUlt=_f9;pintaHTMLF();
       var r=document.getElementById('_tvRes');if(r)r.textContent=(D.u.pend?'cargando tareas\u2026':_tvInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaVRepinta==='function')window._crTablaVRepinta()}catch(e){}},2500)}catch(e){wrap.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}};
   top.querySelector('#_tvBus').oninput=function(){q=this.value;pintaHTMLF()};
@@ -32167,8 +32210,8 @@ async function _crTablaVUI(c){
   top.querySelector('#_tvCols').onclick=function(){_crTablaVColsUI(document,this,pintaHTMLF)};
   var _bSem9=top.querySelector('#_tvSem');if(_bSem9)_bSem9.onclick=function(){_crTablaVSemUI(document,this,pintaHTMLF)};
   var bAjF=top.querySelector('#_tvAj');var pintaAjF=function(){bAjF.textContent=(_tvAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAjF();bAjF.onclick=function(){var c2=_tvCfg();c2.ajustar=!_tvAjusta();_tvCfgSave(c2);pintaAjF();pintaHTMLF()};
-  top.querySelector('#_tvMas').onclick=function(){ov._zoom=Math.min(3,(ov._zoom||1)*1.1);wrap.style.zoom=ov._zoom};
-  top.querySelector('#_tvMenos').onclick=function(){ov._zoom=Math.max(.4,(ov._zoom||1)/1.1);wrap.style.zoom=ov._zoom};
+  top.querySelector('#_tvMas').onclick=function(){ov._zoom=Math.min(3,(ov._zoom||1)*1.1);wrap.style.zoom=ov._zoom;_tabZoomSet('_tv',ov._zoom)};
+  top.querySelector('#_tvMenos').onclick=function(){ov._zoom=Math.max(.4,(ov._zoom||1)/1.1);wrap.style.zoom=ov._zoom;_tabZoomSet('_tv',ov._zoom)};
   top.querySelector('#_tvCopiar').onclick=function(){try{var t=wrap.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_tvEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});navigator.clipboard.writeText(out.join('\n')).then(function(){toast('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){toast('No se pudo copiar')})}catch(e){}};
   ov._sacar=function(){ov.remove();try{ov._alCerrar()}catch(e){}window._crTablaVRepinta=null;_crTablaVUI(c)};
   window._crTablaVRepinta=function(){try{if(!document.getElementById('_crTabVOv'))return;if(window._tvT)clearTimeout(window._tvT);window._tvT=setTimeout(function(){window._tvT=null;pintaF()},150)}catch(e){}};
@@ -33356,7 +33399,7 @@ async function _crTablaRUI(c){
   try{await _trPull()}catch(e){}   /* y los rendimientos APP escritos en la tabla */
   var titulo=_TX_TIT+' \u00b7 '+_crNomVis(c);
   window._crTablaRCron=c;
-  var q='',ordRef={v:null},D=null,zoom=1;
+  var q='',ordRef={v:null},D=null,zoom=_tabZoomGet('_tx');
   /* 1) ventana propia: una ventana NORMAL del navegador, a toda la pantalla,
      que se maximiza y se agranda sin tope (la de Picture-in-Picture tiene
      tamano maximo; queda solo como respaldo). Se pide de inmediato porque
@@ -33375,11 +33418,11 @@ async function _crTablaRUI(c){
     doc.getElementById('_txCols').onclick=function(){_crTablaRColsUI(doc,this,pintaHTML)};
     var _bSem9=doc.getElementById('_txSem');if(_bSem9)_bSem9.onclick=function(){_crTablaRSemUI(doc,this,pintaHTML)};
     var bAj=doc.getElementById('_txAj');var pintaAj=function(){bAj.textContent=(_txAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAj();bAj.onclick=function(){var c2=_txCfg();c2.ajustar=!_txAjusta();_txCfgSave(c2);pintaAj();pintaHTML()};
-    doc.getElementById('_txMas').onclick=function(){zoom=Math.min(3,zoom*1.1);cuerpo.style.zoom=zoom};
-    doc.getElementById('_txMenos').onclick=function(){zoom=Math.max(.4,zoom/1.1);cuerpo.style.zoom=zoom};
+    doc.getElementById('_txMas').onclick=function(){zoom=Math.min(3,zoom*1.1);cuerpo.style.zoom=zoom;_tabZoomSet('_tx',zoom)};
+    doc.getElementById('_txMenos').onclick=function(){zoom=Math.max(.4,zoom/1.1);cuerpo.style.zoom=zoom;_tabZoomSet('_tx',zoom)};
     var bMax=doc.getElementById('_txMax');if(bMax)bMax.onclick=function(){try{pw.moveTo(0,0);pw.resizeTo(screen.availWidth||_sw,screen.availHeight||_sh)}catch(e){}};
     try{pw.moveTo(0,0);pw.resizeTo(_sw,_sh)}catch(e){}
-    doc.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();zoom=Math.max(.4,Math.min(3,zoom*(e.deltaY<0?1.1:1/1.1)));cuerpo.style.zoom=zoom},{passive:false});
+    doc.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();zoom=Math.max(.4,Math.min(3,zoom*(e.deltaY<0?1.1:1/1.1)));cuerpo.style.zoom=zoom;_tabZoomSet('_tx',zoom)},{passive:false});
     doc.getElementById('_txCopiar').onclick=function(){try{var t=cuerpo.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_txEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});(pw.navigator.clipboard||navigator.clipboard).writeText(out.join('\n')).then(function(){setRes('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){setRes('No se pudo copiar')})}catch(e){}};
     var pinta=async function(){try{var seq=(window._txSeq=(window._txSeq||0)+1);var D2=await _txDatos(c);if(seq!==window._txSeq||cerrada)return;D=D2;var _f9=_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TX_LS)||''}catch(e){return ''}})());if(_f9===pw._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaRRepinta==='function')window._crTablaRRepinta()}catch(e){}},2500);return}pw._t23FirmaUlt=_f9;pintaHTML();setRes(D.u.pend?'cargando tareas\u2026':_txInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaRRepinta==='function')window._crTablaRRepinta()}catch(e){}},2500)}catch(e){try{cuerpo.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}catch(_e){}}};
     window._crTablaRRepinta=function(){try{if(cerrada||pw.closed){window._crTablaRRepinta=null;return}if(window._txT)clearTimeout(window._txT);window._txT=setTimeout(function(){window._txT=null;pinta()},150)}catch(e){}};
@@ -33398,7 +33441,7 @@ async function _crTablaRUI(c){
     '<button id="_txCopiar" style="'+bst+'">\ud83d\udccb Copiar como tabla</button><button id="_txXls" style="'+bst+'" title="Descarga el cuadro tal como se ve (columnas, colores, t\u00edtulos WBS y TOTAL) con los costos como f\u00f3rmulas">\u2b07 Exportar a Excel</button>'+_txBarraHTML()+'<div id="_txFx" title="Barra de f\u00f3rmulas: toca una celda y aqu\u00ed sale su referencia y, si es f\u00f3rmula, la f\u00f3rmula con sus celdas marcadas" style="flex-basis:100%;display:flex;align-items:center;gap:6px;background:#0d1117;border:1px solid #1d3550;border-radius:8px;padding:3px 6px;font-size:12px"><span id="_txFxRef" style="min-width:52px;text-align:center;font-weight:800;color:#8ECBF5;border-right:1px solid #1d3550;padding-right:6px">&nbsp;</span><span style="color:#7d8590;font-style:italic;font-weight:800">fx</span><span id="_txFxVal" style="flex:1;font-family:Consolas,monospace;color:#cfe3ff;white-space:normal;overflow-wrap:anywhere;min-height:16px"></span></div>';
   ov.insertBefore(top,body);try{_tabOpcToggle(document,top,'_tx')}catch(_eo){}
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
-  var pintaHTMLF=function(){if(!D)return;var _sT=body.scrollTop,_sL=body.scrollLeft;wrap.innerHTML=_crTablaRHTML(D,q,ordRef.v);wrap.style.zoom=ov._zoom||1;body.scrollTop=_sT;body.scrollLeft=_sL;_crTablaRBind(wrap,ordRef,pintaHTMLF);try{var _r9=document.getElementById('_txRes');if(_r9)_r9.textContent=_txInfoTxt(D)}catch(e){}};
+  var pintaHTMLF=function(){if(!D)return;var _sT=body.scrollTop,_sL=body.scrollLeft;wrap.innerHTML=_crTablaRHTML(D,q,ordRef.v);wrap.style.zoom=ov._zoom||(ov._zoom=_tabZoomGet('_tx'));body.scrollTop=_sT;body.scrollLeft=_sL;_crTablaRBind(wrap,ordRef,pintaHTMLF);try{var _r9=document.getElementById('_txRes');if(_r9)_r9.textContent=_txInfoTxt(D)}catch(e){}};
   var pintaF=async function(){try{var seq=(window._txSeq=(window._txSeq||0)+1);var D2=await _txDatos(c);if(seq!==window._txSeq)return;D=D2;if(!document.getElementById('_crTabROv'))return;var _f9=_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TX_LS)||''}catch(e){return ''}})());if(_f9===ov._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaRRepinta==='function')window._crTablaRRepinta()}catch(e){}},2500);return}ov._t23FirmaUlt=_f9;pintaHTMLF();
       var r=document.getElementById('_txRes');if(r)r.textContent=(D.u.pend?'cargando tareas\u2026':_txInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaRRepinta==='function')window._crTablaRRepinta()}catch(e){}},2500)}catch(e){wrap.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}};
   top.querySelector('#_txBus').oninput=function(){q=this.value;pintaHTMLF()};
@@ -33406,8 +33449,8 @@ async function _crTablaRUI(c){
   top.querySelector('#_txCols').onclick=function(){_crTablaRColsUI(document,this,pintaHTMLF)};
   var _bSem9=top.querySelector('#_txSem');if(_bSem9)_bSem9.onclick=function(){_crTablaRSemUI(document,this,pintaHTMLF)};
   var bAjF=top.querySelector('#_txAj');var pintaAjF=function(){bAjF.textContent=(_txAjusta()?'\u21a9 Ajustar texto: S\u00ed':'\u21a9 Ajustar texto: No')};pintaAjF();bAjF.onclick=function(){var c2=_txCfg();c2.ajustar=!_txAjusta();_txCfgSave(c2);pintaAjF();pintaHTMLF()};
-  top.querySelector('#_txMas').onclick=function(){ov._zoom=Math.min(3,(ov._zoom||1)*1.1);wrap.style.zoom=ov._zoom};
-  top.querySelector('#_txMenos').onclick=function(){ov._zoom=Math.max(.4,(ov._zoom||1)/1.1);wrap.style.zoom=ov._zoom};
+  top.querySelector('#_txMas').onclick=function(){ov._zoom=Math.min(3,(ov._zoom||1)*1.1);wrap.style.zoom=ov._zoom;_tabZoomSet('_tx',ov._zoom)};
+  top.querySelector('#_txMenos').onclick=function(){ov._zoom=Math.max(.4,(ov._zoom||1)/1.1);wrap.style.zoom=ov._zoom;_tabZoomSet('_tx',ov._zoom)};
   top.querySelector('#_txCopiar').onclick=function(){try{var t=wrap.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_txEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});navigator.clipboard.writeText(out.join('\n')).then(function(){toast('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){toast('No se pudo copiar')})}catch(e){}};
   ov._sacar=function(){ov.remove();try{ov._alCerrar()}catch(e){}window._crTablaRRepinta=null;_crTablaRUI(c)};
   window._crTablaRRepinta=function(){try{if(!document.getElementById('_crTabROv'))return;if(window._txT)clearTimeout(window._txT);window._txT=setTimeout(function(){window._txT=null;pintaF()},150)}catch(e){}};
