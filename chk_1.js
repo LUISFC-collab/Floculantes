@@ -21073,7 +21073,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b62';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b63';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -27389,8 +27389,96 @@ function _fltBind(doc,root,leerFiltros,valoresDe,guardar){try{doc=doc||document;
    derecha / izquierda. Se salta la columna de numeros, los titulos WBS y las filas
    plegadas; arriba/abajo se quedan en el cuerpo (el pie tiene celdas combinadas).
    La celda destino se elige con su propio onclick, asi la barra fx y el resto siguen igual. */
+/* ===== FILA ENTERA Y DECIMALES, comun a las Tablas 1, 2, 3 y R =====
+   - Como Excel: un clic en el NUMERO de la fila la elige entera (igual que la letra elige la
+     columna). Ctrl+C copia sus valores separados por tabulador (para pegarlos en Excel).
+   - Botones de la barra "2 dec / +1 dec / -1 dec / quitar": cambian cuantos decimales se VEN
+     en la seleccion (la celda elegida, si no la fila, si no la columna; sin nada elegido, toda
+     la tabla). Solo en numeros y porcentajes: los textos, codigos, fechas y el N no se tocan.
+     Es formato de pantalla: el valor guardado, las formulas, la barra fx y el Excel exportado
+     siguen con su numero completo. Se guarda en la configuracion de cada tabla (cfg.dec). */
+var _TAB_DEC_NO={num:1,id:1,pert:1,item:1,cod:1,codigo:1};
+function _tabKeys(rt){return Array.prototype.map.call(rt.querySelectorAll('thead th'),function(t){return t.getAttribute('data-k')})}
+function _tabRowKey(tr){return tr.getAttribute('data-rk')||('n'+(tr.getAttribute('data-rn')||''))}
+function _tabNumTxt(td){var t=String(td.textContent||'').replace(/\s+/g,' ').trim();return t}
+function _tabEsNum(td){try{if(td.querySelector('input,select,textarea'))return false;var raw=td.getAttribute('data-num');if(raw!=null&&raw!==''&&isFinite(Number(raw)))return /\d/.test(td.textContent||'');
+  var al=(td.style&&td.style.textAlign)||'';if(al!=='right')return false;return /^[+\-\u2212]?\s?[\d',]*\d(\.\d+)?\s?%?$/.test(_tabNumTxt(td))}catch(e){return false}}
+/* recorre las celdas de datos de una fila con la clave de su columna (respeta colspan) */
+function _tabCeldas(tr,keys,pfx,fn){var pos=0;Array.prototype.forEach.call(tr.children,function(td){if(td.classList&&td.classList.contains(pfx+'Ex'))return;var cs=parseInt(td.getAttribute('colspan'),10)||1;var k=keys[pos];pos+=cs;if(cs>1)return;fn(td,k)})}
+function _tabDecDe(dec,rk,k){var v=dec['x:'+rk+'|'+k];if(v==null)v=dec['r:'+rk];if(v==null)v=dec['c:'+k];if(v==null)v=dec['*'];return (v==null)?null:Number(v)}
+function _tabDecCelda(td,d){
+  if(!td._d0){var w=(td.ownerDocument||document).createTreeWalker(td,4,null),n=null,x;while((x=w.nextNode())){if(/\d/.test(x.nodeValue||'')){n=x;break}}if(!n)return;td._d0={n:n,t:n.nodeValue}}
+  var o=td._d0;if(d==null||!isFinite(d)){if(o.n.nodeValue!==o.t)o.n.nodeValue=o.t;return}
+  var m=/\d[\d',]*(?:\.\d+)?/.exec(o.t);if(!m)return;var sx=m[0],sd=(sx.split('.')[1]||'').length,shown=Number(sx.replace(/[',]/g,''));if(!isFinite(shown))return;
+  var sep=(sx.indexOf(',')>=0)?',':"'";var v=shown,raw=td.getAttribute('data-num');
+  if(raw!=null&&raw!==''&&isFinite(Number(raw))){var r=Math.abs(Number(raw)),tol=0.5*Math.pow(10,-sd)+1e-9;[r,r*100,r/100].some(function(c){if(Math.abs(Math.round(c*Math.pow(10,sd))/Math.pow(10,sd)-shown)<=tol){v=c;return true}return false})}
+  d=Math.max(0,Math.min(8,Math.round(d)));var f=(Math.round(v*Math.pow(10,d))/Math.pow(10,d)).toFixed(d),q=f.split('.');q[0]=q[0].replace(/\B(?=(\d{3})+(?!\d))/g,sep);
+  var nt=o.t.slice(0,m.index)+q.join('.')+o.t.slice(m.index+sx.length);if(o.n.nodeValue!==nt)o.n.nodeValue=nt}
+/* decimales que se ven hoy en una celda (su formato o su texto original) */
+function _tabDecVisto(td,dec,rk,k){var d=_tabDecDe(dec,rk,k);if(d!=null)return d;var t=(td._d0&&td._d0.t)||_tabNumTxt(td);var m=/\d[\d',]*(?:\.(\d+))?/.exec(t);return m&&m[1]?m[1].length:0}
+function _tabDecAplica(rt,pfx){try{if(!rt)return;var cf=window[pfx+'Cfg'];var cfg=(typeof cf==='function')?(cf()||{}):{};var dec=cfg.dec||{};var hay=Object.keys(dec).length>0;
+  if(!hay&&!rt._decTocada)return;rt._decTocada=hay||rt._decTocada;var keys=_tabKeys(rt);
+  Array.prototype.forEach.call(rt.querySelectorAll('tbody tr, tfoot tr'),function(tr){var rk=_tabRowKey(tr);_tabCeldas(tr,keys,pfx,function(td,k){if(_TAB_DEC_NO[k]||!_tabEsNum(td))return;_tabDecCelda(td,_tabDecDe(dec,rk,k))})})}catch(e){}}
+/* la fila elegida: se pinta y se recuerda por su clave (sobrevive al repintado) */
+function _tabRowPinta(rt,pfx){try{Array.prototype.forEach.call(rt.querySelectorAll('.'+pfx+'RowSel'),function(x){x.classList.remove(pfx+'RowSel');x.style.outline=x._rsO||'';x.style.outlineOffset=x._rsOO||'';if(x._rsB!=null){x.style.background=x._rsB;x.style.color=x._rsC;x._rsB=null}});
+  var sr=window[pfx+'SelRow'];if(!sr)return;var tr=null;Array.prototype.some.call(rt.querySelectorAll('tbody tr, tfoot tr'),function(f){if(_tabRowKey(f)===sr.rk){tr=f;return true}return false});if(!tr){window[pfx+'SelRow']=null;return}
+  Array.prototype.forEach.call(tr.children,function(td,i){td.classList.add(pfx+'RowSel');if(i===0&&td.classList.contains(pfx+'Ex')){td._rsB=td.style.background;td._rsC=td.style.color;td.style.background='#2d5a86';td.style.color='#fff';return}td._rsO=td.style.outline||'';td._rsOO=td.style.outlineOffset||'';td.style.outline='1px solid #8ECBF5';td.style.outlineOffset='-1px'})}catch(e){}}
+function _tabRowQuita(rt,pfx){if(!window[pfx+'SelRow'])return;window[pfx+'SelRow']=null;_tabRowPinta(rt,pfx)}
+function _tabRowBind(doc,rt,pfx){try{if(!rt)return;
+  var msg=function(t){try{var r9=doc.getElementById(pfx+'Res');if(r9)r9.textContent=t}catch(e){}};
+  Array.prototype.forEach.call(rt.querySelectorAll('tbody tr, tfoot tr'),function(tr){var n=tr.children[0];if(!n||!(n.classList&&n.classList.contains(pfx+'Ex')))return;
+    n.style.cursor='pointer';n.title='Seleccionar la fila: Ctrl+C copia sus valores; los botones de decimales se aplican a ella';
+    n.onclick=function(e){e.stopPropagation();e.preventDefault();var rk=_tabRowKey(tr);var ya=window[pfx+'SelRow']&&window[pfx+'SelRow'].rk===rk;
+      /* como Excel: al elegir la fila se sueltan la columna y la celda elegidas */
+      try{window[pfx+'SelCol']=null;Array.prototype.forEach.call(rt.querySelectorAll('.'+pfx+'ColSel'),function(x){x.classList.remove(pfx+'ColSel');x.style.outline=x[pfx+'Oc']||'';x.style.outlineOffset=x[pfx+'Oc']?'-2px':'';x[pfx+'Oc']=null})}catch(_e){}
+      try{var pv=rt.querySelector('td.'+pfx+'SelC');if(pv){pv.classList.remove(pfx+'SelC');pv.style.outline=''}window[pfx+'SelKey']=null;window[pfx+'Sel']=null;var fm=window[pfx+'FxMuestra'];if(typeof fm==='function')fm(rt,doc,null)}catch(_e2){}
+      window[pfx+'SelRow']=ya?null:{rk:rk,rn:String(n.textContent||'').trim()};_tabRowPinta(rt,pfx);
+      msg(ya?'':('Fila '+String(n.textContent||'').trim()+' elegida: Ctrl+C copia sus valores \u00b7 los botones de decimales se aplican a esta fila'))}});
+  /* cualquier otro clic en la tabla (letra, celda) suelta la fila */
+  if(!rt._rowClk){rt._rowClk=1;rt.addEventListener('click',function(e){try{var t=e.target,td=t&&t.closest&&t.closest('td,th');if(td&&td.classList.contains(pfx+'Ex')&&td.parentNode&&td.parentNode.parentNode&&td.parentNode.parentNode.tagName!=='THEAD'&&td===td.parentNode.children[0])return;_tabRowQuita(rt,pfx)}catch(_e){}},true)}
+  _tabRowPinta(rt,pfx);
+  if(!doc['_rowCp'+pfx]){doc['_rowCp'+pfx]=1;doc.addEventListener('keydown',function(e){try{if(!(e.ctrlKey||e.metaKey)||e.altKey||String(e.key||'').toLowerCase()!=='c')return;var ae=doc.activeElement;if(ae&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName))return;
+    var sr=window[pfx+'SelRow'],r2=window['_nav'+pfx+'Root'];if(!sr||!r2||window[pfx+'SelCol'])return;var tr=null;Array.prototype.some.call(r2.querySelectorAll('tbody tr, tfoot tr'),function(f){if(_tabRowKey(f)===sr.rk){tr=f;return true}return false});if(!tr)return;
+    var vals=[];Array.prototype.forEach.call(tr.children,function(td){if(td.classList.contains(pfx+'Ex'))return;var raw=td.getAttribute('data-num');vals.push((raw!=null&&raw!=='')?raw:String(td.textContent||'').replace(/\u270e/g,'').replace(/\s+/g,' ').trim())});
+    var txt=vals.join('\t');e.preventDefault();e.stopPropagation();try{var nv=(doc.defaultView&&doc.defaultView.navigator)||navigator;if(nv.clipboard&&nv.clipboard.writeText)nv.clipboard.writeText(txt).catch(function(){})}catch(_e){}
+    try{var r9=doc.getElementById(pfx+'Res');if(r9)r9.textContent=vals.length+' valores copiados de la fila '+sr.rn}catch(_e2){}}catch(_e3){}},true)}
+}catch(e){}}
+/* los botones de decimales de la barra */
+function _tabDecBar(doc,top,pfx,antes){try{if(!top||top.querySelector('#'+pfx+'Dec'))return;
+  var g=doc.createElement('span');g.id=pfx+'Dec';g.style.cssText='display:inline-flex;align-items:center;gap:3px;flex:none;background:#0f1a2a;border:1px solid #243b55;border-radius:9px;padding:2px 4px';
+  g.title='Decimales que se ven en la seleccion (celda, fila, columna o toda la tabla); solo numeros y porcentajes';
+  var bt='background:#243b55;color:#cfe3ff;border:0;border-radius:7px;padding:5px 8px;font-weight:800;cursor:pointer;font-size:11.5px;font-variant-numeric:tabular-nums';
+  g.innerHTML='<span style="font-size:10.5px;color:#8ECBF5;font-weight:800;padding:0 3px">Decimales</span>'+
+    '<button type="button" data-op="2" title="Dos decimales" style="'+bt+'">0.00</button>'+
+    '<button type="button" data-op="+" title="Un decimal mas" style="'+bt+'">+1</button>'+
+    '<button type="button" data-op="-" title="Un decimal menos" style="'+bt+'">\u22121</button>'+
+    '<button type="button" data-op="x" title="Quitar el formato de decimales de toda la tabla (vuelve a como estaba)" style="'+bt+';background:#3a2530;color:#FFB4A8">\u21ba</button>';
+  if(antes&&antes.parentNode===top)top.insertBefore(g,antes.nextSibling);else top.appendChild(g);
+  g.addEventListener('mousedown',function(e){e.preventDefault()});   /* no roba el foco ni suelta la seleccion */
+  Array.prototype.forEach.call(g.querySelectorAll('button'),function(b){b.onclick=function(e){e.stopPropagation();_tabDecOp(doc,pfx,b.getAttribute('data-op'))}})}catch(e){}}
+function _tabDecOp(doc,pfx,op){try{var rt=window['_nav'+pfx+'Root'];if(!rt||!doc.contains(rt))return;
+  var msg=function(t){try{var r9=doc.getElementById(pfx+'Res');if(r9)r9.textContent=t}catch(e){}};
+  var cf=window[pfx+'Cfg'],cs=window[pfx+'CfgSave'];if(typeof cf!=='function'||typeof cs!=='function')return;var cfg=cf()||{};var dec=cfg.dec||{};var keys=_tabKeys(rt);
+  if(op==='x'){cfg.dec={};cs(cfg);_tabDecAplica(rt,pfx);msg('Decimales como estaban en toda la tabla');return}
+  var celdas=[],key='*',que='toda la tabla';
+  var sc=rt.querySelector('td.'+pfx+'SelC'),sr=window[pfx+'SelRow'],sk=window[pfx+'SelCol'];
+  var todas=function(filtro){Array.prototype.forEach.call(rt.querySelectorAll('tbody tr, tfoot tr'),function(tr){var rk=_tabRowKey(tr);_tabCeldas(tr,keys,pfx,function(td,k){if(_TAB_DEC_NO[k]||!_tabEsNum(td))return;if(filtro(tr,rk,td,k))celdas.push([td,rk,k])})})};
+  if(sc){var trc=sc.parentNode,rkc=_tabRowKey(trc),kc=null;_tabCeldas(trc,keys,pfx,function(td,k){if(td===sc)kc=k});if(kc!=null){key='x:'+rkc+'|'+kc;que='la celda '+((typeof _tbColL==='function')?_tbColL(keys.indexOf(kc)):'')+String((trc.children[0]&&trc.children[0].textContent)||'').trim();todas(function(tr,rk,td){return td===sc})}}
+  else if(sr){key='r:'+sr.rk;que='la fila '+sr.rn;todas(function(tr,rk){return rk===sr.rk})}
+  else if(sk&&sk.k){key='c:'+sk.k;que='la columna '+((typeof _tbColL==='function')?_tbColL(keys.indexOf(sk.k)):sk.k);todas(function(tr,rk,td,k){return k===sk.k})}
+  else todas(function(){return true});
+  if(!celdas.length){msg('En '+que+' no hay n\u00fameros ni porcentajes: los decimales solo cambian en ellos');return}
+  var cur=_tabDecVisto(celdas[0][0],dec,celdas[0][1],celdas[0][2]);
+  var nd=(op==='2')?2:(op==='+'?Math.min(8,cur+1):Math.max(0,cur-1));
+  /* lo mas amplio manda sobre lo de adentro: al formatear la columna se sueltan sus celdas; la fila, las suyas; la tabla, todo */
+  if(key==='*')dec={};
+  else if(key.indexOf('c:')===0){var kk=key.slice(2);Object.keys(dec).forEach(function(z){if(z.indexOf('x:')===0&&z.slice(z.lastIndexOf('|')+1)===kk)delete dec[z]})}
+  else if(key.indexOf('r:')===0){var rr=key.slice(2);Object.keys(dec).forEach(function(z){if(z.indexOf('x:'+rr+'|')===0)delete dec[z]})}
+  dec[key]=nd;cfg.dec=dec;cs(cfg);_tabDecAplica(rt,pfx);
+  msg(nd+' decimal'+(nd===1?'':'es')+' en '+que+(key==='*'?'':' \u00b7 sin nada elegido se aplica a toda la tabla'))}catch(e){}}
 function _tabNavBind(doc,root,pfx){try{
   window['_nav'+pfx+'Root']=root;
+  try{_tabRowBind(doc,root,pfx)}catch(_er){}try{_tabDecAplica(root,pfx)}catch(_ed){}
   if(doc['_nav'+pfx+'On'])return;doc['_nav'+pfx+'On']=1;
   doc.addEventListener('keydown',function(e){try{
     var k=e.key;if(k!=='ArrowLeft'&&k!=='ArrowRight'&&k!=='ArrowUp'&&k!=='ArrowDown'&&k!=='Tab')return;
@@ -27435,7 +27523,7 @@ function _tabNavVer(rt,dest,pfx){
 function _tabOpcToggle(doc,top,pfx){try{if(!top||top.querySelector('#'+pfx+'OpcTg'))return;
   var key='obf4_tab_opc_'+pfx;var b=doc.createElement('button');b.id=pfx+'OpcTg';b.type='button';
   b.style.cssText='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 9px;font-weight:800;cursor:pointer;flex:none;font-size:12px';
-  top.insertBefore(b,top.firstChild);
+  top.insertBefore(b,top.firstChild);try{_tabDecBar(doc,top,pfx,b)}catch(_edb){}
   var lee=function(){try{return localStorage.getItem(key)==='1'}catch(e){return false}};
   var aplica=function(){var oc=lee();
     Array.prototype.forEach.call(top.children,function(el){if(el===b||(el.id||'')===pfx+'Fx')return;
