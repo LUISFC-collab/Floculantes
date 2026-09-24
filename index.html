@@ -21824,7 +21824,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b89';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b90';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28266,21 +28266,28 @@ function _tabClrMenu(doc,pfx){try{var rt=window['_nav'+pfx+'Root'];if(!rt)return
    en una ventana flotante que se mueve y se agranda como las tablas, la misma vista del
    boton 📅 de la tarjeta: los dias con avance, cada carga con sus fotos, la suma (Σ) y la
    diferencia contra el 100%. El punto es un ::before de CSS: no agrega nodos a la tabla. */
+/* Dias con avance: el zoom se recuerda al pasar de una actividad a otra (y en este equipo, para
+   la proxima vez); la ventana flotante conserva su posicion y tamano. El punto de la actividad que
+   se esta viendo se pinta NARANJA hasta cerrar la vista o pasar a otra. */
+function _tbCalZ(){if(window._tbCalZv==null){var z=1;try{z=Number(localStorage.getItem('obf4_tbcal_zoom'))||1}catch(e){}window._tbCalZv=Math.max(.4,Math.min(3,z))}return window._tbCalZv}
+function _tbCalZSet(z){z=Math.max(.4,Math.min(3,Number(z)||1));window._tbCalZv=z;try{localStorage.setItem('obf4_tbcal_zoom',String(Math.round(z*1000)/1000))}catch(e){}}
+function _tbCalMarca(rk){window._tbCalRk=rk||null;try{var rt=window._nav_tbRoot;if(!rt)return;Array.prototype.forEach.call(rt.querySelectorAll('tbody tr[data-rk]'),function(tr){tr.classList.toggle('_tbCalVer',!!rk&&tr.getAttribute('data-rk')===rk)})}catch(e){}}
 function _tbDotCss(doc){if(doc.getElementById('_tbDotCss'))return;var st=doc.createElement('style');st.id='_tbDotCss';
   st.textContent='._tbDots tbody tr[data-rk]>td._tbDotC{position:relative}'+
     '._tbDots tbody tr[data-rk]>td._tbDotC::before{content:"";position:absolute;left:2px;top:2px;width:5px;height:5px;border-radius:50%;background:#6b7c95;opacity:.55;pointer-events:none;z-index:1}'+
     '._tbDots tbody tr[data-rk]._tbConAv>td._tbDotC::before{background:#3FB950;opacity:.85}'+
+    '._tbDots tbody tr[data-rk]._tbCalVer>td._tbDotC::before{background:#F59E0B;opacity:1;width:7px;height:7px;left:1px;top:1px;box-shadow:0 0 0 2px rgba(245,158,11,.35)}'+
     '._tbDots tbody tr[data-rk]>td._tbDotC:hover::before{opacity:1;width:7px;height:7px;left:1px;top:1px;box-shadow:0 0 0 2px rgba(142,203,245,.45)}';
   (doc.head||doc.documentElement).appendChild(st)}
 function _tbDotId(tr){try{var m=(window._tbLineas||{})[tr.getAttribute('data-rk')];return (m&&m.id)?String(m.id):null}catch(e){return null}}
 function _tbDotBind(doc,rt){try{if(!rt)return;_tbDotCss(doc);rt.classList.add('_tbDots');
   var keysD=_tabKeys(rt);
-  Array.prototype.forEach.call(rt.querySelectorAll('tbody tr[data-rk]'),function(tr){_tabCeldas(tr,keysD,'_tb',function(td,k){if(k==='metA')td.classList.add('_tbDotC')});var id=_tbDotId(tr);var n=0;try{n=id&&typeof partesOf==='function'?partesOf(id).length:0}catch(e){}tr.classList.toggle('_tbConAv',n>0)});
+  Array.prototype.forEach.call(rt.querySelectorAll('tbody tr[data-rk]'),function(tr){_tabCeldas(tr,keysD,'_tb',function(td,k){if(k==='metA')td.classList.add('_tbDotC')});var id=_tbDotId(tr);var n=0;try{n=id&&typeof partesOf==='function'?partesOf(id).length:0}catch(e){}tr.classList.toggle('_tbConAv',n>0);tr.classList.toggle('_tbCalVer',!!window._tbCalRk&&tr.getAttribute('data-rk')===window._tbCalRk)});
   if(rt._dotClk)return;rt._dotClk=1;
   var enPunto=function(e){var t=e.target,td=t&&t.closest&&t.closest('td');if(!td||!td.classList.contains('_tbDotC'))return null;var tr=td.parentNode;if(!tr||!tr.getAttribute||!tr.getAttribute('data-rk')||!tr.parentNode||tr.parentNode.tagName!=='TBODY')return null;
     var r=td.getBoundingClientRect();if(e.clientX-r.left>11||e.clientY-r.top>11)return null;return _tbDotId(tr)};
   rt.addEventListener('mousemove',function(e){var td=e.target&&e.target.closest&&e.target.closest('td');if(!td)return;var si=!!enPunto(e);if(si!==!!td._dotHov){td._dotHov=si;td.style.cursor=si?'pointer':'';td.title=si?'Ver los d\u00edas con avance de esta actividad (fotos, cargas y suma)':(td._dotT0||'')}},true);
-  rt.addEventListener('click',function(e){var id=enPunto(e);if(!id)return;e.preventDefault();e.stopPropagation();_tbCalFlot(id,doc)},true)}catch(e){}}
+  rt.addEventListener('click',function(e){var id=enPunto(e);if(!id)return;e.preventDefault();e.stopPropagation();var td9=e.target.closest('td'),rk9=td9&&td9.parentNode?td9.parentNode.getAttribute('data-rk'):null;_tbCalFlot(id,doc);_tbCalMarca(rk9)},true)}catch(e){}}
 /* La Tabla 1 suele vivir en una ventana propia (Picture-in-Picture: siempre encima de todo);
    ahi la vista de dias con avance se abre DENTRO de esa ventana, encima de la tabla. La vista
    es la misma de openActMenu: se crea en la app y se muda a la ventana; mientras esta abierta,
@@ -28305,11 +28312,11 @@ function _tbCalPip(p,doc,full){try{
     Array.prototype.forEach.call(x.querySelectorAll('img._amFoto'),function(im){im.onclick=function(ev){ev.stopPropagation();var lb=doc.createElement('div');lb.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(10,15,25,.88);display:flex;align-items:center;justify-content:center;cursor:zoom-out';lb.innerHTML='<img src="'+esc(im.getAttribute('data-src')||im.src)+'" style="max-width:96vw;max-height:94vh;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.6)">';lb.onclick=function(){lb.remove()};lb.className='_tbCalLb';if(_inv())lb.style.filter='invert(1) hue-rotate(180deg)';doc.body.appendChild(lb)}})};
   _tbCalPipGid(true,doc);adopta(am);
   var mo=new MutationObserver(function(){if(B.contains(am))return;var nu=window._gidOrig?window._gidOrig.call(document,'_actMenu'):null;if(nu&&nu.parentNode===document.body){adopta(nu);return}W._cierra()});mo.observe(B,{childList:true});
-  W._cierra=function(){try{mo.disconnect()}catch(_e){}_tbCalPipGid(false);try{W.remove()}catch(_e2){}try{var m2=window._gidOrig?window._gidOrig.call(document,'_actMenu'):null;if(m2)m2.remove()}catch(_e3){}};
+  W._cierra=function(){try{mo.disconnect()}catch(_e){}_tbCalMarca(null);_tbCalPipGid(false);try{W.remove()}catch(_e2){}try{var m2=window._gidOrig?window._gidOrig.call(document,'_actMenu'):null;if(m2)m2.remove()}catch(_e3){}};
   var xB=H.querySelector('button');xB.onclick=function(){W._cierra()};
-  W._zoom=1;_tbCalZoomBtns(doc,H,xB,function(){return am},function(){return W._zoom||1},function(z){W._zoom=z});
+  W._zoom=_tbCalZ();if(am)am.style.zoom=W._zoom;_tbCalZoomBtns(doc,H,xB,function(){return am},function(){return W._zoom||1},function(z){W._zoom=z;_tbCalZSet(z)});
   /* Ctrl+rueda sobre esta vista: solo ella (la tabla de atras escucha en toda su ventana) */
-  W.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();e.stopPropagation();W._zoom=Math.max(.4,Math.min(3,(W._zoom||1)*(e.deltaY<0?1.1:1/1.1)));if(am)am.style.zoom=W._zoom},{passive:false});
+  W.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();e.stopPropagation();W._zoom=Math.max(.4,Math.min(3,(W._zoom||1)*(e.deltaY<0?1.1:1/1.1)));if(am)am.style.zoom=W._zoom;_tbCalZSet(W._zoom)},{passive:false});
   /* como las ventanas flotantes de las tablas: se arrastra por la barra, se agranda desde la
      esquina, se maximiza (boton, doble clic en la barra o pegandola arriba) y se restaura */
   if(!full)try{var pv=doc.defaultView;var vw=function(){return pv.innerWidth},vh=function(){return pv.innerHeight};
@@ -28507,12 +28514,14 @@ function _tbCalFlot(id,doc){try{
   var p=(typeof applyEdit==='function')?applyEdit(base):base;
   var _sw=(doc&&doc.defaultView&&!doc.defaultView.closed)?doc.defaultView:window;if(_tbCalWin(p,_sw))return;
   if(doc&&doc!==document&&doc.defaultView&&!doc.defaultView.closed){_tbCalPip(p,doc);return}
-  var ya=document.getElementById('_tbCalFlot');if(ya){try{if(ya._alCerrar)ya._alCerrar()}catch(_e){}ya.remove()}
+  var ya=document.getElementById('_tbCalFlot'),geo0=null;if(ya){geo0={l:ya.style.left,t:ya.style.top,w:ya.style.width,h:ya.style.height,r:ya.style.right};try{if(ya._alCerrar)ya._alCerrar()}catch(_e){}ya.remove()}
   openActMenu(p,true);var am=document.getElementById('_actMenu');if(!am)return;
   var W=_flotVentana('_tbCalFlot','D\u00edas con avance \u00b7 ['+((typeof codeOf==='function')?codeOf(p):id)+'] '+String(p.nombre||''),'\ud83d\udcc5');
   try{var sac=W.bar.querySelector('._flPip');if(sac)sac.style.display='none'}catch(_e){}
-  _tbCalZoomBtns(document,W.bar,W.bar.querySelector('._flMax'),function(){return am},function(){return W.ov._zoom||1},function(z){W.ov._zoom=z});
+  _tbCalZoomBtns(document,W.bar,W.bar.querySelector('._flMax'),function(){return am},function(){return W.ov._zoom||1},function(z){W.ov._zoom=z;_tbCalZSet(z)});
   W.ov.style.left='auto';W.ov.style.right='2vw';W.ov.style.width='min(560px,94vw)';W.ov.style.top='60px';W.ov.style.height='calc(100vh - 90px)';
+  if(geo0){W.ov.style.left=geo0.l;W.ov.style.right=geo0.r;W.ov.style.top=geo0.t;W.ov.style.width=geo0.w;W.ov.style.height=geo0.h}
+  W.ov._zoom=_tbCalZ();W.ov.addEventListener('wheel',function(e){if(e.ctrlKey)setTimeout(function(){_tbCalZSet(W.ov._zoom)},0)});
   W.body.style.background='#EEF2F8';
   var adopta=function(x){x.style.cssText='position:static;display:block;background:transparent;min-height:100%';
     var panel=x.firstElementChild;if(panel){panel.style.maxWidth='none';panel.style.width='100%';panel.style.maxHeight='none';panel.style.borderRadius='0';panel.style.minHeight='100%'}
@@ -28521,8 +28530,8 @@ function _tbCalFlot(id,doc){try{
   /* si la vista se cierra (Cancelar) se cierra la ventana; si se vuelve a abrir sola (tras
      modificar una carga), la ventana adopta la vista nueva */
   var mo=new MutationObserver(function(){if(W.body.contains(am))return;var nu=document.getElementById('_actMenu');
-    if(nu&&nu.parentNode===document.body){adopta(nu);return}try{mo.disconnect()}catch(_e){}try{W.ov.remove()}catch(_e2){}});mo.observe(W.body,{childList:true});
-  W.ov._alCerrar=function(){try{mo.disconnect()}catch(_e){}};
+    if(nu&&nu.parentNode===document.body){adopta(nu);return}try{mo.disconnect()}catch(_e){}_tbCalMarca(null);try{W.ov.remove()}catch(_e2){}});mo.observe(W.body,{childList:true});
+  W.ov._alCerrar=function(){try{mo.disconnect()}catch(_e){}_tbCalMarca(null)};
   if(doc&&doc!==document){try{window.focus()}catch(_e3){}try{if(typeof toast==='function')toast('\ud83d\udcc5 Se abri\u00f3 en la ventana principal de la app')}catch(_e4){}}
 }catch(e){try{if(typeof toast==='function')toast('\u26a0 '+((e&&e.message)||e))}catch(_e){}}}
 /* ===== CABECERA LIMPIA de las Tablas 1, 2, 3 y R =====
