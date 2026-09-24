@@ -21073,7 +21073,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c05';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c06';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28728,7 +28728,7 @@ async function _tbExportarXlsx(root,doc,opt){
       var base=JSON.parse(JSON.stringify(_tbCfg()));base.pleg={};if(opt&&opt.cols&&opt.cols.length){var sel9={};opt.cols.forEach(function(k){sel9[k]=1});base.ocultas={};_TB_COLS.forEach(function(x){if(!sel9[x[0]])base.ocultas[x[0]]=1});base.orden=opt.cols.concat((base.orden||[]).filter(function(k){return !sel9[k]}));_TB_COLS.forEach(function(x){if(base.orden.indexOf(x[0])<0)base.orden.push(x[0])})}window._tbCfgMem={str:raw,obj:base};
       var html;try{html=_crTablaHTML(U.D,U.q,U.ord)}finally{window._tbCfgMem=null}
       full=doc.createElement('div');full.style.cssText='position:fixed;left:0;top:0;width:1600px;height:800px;overflow:auto;visibility:hidden;background:#0b1220';
-      full.innerHTML=html;doc.body.appendChild(full);try{_tbAplicaFijas(full)}catch(_e2){}}}
+      full.innerHTML=html;doc.body.appendChild(full);try{_tbAplicaFijas(full)}catch(_e2){}try{_tabOcAplica(doc,full,'_tb')}catch(_eoc){}}}
   catch(_e3){try{if(full)full.remove()}catch(_e4){}full=null}
   try{return await _tbExportarXlsx2(full||root,doc,opt)}
   finally{if(full){try{full.remove()}catch(_e5){}}}}
@@ -30204,7 +30204,7 @@ async function _tqExportarXlsx(root,doc){
       var base=JSON.parse(JSON.stringify(_tqCfg()));base.pleg={};window._tqCfgMem={str:raw,obj:base};
       var html;try{html=_crTablaQHTML(U.D,U.q,U.ord)}finally{window._tqCfgMem=null}
       full=doc.createElement('div');full.style.cssText='position:fixed;left:0;top:0;width:1600px;height:800px;overflow:auto;visibility:hidden;background:#0b1220';
-      full.innerHTML=html;doc.body.appendChild(full);try{_tqAplicaFijas(full)}catch(_e2){}}}
+      full.innerHTML=html;doc.body.appendChild(full);try{_tqAplicaFijas(full)}catch(_e2){}try{_tabOcAplica(doc,full,'_tq')}catch(_eoc){}}}
   catch(_e3){try{if(full)full.remove()}catch(_e4){}full=null}
   try{return await _tqExportarXlsx2(full||root,doc)}
   finally{if(full){try{full.remove()}catch(_e5){}}}}
@@ -31194,7 +31194,7 @@ async function _tvExportarXlsx(root,doc){
       var base=JSON.parse(JSON.stringify(_tvCfg()));base.pleg={};window._tvCfgMem={str:raw,obj:base};
       var html;try{html=_crTablaVHTML(U.D,U.q,U.ord)}finally{window._tvCfgMem=null}
       full=doc.createElement('div');full.style.cssText='position:fixed;left:0;top:0;width:1600px;height:800px;overflow:auto;visibility:hidden;background:#0b1220';
-      full.innerHTML=html;doc.body.appendChild(full);try{_tvAplicaFijas(full)}catch(_e2){}}}
+      full.innerHTML=html;doc.body.appendChild(full);try{_tvAplicaFijas(full)}catch(_e2){}try{_tabOcAplica(doc,full,'_tv')}catch(_eoc){}}}
   catch(_e3){try{if(full)full.remove()}catch(_e4){}full=null}
   try{return await _tvExportarXlsx2(full||root,doc)}
   finally{if(full){try{full.remove()}catch(_e5){}}}}
@@ -32427,7 +32427,7 @@ async function _txExportarXlsx(root,doc){
       var base=JSON.parse(JSON.stringify(_txCfg()));base.pleg={};window._txCfgMem={str:raw,obj:base};
       var html;try{html=_crTablaRHTML(U.D,U.q,U.ord)}finally{window._txCfgMem=null}
       full=doc.createElement('div');full.style.cssText='position:fixed;left:0;top:0;width:1600px;height:800px;overflow:auto;visibility:hidden;background:#0b1220';
-      full.innerHTML=html;doc.body.appendChild(full);try{_txAplicaFijas(full)}catch(_e2){}}}
+      full.innerHTML=html;doc.body.appendChild(full);try{_txAplicaFijas(full)}catch(_e2){}try{_tabOcAplica(doc,full,'_tx')}catch(_eoc){}}}
   catch(_e3){try{if(full)full.remove()}catch(_e4){}full=null}
   try{return await _txExportarXlsx2(full||root,doc)}
   finally{if(full){try{full.remove()}catch(_e5){}}}}
