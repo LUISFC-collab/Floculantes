@@ -21073,7 +21073,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b94';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b95';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28731,8 +28731,8 @@ async function _tbExportarXlsx2(root,doc,opt){
   /* ===== CON SUSTENTOS: debajo de cada fila de partida, una fila de FOTOS de sus cargas
      (todas del mismo tamano, en espacios iguales a lo ancho de las columnas visibles) y otra
      con la fecha, el avance y el total. Las partes (apartados) llevan solo sus cargas. ===== */
-  var ALCF=null,pendT=[],RES=!!(opt&&opt.sust&&opt.resumen),resG=[];if(opt&&opt.sust&&Array.isArray(opt.alc)&&typeof _ALC!=='undefined'&&opt.alc.length<_ALC.length){ALCF={};opt.alc.forEach(function(k){ALCF[k]=1})}
-  var resAdd=function(m,rr){var g=resG[resG.length-1];if(g&&m.pert&&g.partes&&g.id===String(m.id))g.rows.push({r:rr,m:m});else resG.push({id:String(m.id),partes:!!m.pert,rows:[{r:rr,m:m}]})};
+  var ALCF=null,pendT=[],RES=!!(opt&&opt.sust&&opt.resumen),resG=[],resSeq=[];if(opt&&opt.sust&&Array.isArray(opt.alc)&&typeof _ALC!=='undefined'&&opt.alc.length<_ALC.length){ALCF={};opt.alc.forEach(function(k){ALCF[k]=1})}
+  var resAdd=function(m,rr){var g=resG[resG.length-1];if(g&&m.pert&&g.partes&&g.id===String(m.id))g.rows.push({r:rr,m:m});else{var ng={id:String(m.id),partes:!!m.pert,rows:[{r:rr,m:m}]};resG.push(ng);resSeq.push(ng)}};
   var imgExt=[],SUST=!!(opt&&opt.sust),prog=(opt&&opt.onProg)||function(){},FO=_tbSustFoto(opt&&opt.foto),IW=Math.max(FO.hW,FO.vW),FILA=Math.max(FO.fila,FO.hH+8,FO.vH+8),imgs=[],anchors=[],fotoBy={},slots=[],xfCap=0,xfPic=0;
   var itemsDe=function(m){return _tbSustItems(m,(opt&&opt.fotosOff)||{})};
   if(SUST){
@@ -28773,11 +28773,11 @@ async function _tbExportarXlsx2(root,doc,opt){
       /* con filtro de alcance: el titulo sale solo si debajo queda alguna partida (y sin sus conteos) */
       if(ALCF){var lv9=String(tr.getAttribute('data-wk')||'').split(' / ').length-1;pendT=pendT.filter(function(x){return x.lv<lv9});pendT.push({lv:lv9,lab:lab.replace(/\s*\u00b7\s*\d+\s*partidas?\s*\u00b7\s*\d+\s*activas?\s*$/,''),st:estiloDe(t0,tr,0,'left')});return}
       filas.push('<row r="'+r+'" ht="18" customHeight="1">'+celT('A'+r,lab,estiloDe(t0,tr,0,'left'))+'</row>');
-      merges.push('A'+r+':'+colL(nC-1)+r);r++;return}
+      merges.push('A'+r+':'+colL(nC-1)+r);r++;if(RES)resSeq.push({t:'tit',lab:lab,lv:String(tr.getAttribute('data-wk')||'').split(' / ').length-1});return}
     if(tds.length!==nC)return;
     var m=L[tr.getAttribute('data-rk')||'']||null;
     if(ALCF&&m&&typeof _alcDe==='function'&&!ALCF[_alcDe(m.id)])return;
-    if(pendT.length){pendT.forEach(function(x){filas.push('<row r="'+r+'" ht="18" customHeight="1">'+celT('A'+r,x.lab,x.st)+'</row>');merges.push('A'+r+':'+colL(nC-1)+r);r++});pendT=[]}
+    if(pendT.length){pendT.forEach(function(x){filas.push('<row r="'+r+'" ht="18" customHeight="1">'+celT('A'+r,x.lab,x.st)+'</row>');merges.push('A'+r+':'+colL(nC-1)+r);r++;if(RES)resSeq.push({t:'tit',lab:x.lab,lv:x.lv})});pendT=[]}
     if(!primera)primera=r;ultima=r;
     /* el costo unitario EXACTO: costo entre metrado; con el, metrado x cu cuadra al centimo */
     var pu=null,metX={};
@@ -28880,7 +28880,7 @@ async function _tbExportarXlsx2(root,doc,opt){
   if(RES&&resG.length){
     var c9=window._crTablaCron||null,nomC9=c9?((typeof _crNomVis==='function')?_crNomVis(c9):c9.cron_id):'tabla';
     var hn9=String('Alcance '+nomC9).replace(/[\\\/\?\*\[\]:]/g,' ').slice(0,31),S1="'"+hn9.replace(/'/g,"''")+"'!";
-    fonts.push('<font><sz val="10"/><name val="Calibri"/><color rgb="FF1B2433"/></font>');var foR=fonts.length-1;
+    fonts.push('<font><sz val="10"/><name val="Calibri"/><color rgb="FF000000"/></font>');var foR=fonts.length-1;
     fonts.push('<font><sz val="10"/><name val="Calibri"/><b/><color rgb="FF122C91"/></font>');var foRB=fonts.length-1;
     fills.push('<fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/><bgColor indexed="64"/></patternFill></fill>');var fiR=fills.length-1;
     fills.push('<fill><patternFill patternType="solid"><fgColor rgb="FFE3EAF6"/><bgColor indexed="64"/></patternFill></fill>');var fiRH=fills.length-1;
@@ -28892,7 +28892,12 @@ async function _tbExportarXlsx2(root,doc,opt){
     var ref=function(k,rr){return S1+colL(ix[k])+rr};
     var f2=[],r2=1,hdr='';keys.forEach(function(k,i){hdr+=celT(colL(i)+r2,nomCol[k]||k,xRH)});
     f2.push('<row r="1" ht="'+Math.max(30,Math.round(Math.max.apply(null,keys.map(function(k,i){return lineas(nomCol[k]||k,wch[i])}))*13+4))+'" customHeight="1">'+hdr+'</row>');r2++;var r2a=r2;
-    resG.forEach(function(g){var rows=g.rows,ci=rows[rows.length-1],h='';
+    var TCOL=[['FF1F3864','FFFFFFFF'],['FF2E5496','FFFFFFFF'],['FF8EA9DB','FF000000'],['FFB4C6E7','FF000000'],['FFD9E1F2','FF000000']],tSt={},mg2=[];
+    var estTit=function(lv){lv=Math.max(0,Math.min(TCOL.length-1,lv||0));if(tSt[lv]!=null)return tSt[lv];fonts.push('<font><sz val="10"/><name val="Calibri"/><b/><color rgb="'+TCOL[lv][1]+'"/></font>');var fo=fonts.length-1;
+      fills.push('<fill><patternFill patternType="solid"><fgColor rgb="'+TCOL[lv][0]+'"/><bgColor indexed="64"/></patternFill></fill>');var fi=fills.length-1;
+      xfs.push('<xf numFmtId="0" fontId="'+fo+'" fillId="'+fi+'" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" indent="'+Math.min(lv||0,6)+'"/></xf>');return tSt[lv]=xfs.length-1};
+    resSeq.forEach(function(g){if(g.t==='tit'){var sT=estTit(g.lv),ht9='';for(var i9=0;i9<nC;i9++)ht9+=(i9===0)?celT('A'+r2,g.lab,sT):('<c r="'+colL(i9)+r2+'" s="'+sT+'"/>');f2.push('<row r="'+r2+'" ht="18" customHeight="1">'+ht9+'</row>');if(nC>1)mg2.push('A'+r2+':'+colL(nC-1)+r2);r2++;return}
+      var rows=g.rows,ci=rows[rows.length-1],h='';
       var wRef=function(row){if(ix.pctAg!=null)return '('+ref('pctAg',row.r)+'/100)';
         if(ix[agB]!=null)return '('+ref(agB,row.r)+'/('+rows.map(function(q){return ref(agB,q.r)}).join('+')+'))';
         return String((Number(row.m.peso)||0)/100)};
@@ -28911,7 +28916,7 @@ async function _tbExportarXlsx2(root,doc,opt){
     f2.push('<row r="'+r2+'" ht="18" customHeight="1">'+ht2+'</row>');
     hoja2='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
       '<dimension ref="A1:'+colL(nC-1)+r2+'"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'+
-      '<sheetFormatPr defaultRowHeight="15"/>'+cols+'<sheetData>'+f2.join('')+'</sheetData></worksheet>'}
+      '<sheetFormatPr defaultRowHeight="15"/>'+cols+'<sheetData>'+f2.join('')+'</sheetData>'+(mg2.length?('<mergeCells count="'+mg2.length+'">'+mg2.map(function(x){return '<mergeCell ref="'+x+'"/>'}).join('')+'</mergeCells>'):'')+'</worksheet>'}
   var estilos='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
     '<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/><numFmt numFmtId="166" formatCode="&quot;− &quot;#,##0.00;&quot;+ &quot;#,##0.00;0.00"/></numFmts>'+
