@@ -21073,7 +21073,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c06';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c07';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28442,6 +28442,17 @@ function _crTablaHTML(D,q,ord){
     return L};
   /* con formulas cambiadas por el usuario, cada linea se recalcula con ellas */
   var _hayFx=_TB_COLS.some(function(cl){return _tbFxCambiada(cl[0])});
+  /* como el QPS: el METRADO CONTRATO de cada linea es el de la partida y su COSTO UNITARIO = su costo / ese metrado,
+     sin redondear (asi los costos unitarios de los apartados suman el del APU y metrado x costo unitario = costo).
+     Un apartado cuya fase trae otra cantidad (p. ej. suministro con desperdicio) se lleva a esa escala; uno apagado
+     sin metrado toma el de la partida. Sobre copias: los datos de la tabla no se tocan. */
+  var visQ=vis;vis=function(r){var L0=visQ(r),M=Number(r.met);if(!(M>0))return L0;return L0.map(function(m0){var m={};for(var k in m0)m[k]=m0[k];
+    var resto=(m.pert==='Resto de la partida');
+    if(m.pert&&!resto){var q9=Number(m.met);
+      if(q9>0&&Math.abs(q9-M)>1e-9){var k9=M/q9;['met','metF','metM','metA','metAM','av','metR','metRF','retN','rend'].forEach(function(f){var v=m[f];if(v!=null&&v!==''&&isFinite(Number(v)))m[f]=Math.round(Number(v)*k9*1e10)/1e10});if(r.und)m.und=r.und}
+      else if(!(q9>0)&&m.apOff){m.met=M;m.metF=0;m.metM=0;m.metA=0;m.metAM=0;if(r.und)m.und=r.und}}
+    var co=Number(m.costo),mt=Number(m.met);if(!resto&&mt>0&&isFinite(co)&&m.costo!=null){m.pu=co/mt;if(Number(m.hhC)>0)m.hhu=Number(m.hhC)/mt}
+    return m})};
   var vis0=vis;vis=function(r){var L0=vis0(r);if(!_hayFx)return L0;return L0.map(function(m){var c={};for(var k in m)c[k]=m[k];return _tbFxAplica(c)})};   /* sobre copias: la fila original de la tabla no se toca */
   /* FILTROS de columna: las lineas de cada partida se arman UNA sola vez; las
      que no pasan el filtro ni se pintan ni suman, una partida sin lineas no
@@ -28478,7 +28489,7 @@ function _crTablaHTML(D,q,ord){
         H+='<tr data-rk="'+esc(rk9)+'" data-rn="'+_rn+'" style="background:'+bg+(apag?';color:#8a94a6':'')+'">'+numCel(_rn,4);cols.forEach(function(cl){H+=celda(m,cl[0],false,m._np?(N+'.'+m._np):N)});H+='</tr>'})});
     T.n+=L.length;T.hhC+=S.hhC;T.hh+=S.hh;T.costo+=S.costo;T.costoC+=S.costoC;T.dCosto+=S.dCosto;T.act+=S.act;T.hhM+=S.hhM;T.costoM+=S.costoM;T.hhA+=S.hhA;T.costoA+=S.costoA;T.hhAM+=S.hhAM;T.costoAM+=S.costoAM;T.hhR+=S.hhR;T.hhRF+=S.hhRF;T.costoR+=S.costoR;T.costoRF+=S.costoRF});
   window._tbFltTxt=_fltKs.length?(' · filtrado: '+_fltX+' de '+_fltN+' filas'):'';
-  T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);T.hhR=r2(T.hhR);T.hhRF=r2(T.hhRF);T.costoR=r2(T.costoR);T.costoRF=r2(T.costoRF);
+  r2=function(x){return Number(x)||0};T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);T.hhR=r2(T.hhR);T.hhRF=r2(T.hhRF);T.costoR=r2(T.costoR);T.costoRF=r2(T.costoRF);
   H+='</tbody><tfoot>'+subtot('TOTAL \u00b7 '+T.n+' partidas \u00b7 '+T.act+' activas',T,'#152436',900,true)+'</tfoot></table>';
   return H}
 /* cabecera: ordenar con clic, mover arrastrando; boton Columnas para ocultar/mostrar */
@@ -29891,6 +29902,17 @@ function _crTablaQHTML(D,q,ord){
     return L};
   /* con formulas cambiadas por el usuario, cada linea se recalcula con ellas */
   var _hayFx=_TQ_COLS.some(function(cl){return _tqFxCambiada(cl[0])});
+  /* como el QPS: el METRADO CONTRATO de cada linea es el de la partida y su COSTO UNITARIO = su costo / ese metrado,
+     sin redondear (asi los costos unitarios de los apartados suman el del APU y metrado x costo unitario = costo).
+     Un apartado cuya fase trae otra cantidad (p. ej. suministro con desperdicio) se lleva a esa escala; uno apagado
+     sin metrado toma el de la partida. Sobre copias: los datos de la tabla no se tocan. */
+  var visQ=vis;vis=function(r){var L0=visQ(r),M=Number(r.met);if(!(M>0))return L0;return L0.map(function(m0){var m={};for(var k in m0)m[k]=m0[k];
+    var resto=(m.pert==='Resto de la partida');
+    if(m.pert&&!resto){var q9=Number(m.met);
+      if(q9>0&&Math.abs(q9-M)>1e-9){var k9=M/q9;['met','metF','metM','metA','metAM','av','metR','metRF','retN','rend'].forEach(function(f){var v=m[f];if(v!=null&&v!==''&&isFinite(Number(v)))m[f]=Math.round(Number(v)*k9*1e10)/1e10});if(r.und)m.und=r.und}
+      else if(!(q9>0)&&m.apOff){m.met=M;m.metF=0;m.metM=0;m.metA=0;m.metAM=0;if(r.und)m.und=r.und}}
+    var co=Number(m.costo),mt=Number(m.met);if(!resto&&mt>0&&isFinite(co)&&m.costo!=null){m.pu=co/mt;if(Number(m.hhC)>0)m.hhu=Number(m.hhC)/mt}
+    return m})};
   var vis0=vis;vis=function(r){var L0=vis0(r);if(!_hayFx)return L0;return L0.map(function(m){var c={};for(var k in m)c[k]=m[k];return _tqFxAplica(c)})};   /* sobre copias: la fila original de la tabla no se toca */
   var _dzPrev=null,_dzOff=0,_dzCnt=_tbDiscCnt(porSis,orden);
   orden.forEach(function(sis){var L=porSis[sis],LV=L.map(function(r9){var v9=vis(r9);for(var j9=0;j9<v9.length;j9++)_todas.push(v9[j9]);return v9});
@@ -29932,7 +29954,7 @@ function _crTablaQHTML(D,q,ord){
     H+='<tr data-rn="'+_rn+'" style="background:#3A1414"><td class="_tqEx" style="background:#3A1414;color:#FFB4A8;text-align:center;font-weight:800;font-size:10.5px;padding:1px 5px;border-right:1px solid #223049;border-bottom:1px solid #223049;user-select:none;position:sticky;left:0;z-index:4;min-width:22px">'+_rn+'</td><td colspan="'+cols.length+'" style="border-top:1px solid #5A2A2A;border-bottom:1px solid #5A2A2A;border-left:0;border-right:0;padding:4px 6px;font-weight:800;color:#FFB4A8;white-space:nowrap"><span style="position:sticky;left:36px;display:inline-block">\u26d4 SIN AGRUPACI\u00d3N \u00b7 '+_SU9.length+' partidas que no entran en ninguna actividad del cronograma \u00b7 solo informativas: NO suman en el TOTAL</span></td></tr>';
     _SU9.forEach(function(m){_rn++;var rk9='NS|'+String(m.id||'')+'|0';window._tqLineas[rk9]=m;
       H+='<tr data-rk="'+esc(rk9)+'" data-rn="'+_rn+'" data-nosum="1" style="background:#3A1414;color:#FFD9D4">'+numCel(_rn,4);cols.forEach(function(cl){H+=celda(m,cl[0],false,'')});H+='</tr>'})}
-  T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);T.hhR=r2(T.hhR);T.hhRF=r2(T.hhRF);T.costoR=r2(T.costoR);T.costoRF=r2(T.costoRF);
+  r2=function(x){return Number(x)||0};T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);T.hhR=r2(T.hhR);T.hhRF=r2(T.hhRF);T.costoR=r2(T.costoR);T.costoRF=r2(T.costoRF);
   /* % de cada periodo y % acumulado sobre las HH del alcance (el mismo denominador de la curva) */
   var _tqPieFila=function(lab,S,modo){_rn++;var bg='#132033';var den=Number(D.u&&D.u.hh)||0;var h='<tr data-rn="'+_rn+'" data-den="'+den+'" style="background:'+bg+'">'+numCel(_rn,5,'bottom:0;');var ST='position:sticky;bottom:0;z-index:3;background:'+bg+';';var run=0,puesto=false,ac=0;
     var flush=function(){if(!run)return;h+='<td colspan="'+run+'" style="'+ST+'border-top:0;border-bottom:1px solid #223049;border-left:0;border-right:0;padding:3px 6px;font-weight:700;color:#9FE8B0;font-size:10.5px;white-space:nowrap">'+(puesto?'':('<span style="position:sticky;left:36px;display:inline-block">'+lab+'</span>'))+'</td>';puesto=true;run=0};
@@ -30859,6 +30881,17 @@ function _crTablaVHTML(D,q,ord){
     return L};
   /* con formulas cambiadas por el usuario, cada linea se recalcula con ellas */
   var _hayFx=_TV_COLS.some(function(cl){return _tvFxCambiada(cl[0])});
+  /* como el QPS: el METRADO CONTRATO de cada linea es el de la partida y su COSTO UNITARIO = su costo / ese metrado,
+     sin redondear (asi los costos unitarios de los apartados suman el del APU y metrado x costo unitario = costo).
+     Un apartado cuya fase trae otra cantidad (p. ej. suministro con desperdicio) se lleva a esa escala; uno apagado
+     sin metrado toma el de la partida. Sobre copias: los datos de la tabla no se tocan. */
+  var visQ=vis;vis=function(r){var L0=visQ(r),M=Number(r.met);if(!(M>0))return L0;return L0.map(function(m0){var m={};for(var k in m0)m[k]=m0[k];
+    var resto=(m.pert==='Resto de la partida');
+    if(m.pert&&!resto){var q9=Number(m.met);
+      if(q9>0&&Math.abs(q9-M)>1e-9){var k9=M/q9;['met','metF','metM','metA','metAM','av','metR','metRF','retN','rend'].forEach(function(f){var v=m[f];if(v!=null&&v!==''&&isFinite(Number(v)))m[f]=Math.round(Number(v)*k9*1e10)/1e10});if(r.und)m.und=r.und}
+      else if(!(q9>0)&&m.apOff){m.met=M;m.metF=0;m.metM=0;m.metA=0;m.metAM=0;if(r.und)m.und=r.und}}
+    var co=Number(m.costo),mt=Number(m.met);if(!resto&&mt>0&&isFinite(co)&&m.costo!=null){m.pu=co/mt;if(Number(m.hhC)>0)m.hhu=Number(m.hhC)/mt}
+    return m})};
   var vis0=vis;vis=function(r){var L0=vis0(r);if(!_hayFx)return L0;return L0.map(function(m){var c={};for(var k in m)c[k]=m[k];return _tvFxAplica(c)})};   /* sobre copias: la fila original de la tabla no se toca */
   /* ===== filtros de columna (como en Excel; modulo comun _flt*) =====
      valorDe: el MISMO valor que pinta la celda (los periodos de m.p, el resto
@@ -30913,7 +30946,7 @@ function _crTablaVHTML(D,q,ord){
     H+='<tr data-rn="'+_rn+'" style="background:#3A1414"><td class="_tvEx" style="background:#3A1414;color:#FFB4A8;text-align:center;font-weight:800;font-size:10.5px;padding:1px 5px;border-right:1px solid #223049;border-bottom:1px solid #223049;user-select:none;position:sticky;left:0;z-index:4;min-width:22px">'+_rn+'</td><td colspan="'+cols.length+'" style="border-top:1px solid #5A2A2A;border-bottom:1px solid #5A2A2A;border-left:0;border-right:0;padding:4px 6px;font-weight:800;color:#FFB4A8;white-space:nowrap"><span style="position:sticky;left:36px;display:inline-block">\u26d4 SIN AGRUPACI\u00d3N \u00b7 '+D.sueltas.length+' partidas que no entran en ninguna actividad del cronograma \u00b7 solo informativas: NO suman en el TOTAL</span></td></tr>';
     D.sueltas.forEach(function(m){if(qq&&_tvNorm(m.id+' '+m.nom+' '+m.tareas+' '+m.esp+' '+(m.und||'')).indexOf(qq)<0)return;_rn++;var rk9='NS|'+String(m.id||'')+'|0';window._tvLineas[rk9]=m;
       H+='<tr data-rk="'+esc(rk9)+'" data-rn="'+_rn+'" data-nosum="1" style="background:#3A1414;color:#FFD9D4">'+numCel(_rn,4);cols.forEach(function(cl){H+=celda(m,cl[0],false,'')});H+='</tr>'})}
-  T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);T.hhR=r2(T.hhR);T.hhRF=r2(T.hhRF);T.costoR=r2(T.costoR);T.costoRF=r2(T.costoRF);
+  r2=function(x){return Number(x)||0};T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);T.hhR=r2(T.hhR);T.hhRF=r2(T.hhRF);T.costoR=r2(T.costoR);T.costoRF=r2(T.costoRF);
   /* % de cada periodo y % acumulado sobre las HH del alcance (el mismo denominador de la curva) */
   var _tvPieFila=function(lab,S,modo){_rn++;var bg='#132033';var den=Number(D.u&&D.u.hh)||0;var h='<tr data-rn="'+_rn+'" data-den="'+den+'" style="background:'+bg+'">'+numCel(_rn,5,'bottom:0;');var ST='position:sticky;bottom:0;z-index:3;background:'+bg+';';var run=0,puesto=false,ac=0;
     var flush=function(){if(!run)return;h+='<td colspan="'+run+'" style="'+ST+'border-top:0;border-bottom:1px solid #223049;border-left:0;border-right:0;padding:3px 6px;font-weight:700;color:#9FE8B0;font-size:10.5px;white-space:nowrap">'+(puesto?'':('<span style="position:sticky;left:36px;display:inline-block">'+lab+'</span>'))+'</td>';puesto=true;run=0};
@@ -32089,6 +32122,17 @@ function _crTablaRHTML(D,q,ord){
     return L};
   /* con formulas cambiadas por el usuario, cada linea se recalcula con ellas */
   var _hayFx=_TX_COLS.some(function(cl){return _txFxCambiada(cl[0])});
+  /* como el QPS: el METRADO CONTRATO de cada linea es el de la partida y su COSTO UNITARIO = su costo / ese metrado,
+     sin redondear (asi los costos unitarios de los apartados suman el del APU y metrado x costo unitario = costo).
+     Un apartado cuya fase trae otra cantidad (p. ej. suministro con desperdicio) se lleva a esa escala; uno apagado
+     sin metrado toma el de la partida. Sobre copias: los datos de la tabla no se tocan. */
+  var visQ=vis;vis=function(r){var L0=visQ(r),M=Number(r.met);if(!(M>0))return L0;return L0.map(function(m0){var m={};for(var k in m0)m[k]=m0[k];
+    var resto=(m.pert==='Resto de la partida');
+    if(m.pert&&!resto){var q9=Number(m.met);
+      if(q9>0&&Math.abs(q9-M)>1e-9){var k9=M/q9;['met','metF','metM','metA','metAM','av','metR','metRF','retN','rend'].forEach(function(f){var v=m[f];if(v!=null&&v!==''&&isFinite(Number(v)))m[f]=Math.round(Number(v)*k9*1e10)/1e10});if(r.und)m.und=r.und}
+      else if(!(q9>0)&&m.apOff){m.met=M;m.metF=0;m.metM=0;m.metA=0;m.metAM=0;if(r.und)m.und=r.und}}
+    var co=Number(m.costo),mt=Number(m.met);if(!resto&&mt>0&&isFinite(co)&&m.costo!=null){m.pu=co/mt;if(Number(m.hhC)>0)m.hhu=Number(m.hhC)/mt}
+    return m})};
   var vis0=vis;vis=function(r){var L0=vis0(r);if(!_hayFx)return L0;return L0.map(function(m){var c={};for(var k in m)c[k]=m[k];return _txFxAplica(c)})};   /* sobre copias: la fila original de la tabla no se toca */
   /* FIX E: las lineas de un alcance. La PARTIDA pinta SIEMPRE sus dos filas
      (PROGRAMADO y HECHO) y debajo van los apartados, en pares, tal como los
@@ -32143,7 +32187,7 @@ function _crTablaRHTML(D,q,ord){
     H+='<tr data-rn="'+_rn+'" style="background:#3A1414"><td class="_txEx" style="background:#3A1414;color:#FFB4A8;text-align:center;font-weight:800;font-size:10.5px;padding:1px 5px;border-right:1px solid #223049;border-bottom:1px solid #223049;user-select:none;position:sticky;left:0;z-index:4;min-width:22px">'+_rn+'</td><td colspan="'+cols.length+'" style="border-top:1px solid #5A2A2A;border-bottom:1px solid #5A2A2A;border-left:0;border-right:0;padding:4px 6px;font-weight:800;color:#FFB4A8;white-space:nowrap"><span style="position:sticky;left:36px;display:inline-block">\u26d4 SIN AGRUPACI\u00d3N \u00b7 '+_txNPart(_SU9)+' partidas que no entran en ninguna actividad del cronograma \u00b7 solo informativas: NO suman en el TOTAL</span></td></tr>';
     _SU9.forEach(function(m){_rn++;var rk9='NS|'+String(m.id||'')+'|'+String(m._tipo||'')+'|0';window._txLineas[rk9]=m;
       H+='<tr data-rk="'+esc(rk9)+'" data-rn="'+_rn+'" data-nosum="1" data-tipo="'+esc(String(m._tipo||''))+'" style="background:#3A1414;color:#FFD9D4">'+numCel(_rn,4);cols.forEach(function(cl){H+=celda(m,cl[0],false,'')});H+='</tr>'})}
-  T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);T.hhR=r2(T.hhR);T.hhRF=r2(T.hhRF);T.costoR=r2(T.costoR);T.costoRF=r2(T.costoRF);
+  r2=function(x){return Number(x)||0};T.hhC=r2(T.hhC);T.hh=r2(T.hh);T.costo=r2(T.costo);T.costoC=r2(T.costoC);T.dCosto=r2(T.dCosto);T.hhM=r2(T.hhM);T.costoM=r2(T.costoM);T.hhA=r2(T.hhA);T.costoA=r2(T.costoA);T.hhAM=r2(T.hhAM);T.costoAM=r2(T.costoAM);T.hhR=r2(T.hhR);T.hhRF=r2(T.hhRF);T.costoR=r2(T.costoR);T.costoRF=r2(T.costoRF);
   /* % de cada periodo y % acumulado sobre las HH del alcance (el mismo denominador de la curva) */
   var _txPieFila=function(lab,S,modo,tipo){_rn++;var bg='#132033';var den=Number(D.u&&D.u.hh)||0;var CT=_txColTipo(tipo);
     var h='<tr data-rn="'+_rn+'" data-den="'+den+'" data-modo="'+modo+'" data-tipo="'+(tipo||'')+'" style="background:'+bg+'">'+numCel(_rn,5,'bottom:0;');var ST='position:sticky;bottom:0;z-index:3;background:'+bg+';';var run=0,puesto=false,ac=0;
