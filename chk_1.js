@@ -21073,7 +21073,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c11';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c12';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -27422,8 +27422,8 @@ function _tabDecCelda(td,d){
   var o=td._d0;if(d==null||!isFinite(d)){if(o.n.nodeValue!==o.t)o.n.nodeValue=o.t;return}
   var m=/\d[\d',]*(?:\.\d+)?/.exec(o.t);if(!m)return;var sx=m[0],sd=(sx.split('.')[1]||'').length,shown=Number(sx.replace(/[',]/g,''));if(!isFinite(shown))return;
   var sep=(sx.indexOf(',')>=0)?',':"'";var v=shown,raw=td.getAttribute('data-num');
-  if(raw!=null&&raw!==''&&isFinite(Number(raw))){var r=Math.abs(Number(raw)),tol=0.5*Math.pow(10,-sd)+1e-9;[r,r*100,r/100].some(function(c){if(Math.abs(Math.round(c*Math.pow(10,sd))/Math.pow(10,sd)-shown)<=tol){v=c;return true}return false})}
-  d=Math.max(0,Math.min(8,Math.round(d)));var f=(Math.round(v*Math.pow(10,d))/Math.pow(10,d)).toFixed(d),q=f.split('.');q[0]=q[0].replace(/\B(?=(\d{3})+(?!\d))/g,sep);
+  if(raw!=null&&raw!==''&&isFinite(Number(raw))){var r=Math.abs(Number(raw)),tol=0.5*Math.pow(10,-sd)+1e-9;[r,r*100,r/100].some(function(c){if(Math.abs(Math.round(c*Math.pow(10,sd))/Math.pow(10,sd)-shown)<=tol||Math.abs(c-shown)<=tol){v=c;return true}return false})}
+  d=Math.max(0,Math.min(8,Math.round(d)));var f=(Math.round(Number((v*Math.pow(10,d)).toPrecision(15)))/Math.pow(10,d)).toFixed(d),q=f.split('.');q[0]=q[0].replace(/\B(?=(\d{3})+(?!\d))/g,sep);
   var nt=o.t.slice(0,m.index)+q.join('.')+o.t.slice(m.index+sx.length);if(o.n.nodeValue!==nt)o.n.nodeValue=nt}
 /* decimales que se ven hoy en una celda (su formato o su texto original) */
 function _tabDecVisto(td,dec,rk,k){var d=_tabDecDe(dec,rk,k);if(d!=null)return d;var t=(td._d0&&td._d0.t)||_tabNumTxt(td);var m=/\d[\d',]*(?:\.(\d+))?/.exec(t);return m&&m[1]?m[1].length:0}
@@ -33459,10 +33459,10 @@ async function _hhToggle(id,cronId){
   return apago;
 }
 /* cantidades y HH con miles: 10'000.5 (los decimales quedan como vienen) */
-function _nMil2(v){var n=Number(v);if(v==null||v===''||!isFinite(n))return '';return _nMil((Math.round(n*100)/100).toFixed(2))}
+function _nMil2(v){var n=Number(v);if(v==null||v===''||!isFinite(n))return '';return _nMil((Math.round(Number((n*100).toPrecision(15)))/100).toFixed(2))}
 function _nMil(v){if(v==null||v==='')return '';var t=String(v);var n=Number(t);if(!isFinite(n))return t;var neg=t.charAt(0)==='-';if(neg)t=t.slice(1);var q=t.split('.');return (neg?'-':'')+q[0].replace(/\B(?=(\d{3})+(?!\d))/g,"'")+(q[1]!=null?('.'+q[1]):'')}
 function _nMon(n){n=Number(n);if(!isFinite(n))return '—';
-  var s=Math.abs(n).toFixed(2).split('.');
+  var s=(Math.round(Number((Math.abs(n)*100).toPrecision(15)))/100).toFixed(2).split('.');
   return (n<0?'-':'')+s[0].replace(/\B(?=(\d{3})+(?!\d))/g,"'")+'.'+s[1]}
 function _nNum(n,d){n=Number(n);if(!isFinite(n))return '—';return (d?n.toFixed(d):String(n))}
 function _actDetalle(id){window._actIdAbierta=id;
