@@ -21824,7 +21824,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920b69';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920b70';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28300,8 +28300,40 @@ function _tbCalFlot(id,doc){try{
   W.ov._alCerrar=function(){try{mo.disconnect()}catch(_e){}};
   if(doc&&doc!==document){try{window.focus()}catch(_e3){}try{if(typeof toast==='function')toast('\ud83d\udcc5 Se abri\u00f3 en la ventana principal de la app')}catch(_e4){}}
 }catch(e){try{if(typeof toast==='function')toast('\u26a0 '+((e&&e.message)||e))}catch(_e){}}}
+/* ===== CABECERA LIMPIA de las Tablas 1, 2, 3 y R =====
+   Casilla "Botones de columna" junto a la flechita de Opciones (se ve siempre, aunque las
+   opciones esten ocultas). Desmarcada: se ocultan 📌 🎨 A ⏷ de cada columna (los que estan EN
+   USO -columna inmovilizada, color puesto, filtro activo- siguen a la vista) y los nombres se
+   abrevian para que la fila 1 ocupe menos alto; el nombre completo sale al pasar el raton.
+   Se guarda en la configuracion de la tabla (cfg.limpio -> Supabase). */
+var _TAB_ABREV=[[/\bmayor metrado\b/gi,'MM'],[/\bMetrado mayor\b/g,'Met. MM'],[/\bMetrado\b/g,'Met.'],[/\bmetrado\b/g,'met.'],
+  [/\bcontractual\b/gi,'contr.'],[/\bcontrato\b/gi,'contr.'],[/\bforecast\b/gi,'fc'],[/\bunitario\b/gi,'unit.'],[/\bactual\b/gi,'act.'],
+  [/\brestante\b/gi,'rest.'],[/\bDiferencia de costo\b/gi,'Dif. cto.'],[/\bCosto\b/g,'Cto.'],[/\bRendimiento\b/g,'Rend.'],[/\(und\/d\u00eda\)/g,'(u/d)'],
+  [/\bDuraci\u00f3n\b/g,'Dur.'],[/\(d\u00edas\)/g,'(d)'],[/\bApartados apagados\b/g,'Apart. apag.'],[/\bSaldo retirado\b/g,'Saldo ret.'],
+  [/% no se hace/g,'% no hace'],[/\bAgrupaci\u00f3n\b/g,'Agrup.'],[/\bPertenece\b/g,'Pert.'],[/\bTarea\(s\)/g,'Tareas'],[/\bSistema\b/g,'Sist.'],
+  [/\bEstado restricci\u00f3n\b/g,'Est. restr.'],[/\bEstado\b/g,'Est.'],[/% avance\b/g,'% av.'],[/\bAvance\b/g,'Av.'],[/\bSuma de HH\b/g,'\u03a3 HH'],[/\bSuma HH\b/g,'\u03a3 HH'],
+  [/\bSuma de metrado\b/g,'\u03a3 met.'],[/\bRestricci\u00f3n\b/g,'Restr.'],[/\bResponsable\b/g,'Resp.'],[/\bAcci\u00f3n\b/g,'Acc.']];
+function _tabAbrev(t){var x=String(t||'');_TAB_ABREV.forEach(function(r){x=x.replace(r[0],r[1])});return x}
+function _tabLimpioCss(doc){if(doc.getElementById('_tabLimpioCss'))return;var st=doc.createElement('style');st.id='_tabLimpioCss';
+  st.textContent=['_tb','_tq','_tv','_tx'].map(function(p){return '.'+p+'Limpio .'+p+'Pin:not([style*="opacity:1"]),.'+p+'Limpio .'+p+'Clr:not([style*="opacity:1"]),.'+p+'Limpio .'+p+'Fnt:not([style*="opacity:1"]),.'+p+'Limpio ._fltBtn:not([style*="opacity:1"])'}).join(',')+'{display:none!important}';
+  (doc.head||doc.documentElement).appendChild(st)}
+function _tabLimpioOn(pfx){try{var cf=window[pfx+'Cfg'];return !!((typeof cf==='function')&&cf().limpio)}catch(e){return false}}
+function _tabLimpioAplica(doc,rt,pfx){try{if(!rt)return;_tabLimpioCss(doc);var on=_tabLimpioOn(pfx);rt.classList.toggle(pfx+'Limpio',on);
+  Array.prototype.forEach.call(rt.querySelectorAll('thead th[data-k]'),function(th){var n=th.firstChild;if(!n||n.nodeType!==3)return;
+    if(th._full==null){th._full=n.nodeValue;th._tit0=th.getAttribute('title')||''}
+    var nv=on?_tabAbrev(th._full):th._full;if(n.nodeValue!==nv)n.nodeValue=nv;
+    var t=on&&nv!==th._full?(th._full+' \u00b7 '+th._tit0):th._tit0;if((th.getAttribute('title')||'')!==t)th.setAttribute('title',t)});
+  var ck=doc.getElementById(pfx+'LimpioCk');if(ck&&ck.checked!==!on)ck.checked=!on}catch(e){}}
+function _tabLimpioCk(doc,top,pfx,antes){try{if(!top||top.querySelector('#'+pfx+'LimpioW'))return;
+  var w=doc.createElement('label');w.id=pfx+'LimpioW';w.title='Mostrar u ocultar los botones de cada columna (inmovilizar, relleno, fuente y filtro). Ocultos, los nombres se abrevian y la fila 1 queda mas baja';
+  w.style.cssText='display:inline-flex;align-items:center;gap:5px;flex:none;background:#0f1a2a;border:1px solid #243b55;border-radius:8px;padding:4px 8px;color:#cfe3ff;font-weight:800;font-size:11.5px;cursor:pointer;user-select:none';
+  w.innerHTML='<input type="checkbox" id="'+pfx+'LimpioCk" style="width:14px;height:14px;margin:0;cursor:pointer"'+(_tabLimpioOn(pfx)?'':' checked')+'> Botones de columna';
+  if(antes&&antes.parentNode===top)top.insertBefore(w,antes.nextSibling);else top.appendChild(w);
+  var ck=w.querySelector('input');ck.onchange=function(){var cf=window[pfx+'Cfg'],cs=window[pfx+'CfgSave'];if(typeof cf!=='function'||typeof cs!=='function')return;var c=cf();c.limpio=!ck.checked;cs(c);
+    var rt=window['_nav'+pfx+'Root'];if(rt){_tabLimpioAplica(doc,rt,pfx);try{var af=window[pfx+'AplicaFijas'];if(typeof af==='function')af(rt)}catch(_e){}}}}catch(e){}}
 function _tabNavBind(doc,root,pfx){try{
   window['_nav'+pfx+'Root']=root;
+  try{_tabLimpioAplica(doc,root,pfx)}catch(_elp){}
   if(pfx==='_tb'){try{_tbDotBind(doc,root)}catch(_edt){}}
   try{_tabRowBind(doc,root,pfx)}catch(_er){}setTimeout(function(){try{_tabClrMenu(doc,pfx)}catch(_ec){}},0);try{_tabDecAplica(root,pfx)}catch(_ed){}
   if(doc['_nav'+pfx+'On'])return;doc['_nav'+pfx+'On']=1;
@@ -28365,10 +28397,10 @@ function _tabTemaBtn(doc,top,pfx,antes){try{if(!top||top.querySelector('#'+pfx+'
 function _tabOpcToggle(doc,top,pfx){try{if(!top||top.querySelector('#'+pfx+'OpcTg'))return;
   var key='obf4_tab_opc_'+pfx;var b=doc.createElement('button');b.id=pfx+'OpcTg';b.type='button';
   b.style.cssText='background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 9px;font-weight:800;cursor:pointer;flex:none;font-size:12px';
-  top.insertBefore(b,top.firstChild);try{_tabDecBar(doc,top,pfx,b)}catch(_edb){}try{_tabTemaBtn(doc,top,pfx,top.querySelector('#'+pfx+'Dec')||b)}catch(_etm){}
+  top.insertBefore(b,top.firstChild);try{_tabLimpioCk(doc,top,pfx,b)}catch(_elk){}try{_tabDecBar(doc,top,pfx,top.querySelector('#'+pfx+'LimpioW')||b)}catch(_edb){}try{_tabTemaBtn(doc,top,pfx,top.querySelector('#'+pfx+'Dec')||b)}catch(_etm){}
   var lee=function(){try{return localStorage.getItem(key)==='1'}catch(e){return false}};
   var aplica=function(){var oc=lee();
-    Array.prototype.forEach.call(top.children,function(el){if(el===b||(el.id||'')===pfx+'Fx')return;
+    Array.prototype.forEach.call(top.children,function(el){if(el===b||(el.id||'')===pfx+'Fx'||(el.id||'')===pfx+'LimpioW')return;
       if(oc){if(el.getAttribute('data-opc-disp')==null)el.setAttribute('data-opc-disp',el.style.display||'');el.style.display='none'}
       else if(el.getAttribute('data-opc-disp')!=null){el.style.display=el.getAttribute('data-opc-disp');el.removeAttribute('data-opc-disp')}});
     b.textContent=oc?'\u25be Opciones':'\u25b4';b.title=oc?'Mostrar las opciones de la tabla':'Ocultar las opciones (queda solo la barra de f\u00f3rmulas)'};
