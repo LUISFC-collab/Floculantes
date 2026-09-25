@@ -14677,7 +14677,11 @@ var _WK_GENS=[
   {id:'C.003',
    nombre:'C.003 — igual a la A, medida como las Tablas (% real, ACTUAL del PPC/3WLA) y nombres enteros',
    desc:'El mismo libro de la A.001 (mismas hojas, misma data), con tres cambios: (1) el % real de cada partida se mide como las Tablas 1 y 2 (31.63 % donde la A dice 33.8 %); (2) la línea ACTUAL del PPC y del 3WLA (fila 9 semana, fila 11 acumulado) lleva las HH hechas por día de la Tabla 2, así el acumulado real es exactamente el de la Tabla 2 y el ACUMULADO del 3WLA arranca de él y suma lo programado en el calendario; (3) los rótulos Prog. <cronograma> y la hoja P6-<cronograma> llevan el nombre entero del cronograma.',
-   fn:'_wkCLibroApp'}];
+   fn:'_wkCLibroApp'},
+  {id:'D.001',
+   nombre:'D.001 — igual a la C.003, con el COSTO forecast de la Tabla 1',
+   desc:'El mismo libro de la C.003 (plan de la Tabla 3, % real como las Tablas). Solo cambia el COSTO: cada partida lleva su Costo forecast de la Tabla 1, así el costo total cuadra con el forecast igual que las HH. Además METRADO y PROGRAMACION no muestran sus filas 1 a 3.',
+   fn:'_wkDLibroApp'}];
 var _WK_GEN_DEF='A.001';              /* hasta que B.001 este validada */
 var _WK_GEN_KEY='obf4_wk_gen';
 function _wkGenDe(id){for(var i=0;i<_WK_GENS.length;i++)if(_WK_GENS[i].id===id)return _WK_GENS[i];return null}
@@ -20163,6 +20167,22 @@ async function _wkCLibroApp(semN,corte,ids){
     LB.hojas=_wkCMigra(LB.hojas);window._wkCHojas=LB.hojas;
     try{LB.info=LB.info||{};LB.info.gen='C.003'}catch(e){}return LB}
   finally{pctOfAt=orig;_crPlanRecupera=origPR;_crTramosDe=origTr;_wkPlanPorItem=origPI}}
+/* D.001: la C.003 tal cual, salvo el COSTO: cada partida lleva el Costo forecast de la Tabla 1
+   (columna costoC de _crTablaDatos del cronograma), asi COSTO cuadra con el forecast como las HH.
+   Y en METRADO y PROGRAMACION las filas 1 a 3 salen vacias y ocultas (nadie las referencia). */
+function _wkDSinFilas13(xml){try{return String(xml).replace(/<row r="([123])"([^>]*?)(\/>|>[\s\S]*?<\/row>)/g,function(m,n,at){
+    at=String(at||'').replace(/\s*hidden="[^"]*"/g,'');return '<row r="'+n+'"'+at+' hidden="1"/>'})}catch(e){return xml}}
+async function _wkDLibroApp(semN,corte,ids){
+  var origC=_crCostoDe,M={};
+  try{var L=(await _crPull()).filter(function(c){return !c.eliminado&&ids.indexOf(c.cron_id)>=0});
+    for(var i=0;i<L.length;i++){try{var D=await _crTablaDatosMemo(L[i]),m={};(D.filas||[]).forEach(function(r){if(r&&r.id)m[r.id]=r});M[L[i].cron_id]=m}catch(e){}}
+    _crCostoDe=function(pp,tipo,cronId){try{var m=M[cronId],r=(m&&pp)?m[pp.id]:null;
+      if(r&&r.costoC!=null&&r.costoC!==''&&isFinite(Number(r.costoC)))return Number(r.costoC)}catch(e){}
+      return origC.apply(this,arguments)};
+    var LB=await _wkCLibroApp(semN,corte,ids);
+    LB.hojas=(LB.hojas||[]).map(function(h){if(h&&(h[0]==='PROGRAMACION'||h[0]==='METRADO'))h[1]=_wkDSinFilas13(h[1]);return h});
+    try{LB.info=LB.info||{};LB.info.gen='D.001'}catch(e){}return LB}
+  finally{_crCostoDe=origC}}
 function _wkExcel(){
   if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return}
   if(typeof DecompressionStream==='undefined'||typeof CompressionStream==='undefined'){
@@ -22079,7 +22099,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c24';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c25';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
