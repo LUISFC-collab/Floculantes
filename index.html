@@ -22057,7 +22057,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c20';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c21';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -29955,10 +29955,19 @@ async function _tbExportarXlsx2(root,doc,opt){
     (merges.length?('<mergeCells count="'+merges.length+'">'+merges.map(function(x){return '<mergeCell ref="'+x+'"/>'}).join('')+'</mergeCells>'):'')+
     (anchors.length?'<drawing r:id="rId1"/>':'')+'</worksheet>';
   /* ===== HOJA "Resumen" (Excel con sustentos): las mismas columnas, UNA fila por partida. Sin partes,
-     cada celda apunta a su celda de la hoja de fotos. Con partes (agrupados): HH y costos = SUMA de sus
-     partes; metrado contratado = el de la parte que cierra; metrados de avance/restante = metrado x
-     suma(metrado de la parte / su metrado x su % del agrupado); porcentajes = suma(% de la parte x su %
-     del agrupado); lo demas, de la parte que cierra. Todo con formulas. ===== */
+     cada celda apunta a su celda de la hoja de fotos. Con partes (agrupados): HH = SUMA de sus partes;
+     metrado contratado = el de la partida; metrados (forecast, mayor, actual, avance, retirado) = CANTIDAD
+     equivalente = suma(metrado de la parte x su % del agrupado / 100); restantes = contratado - avance (o
+     forecast - actual) equivalentes; costos = metrado del Resumen x costo unitario (costo de las partes /
+     metrado de la partida); diferencia de costo = costo contrato - costo forecast de esta hoja; porcentajes =
+     suma(% de la parte x su % del agrupado / 100); lo demas, de la parte que lleva el metrado. Una parte en
+     OTRA unidad o con otra cantidad (suministro con desperdicio) ya llega a la hoja de fotos a la escala de la
+     partida (visQ: su metrado = el de la partida; forecast y retirado x metrado partida / metrado fase; avance y actual
+     tambien si la unidad es otra; en la misma unidad lo cargado ya cuenta en la de la partida: 552 de 579.6 = 100 %),
+     asi que su equivalente queda en la unidad de la partida. Sin metrado de la partida (fases sin cantidad)
+     los costos son la SUMA de los de sus partes. OJO: si la partida no tiene metrado pero sus fases si, visQ no
+     las reescala: el metrado del Resumen es el de la fase mayor y los equivalentes suman cantidades de fases que
+     pueden ser de otra unidad (el costo contrato igual cuadra). Todo con formulas. ===== */
   var hoja2=null;
   if(RES&&resG.length){
     var c9=window._crTablaCron||null,nomC9=c9?((typeof _crNomVis==='function')?_crNomVis(c9):c9.cron_id):'tabla';
@@ -29968,8 +29977,8 @@ async function _tbExportarXlsx2(root,doc,opt){
     fills.push('<fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/><bgColor indexed="64"/></patternFill></fill>');var fiR=fills.length-1;
     fills.push('<fill><patternFill patternType="solid"><fgColor rgb="FFE3EAF6"/><bgColor indexed="64"/></patternFill></fill>');var fiRH=fills.length-1;
     var xR=function(fo,fi,nf,al){xfs.push('<xf numFmtId="'+nf+'" fontId="'+fo+'" fillId="'+fi+'" borderId="1" applyFont="1" applyFill="1" applyBorder="1"'+(nf?' applyNumberFormat="1"':'')+' applyAlignment="1"><alignment horizontal="'+al+'" vertical="center" wrapText="1"/></xf>');return xfs.length-1};
-    var xRH=xR(foRB,fiRH,0,'center'),xRT=xR(foR,fiR,0,'left'),xRN=xR(foR,fiR,NUM,'right'),xRP=xR(foR,fiR,PCT,'right'),xRTB=xR(foRB,fiRH,0,'left'),xRNB=xR(foRB,fiRH,NUM,'right');
-    var ADD={hhC:1,hh:1,costo:1,costoC:1,dCosto:1,hhM:1,costoM:1,hhA:1,costoA:1,hhAM:1,costoAM:1,hhR:1,hhRF:1,costoR:1,costoRF:1,retN:1};
+    var xRH=xR(foRB,fiRH,0,'center'),xRT=xR(foR,fiR,0,'left'),xRN=xR(foR,fiR,NUM,'right'),xRP=xR(foR,fiR,PCT,'right'),xRTB=xR(foRB,fiRH,0,'left'),xRNB=xR(foRB,fiRH,NUM,'right'),xRD=xR(foR,fiR,DIF,'right'),xRDB=xR(foRB,fiRH,DIF,'right');
+    var ADD={hhC:1,hh:1,costo:1,costoC:1,dCosto:1,hhM:1,costoM:1,hhA:1,costoA:1,hhAM:1,costoAM:1,hhR:1,hhRF:1,costoR:1,costoRF:1};
     var QW={metF:1,metM:1,metA:1,metAM:1,av:1,metR:1,metRF:1},PW={pct:1,noHace:1,pctRet:1};
     var agB=(typeof _tbAgBase==='function')?_tbAgBase():'hh';
     var ref=function(k,rr){return S1+colL(ix[k])+rr};
@@ -29986,7 +29995,7 @@ async function _tbExportarXlsx2(root,doc,opt){
     var qMal=function(id){id=String(id==null?'':id).trim();if(!/^\d+(\.\d+)+$/.test(id))return '';return QMAL.hasOwnProperty(id)?QMAL[id]:id};
     nomCol.qpsMal='Item Mal';var jQ=RK.indexOf('id');RK.splice(jQ+1,0,'qpsMal');wR.splice(jQ+1,0,12);
     fonts.push('<font><sz val="10"/><name val="Calibri"/><b/><color rgb="FFC00000"/></font>');var xRTM=xR(fonts.length-1,fiR,0,'left');
-    var nR=RK.length,MET={met:1,metF:1,metM:1,metA:1,metAM:1,metR:1,metRF:1},FQ={metF:1,metM:1,metA:1,metAM:1};
+    var nR=RK.length,MET={met:1,metF:1,metM:1,metA:1,metAM:1,metR:1,metRF:1},FQ={metF:1,metM:1,metA:1,metAM:1,av:1,retN:1};
     var cols2='<cols>'+wR.map(function(wc,i){return '<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+wc+'" customWidth="1"/>'}).join('')+'</cols>';
     var f2=[],r2=1,hdr='';RK.forEach(function(k,i){hdr+=celT(colL(i)+r2,nomCol[k]||k,xRH)});
     f2.push('<row r="1" ht="'+Math.max(30,Math.round(Math.max.apply(null,RK.map(function(k,i){return lineas(nomCol[k]||k,wR[i])}))*13+4))+'" customHeight="1">'+hdr+'</row>');r2++;var r2a=r2;
@@ -29998,20 +30007,25 @@ async function _tbExportarXlsx2(root,doc,opt){
     resSeq.forEach(function(g){if(g.t==='tit'){var sT=estTit(g.lv),ht9='';for(var i9=0;i9<nR;i9++)ht9+=(i9===0)?celT('A'+r2,g.lab,sT):('<c r="'+colL(i9)+r2+'" s="'+sT+'"/>');f2.push('<row r="'+r2+'" ht="18" customHeight="1">'+ht9+'</row>');if(nR>1)mg2.push('A'+r2+':'+colL(nR-1)+r2);r2++;return}
       var rows=g.rows,ci=rows[rows.length-1],h='',grp=!!(g.partes&&rows.length>=2);
       /* la parte que lleva el metrado de la partida (la de mayor metrado; la ultima puede ser un restante sin metrado) */
-      var cM=ci;if(grp)rows.forEach(function(q){if((nv(q.m.met)||0)>(nv(cM.m.met)||0))cM=q});
+      var cM=ci;if(grp)rows.forEach(function(q){var a8=nv(q.m.met)||0,b8=nv(cM.m.met)||0;if(a8>b8||(a8===b8&&a8>0&&cM.m.apOff&&!q.m.apOff))cM=q});
       /* pP: % del agrupado de la parte (0-100); si esa columna no se exporta, su base / suma de la base x 100, o su peso */
-      var pP=function(row){if(ix.pctAg!=null)return ref('pctAg',row.r);if(ix[agB]!=null)return '('+ref(agB,row.r)+'/('+rows.map(function(q){return ref(agB,q.r)}).join('+')+')*100)';return _lit15(Number(row.m.peso)||0)};
+      var pP=function(row){if(!(sB>0))return _lit15(wP(row)*100);if(ix.pctAg!=null)return ref('pctAg',row.r);if(ix[agB]!=null)return '('+ref(agB,row.r)+'/SUM('+ref(agB,rows[0].r)+':'+colL(ix[agB])+rows[rows.length-1].r+')*100)';return _lit15(wP(row)*100)};
       var metRef=function(row){return (ix.met!=null)?ref('met',row.r):_lit15(Number(row.m.met)||0)};
-      /* METRADOS: SOLO VALORES. Con partes: contratado = el de la partida; forecast/mayor/actual = ese metrado x
-         suma(metrado de la parte / su metrado contratado x su % del agrupado) (una parte apagada no suma);
-         restantes = contratado o forecast - actual */
+      /* METRADOS: formula de la hoja de fotos; valor (metV) solo si su columna no se exporto. Con partes:
+         contratado = el de la partida; forecast/mayor/actual/avance/retirado = suma(metrado de la parte x su %
+         del agrupado / 100); restantes = contratado - avance (como la Tabla 1: met - av) o forecast - actual.
+         Una parte apagada o el "Resto de la partida" (sin metrado) aportan 0: si hay Resto, el forecast
+         equivalente no llega al contratado y el costo forecast del Resumen sale menor que la suma de la hoja 1
+         (el costo contrato si cuadra). Un apartado APAGADO, con la base del % del agrupado en HH forecast (la de
+         siempre), pesa 0 %: las demas partes llegan al 100 %, el forecast equivalente = el contratado y el costo
+         forecast del Resumen NO descuenta lo apagado (la hoja 1 si: su diferencia de costo aqui sale 0). */
       var sB=0;rows.forEach(function(q){sB+=nv(q.m[agB])||0});
       var wP=function(q){return (sB>0)?((nv(q.m[agB])||0)/sB):((nv(q.m.peso)||0)/100)};
       var eq=function(qk){var s9=0,hay=false;rows.forEach(function(q){var a=nv(q.m[qk]),b=nv(q.m.met);if(a!=null)hay=true;if(a!=null&&b)s9+=a/b*wP(q)});var M=nv(cM.m.met);return hay?((M!=null)?M*s9:0):null};
       var metV=function(k){if(!grp)return nv(ci.m[k]);
         if(k==='met')return nv(cM.m.met);
         if(k==='metF'||k==='metM'||k==='metA'||k==='metAM')return eq(k);
-        var A9=eq('metA')||0,M9=(k==='metR')?nv(cM.m.met):eq('metF');return (M9==null)?null:Math.max(0,M9-A9)};
+        var A9=((k==='metR'&&eq('av')!=null)?eq('av'):eq('metA'))||0,M9=(k==='metR')?nv(cM.m.met):eq('metF');return (M9==null)?null:(M9-A9)};
       var puV=function(){if(grp){var cT=0;rows.forEach(function(q){cT+=nv(q.m.costo)||0});var M=nv(cM.m.met);return (M&&M>0)?cT/M:null}
         var mt=nv(ci.m.met),co=nv(ci.m.costo);return (mt>0&&co>0)?co/mt:nv(ci.m.pu)};
       var rd=function(v){return v};
@@ -30021,41 +30035,78 @@ async function _tbExportarXlsx2(root,doc,opt){
         /* metrado forecast / mayor / actual: FORMULA de la hoja de fotos. Con partes: CANTIDAD equivalente =
            suma de SI.ERROR(metrado de la parte x su % del agrupado / 100; 0): 552 x 53.06% + 363 x 46.94% = 463.28 */
         if(FQ[k]&&ix[k]!=null){if(!grp)h+=celF(cr,ref(k,ci.r),xRN);
+          /* ninguna parte con ese metrado (fases sin cantidad): vacia, como el contratado y el restante, no 0.00 */
+          else if(rows.every(function(q){return nv(q.m[k])==null}))h+='<c r="'+cr+'" s="'+xRN+'"/>';
           else h+=celF(cr,rows.map(function(q){return 'IFERROR('+ref(k,q.r)+'*'+pP(q)+'/100,0)'}).join('+'),xRN);return}
-        if(MET[k]){var v9=metV(k);h+=(v9==null)?('<c r="'+cr+'" s="'+xRN+'"/>'):celN(cr,rd(v9),xRN);return}
+        if(MET[k]){if(!grp&&ix[k]!=null){h+=celF(cr,ref(k,ci.r),xRN);return}
+          if(grp&&k==='met'&&ix.met!=null){h+=celF(cr,ref('met',cM.r),xRN);return}
+          var qE=function(qk){return '('+rows.map(function(q){return 'IFERROR('+ref(qk,q.r)+'*'+pP(q)+'/100,0)'}).join('+')+')'};
+          /* sin la columna Avance, el avance equivalente exacto (como metV y la Tabla 1: met - av), no el metrado actual:
+             con un ampliado (av > forecast) o una tarea que no se considera, av y metA no coinciden */
+          /* formula de la columna cambiada por el usuario (barra fx): la suya sobre las celdas de ESTA hoja (equivalentes); exacta con + y -, con * o / es la formula sobre los equivalentes */
+          if(grp&&_tbFxCambiada(k)){var OV5=_tbFxDe(k),a5=ri(OV5[0]),b5=ri(OV5[2]);if(a5&&b5&&!ADD[OV5[0]]&&!ADD[OV5[2]]){h+=celF(cr,(OV5[1]==='/')?('IFERROR('+a5+'/'+b5+',"")'):(a5+OV5[1]+b5),xRN);return}}
+          if(grp&&k==='metR'&&ix.met!=null&&(ix.av!=null||eq('av')!=null||ix.metA!=null)&&nv(cM.m.met)!=null){h+=celF(cr,ref('met',cM.r)+'-'+((ix.av!=null)?qE('av'):((eq('av')!=null)?('('+_lit15(eq('av'))+')'):qE('metA'))),xRN);return}
+          if(grp&&k==='metRF'&&ix.metF!=null&&ix.metA!=null&&rows.some(function(q){return nv(q.m.metF)!=null})){h+=celF(cr,qE('metF')+'-'+qE('metA'),xRN);return}
+          var v9=metV(k);h+=(v9==null)?('<c r="'+cr+'" s="'+xRN+'"/>'):celN(cr,rd(v9),xRN);return}
         /* COSTOS: los unicos que dependen de otras columnas del Resumen: su metrado x el costo unitario del Resumen */
         var COSTM={costo:'met',costoC:'metF',costoM:'metM',costoA:'metA',costoAM:'metAM',costoR:'metR',costoRF:'metRF'};
-        if(COSTM[k]){var rm=ri(COSTM[k]),rp=ri('pu');
-          /* con partes, los metrados del Resumen ya son cantidades equivalentes: metrado x costo unitario */
-          if(rp&&rm)f='IFERROR('+rm+'*'+rp+',0)';
-          else f=grp?('SUM('+rows.map(function(q){return ref(k,q.r)}).join(',')+')'):ref(k,ci.r);
+        if(COSTM[k]){var rm=ri(COSTM[k]),rp=ri('pu'),OV7=_tbFxCambiada(k);
+          /* con partes, los metrados del Resumen ya son cantidades equivalentes: metrado x costo unitario. Con la formula
+             de la columna cambiada por el usuario (barra fx), la de la hoja 1 (ref o SUMA de las partes): si no, la suma
+             del Resumen no daria el TOTAL de la Tabla 1 */
+          if(!OV7&&rp&&rm&&puV()!=null)f='IFERROR('+rm+'*'+rp+',0)';
+          /* con partes y sin la columna de su metrado: el metrado equivalente (valor) x el costo unitario, no la suma de las partes */
+          else if(!OV7&&grp&&puV()!=null&&metV(COSTM[k])!=null){if(rp)f='IFERROR('+_lit15(metV(COSTM[k]))+'*'+rp+',0)';else{h+=celN(cr,metV(COSTM[k])*puV(),xRN);return}}
+          else if(ix[k]!=null)f=grp?('SUM('+rows.map(function(q){return ref(k,q.r)}).join(',')+')'):ref(k,ci.r);
+          else{var c8=null;rows.forEach(function(q){var v8=nv(q.m[k]);if(v8!=null)c8=(c8||0)+v8});h+=(c8==null)?('<c r="'+cr+'" s="'+xRN+'"/>'):celN(cr,c8,xRN);return}
           h+=celF(cr,f,xRN);return}
         /* costo unitario: el de la hoja de fotos; con partes, el costo de todas sus partes / el metrado de la partida;
            si no se exporto, va como valor */
-        if(k==='pu'){if(ix.pu==null||(grp&&(ix.costo==null||ix.met==null))){var p9=puV();h+=(p9==null)?('<c r="'+cr+'" s="'+xRN+'"/>'):celN(cr,rd(p9),xRN);return}
+        if(k==='pu'){if((ix.pu==null&&!(grp&&ix.costo!=null&&ix.met!=null))||(grp&&(ix.costo==null||ix.met==null||puV()==null))){var p9=puV();h+=(p9==null)?('<c r="'+cr+'" s="'+xRN+'"/>'):celN(cr,rd(p9),xRN);return}
           if(grp){h+=celF(cr,'IFERROR(SUM('+rows.map(function(q){return ref('costo',q.r)}).join(',')+')/'+ref('met',cM.r)+',0)',xRN);return}}
         /* estado de una partida con partes: si todas dicen lo mismo, eso; si no, el de cada parte */
-        if(k==='est'&&grp){var es9=rows.map(function(q){return String(q.m.est==null?'':q.m.est)});
-          if(es9.every(function(e){return e===es9[0]}))f='IF('+ref(k,ci.r)+'="","",'+ref(k,ci.r)+')';
-          else f=rows.map(function(q){return '"'+String(q.m.pert||'Parte').replace(/"/g,'""')+': "&'+ref(k,q.r)}).join('&" · "&');
+        /* el "Resto de la partida" repite el estado de la partida ('Activa'): no cuenta */
+        if(k==='est'&&grp){var rE9=rows.filter(function(q){return q.m.pert!=='Resto de la partida'});if(!rE9.length)rE9=rows;var es9=rE9.map(function(q){return String(q.m.est==null?'':q.m.est)});
+          if(es9.every(function(e){return e===es9[0]}))f='IF('+ref(k,rE9[0].r)+'="","",'+ref(k,rE9[0].r)+')';
+          else f=rE9.map(function(q){return '"'+String(q.m.pert||'Parte').replace(/"/g,'""')+': "&'+ref(k,q.r)}).join('&" · "&');
           h+=celF(cr,f,xRT);return}
-        if(!grp){f=num?ref(k,ci.r):('IF('+ref(k,ci.r)+'="","",'+ref(k,ci.r)+')')}
+        /* diferencia de costo: la de los costos de ESTA hoja (contrato - forecast), con su formato de signo */
+        /* con la formula de la columna cambiada por el usuario (barra fx), la suya sobre las celdas de esta hoja */
+        if(k==='dCosto'){var OV6=_tbFxDe(k)||['costo','-','costoC'],rC8=ri(OV6[0]),rF8=ri(OV6[2]);
+          /* con partes y sin la columna de uno de los costos (ni la de su metrado): su valor en ESTA hoja (metrado equivalente x unitario), no la suma de la hoja 1 */
+          var vC8=function(x){return (grp&&COSTM[x]&&!_tbFxCambiada(x)&&puV()!=null&&metV(COSTM[x])!=null)?_lit15(metV(COSTM[x])*puV()):null};if(!rC8)rC8=vC8(OV6[0]);if(!rF8)rF8=vC8(OV6[2]);
+          if(rC8&&rF8){h+=celF(cr,(OV6[1]==='/')?('IFERROR('+rC8+'/'+rF8+',"")'):(rC8+OV6[1]+rF8),xRD);return}st=xRD}
+        if(!grp&&!(k==='num'&&g.partes)){f=num?ref(k,ci.r):('IF('+ref(k,ci.r)+'="","",'+ref(k,ci.r)+')')}
         else if(k==='pert'){h+=celT(cr,'',xRT);return}
+        /* textos que cambian por parte (apartados apagados, saldo retirado): los de TODAS sus partes, no solo el de la que
+           lleva el metrado (cM prefiere la parte NO apagada); el saldo retirado, con el nombre de su parte */
+        else if(k==='apOff'||k==='ret'){var vs9={},tx9=rows.filter(function(q){var t9=String(q.m[k]==null?'':q.m[k]);if(t9===''||(k==='apOff'&&vs9[t9]))return false;vs9[t9]=1;return true});
+          if(!tx9.length){h+=celT(cr,'',xRT);return}
+          f=tx9.map(function(q){return (k==='ret'?('"'+String(q.m.pert||'Parte').replace(/"/g,'""')+': "&'):'')+ref(k,q.r)}).join('&" · "&')}
         else if(ADD[k])f='SUM('+rows.map(function(q){return ref(k,q.r)}).join(',')+')';
-        else if(k==='pctAg')f='SUM('+rows.map(function(q){return ref(k,q.r)}).join(',')+')';
-        else if(QW[k]){f=rows.map(function(q){return 'IFERROR('+ref(k,q.r)+'/'+metRef(q)+'*'+pP(q)+',0)'}).join('+');st=xRP}
+        else if(k==='pctAg')f=(sB>0)?('SUM('+rows.map(function(q){return ref(k,q.r)}).join(',')+')'):_lit15(rows.reduce(function(s8,q){return s8+wP(q)*100},0));
+        else if(QW[k])f=rows.map(function(q){return 'IFERROR('+ref(k,q.r)+'*'+pP(q)+'/100,0)'}).join('+');
+        /* % no se hace: cada parte pesa lo que vale en el CONTRATO (HH contrato), no en el forecast (un apartado apagado
+           tiene HH forecast 0 y la partida salia con 0 %); el "Resto de la partida" repite el de la partida y no suma */
+        else if(k==='noHace'){var nr9=rows.filter(function(q){return q.m.pert!=='Resto de la partida'}),sc9=0;rows.forEach(function(q){sc9+=nv(q.m.hhC)||0});
+          if(ix.hhC!=null&&sc9>0)f='IFERROR(('+nr9.map(function(q){return 'IFERROR('+ref(k,q.r)+'*'+ref('hhC',q.r)+',0)'}).join('+')+')/SUM('+rows.map(function(q){return ref('hhC',q.r)}).join(',')+'),0)';
+          else f=_lit15(nr9.reduce(function(s8,q){return s8+((sc9>0)?(nv(q.m.hhC)||0)/sc9:(nv(q.m.peso)||0)/100)*(nv(q.m.noHace)||0)},0))}
         else if(PW[k])f=rows.map(function(q){return 'IFERROR('+ref(k,q.r)+'*'+pP(q)+'/100,0)'}).join('+');
+        /* numero de fila: el de la partida (la hoja de fotos numera cada parte 12.1, 12.2) */
+        else if(k==='num')f='IF('+ref(k,cM.r)+'="","",LEFT('+ref(k,cM.r)+',FIND(".",'+ref(k,cM.r)+'&".")-1))';
+        else if(k==='hhu'&&ix.hhC!=null&&ix.met!=null&&nv(cM.m.met)>0)f='IFERROR(SUM('+rows.map(function(q){return ref('hhC',q.r)}).join(',')+')/'+ref('met',cM.r)+',0)';
+        else if(k==='hhu'&&nv(cM.m.met)>0&&rows.some(function(q){return nv(q.m.hhC)!=null})){var hs9=0;rows.forEach(function(q){hs9+=nv(q.m.hhC)||0});h+=celN(cr,hs9/nv(cM.m.met),xRN);return}
         else f=num?ref(k,cM.r):('IF('+ref(k,cM.r)+'="","",'+ref(k,cM.r)+')');
         h+=celF(cr,f,st)});
       f2.push('<row r="'+r2+'">'+h+'</row>');r2++});
-    var ht2='';RK.forEach(function(k,i){var cr=colL(i)+r2;if(i===0)ht2+=celT(cr,'TOTAL',xRTB);else if(ADD[k])ht2+=celF(cr,'SUM('+colL(i)+r2a+':'+colL(i)+(r2-1)+')',xRNB);else ht2+=celT(cr,'',xRTB)});
+    var ht2='',tt9=false;RK.forEach(function(k,i){var cr=colL(i)+r2;if(ADD[k])ht2+=celF(cr,'SUM('+colL(i)+r2a+':'+colL(i)+(r2-1)+')',(k==='dCosto')?xRDB:xRNB);else if(!tt9){tt9=true;ht2+=celT(cr,'TOTAL',xRTB)}else ht2+=celT(cr,'',xRTB)});
     f2.push('<row r="'+r2+'" ht="18" customHeight="1">'+ht2+'</row>');
     hoja2='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
       '<dimension ref="A1:'+colL(nR-1)+r2+'"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'+
       '<sheetFormatPr defaultRowHeight="15"/>'+cols2+'<sheetData>'+f2.join('')+'</sheetData>'+(mg2.length?('<mergeCells count="'+mg2.length+'">'+mg2.map(function(x){return '<mergeCell ref="'+x+'"/>'}).join('')+'</mergeCells>'):'')+'</worksheet>'}
   var estilos='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    '<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/><numFmt numFmtId="166" formatCode="&quot;− &quot;#,##0.00;&quot;+ &quot;#,##0.00;0.00"/></numFmts>'+
+    '<numFmts count="3"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/><numFmt numFmtId="166" formatCode="&quot;− &quot;#,##0.00;&quot;+ &quot;#,##0.00;0.00"/></numFmts>'+
     '<fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts>'+
     '<fills count="'+fills.length+'">'+fills.join('')+'</fills>'+
     '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+
@@ -31413,7 +31464,7 @@ async function _tqExportarXlsx2(root,doc){
     '</worksheet>';
   var estilos='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    '<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/><numFmt numFmtId="166" formatCode="&quot;− &quot;#,##0.00;&quot;+ &quot;#,##0.00;0.00"/></numFmts>'+
+    '<numFmts count="3"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/><numFmt numFmtId="166" formatCode="&quot;− &quot;#,##0.00;&quot;+ &quot;#,##0.00;0.00"/></numFmts>'+
     '<fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts>'+
     '<fills count="'+fills.length+'">'+fills.join('')+'</fills>'+
     '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+
@@ -32429,7 +32480,7 @@ async function _tvExportarXlsx2(root,doc){
     '</worksheet>';
   var estilos='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    '<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/><numFmt numFmtId="166" formatCode="&quot;− &quot;#,##0.00;&quot;+ &quot;#,##0.00;0.00"/></numFmts>'+
+    '<numFmts count="3"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/><numFmt numFmtId="166" formatCode="&quot;− &quot;#,##0.00;&quot;+ &quot;#,##0.00;0.00"/></numFmts>'+
     '<fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts>'+
     '<fills count="'+fills.length+'">'+fills.join('')+'</fills>'+
     '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+
@@ -33689,7 +33740,7 @@ async function _txExportarXlsx2(root,doc){
     '</worksheet>';
   var estilos='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
-    '<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/><numFmt numFmtId="166" formatCode="&quot;− &quot;#,##0.00;&quot;+ &quot;#,##0.00;0.00"/></numFmts>'+
+    '<numFmts count="3"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/><numFmt numFmtId="166" formatCode="&quot;− &quot;#,##0.00;&quot;+ &quot;#,##0.00;0.00"/></numFmts>'+
     '<fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts>'+
     '<fills count="'+fills.length+'">'+fills.join('')+'</fills>'+
     '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+
