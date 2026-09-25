@@ -12002,7 +12002,7 @@ async function _wkLibroApp(semN,corte,ids){
       ch=ch.replace(/<c:tx><c:v>Programado \([^<]*\)<\/c:v><\/c:tx>/,
         '<c:tx><c:v>Programado ('+_wkEsc(resRS[0].id)+')</c:v></c:tx>');
       ap.partes[rp]=ch});
-    hojas.push(['REPORTE SEMANAL',hp.xml,
+    hojas.push(['REPORTE SEMANAL',_wkComAplica(hp.xml),
       ap?{relsHoja:ap.rels,partes:ap.partes}:null]);
     /* las dos hojas que sus graficos leen, con su formato */
   }
@@ -20183,6 +20183,34 @@ async function _wkDLibroApp(semN,corte,ids){
     LB.hojas=(LB.hojas||[]).map(function(h){if(h&&(h[0]==='PROGRAMACION'||h[0]==='METRADO'))h[1]=_wkDSinFilas13(h[1]);return h});
     try{LB.info=LB.info||{};LB.info.gen='D.001'}catch(e){}return LB}
   finally{_crCostoDe=origC}}
+/* Los 4 COMENTARIOS del REPORTE SEMANAL (AC39:AM78): el administrador los escribe en la ventana del
+   Excel semanal; cada uno va en la celda superior izquierda de su bloque combinado y las filas del bloque
+   se agrandan segun el texto. En blanco = el bloque sale en blanco (no el texto viejo de la plantilla). */
+var _WK_COM=[{id:'_wkC1',t:'CUMPLIMIENTOS Y OBSERVACIONES',cel:'AC40',f0:40,f1:47},
+  {id:'_wkC2',t:'PROBLEMAS/RESTRICCIONES',cel:'AC51',f0:51,f1:54},
+  {id:'_wkC3',t:'RIESGOS / OPORTUNIDADES',cel:'AC59',f0:59,f1:67},
+  {id:'_wkC4',t:'PLAN DE MITIGACI\u00d3N',cel:'AC71',f0:71,f1:79}];
+function _wkComLee(){var o={};_WK_COM.forEach(function(z){var e=document.getElementById(z.id);o[z.id]=e?String(e.value||''):''});return o}
+function _wkComKey(){var s9=document.getElementById('_wkSel');return 'obf4_wk_com_S'+(s9?s9.value:'')}
+function _wkComCarga(){try{var v=JSON.parse(localStorage.getItem(_wkComKey())||'{}');_WK_COM.forEach(function(z){var e=document.getElementById(z.id);if(e)e.value=v[z.id]||''})}catch(e){}}
+function _wkComGuarda(){try{var o=_wkComLee(),hay=false;for(var k in o)if(o[k].trim())hay=true;if(hay)localStorage.setItem(_wkComKey(),JSON.stringify(o));else localStorage.removeItem(_wkComKey())}catch(e){}}
+function _wkComAplica(xml){try{var o=_wkComLee();
+  _WK_COM.forEach(function(z){var tx=String(o[z.id]||'').replace(/\r/g,'').replace(/\s+$/,'');
+    /* la celda: mismo estilo, texto en linea (o vacia) */
+    var re=new RegExp('<c r="'+z.cel+'"([^>]*?)(\\/>|>[\\s\\S]*?<\\/c>)');
+    var m=re.exec(xml),st='';if(m){var ms=/\ss="(\d+)"/.exec(m[1]);st=ms?(' s="'+ms[1]+'"'):''}
+    var nueva=tx?('<c r="'+z.cel+'"'+st+' t="inlineStr"><is><t xml:space="preserve">'+_wkEsc(tx)+'</t></is></c>'):('<c r="'+z.cel+'"'+st+'/>');
+    if(m)xml=xml.replace(m[0],nueva);
+    /* el alto: lineas que ocupa el texto en el ancho AC:AM (~125 caracteres por linea) repartido en las filas del bloque */
+    var lin=0;(tx?tx.split('\n'):[]).forEach(function(p){lin+=Math.max(1,Math.ceil(p.length/118))});
+    var nF=z.f1-z.f0+1,tot=lin*15+6,ht=Math.max(15,Math.ceil(tot/nF*4)/4);
+    for(var r=z.f0;r<=z.f1;r++){var rr=new RegExp('<row r="'+r+'"([^>]*?)(\\/?)>');var mr=rr.exec(xml);
+      if(mr){var at=mr[1].replace(/\s*ht="[^"]*"/,'').replace(/\s*customHeight="[^"]*"/,'');xml=xml.replace(mr[0],'<row r="'+r+'"'+at+' ht="'+ht+'" customHeight="1"'+mr[2]+'>')}
+      else{/* la fila no existe: se mete antes de la siguiente */
+        var sig=null,rs=/<row r="(\d+)"/g,x2;while((x2=rs.exec(xml))){if(+x2[1]>r){sig=x2;break}}
+        var nr='<row r="'+r+'" ht="'+ht+'" customHeight="1"/>';
+        if(sig)xml=xml.slice(0,sig.index)+nr+xml.slice(sig.index);else xml=xml.replace('</sheetData>',nr+'</sheetData>')}}});
+  return xml}catch(e){try{console.warn('comentarios REPORTE SEMANAL:',e)}catch(_e){}return xml}}
 function _wkExcel(){
   if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return}
   if(typeof DecompressionStream==='undefined'||typeof CompressionStream==='undefined'){
@@ -20221,6 +20249,11 @@ function _wkExcel(){
     '<div style="text-align:center;font-size:10.5px;color:#8A94A6;margin-bottom:9px">— o con un archivo tuyo —</div>'+
     '<button id="_wkPick" style="width:100%;background:#EAF1FB;color:#1F3864;border:1.5px dashed #7FA0F5;border-radius:11px;padding:13px;font-weight:800;font-size:13px;cursor:pointer;margin-bottom:11px">📄 Elegir el Excel plantilla…</button>'+
     '<input type="file" id="_wkFile" accept=".xlsx" style="display:none">'+
+    '<div id="_wkComBox" style="margin:2px 0 11px;border:1.5px solid #C7D2E0;border-radius:11px;padding:10px 11px;background:#F8FAFD">'+
+    '<div style="font-weight:900;font-size:13px;color:#1F3864;margin-bottom:3px">📝 Comentarios de la hoja REPORTE SEMANAL</div>'+
+    '<div style="font-size:11px;color:#5C6779;margin-bottom:8px">Van en AC39:AM78 del REPORTE SEMANAL; el alto de las filas se ajusta al texto (poco o mucho). En blanco, salen en blanco.</div>'+
+    _WK_COM.map(function(z){return '<label style="display:block;font-size:11px;font-weight:800;color:#1F3864;margin:6px 0 3px">'+_wkEsc(z.t)+'</label>'+
+      '<textarea id="'+z.id+'" rows="4" placeholder="Escribe aquí…" style="width:100%;box-sizing:border-box;border:1.5px solid #C7D2E0;border-radius:9px;padding:8px 9px;font-size:12.5px;font-family:inherit;resize:vertical;background:#fff"></textarea>'}).join('')+'</div>'+
     '<div id="_wkMsg" style="font-size:12px;color:#5C6779;margin-bottom:11px"></div>'+
     '<div style="display:flex;gap:9px">'+
     '<button id="_wkNo" style="flex:1;background:#E7EDF5;color:#1B2433;border:0;border-radius:12px;padding:14px;font-weight:800;font-size:13.5px;cursor:pointer">Cancelar</button>'+
@@ -20228,6 +20261,7 @@ function _wkExcel(){
   document.body.appendChild(ov);
   ov.onclick=function(e){if(e.target===ov)ov.remove()};
   document.getElementById('_wkNo').onclick=function(){ov.remove()};
+  try{_wkComCarga();_WK_COM.forEach(function(z){var e=document.getElementById(z.id);if(e)e.oninput=_wkComGuarda});var _s9=document.getElementById('_wkSel');if(_s9)_s9.addEventListener('change',_wkComCarga)}catch(_ec){}
   /* la generacion elegida se recuerda, y el boton verde dice cual
      va a armar: asi no hay forma de bajar B creyendo que es A */
   var _genPinta=function(){try{
@@ -22099,7 +22133,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c25';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c26';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
