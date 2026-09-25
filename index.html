@@ -22057,7 +22057,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c18';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c19';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -29015,11 +29015,17 @@ function _flotVentana(id,titulo,icono){
 /* la ruta WBS de una partida debajo de su sistema: los titulos del catalogo
    cuyo item es prefijo del suyo (4.01.02 para 4.01.02.01), del mas corto al mas
    largo, y su subsistema si lo tiene (MATERIALES ENTREGADOS POR...) */
-function _tbWbsDe(pp){var id=String(pp.id||''),out=[];try{var T=window._crCatTit||[];
+function _tbWbsDe(pp){var id=String(pp.id||''),out=[],ks=[];try{var T=window._crCatTit||[];
+  /* dos titulos del QPS pueden llamarse igual (4.04.01 y 4.04.02 'Conductores de baja tension'):
+     el nombre se muestra igual, pero la CLAVE del titulo lleva su item para que sean dos titulos */
+  var rep={};T.forEach(function(t){if(t.item&&t.nom)rep[t.nom]=(rep[t.nom]||0)+1});
   T.filter(function(t){return t.item&&id.indexOf(t.item+'.')===0&&t.nom!==pp.sis&&t.item.split('.').length>2})
    .sort(function(a,b){return a.item.length-b.item.length})
-   .forEach(function(t){if(t.nom&&out.indexOf(t.nom)<0)out.push(t.nom)});
-  if(pp.sub&&out.indexOf(pp.sub)<0)out.push(pp.sub)}catch(e){}return out}
+   .forEach(function(t){if(t.nom&&out.indexOf(t.nom)<0){out.push(t.nom);ks.push(rep[t.nom]>1?(t.nom+' ('+t.item+')'):t.nom)}});
+  if(pp.sub&&out.indexOf(pp.sub)<0){out.push(pp.sub);ks.push(pp.sub)}}catch(e){}out._k=ks;return out}
+/* clave del nivel i de la ruta WBS de una fila (el nombre, o nombre (item) si hay dos titulos con ese nombre) */
+function _tbWbsK(r,i,lab){try{var k=(r&&r.wbs&&r.wbs._k)||null;if(!k&&r&&r.id&&r.wbs&&r.wbs.length){k=_tbWbsDe({id:r.id,sis:r.sis,sub:r.wbs[r.wbs.length-1]})._k}
+  return (k&&k[i]&&String(k[i]).indexOf(lab)===0)?k[i]:lab}catch(e){return lab}}
 /* metrado restante (a - b, a centesimas) y duracion en dias = metrado
    restante forecast / rendimiento (und/dia); las mismas cuentas que las
    formulas del Excel exportado */
@@ -29480,12 +29486,12 @@ function _crTablaHTML(D,q,ord){
     var kS=String(sis),cS=!!_pleg[kS]||dzC;
     if(!dzC)H+=tituloN(esc(sis)+' <span style="color:#7d8590;font-weight:600">· '+L.length+' partidas · '+S.act+' activas</span>',kS,0,cS);
     /* subtitulos WBS debajo del sistema: cuantas partidas y activas tiene cada uno */
-    var cnt={};L.forEach(function(r){var k=kS;(r.wbs||[]).forEach(function(lab){k+=' / '+lab;var c=cnt[k]||(cnt[k]={n:0,act:0});c.n++;if(r.est==='Activa')c.act++})});
+    var cnt={};L.forEach(function(r){var k=kS;(r.wbs||[]).forEach(function(lab,_i9){k+=' / '+_tbWbsK(r,_i9,lab);var c=cnt[k]||(cnt[k]={n:0,act:0});c.n++;if(r.est==='Activa')c.act++})});
     var prevK=[];
     L.forEach(function(r,i){N++;var bg=(i%2)?'#0d1522':'#0b1220';
       /* se abre un subtitulo por cada nivel de la ruta que cambia respecto a la
          fila anterior; con un nivel de arriba plegado no se pinta nada de abajo */
-      var ruta=r.wbs||[],keys=[],k9=kS;ruta.forEach(function(lab){k9+=' / '+lab;keys.push(k9)});
+      var ruta=r.wbs||[],keys=[],k9=kS;ruta.forEach(function(lab,_i9){k9+=' / '+_tbWbsK(r,_i9,lab);keys.push(k9)});
       var oc=cS;
       for(var lv=0;lv<keys.length;lv++){
         if(keys[lv]!==prevK[lv]&&!oc){var c9=cnt[keys[lv]]||{n:0,act:0};H+=tituloN(esc(ruta[lv])+' <span style="color:#7d8590;font-weight:600">· '+c9.n+' partidas · '+c9.act+' activas</span>',keys[lv],lv+1,!!_pleg[keys[lv]])}
@@ -30946,12 +30952,12 @@ function _crTablaQHTML(D,q,ord){
     var kS=String(sis),cS=!!_pleg[kS]||dzC;
     if(!dzC)H+=tituloN(esc(sis)+' <span style="color:#7d8590;font-weight:600">· '+L.length+' partidas · '+S.act+' activas</span>',kS,0,cS);
     /* subtitulos WBS debajo del sistema: cuantas partidas y activas tiene cada uno */
-    var cnt={};L.forEach(function(r){var k=kS;(r.wbs||[]).forEach(function(lab){k+=' / '+lab;var c=cnt[k]||(cnt[k]={n:0,act:0});c.n++;if(r.est==='Activa')c.act++})});
+    var cnt={};L.forEach(function(r){var k=kS;(r.wbs||[]).forEach(function(lab,_i9){k+=' / '+_tbWbsK(r,_i9,lab);var c=cnt[k]||(cnt[k]={n:0,act:0});c.n++;if(r.est==='Activa')c.act++})});
     var prevK=[];
     L.forEach(function(r,i){N++;var bg=(i%2)?'#0d1522':'#0b1220';
       /* se abre un subtitulo por cada nivel de la ruta que cambia respecto a la
          fila anterior; con un nivel de arriba plegado no se pinta nada de abajo */
-      var ruta=r.wbs||[],keys=[],k9=kS;ruta.forEach(function(lab){k9+=' / '+lab;keys.push(k9)});
+      var ruta=r.wbs||[],keys=[],k9=kS;ruta.forEach(function(lab,_i9){k9+=' / '+_tbWbsK(r,_i9,lab);keys.push(k9)});
       var oc=cS;
       for(var lv=0;lv<keys.length;lv++){
         if(keys[lv]!==prevK[lv]&&!oc){var c9=cnt[keys[lv]]||{n:0,act:0};H+=tituloN(esc(ruta[lv])+' <span style="color:#7d8590;font-weight:600">· '+c9.n+' partidas · '+c9.act+' activas</span>',keys[lv],lv+1,!!_pleg[keys[lv]])}
@@ -31952,12 +31958,12 @@ function _crTablaVHTML(D,q,ord){
     var kS=String(sis),cS=!!_pleg[kS]||dzC;
     if(!dzC)H+=tituloN(esc(sis)+' <span style="color:#7d8590;font-weight:600">· '+L.filter(function(r9){return !r9._tipo}).length+' partidas · '+S.act+' activas</span>',kS,0,cS);
     /* subtitulos WBS debajo del sistema: cuantas partidas y activas tiene cada uno */
-    var cnt={};L.forEach(function(r){if(r._tipo)return;var k=kS;(r.wbs||[]).forEach(function(lab){k+=' / '+lab;var c=cnt[k]||(cnt[k]={n:0,act:0});c.n++;if(r.est==='Activa')c.act++})});
+    var cnt={};L.forEach(function(r){if(r._tipo)return;var k=kS;(r.wbs||[]).forEach(function(lab,_i9){k+=' / '+_tbWbsK(r,_i9,lab);var c=cnt[k]||(cnt[k]={n:0,act:0});c.n++;if(r.est==='Activa')c.act++})});
     var prevK=[];
     L.forEach(function(r,i){if(!r._tipo)N++;var bg=(i%2)?'#0d1522':'#0b1220';
       /* se abre un subtitulo por cada nivel de la ruta que cambia respecto a la
          fila anterior; con un nivel de arriba plegado no se pinta nada de abajo */
-      var ruta=r.wbs||[],keys=[],k9=kS;ruta.forEach(function(lab){k9+=' / '+lab;keys.push(k9)});
+      var ruta=r.wbs||[],keys=[],k9=kS;ruta.forEach(function(lab,_i9){k9+=' / '+_tbWbsK(r,_i9,lab);keys.push(k9)});
       var oc=cS;
       for(var lv=0;lv<keys.length;lv++){
         if(keys[lv]!==prevK[lv]&&!oc){var c9=cnt[keys[lv]]||{n:0,act:0};H+=tituloN(esc(ruta[lv])+' <span style="color:#7d8590;font-weight:600">· '+c9.n+' partidas · '+c9.act+' activas</span>',keys[lv],lv+1,!!_pleg[keys[lv]])}
@@ -33204,12 +33210,12 @@ function _crTablaRHTML(D,q,ord){
     var kS=String(sis),cS=!!_pleg[kS]||dzC;
     if(!dzC)H+=tituloN(esc(sis)+' <span style="color:#7d8590;font-weight:600">· '+L.length+' partidas · '+S.act+' activas</span>',kS,0,cS);
     /* subtitulos WBS debajo del sistema: cuantas partidas y activas tiene cada uno */
-    var cnt={};L.forEach(function(g){var r=g.L[0],k=kS;(r.wbs||[]).forEach(function(lab){k+=' / '+lab;var c=cnt[k]||(cnt[k]={n:0,act:0});c.n++;if(r.est==='Activa')c.act++})});
+    var cnt={};L.forEach(function(g){var r=g.L[0],k=kS;(r.wbs||[]).forEach(function(lab,_i9){k+=' / '+_tbWbsK(r,_i9,lab);var c=cnt[k]||(cnt[k]={n:0,act:0});c.n++;if(r.est==='Activa')c.act++})});
     var prevK=[];
     L.forEach(function(g,i){N++;var r=g.L[0];var bg=(i%2)?'#0d1522':'#0b1220';   /* el mismo numero y el mismo fondo para las dos filas del alcance */
       /* se abre un subtitulo por cada nivel de la ruta que cambia respecto a la
          fila anterior; con un nivel de arriba plegado no se pinta nada de abajo */
-      var ruta=r.wbs||[],keys=[],k9=kS;ruta.forEach(function(lab){k9+=' / '+lab;keys.push(k9)});
+      var ruta=r.wbs||[],keys=[],k9=kS;ruta.forEach(function(lab,_i9){k9+=' / '+_tbWbsK(r,_i9,lab);keys.push(k9)});
       var oc=cS;
       for(var lv=0;lv<keys.length;lv++){
         if(keys[lv]!==prevK[lv]&&!oc){var c9=cnt[keys[lv]]||{n:0,act:0};H+=tituloN(esc(ruta[lv])+' <span style="color:#7d8590;font-weight:600">· '+c9.n+' partidas · '+c9.act+' activas</span>',keys[lv],lv+1,!!_pleg[keys[lv]])}
