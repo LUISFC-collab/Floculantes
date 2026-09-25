@@ -20133,8 +20133,28 @@ async function _wkCActualT2(R,cronId,corte){
     if(gIni<=corte){if(pre<0){neg+=pre}else if(pre>1e-9){m[gIni]=(m[gIni]||0)+pre/hh;dias.push(gIni)}}
     if(neg<0){dias.sort();var q=-neg/hh;for(var k9=dias.length-1;k9>=0&&q>1e-12;k9--){var d9=dias[k9],v9=m[d9]||0;var r9=Math.min(v9,q);m[d9]=v9-r9;q-=r9;if(!(m[d9]>1e-12))delete m[d9]}}})}
 async function _wkCLibroApp(semN,corte,ids){
-  var orig=pctOfAt,origPR=_crPlanRecupera,mapa={};
+  var orig=pctOfAt,origPR=_crPlanRecupera,origTr=_crTramosDe,origPI=_wkPlanPorItem,mapa={};
   try{var L=(await _crPull()).filter(function(c){return !c.eliminado&&ids.indexOf(c.cron_id)>=0});
+    /* el PLAN de la C es el de la TABLA 3: su fila 'Curva S del cronograma (.xer)' (lo ganado hasta la
+       fecha de datos y el remanente de cada actividad por dia laboral), por actividad (vista agrupada,
+       para ACTIVITY_PLAN y las filas Prog. de PROGRAMACION) y por partida (vista por partida) */
+    var T3A={},T3I={};
+    for(var i9=0;i9<L.length;i9++){var c9=L[i9];try{
+      var b9=(typeof _tvOpc==='function')?(_tvOpc()||{}):{},o9={};for(var k9 in b9)o9[k9]=b9[k9];
+      o9.fuente='curva';o9.plan=false;o9.incSem=false;o9.per='sem';o9.desde='';o9.hasta='';
+      var tr9=function(D){var m={};(D.filas||[]).forEach(function(r){if(!r||r.id==null||r._nosum)return;var L2=[];
+        (D.per||[]).forEach(function(p){var v=Number((r.p||{})[p.k])||0;if(v>1e-12)L2.push({ini:p.ini,fin:p.fin,hh:v})});m[String(r.id)]=L2});return m};
+      var oA={};for(var kA in o9)oA[kA]=o9[kA];oA.vista='agr';T3A[c9.cron_id]=tr9(await _t23Datos(c9,oA));
+      var oI={};for(var kI in o9)oI[kI]=o9[kI];oI.vista='alc';T3I[c9.cron_id]=tr9(await _t23Datos(c9,oI))}
+      catch(e9){try{console.warn('C.003 plan de la Tabla 3:',e9)}catch(_e){}}}
+    _crTramosDe=function(t,alc,uItems,rp){try{var A=t&&T3A[t.cron_id],L3=A?A[String(t.task_code)]:null;
+      if(L3&&L3.length){var tot=0;L3.forEach(function(x){tot+=x.hh});var hq=0;(t.items||[]).forEach(function(i){hq+=(Number(uItems&&uItems[i])||0)/_crVeces(rp,i)});
+        var f=(tot>0&&hq>0)?hq/tot:0;return L3.map(function(x){return {ini:x.ini,fin:x.fin,hh:x.hh*f}})}}catch(e){}return origTr.apply(this,arguments)};
+    _wkPlanPorItem=function(tar,uItems,semanas,alc){try{var cid=tar&&tar[0]&&tar[0].cron_id,I=cid?T3I[cid]:null;
+      if(I&&semanas&&semanas.length){var ult=semanas.length-1,out={};Object.keys(uItems||{}).forEach(function(it){var L4=I[it];if(!L4||!L4.length)return;
+        var fila=semanas.map(function(){return 0});L4.forEach(function(x){var d=x.ini,w=-1;if(d>semanas[ult].fin)w=ult;else if(d<semanas[0].ini)w=0;
+          else for(var j=0;j<semanas.length;j++)if(d>=semanas[j].ini&&d<=semanas[j].fin){w=j;break}if(w>=0)fila[w]+=x.hh});out[it]=fila});return out}}
+      catch(e){}return origPI.apply(this,arguments)};
     var esp=L[L.length-1];if(esp){var D=await _crTablaDatosMemo(esp);(D.filas||[]).forEach(function(r){if(r&&r.id)mapa[r.id]=r})}
     pctOfAt=function(p,iso){var r=p&&mapa[p.id];if(!r)return orig.apply(this,arguments);var f=Number(_crFracHechaAt(r,iso))||0;return Math.max(0,Math.min(100,f*100))};
     _crPlanRecupera=async function(cronId,corte2,semN2){var R=await origPR.apply(this,arguments);
@@ -20142,7 +20162,7 @@ async function _wkCLibroApp(semN,corte,ids){
     var LB=await _wkLibroApp(semN,corte,ids);
     LB.hojas=_wkCMigra(LB.hojas);window._wkCHojas=LB.hojas;
     try{LB.info=LB.info||{};LB.info.gen='C.003'}catch(e){}return LB}
-  finally{pctOfAt=orig;_crPlanRecupera=origPR}}
+  finally{pctOfAt=orig;_crPlanRecupera=origPR;_crTramosDe=origTr;_wkPlanPorItem=origPI}}
 function _wkExcel(){
   if(!(typeof esAdmin==='function'&&esAdmin())){if(typeof toast==='function')toast('Solo el administrador');return}
   if(typeof DecompressionStream==='undefined'||typeof CompressionStream==='undefined'){
@@ -22059,7 +22079,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c23';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c24';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
