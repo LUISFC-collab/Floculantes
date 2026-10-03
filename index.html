@@ -10868,8 +10868,14 @@ function _wkCostoApp(P){
       COLS.forEach(function(col){
         c+=(col==='F')?txt('F','Actual',est.e.F):vac(col,est.e[col])});
     }
-    for(var w=1;w<=nS;w++)
-      c+=cel(colC(w),'$D'+(m.base+D)+'*PROGRAMACION!'+_wkgCol('N',w)+pr,est.e[colC(w)]);
+    var CSx=(m.tipo!=='plan'&&typeof window!=='undefined'&&window._wkDCostoSem)?window._wkDCostoSem[m.cron]:null;
+    for(var w=1;w<=nS;w++){
+      if(CSx){/* D.001: costo ganado acumulado de la actividad (Tabla 1 por metrado), no $D x % de HH */
+        var h6="'P6-"+m.cron+"'",u6=(P.p6Ult&&P.p6Ult[m.cron])||3,cF=_wkP6Col(2*nS-1);
+        var fq6=(w>P.iSem)?'""':('IFERROR(VLOOKUP($B'+(m.base+D)+','+h6+'!$'+_WKP6.cod+'$3:$'+cF+'$'+u6+
+          ',MATCH("COSTO REAL S'+sem[w-1].n+'",'+h6+'!$'+_WKP6.cod+'$2:$'+cF+'$2,0),FALSE),0)');
+        c+=cel(colC(w),fq6,est.e[colC(w)])}
+      else c+=cel(colC(w),'$D'+(m.base+D)+'*PROGRAMACION!'+_wkgCol('N',w)+pr,est.e[colC(w)])}
     r.push('<row r="'+n+'"'+est.at+'>'+c+'</row>')});
   var ultPie=P.ultFila+D;
   var enc=base.slice(0,base.indexOf('<sheetData>'))
@@ -11381,6 +11387,8 @@ function _wkEspinaFilas(filas,nomWbs,desde,paso){
 /* La lista de actividades de un cronograma: la suya, no la de otro. */
 function _wkHojaP6Esp(bl,semanas,ib){
   var S=_WKS,P=_WKP6,r=[];
+  /* D.001: tras las REAL Sn van las COSTO REAL Sn (costo ganado acumulado por actividad) */
+  var nSemP6=(semanas||[]).length,hayCS=(bl.filas||[]).some(function(f){return f&&f.costoSem});
   var E=_wkEspinaFilas(bl.filas,bl.nomWbs,3);
   r.push('<row r="1">'+_crXlsCel(P.clave,1,_WKPROY||'',true,S.titulo)+
     _crXlsCel(P.nom,1,_WKFECHA?_crASerial(_WKFECHA):'',false,S.fecha)+
@@ -11390,7 +11398,9 @@ function _wkHojaP6Esp(bl,semanas,ib){
            [P.dias,'DURAC. (d)'],[P.ini,'INICIO'],[P.fin,'FIN']];
   r.push('<row r="2">'+cab.map(function(c){return _crXlsCel(c[0],2,c[1],true,S.cab)}).join('')+
     (semanas||[]).map(function(s2,i){return _crXlsCel(_wkP6Col(i),2,
-      'REAL S'+s2.n,true,S.cab)}).join('')+'</row>');
+      'REAL S'+s2.n,true,S.cab)}).join('')+
+    (hayCS?(semanas||[]).map(function(s2,i){return _crXlsCel(_wkP6Col(nSemP6+i),2,
+      'COSTO REAL S'+s2.n,true,S.cab)}).join(''):'')+'</row>');
   E.lista.forEach(function(x){
     var n=x.r;
     if(x.tipo==='wbs'){
@@ -11413,11 +11423,14 @@ function _wkHojaP6Esp(bl,semanas,ib){
     (semanas||[]).forEach(function(s2,i){
       var v=(f.semReal&&f.semReal[i])?f.semReal[i]:'';
       c+=_crXlsCel(_wkP6Col(i),n,v,false,S.num)});
+    if(hayCS)(semanas||[]).forEach(function(s2,i){
+      var v=(f.costoSem&&f.costoSem[i]!=null&&f.costoSem[i]!=='')?f.costoSem[i]:'';
+      c+=_crXlsCel(_wkP6Col(nSemP6+i),n,v,false,S.num)});
     r.push('<row r="'+n+'">'+c+'</row>')});
   return {xml:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
     '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
     _wkTab(_WK_AMARILLO)+
-    '<dimension ref="A1:'+_wkP6Col(((semanas||[]).length||1)-1)+E.ultima+'"/>'+
+    '<dimension ref="A1:'+_wkP6Col((hayCS?2:1)*((semanas||[]).length||1)-1)+E.ultima+'"/>'+
     '<sheetViews><sheetView showGridLines="0" workbookViewId="0">'+
     '<pane xSplit="4" ySplit="2" topLeftCell="E3" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'+
     '<sheetFormatPr defaultRowHeight="15"/>'+
@@ -11793,7 +11806,9 @@ function _wkBloquesDe(C,esp,sem,corte,porId,pctA){
         ini:t.ini||'', fin:t.fin||'',
         dias:(t.ini&&t.fin)?(_crASerial(t.fin)-_crASerial(t.ini)+1):0,
         hhReal:hh>0?pr:0, pctReal:hh>0?Math.min(1,pr/hh):0,
-        acumReal:acumReal, semReal:semReal})});
+        acumReal:acumReal, semReal:semReal,
+        /* D.001: costo ganado acumulado por semana (Tabla 1 al cierre de cada semana, sumado por actividad) */
+        costoSem:(function(){try{var Z=window._wkDCostoSem;return (Z&&Z[cc.id]&&Z[cc.id][t.task_code])||null}catch(e){return null}})()})});
     return {id:cc.id, nombre:cc.nombre||'', nomWbs:cc.nomWbs||{},
       hh:cc.u.hh, filas:filas}})}
 /* Junta los datos y arma el libro. La espina es el ULTIMO cronograma marcado
@@ -20193,10 +20208,25 @@ async function _wkDLibroApp(semN,corte,ids){
     _crCostoDe=function(pp,tipo,cronId){try{var m=M[cronId],r=(m&&pp)?m[pp.id]:null;
       if(r&&r.costoC!=null&&r.costoC!==''&&isFinite(Number(r.costoC)))return Number(r.costoC)}catch(e){}
       return origC.apply(this,arguments)};
+    /* El costo ganado de cada actividad, semana a semana: la Tabla 1 al cierre de la semana (o al corte,
+       si la semana lo pasa) -costoA = costo forecast x avance/metrado de cada partida- sumada por actividad
+       (las partidas compartidas se reparten como en el resto del libro). Asi COSTO 'Actual' dice lo mismo
+       que la Tabla 1 y no el costo x % de HH, que reparte distinto cuando una actividad junta partidas. */
+    window._wkDCostoSem=null;
+    try{var CS={},semL=_wkSemanas();
+      for(var i6=0;i6<L.length;i6++){var c6=L[i6],cid6=c6.cron_id;
+        var tar6=((await _crTareas(cid6))||[]).filter(function(t){return t&&!t.eliminado}),rp6=_crReparto(tar6),porF={},out6={};
+        for(var w6=0;w6<semL.length;w6++){var fe=semL[w6].fin;if(semL[w6].ini>corte){continue}if(fe>corte)fe=corte;
+          if(!porF[fe]){var D6=await _crTablaDatos(c6,fe),by6={};(D6.filas||[]).forEach(function(r){if(r&&r.id)by6[r.id]=r});porF[fe]=by6}
+          var b6=porF[fe];tar6.forEach(function(t){var v=0;(t.items||[]).forEach(function(it){var r=b6[it];if(!r)return;
+              v+=(Number(r.costoA)||0)/_crVeces(rp6,it)});
+            if(!out6[t.task_code])out6[t.task_code]=semL.map(function(){return ''});out6[t.task_code][w6]=v})}
+        CS[cid6]=out6}
+      window._wkDCostoSem=CS}catch(e6){window._wkDCostoSem=null;try{console.warn('D.001 costo ganado por semana:',e6)}catch(_e){}}
     var LB=await _wkCLibroApp(semN,corte,ids);
     LB.hojas=(LB.hojas||[]).map(function(h){if(h&&(h[0]==='PROGRAMACION'||h[0]==='METRADO'))h[1]=_wkDSinFilas13(h[1]);return h});
     try{LB.info=LB.info||{};LB.info.gen='D.001'}catch(e){}return LB}
-  finally{_crCostoDe=origC}}
+  finally{_crCostoDe=origC;window._wkDCostoSem=null}}
 /* ===================== GENERACION E.001 (inicio) =====================
    Post-proceso de la D.001: encabezado de proyecto uniforme con 2 logos en las 9 hojas del reporte,
    paleta #272643/#2c698d/#bae8e8/#e3f6f5/#ffffff, Calibri 9 en tablas, un dato por celda, columnas
@@ -23151,7 +23181,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c30';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c31';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
