@@ -23528,7 +23528,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c37';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c38';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -28001,7 +28001,9 @@ try{if(!window._undAdmWired){window._undAdmWired=1;setInterval(function(){var ov
 window._busqModo=window._busqModo||'cod';
 /* minusculas y sin tildes: "instalacion" tiene que dar con "instalación" */
 function _busqNrm(t){try{
-  return String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')}
+  /* el teclado del celular pone comillas tipograficas (2”, 2″, 1/2’): para buscar valen lo mismo que las rectas */
+  return String(t||'').replace(/[\u201c\u201d\u201e\u201f\u2033\u3003\uff02]/g,'"').replace(/[\u2018\u2019\u201a\u201b\u2032\uff07\u00b4]/g,"'")
+    .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')}
   catch(e){return String(t||'').toLowerCase()}}
 /* El texto normalizado con un mapa de vuelta al original: al descomponer una
    vocal con tilde salen dos caracteres, y sin el mapa el resaltado caeria un
@@ -28077,7 +28079,8 @@ function _busqBarra(){
 function _busqReResalta(){try{var t=document.getElementById('_busqTxt');var bar=document.getElementById('_busqBar');if(!t||!t.value.trim()||(bar&&bar.style.display==='none'))return;
   Array.prototype.forEach.call(document.querySelectorAll('#list .leaf .cname, #list .leaf .cuad-chip'),function(el){_busqResalta(el,t.value)})}catch(e){}}
 (function(){var arma=function(){try{var L=document.getElementById('list');if(!L||L._busqObs)return;var tm=null;
-  var mo=new MutationObserver(function(){if(tm)return;tm=setTimeout(function(){tm=null;mo.disconnect();try{_busqReResalta()}finally{mo.observe(L,{childList:true,subtree:true})}},40)});
+  /* sin espera: el observador corre antes de que el navegador pinte, asi la lista nunca se ve sin el amarillo (antes esperaba 40 ms y parpadeaba) */
+  var mo=new MutationObserver(function(){mo.disconnect();try{_busqReResalta()}finally{mo.observe(L,{childList:true,subtree:true})}});
   mo.observe(L,{childList:true,subtree:true});L._busqObs=mo}catch(e){}};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',arma);else arma();setTimeout(arma,1500)})();
 function _busqAplica(){
