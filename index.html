@@ -1348,8 +1348,14 @@ async function _rtRefrescarWbsX(){
   try{if($('scrList')&&!$('scrList').classList.contains('hidden')&&typeof renderList==='function')renderList()}catch(e){}
  }catch(e){}
 }
+/* rebote del tiempo real: una rafaga de avisos de la misma tabla (una copia
+   de cronograma manda cientos de filas seguidas) = UNA sola bajada o repintado */
+function _rtDeb(k,fn,ms){try{window._rtDebT=window._rtDebT||{};clearTimeout(window._rtDebT[k]);
+  window._rtDebT[k]=setTimeout(function(){window._rtDebT[k]=null;try{var p=fn();if(p&&typeof p.catch==='function')p.catch(function(){})}catch(e){}},ms||700)}
+  catch(e){try{fn()}catch(_e){}}}
 function _rtOnCambio(tabla,_fila){
  var _rec=null;try{_rec=(_fila&&_fila.record&&Object.keys(_fila.record).length)?_fila.record:((_fila&&_fila.old_record)||null)}catch(_e0){}
+ try{var _dv=window._crDupVigia;if(_dv&&_rec&&_rec.cron_id!=null&&String(_rec.cron_id)===_dv.orig){var _tu=Date.parse(_rec.updated_at||'');if(!(Math.max(Number(_rec.ts)||0,isFinite(_tu)?_tu:0)<_dv.t))_dv.sucio=true}}catch(_e1){}
  if(tabla==='wbs_extra'){_rtRefrescarWbsX();return}
  if(tabla==='personal'||tabla==='personal_dia'||tabla==='personal_esp'){try{_pdRT()}catch(e){}return}
  if(tabla==='cuadrillas'){try{if(typeof _pullCuadrillas==='function')_pullCuadrillas()}catch(e){}try{_pdRT()}catch(e){}return}
@@ -1441,17 +1447,17 @@ function _rtOnCambio(tabla,_fila){
     try{if(tabla==='ficticio_create_250826'&&typeof _ficPull==='function')_ficPull()}catch(e){}
     try{if(tabla==='conexiones_create_250826'&&typeof _cnxPull==='function')_cnxPull()}catch(e){}
     return}
-  if(tabla==='cron_rel_create_040926'){try{if(typeof _rlPull==='function')_rlPull()}catch(e){}return}
-  if(tabla==='cron_rel_hist_create_040926'){try{if(typeof _rhPull==='function')_rhPull()}catch(e){}return}
+  if(tabla==='cron_rel_create_040926'){_rtDeb('rl',function(){if(typeof _rlPull==='function')return _rlPull()});return}
+  if(tabla==='cron_rel_hist_create_040926'){_rtDeb('rh',function(){if(typeof _rhPull==='function')return _rhPull()});return}
   if(tabla==='retiro_saldo_create_030926'){try{if(typeof _retPull==='function')_retPull()}catch(e){}return}
   if(tabla==='ppc_visible_create_140926'){try{var _pvQ=(typeof _pvPull==='function')?_pvPull():null;
     if(_pvQ&&_pvQ.then)_pvQ.then(function(){try{if(typeof _pvRepinta==='function')_pvRepinta()}catch(e){}},function(){});
     else if(typeof _pvRepinta==='function')_pvRepinta()}catch(e){}return}
-  if(tabla==='cron_rend_create_040926'){try{if(typeof _cnPull==='function')_cnPull()}catch(e){}return}
-  if(tabla==='tabla_rend_create_190926'){try{if(typeof _trPull==='function')_trPull()}catch(e){}return}
-  if(tabla==='cron_trabajo_create_170926'){try{if(typeof _ctPull==='function')_ctPull()}catch(e){}return}
-  if(tabla==='agrupaciones_create_220826'||tabla==='cron_alcance_create_230826'||tabla==='cron_tareas_create_230826'){try{window._crTar={};window._crAlT={};window._crAgr={};window._crEnT=null;window._hhCache=null}catch(e){}try{if(typeof window._crTablaRepinta==='function')window._crTablaRepinta();_t23Repinta()}catch(e){}}
-  if(tabla==='cron_reparto_create_040926'){try{if(typeof _cpPull==='function')_cpPull()}catch(e){}return}
+  if(tabla==='cron_rend_create_040926'){_rtDeb('cn',function(){if(typeof _cnPull==='function')return _cnPull()});return}
+  if(tabla==='tabla_rend_create_190926'){_rtDeb('tr',function(){if(typeof _trPull==='function')return _trPull()});return}
+  if(tabla==='cron_trabajo_create_170926'){_rtDeb('ct',function(){if(typeof _ctPull==='function')return _ctPull()});return}
+  if(tabla==='agrupaciones_create_220826'||tabla==='cron_alcance_create_230826'||tabla==='cron_tareas_create_230826'){try{window._crTar={};window._crAlT={};window._crAgr={};window._crEnT=null;window._hhCache=null}catch(e){}_rtDeb('crc',function(){if(typeof window._crTablaRepinta==='function')window._crTablaRepinta();_t23Repinta()},900)}
+  if(tabla==='cron_reparto_create_040926'){_rtDeb('cp',function(){if(typeof _cpPull==='function')return _cpPull()});return}
   if(tabla==='ajustes_create_110826'){
     /* una sola tabla guarda 7 familias de clave: se mira la fila que llego y se
        baja SOLO la suya; si la fila no viene, se baja todo como antes */
@@ -1477,17 +1483,17 @@ function _rtOnCambio(tabla,_fila){
   if(tabla==='doc_carpetas_create_120826'||tabla==='doc_archivos_create_120826'){try{if(typeof _docPull==='function')_docPull()}catch(e){}return}
   if(tabla==='fotos'){try{_rtSyncSoon()}catch(e){}return}
   if(tabla==='fotos_borradas'){try{if(document.getElementById('_fcOv')&&typeof _fcPapelera==='function')_fcPapelera()}catch(e){}return}
-  if(tabla==='agrupaciones_create_220826'){try{_agPull(window._agCron).then(function(){if(document.getElementById('_agOv'))_agPinta()})}catch(e){}return}
+  if(tabla==='agrupaciones_create_220826'){_rtDeb('ag',function(){return _agPull(window._agCron).then(function(){if(document.getElementById('_agOv'))_agPinta()})});return}
   if(tabla==='cron_plan_create_230826')return;
   if(tabla==='cron_wbs_create_230826'){
-    /* cambio un titulo de WBS: se vuelve a pintar lo que este abierto */
-    try{
+    /* cambio un titulo de WBS: se vuelve a pintar lo que este abierto (una sola vez por rafaga) */
+    _rtDeb('wbs',function(){try{
       var e=window._crCurEstado;
       if(e&&document.getElementById('_crCurOv')){
         document.getElementById('_crCurOv').remove();
         _crCurvaUI(e.c,e.nivel,e.conWbs,e.esp)}
       else if(document.getElementById('_crOv'))_crPinta();
-    }catch(_e){}
+    }catch(_e){}},900);
     return}
   if(tabla==='cronogramas_create_230826'||tabla==='cron_tareas_create_230826'||tabla==='cron_alcance_create_230826'){
     /* se agrupan los avisos: al cargar una configuracion llegan cientos de
@@ -2916,7 +2922,7 @@ async function _crTareas(cronId){
   window._crTar=window._crTar||{};
   if(window._crTar[cronId])return window._crTar[cronId];
   var lst;
-  try{lst=(await sbSelect(T_CRT,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(cronId)+'&eliminado=is.false&order=orden.asc&limit=5000'))||[]}
+  try{lst=(await _sbSelectTodo(T_CRT,'proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(cronId)+'&eliminado=is.false','orden.asc,task_code.asc',null,true))||[]}
   catch(e){
     /* un fallo de red no se cachea: si no, el cronograma quedaba "sin
        tareas" hasta recargar */
@@ -2932,7 +2938,7 @@ async function _crAlc(cronId){
      la curva) de esta pestana frente a las demas */
   if(window._crAl[cronId]&&(Date.now()-(window._crAlT[cronId]||0))<300000)return window._crAl[cronId];
   var m={},ok=true;
-  try{(await sbSelect(T_CRA,'select=item,incluir,hh_override,ini,fin,origen&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(cronId)+'&eliminado=is.false&limit=5000')||[]).forEach(function(r){m[r.item]={inc:r.incluir!==false,hh:(r.hh_override==null?null:Number(r.hh_override)),ini:r.ini||'',fin:r.fin||'',origen:r.origen||''}})}
+  try{(await _sbSelectTodo(T_CRA,'proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(cronId)+'&eliminado=is.false','item.asc','item,incluir,hh_override,ini,fin,origen',true)||[]).forEach(function(r){m[r.item]={inc:r.incluir!==false,hh:(r.hh_override==null?null:Number(r.hh_override)),ini:r.ini||'',fin:r.fin||'',origen:r.origen||''}})}
   catch(e){ok=false}
   /* una lectura fallida NO se cachea: con un mapa vacio las desmarcadas
      contaban como incluidas hasta recargar */
@@ -2943,12 +2949,12 @@ async function _crAlc(cronId){
 async function _crAlcTodos(){
   var m={};
   try{
-    (await sbSelect(T_CRA,'select=cron_id,item,incluir,hh_override,ini,fin,origen&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&eliminado=is.false&limit=20000')||[])
+    (await _sbSelectTodo(T_CRA,'proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&eliminado=is.false','cron_id.asc,item.asc','cron_id,item,incluir,hh_override,ini,fin,origen')||[])
       .forEach(function(r){
         (m[r.cron_id]=m[r.cron_id]||{})[r.item]={inc:r.incluir!==false,
           hh:(r.hh_override==null?null:Number(r.hh_override)),
           ini:r.ini||'',fin:r.fin||'',origen:r.origen||''}});
-  }catch(e){}
+  }catch(e){return window._crAl||m}   /* lectura fallida o incompleta: se queda lo que habia, sin sellar */
   /* cabecera sin desviaciones = mapa vacio, para no volver a consultarla */
   (window._crCache||[]).forEach(function(c){if(!m[c.cron_id])m[c.cron_id]={}});
   window._crAl=m;
@@ -3364,6 +3370,694 @@ async function _crBorrar(c){
   if(typeof logCambio==='function')logCambio('cronograma',c.cron_id,'eliminado');
   _crInvalida(c.cron_id);await _crPull();}
 
+/* ===== DUPLICAR UN CRONOGRAMA (para hacer forecast) =====
+   Copia EXACTA de todo lo que cuelga del cron_id (cabecera con su .xer crudo,
+   configuracion de trabajo, tareas, alcance, WBS, plan congelado,
+   agrupaciones, relaciones y su historial, rendimientos, repartos,
+   Rendimiento APP y el cursor del deshacer) con un id NUEVO; despues es
+   independiente: filas propias en el servidor, espejos locales recien
+   bajados, ningun objeto compartido con el original.
+   Orden: lo pendiente del original sube y el ACTUAL queda fijado; se lee TODO
+   del servidor (paginado, lapidas incluidas); se reserva la cabecera OCULTA
+   (eliminado=true, elim_por='copiando'); se escriben las hijas; se verifica
+   en el servidor; y al final un PATCH la publica. Si algo falla antes de
+   publicar, se oculta la cabecera y se apaga lo escrito (borrado por
+   apagado); el id no se vuelve a usar. Si no se puede saber si la copia quedo
+   publicada, NO se deshace nada (se avisa).
+   Nunca queda como ACTUAL: cron_trabajo va con activa=false y ts=1, y el tipo
+   ACTUAL pasa a FORECAST. No toca el DOM: el dialogo es _crDuplicarUI. */
+function _crDupClon(x){return x==null?x:JSON.parse(JSON.stringify(x))}
+/* la primera espera es 0: un fallo suelto se reintenta al momento, sin temporizador */
+function _crDupEspera(ms){return ms?new Promise(function(r){setTimeout(r,ms)}):Promise.resolve()}
+function _crDupMsg(e){return String((e&&e.message)||e||'error')}
+function _crDupEstado(e){var m=/\s(\d{3})$/.exec(_crDupMsg(e));return m?Number(m[1]):0}
+function _crDupReintentable(st){return st===0||st===408||st===425||st===429||st>=500}
+/* el cerrojo entre pestanas se renueva en cada lectura o escritura de la copia */
+function _crDupLatido(){try{if(typeof window._crDupRenueva==='function')window._crDupRenueva()}catch(e){}}
+function _crDupSinRed(){try{return typeof navigator!=='undefined'&&navigator.onLine===false}catch(e){return false}}
+function _crDupPista(st){
+  if(st===400)return ' (la tabla no acepta una columna o un tipo)';
+  if(st===409)return ' (choque de clave)';
+  if(st===401||st===403)return ' (sin permiso)';
+  if(st===413)return ' (lote demasiado grande)';
+  if(st===0)return ' (sin respuesta del servidor)';
+  return ''}
+function _crDupCanon(x){if(x===null||typeof x!=='object')return JSON.stringify(x===undefined?null:x);
+  if(Array.isArray(x))return '['+x.map(_crDupCanon).join(',')+']';
+  return '{'+Object.keys(x).sort().map(function(k){return JSON.stringify(k)+':'+_crDupCanon(x[k])}).join(',')+'}'}
+/* LISTA CERRADA de las tablas hijas, en el orden en que se escriben */
+function _crDupTablas(){return [
+  {t:T_CT,oc:'proyecto,cron_id',ord:'cron_id.asc',pk:['cron_id'],nom:'configuración de trabajo'},
+  {t:T_CRT,oc:'proyecto,cron_id,task_code',ord:'task_code.asc',pk:['task_code'],nom:'tareas'},
+  {t:T_CRA,oc:'proyecto,cron_id,item',ord:'item.asc',pk:['item'],nom:'alcance'},
+  {t:T_WBS,oc:'proyecto,cron_id,ruta',ord:'ruta.asc',pk:['ruta'],nom:'WBS'},
+  {t:T_PLAN,oc:'proyecto,cron_id,semana',ord:'semana.asc',pk:['semana'],nom:'plan congelado'},
+  {t:T_AGR,oc:'proyecto,cron_id,grupo_id',ord:'grupo_id.asc',pk:['grupo_id'],nom:'agrupaciones'},
+  {t:T_REL,oc:'proyecto,cron_id,succ,pred',ord:'succ.asc,pred.asc',pk:['succ','pred'],nom:'relaciones'},
+  {t:T_RH,oc:'proyecto,hid',ord:'hid.asc',pk:['hid'],nom:'historial de relaciones'},
+  {t:T_CRN,oc:'proyecto,cron_id,task_code',ord:'task_code.asc',pk:['task_code'],nom:'rendimientos'},
+  {t:T_CRP,oc:'proyecto,cron_id,item',ord:'item.asc',pk:['item'],nom:'repartos'},
+  {t:T_TBR,oc:'proyecto,cron_id,partida_id',ord:'partida_id.asc',pk:['partida_id'],nom:'Rendimiento APP'}]}
+function _crDupClave(pk,r){return pk.map(function(k){return String(r&&r[k])}).join(String.fromCharCode(1))}
+/* regla general por fila: clon profundo, sin ids ni sellos del servidor, con el cron_id y el ts nuevos.
+   eliminado/elim_por/elim_ts y toda columna que el codigo no conozca se conservan tal cual.
+   ts/cell_at/quien solo se ponen si la tabla los trae (una columna inventada daria 400) */
+function _crDupFila(r,N,T0,yo){var x=_crDupClon(r)||{};
+  delete x.id;delete x.created_at;delete x.updated_at;delete x.inserted_at;
+  x.cron_id=N;if('ts' in x)x.ts=T0;if('cell_at' in x)x.cell_at=Date.now();if('quien' in x)x.quien=yo;return x}
+/* una lectura con reintento inmediato (y otro a 1,5 s); si vuelve a fallar, lanza */
+async function _crDupLee(fn){var esperas=[0,0,1500],ult=null;
+  for(var i=0;i<esperas.length;i++){await _crDupEspera(esperas[i]);_crDupLatido();
+    try{return await fn()}catch(e){ult=e}}
+  throw ult||new Error('lectura fallida')}
+/* ---- etiqueta (nombre visible) de la copia ---- */
+/* Project ID util de P6 (11 caracteres) */
+function _crDupXer(s){
+  return String(s||'').toUpperCase().replace(/[^A-Z0-9._-]+/g,'-').replace(/-+/g,'-').replace(/^-+|-+$/g,'').slice(0,11).replace(/-+$/,'')}
+/* el nombre de la hoja del Excel semanal (= _wkHojaCr), en minusculas porque Excel no distingue */
+function _crDupHoja(s){
+  return String(s==null?'':s).trim().replace(/[\\\/\?\*\[\]:]/g,'').slice(0,22).toLowerCase()}
+function _crDupVivos(vivos,idNuevo){
+  return (vivos||[]).filter(function(z){return z&&z.cron_id!=null&&z.cron_id!==''&&!z.eliminado&&String(z.cron_id)!==String(idNuevo==null?'':idNuevo)})}
+/* la lista contra la que se valida: las cabeceras FRESCAS del servidor (un
+   cronograma creado en otro equipo despues del ultimo _crPull tambien cuenta);
+   sin ellas, la lista local */
+function _crDupVivosDe(cab){var v=(cab||[]).filter(function(z){return z&&!z.eliminado&&z.cron_id!=null&&z.cron_id!==''});
+  if(!v.length){try{v=(_crLista()||[]).slice()}catch(e){v=[]}}
+  /* una copia EN CURSO en otro equipo (oculta 'copiando', de hace menos de 10 min) ya tiene su nombre: cuenta como viva */
+  var t=0;try{t=nowSrv()}catch(e){t=Date.now()}
+  (cab||[]).forEach(function(z){if(z&&z.eliminado===true&&z.elim_por==='copiando'&&/^CP\d{6}-\d{1,3}$/.test(String(z.cron_id))&&(t-Number(z.elim_ts||0))<600000)
+    v.push(Object.assign({},z,{eliminado:false,_enCurso:true}))});
+  return v}
+/* la que usa la capa de datos: solo rechaza un nombre REPETIDO ('' = vale).
+   Sin etiqueta se vera el id: se valida el id como nombre */
+function _crDupRepetida(eti,idNuevo,vivos){
+  var e0=String(eti==null?'':eti).trim();if(!e0)e0=String(idNuevo==null?'':idNuevo).trim();if(!e0)return '';
+  var e=e0.toLowerCase();
+  var L=_crDupVivos(vivos,idNuevo);
+  for(var i=0;i<L.length;i++){var nv=String(_crNomVis(L[i])||'').trim();
+    if(e===nv.toLowerCase()||e===String(L[i].cron_id).toLowerCase())return L[i]._enCurso?('Otro equipo está creando ahora una copia con ese nombre ('+nv+'): elige otro'):('Ya hay un cronograma que se llama así ('+nv+')')}
+  var h=_crDupHoja(e0);
+  for(var j=0;j<L.length;j++){if(h&&h===_crDupHoja(_crNomVis(L[j])))return 'En el Excel semanal la hoja se llamaría igual que la de «'+_crNomVis(L[j])+'»'}
+  return ''}
+/* la migracion id -> etiqueta del Excel semanal (_wkPaqueteApp) reemplaza por
+   SUBCADENA 'P6-'+id, 'Prog. '+id, '('+id+')' e id+' — ' de cada cronograma
+   que tiene etiqueta propia: un nombre que EMPIECE o ACABE con el id de otro,
+   o que lo lleve entre parentesis, saldria cambiado en el libro */
+function _crDupCruce(eti,idNuevo,vivos){var e=String(eti==null?'':eti).trim();if(!e)return '';
+  var L=_crDupVivos(vivos,idNuevo);
+  for(var i=0;i<L.length;i++){var z=String(L[i].cron_id),nv=String(_crNomVis(L[i])||'').trim();
+    if(z.length<2||nv===z)continue;
+    if(e.indexOf(z)===0||e.slice(-z.length)===z||e.indexOf('('+z+')')>=0)
+      return 'En el Excel semanal «'+e+'» se confundiría con el id '+z+' de «'+nv+'» (el libro cambia ese id por su nombre): no lo pongas al principio ni al final'}
+  return ''}
+/* la que usa el dialogo: todas las reglas ('' = vale) */
+function _crDupValEti(eti,idNuevo,vivos){
+  var e=String(eti==null?'':eti);if(!e.trim())return '';
+  if(e.length>15)return 'Máximo 15 caracteres: el Excel semanal arma la hoja ACTIVITY_PLAN (nombre) y Excel no admite más de 31';
+  if(/[\x00-\x1F\\\/\?\*\[\]:'"<>&|]/.test(e))return 'Sin \\ / ? * [ ] : \' " < > & |';
+  var r=_crDupRepetida(e,idNuevo,vivos);if(r)return r;
+  var cz=_crDupCruce(e,idNuevo,vivos);if(cz)return cz;
+  var x=_crDupXer(e),L=_crDupVivos(vivos,idNuevo);
+  for(var i=0;i<L.length;i++){if(x&&x===_crDupXer(_crNomVis(L[i])))return 'El .xer semanal saldría con el mismo Project ID que «'+_crNomVis(L[i])+'»: cambia el principio del nombre'}
+  return ''}
+/* 'Copia<n> <nombre>' cortado a 15; la copia de una copia no repite el prefijo */
+function _crDupEtiDef(orig,idNuevo,vivos){
+  var X=String(_crNomVis(orig)||'').replace(/[\x00-\x1F\\\/\?\*\[\]:'"<>&|]/g,'').replace(/\s+/g,' ').trim();
+  var X2=X.replace(/^(copia\d+|c\d+)\s+/i,'');if(X2)X=X2;
+  /* si 'Copia<n> <nombre>' no cabe en 15, 'C<n> <nombre>' y, si aun no cabe, se acorta el principio
+     y se conserva la ultima palabra (la que suele distinguir: fecha, version) */
+  var corto=function(n){var p='C'+n+' ',e=p+X;if(e.length<=15)return e;
+    var w=X.split(' '),u=(w.length>1)?w[w.length-1]:'',ca=w.slice(0,-1).join(' ');
+    if(u&&u.length<=7){var c2=ca.slice(0,15-p.length-1-u.length).replace(/[\s-]+$/,'');if(c2.length>=3)return p+c2+' '+u}
+    return e.slice(0,15).replace(/[\s-]+$/,'')};
+  for(var n=1;n<=99;n++){var l=('Copia'+n+' '+X),cs=[];if(l.length<=15)cs.push(l);else cs.push(corto(n));
+    for(var i=0;i<cs.length;i++)if(cs[i]&&!_crDupValEti(cs[i],idNuevo,vivos))return cs[i]}
+  for(var n2=1;n2<=99;n2++){var e=('Copia'+n2+' '+X).slice(0,15).replace(/[\s-]+$/,'');if(!_crDupValEti(e,idNuevo,vivos))return e}
+  return ''}
+/* ---- id nuevo: CP<DDMMYY>-<nn> ---- */
+/* todas las cabeceras, tambien las borradas y las copias a medias */
+async function _crDupCabeceras(){
+  return await _crDupLee(function(){return _sbSelectTodo(T_CRO,'proyecto=eq.'+encodeURIComponent(DATA.proyecto),'cron_id.asc','cron_id,etiqueta,tipo,orden,eliminado,elim_por,elim_ts')})}
+function _crDupIdsLocales(){var o={};var mete=function(v){if(v!=null&&v!=='')o[String(v).toUpperCase()]=1};
+  try{var C=_ctAll();Object.keys(C).forEach(function(k){mete(k);if(C[k])mete(C[k].cron_id)})}catch(e){}
+  [_rlAll,_cnAll,_cpAll,_trAll].forEach(function(f){try{var A=f();Object.keys(A).forEach(function(k){mete(String(k).split('|')[0]);if(A[k])mete(A[k].cron_id)})}catch(e){}});
+  try{var H=_rhAll();Object.keys(H).forEach(function(k){if(H[k])mete(H[k].cron_id)})}catch(e){}
+  /* el cursor del deshacer de relaciones (ajustes 'rel_cursor:<id>') tambien reserva el id */
+  try{var AJ=_ajAll();Object.keys(AJ).forEach(function(k){if(String(k).indexOf('rel_cursor:')===0)mete(String(k).slice(11))})}catch(e){}
+  return o}
+/* El numero va con DOS cifras (01..99): la migracion id -> etiqueta del Excel
+   semanal reemplaza por subcadena ('P6-'+id, 'Prog. '+id), asi que ningun id
+   puede contener a otro; con -1 y -10 el -10 quedaria bloqueado (y todo el
+   resto del dia despues del -9). Con 3 cifras el id pasaria de los 11
+   caracteres del Project ID de P6. */
+async function _crDupIdNuevo(cab,salto){
+  salto=salto||{};var P=DATA.proyecto,enc=encodeURIComponent;
+  var hoy=String(todayISO()),dd=hoy.slice(8,10)+hoy.slice(5,7)+hoy.slice(2,4);
+  var ids=[];(cab||[]).forEach(function(z){if(z&&z.cron_id!=null&&z.cron_id!=='')ids.push(String(z.cron_id).toUpperCase())});
+  try{_crLista().forEach(function(z){if(z&&z.cron_id!=null&&z.cron_id!=='')ids.push(String(z.cron_id).toUpperCase())})}catch(e){}
+  var loc=_crDupIdsLocales();
+  var tablas=[T_CRT,T_CRA,T_CT,T_REL,T_RH,T_WBS,T_CRN,T_CRP,T_TBR,T_PLAN,T_AGR,T_BI];
+  for(var n=1;n<=99;n++){var id='CP'+dd+'-'+(n<10?'0':'')+n;
+    if(salto[id])continue;
+    var mal=false;
+    for(var i=0;i<ids.length&&!mal;i++){var z=ids[i];if(z===id||(z.length>=2&&(z.indexOf(id)>=0||id.indexOf(z)>=0)))mal=true}
+    if(mal||loc[id])continue;
+    var usado=false;
+    for(var j=0;j<tablas.length&&!usado;j++){var tb=tablas[j];
+      var R=await _crDupLee(function(){return sbSelect(tb,'select=cron_id&proyecto=eq.'+enc(P)+'&cron_id=eq.'+enc(id)+'&limit=1')});
+      if(!Array.isArray(R))throw new Error('No se pudo comprobar el id '+id+' en '+tb);
+      if(R.length)usado=true}
+    if(!usado){var RA=await _crDupLee(function(){return sbSelect(T_AJ,'select=clave&proyecto=eq.'+enc(P)+'&clave=eq.'+enc('rel_cursor:'+id)+'&limit=1')});
+      if(!Array.isArray(RA))throw new Error('No se pudo comprobar el id '+id+' en '+T_AJ);
+      if(RA.length)usado=true}
+    if(!usado)return id}
+  throw new Error('no se encontró un id libre para hoy (CP'+dd+'-01 a -99)')}
+/* ---- escritura en lotes, con reintentos ---- */
+async function _crDupLote(t,lote,oc){
+  var esperas=[0,0,1500,4000],st=0,ult=null,cuelgues=0;
+  for(var i=0;i<esperas.length;i++){if(i>0&&_crDupSinRed())break;
+    /* red colgada (navigator.onLine sigue en true): dos intentos seguidos sin respuesta y lentos bastan */
+    if(cuelgues>=2)break;
+    await _crDupEspera(esperas[i]);_crDupLatido();var t0=Date.now();
+    try{await sbUpsert(t,lote,oc);return}
+    catch(e){ult=e;st=_crDupEstado(e);if(st===0&&(Date.now()-t0)>=5000)cuelgues++;else cuelgues=0;
+      if(st===413&&lote.length>1){var m=Math.ceil(lote.length/2);await _crDupLote(t,lote.slice(0,m),oc);await _crDupLote(t,lote.slice(m),oc);return}
+      if(!_crDupReintentable(st))break}}
+  throw new Error(t+': HTTP '+st+_crDupPista(st)+(st===0&&ult?(' · '+_crDupMsg(ult)):''))}
+async function _crDupUpsert(t,filas,oc,avance){
+  var lotes=[],cur=[],tam=0;
+  (filas||[]).forEach(function(f){var s=JSON.stringify(f).length;
+    if(cur.length&&(cur.length>=120||tam+s>900000)){lotes.push(cur);cur=[];tam=0}
+    cur.push(f);tam+=s});
+  if(cur.length)lotes.push(cur);
+  var hechas=0;
+  for(var i=0;i<lotes.length;i++){await _crDupLote(t,lotes[i],oc);hechas+=lotes[i].length;try{if(avance)avance(hechas,filas.length)}catch(e){}}
+  return hechas}
+/* PATCH filtrado, con los mismos reintentos */
+/* rapido (el deshacer): cada intento con su propio tope de 8 s (sin el cinturon de 30 s) y, con la red
+   colgada (sin respuesta y lento), un solo reintento; el error lleva .st y .lento para no seguir tabla a tabla */
+async function _crDupPatch(t,qs,cuerpo,rapido){
+  var esperas=[0,0,1500,4000],st=0,ult=null,lento=false,cuelgues=0;
+  for(var i=0;i<esperas.length;i++){if(i>0&&_crDupSinRed())break;
+    if(cuelgues>=(rapido?2:3))break;
+    await _crDupEspera(esperas[i]);_crDupLatido();var t0=Date.now();lento=false;
+    try{var ini={method:'PATCH',headers:sbHead({'Prefer':'return=minimal'}),body:JSON.stringify(cuerpo)};
+      if(rapido){try{if(typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function')ini.signal=AbortSignal.timeout(8000)}catch(eS){}}
+      var r=await fetch(sbBase()+'/rest/v1/'+t+'?'+qs,ini);
+      if(r&&r.ok)return true;st=(r&&r.status)||0}
+    catch(e){ult=e;st=0}
+    if(st===0&&(Date.now()-t0)>=5000){lento=true;cuelgues++}else cuelgues=0;
+    if(!_crDupReintentable(st))break}
+  var er=new Error(t+': HTTP '+st+_crDupPista(st)+(st===0&&ult?(' · '+_crDupMsg(ult)):''));er.st=st;er.lento=(st===0&&lento);throw er}
+/* apagar lo escrito de una copia (nunca sin proyecto + cron_id de la copia, o su cursor) */
+async function _crDupApaga(t,qsFiltro){
+  var q='';try{q=decodeURIComponent(String(qsFiltro||''))}catch(e){q=''}
+  if(q.indexOf('proyecto=eq.')<0||!(/(^|&)cron_id=eq\.CP\d{6}-\d{1,3}(&|$)/.test(q)||/(^|&)clave=eq\.rel_cursor:CP\d{6}-\d{1,3}(&|$)/.test(q)))throw new Error('filtro inseguro');
+  var t9=nowSrv();
+  return await _crDupPatch(t,qsFiltro+'&eliminado=is.false',{eliminado:true,elim_por:'copia descartada',elim_ts:t9,ts:t9,cell_at:Date.now()},true)}
+/* las hijas de la copia N, tabla a tabla (un fallo no para las demas); devuelve lo que fallo */
+async function _crDupApagaHijas(N,tablas,avance){
+  if(!/^CP\d{6}-\d{1,3}$/.test(String(N||'')))throw new Error('id de copia no válido: '+N);
+  var P=DATA.proyecto,enc=encodeURIComponent,fx=[];
+  for(var x=tablas.length-1;x>=0;x--){var tx=tablas[x];
+    try{if(avance)avance(tablas.length-x,tablas.length)}catch(eA){}
+    try{await _crDupApaga(tx,tx===T_AJ?('proyecto=eq.'+enc(P)+'&clave=eq.'+enc('rel_cursor:'+N)):('proyecto=eq.'+enc(P)+'&cron_id=eq.'+enc(N)))}
+    catch(e){fx.push(tx+': '+_crDupMsg(e));
+      /* la red no responde: las que faltan quedan apuntadas sin esperar 8 s por cada una (las recogen
+         _crDupReapaga y, si no, la lista de copias a medias con Descartar) */
+      if(e&&e.lento){for(var y=x-1;y>=0;y--)fx.push(tablas[y]+': sin intentar (la red no responde)');break}}}
+  return fx}
+/* lo que este equipo tenga de una copia que NO llego a publicarse (lo pudo
+   traer el tiempo real a mitad): las filas de los espejos quedan como LAPIDAS
+   con un ts nuevo (asi un pull atrasado con las filas vivas no las revive,
+   y un push solo sube la lapida); los caches en memoria se tiran */
+function _crDupPurgaLocal(N,t9){if(!/^CP\d{6}-\d{1,3}$/.test(String(N||'')))return 0;
+  t9=Number(t9)||nowSrv();var n=0;
+  var apaga=function(A,guarda){try{var c=false;Object.keys(A).forEach(function(k){var x=A[k];if(!x||typeof x!=='object')return;
+      if(!(String(x.cron_id)===N||String(k).indexOf(N+'|')===0||String(k)===N))return;
+      if(x.eliminado&&Number(x.ts)>=t9)return;
+      x.eliminado=true;x.elim_por='copia descartada';x.elim_ts=t9;x.ts=t9;x.cell_at=Date.now();if('activa' in x)x.activa=false;c=true;n++});
+    if(c)guarda()}catch(e){}};
+  try{apaga(_ctAll(),_ctSaveLocal)}catch(e){}
+  try{apaga(_rlAll(),_rlSaveLocal)}catch(e){}
+  try{apaga(_rhAll(),_rhSaveLocal)}catch(e){}
+  try{apaga(_cnAll(),_cnSaveLocal)}catch(e){}
+  try{apaga(_cpAll(),_cpSaveLocal)}catch(e){}
+  try{apaga(_trAll(),_trSaveLocal)}catch(e){}
+  try{var aj=_ajAll();if(aj['rel_cursor:'+N]){delete aj['rel_cursor:'+N];_ajSaveLocal()}}catch(e){}
+  ['_crTar','_crAl','_crNT','_crAlT','_crHu','_crCalH2','_crAgr'].forEach(function(k){try{if(window[k]&&typeof window[k]==='object')delete window[k][N]}catch(e){}});
+  try{if(window._agCronCargado===N){window._agCache=null;window._agCronCargado=null}}catch(e){}
+  try{window._ctAct=undefined}catch(e){}
+  return n}
+/* deshacer una copia que NO se publico: la cabecera PRIMERO (oculta y
+   descartada, sin mirar elim_por: una publicacion tardia que ya llego vuelve a
+   quedar oculta, y una que llegue despues ya no casa con elim_por=eq.copiando);
+   despues las hijas, tabla a tabla; despues lo local */
+async function _crDupCierraDescarte(N,t9){try{await _crDupPatch(T_CRO,'proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(N)+'&elim_por=eq.descartando'+(t9?('&ts=eq.'+encodeURIComponent(String(t9))):''),{elim_por:'copia descartada',ts:nowSrv(),cell_at:Date.now()},true);return true}catch(e){return false}}
+async function _crDupDeshaz(N,tablas,avance){
+  if(!/^CP\d{6}-\d{1,3}$/.test(String(N||'')))throw new Error('id de copia no válido: '+N);
+  var P=DATA.proyecto,enc=encodeURIComponent,fx=[],t9=nowSrv();
+  var cabOk=true,colgada=false;try{await _crDupPatch(T_CRO,'proyecto=eq.'+enc(P)+'&cron_id=eq.'+enc(N),{eliminado:true,elim_por:'descartando',elim_ts:t9,ts:t9,cell_at:Date.now()},true)}
+  catch(e){cabOk=false;colgada=!!(e&&e.lento);fx.push('cabecera: '+_crDupMsg(e))}
+  /* la cabecera sigue OCULTA (elim_por 'copiando'); con la red colgada no se espera tabla a tabla */
+  if(colgada)(tablas||[]).forEach(function(tx){fx.push(tx+': sin intentar (la red no responde)')});
+  else fx=fx.concat(await _crDupApagaHijas(N,tablas,avance));
+  if(cabOk&&!fx.length)await _crDupCierraDescarte(N,t9);
+  _crDupPurgaLocal(N,t9);
+  return fx}
+/* unos segundos despues de deshacer: otra pasada (idempotente) en el servidor y
+   en lo local, por si un push que ya estaba en vuelo (de este u otro equipo)
+   volvio a subir filas vivas de la copia descartada */
+async function _crDupReapaga(N,tablas){try{if(!/^CP\d{6}-\d{1,3}$/.test(String(N||'')))return;
+  _crDupPurgaLocal(N);var fx=await _crDupApagaHijas(N,tablas);_crDupPurgaLocal(N);if(!fx.length)await _crDupCierraDescarte(N)}catch(e){}}
+/* ---- contraste de los espejos locales del ORIGINAL con lo leido del servidor ----
+   Una entrada local con ts>0 que el servidor no tiene, o distinta y mas nueva,
+   es un cambio que no subio: la copia saldria distinta de lo que se ve aqui.
+   Se compara el CONTENIDO (no solo el ts): una fila re-guardada igual no sube
+   (onlyChanged) y su ts local queda por delante sin que falte nada. */
+function _crDupEspejos(){
+  var S=function(v){return String(v==null?'':v)},Nn=function(v){return v==null?null:(Number(v)||0)},B=function(v){return !!v},
+    J=function(v){var o=v;if(typeof o==='string'){try{o=JSON.parse(o||'null')}catch(e){}}return _crDupCanon(o==null?null:o)},
+    A=function(v){return _crDupCanon((Array.isArray(v)?v:[]).map(String))};
+  return [
+    {t:T_CT,all:_ctAll,pk:['cron_id'],ok:function(x){return !!x.cron_id},sent:function(x){return String(x.cron_id)},push:_ctPush,
+      c:{activa:B,hh_off:A,fuera:A,base_hh:function(v){return v==='proy'?'proy':'esp'},retiros:J,apu_off:A,eliminado:B}},
+    {t:T_REL,all:_rlAll,pk:['succ','pred'],ok:function(x){return !!(x.succ&&x.pred)},sent:function(x){return x.cron_id+'|'+x.succ+'|'+x.pred},push:_rlPush,
+      c:{tipo:function(v){return S(v||'FS')},lag_d:function(v){return Number(v)||0},lag0:Nn,origen:S,eliminado:B}},
+    {t:T_RH,all:_rhAll,pk:['hid'],ok:function(x){return !!x.hid},sent:function(x){return String(x.hid)},push:_rhPush,
+      c:{seq:function(v){return Number(v)||0},accion:S,succ:S,pred:S,antes:J,despues:J,invalidado:B,eliminado:B}},
+    {t:T_CRN,all:_cnAll,pk:['task_code'],ok:function(x){return !!x.task_code},sent:function(x){return x.cron_id+'|'+x.task_code},push:_cnPush,
+      c:{rend:function(v){return Number(v)||0},eliminado:B}},
+    {t:T_CRP,all:_cpAll,pk:['item'],ok:function(x){return !!x.item},sent:function(x){return x.cron_id+'|'+x.item},push:_cpPush,
+      c:{modo:function(v){return S(v||'orden')},primero:S,fases:function(v){var o=v;if(typeof o==='string'){try{o=JSON.parse(o||'{}')}catch(e){o={}}}return _crDupCanon((o&&typeof o==='object')?o:{})},eliminado:B}},
+    {t:T_TBR,all:_trAll,pk:['partida_id'],ok:function(x){return !!x.partida_id},sent:function(x){return x.cron_id+'|'+x.partida_id},push:_trPush,
+      c:{rend:function(v){return Number(v)||0},eliminado:B}}]}
+function _crDupDifiere(e,x,s){for(var k in e.c){if(e.c[k](x[k])!==e.c[k](s[k]))return true}return false}
+/* devuelve las entradas locales del original que el servidor no refleja */
+function _crDupPendientes(e,O,filas){
+  var srv={};(filas||[]).forEach(function(r){srv[_crDupClave(e.pk,r)]=r});
+  var out=[],all={};try{all=e.all()||{}}catch(_e){all={}}
+  Object.keys(all).forEach(function(k){var x=all[k];
+    if(!x||String(x.cron_id)!==O||!(Number(x.ts)>0)||!e.ok(x))return;
+    var s=srv[_crDupClave(e.pk,x)];
+    if(!s){if(!x.eliminado)out.push(x);return}
+    if(Number(x.ts)>(Number(s.ts)||0)&&_crDupDifiere(e,x,s))out.push(x)});
+  return out}
+/* el admin deja fijado el ACTUAL ANTES de que exista la copia: si el proyecto
+   no tiene ninguna fila activa, _ctAsegura elige sobre la lista SIN la copia
+   (si no, en un proyecto sin filas y sin tipo ACTUAL la copia, la ultima de la
+   lista, seria la elegida por defecto). Espera tambien al _ctAsegura que
+   _ctPull lanza sin await */
+async function _crDupAseguraActual(){
+  var espera=async function(){for(var i=0;i<400&&window._ctAsegurando;i++)await Promise.resolve();
+    for(var j=0;j<40&&window._ctAsegurando;j++)await _crDupEspera(250)};
+  await espera();
+  if(typeof _ctAsegura==='function')await _ctAsegura();
+  await espera();
+  try{await _ctPush()}catch(e){}}
+/* (v3) la unica fila activa de cron_trabajo puede ser de un cronograma BORRADO (_crBorrar no la apaga):
+   _ctAsegura la da por buena y _ctActiva() la devuelve solo porque ningun vivo tiene fila. La copia lleva su
+   foto con ts 1 y seria la UNICA fila de un cronograma vivo: pasaria a ser _ctActiva()/_crActualDe y el
+   siguiente _ctAsegura la activaria en la base. Si ninguna fila de un cronograma vivo esta activa ni tiene
+   ts>1, se fija ANTES el ACTUAL sobre la lista sin la copia y se comprueba en el servidor */
+async function _crDupFijaActual(){
+  var L=[];try{L=(_crLista()||[]).filter(function(z){return z&&z.cron_id!=null&&z.cron_id!==''&&!z.eliminado})}catch(e){L=[]}
+  if(!L.length)return;
+  var viv={};L.forEach(function(z){viv[String(z.cron_id)]=1});
+  var all=_ctAll(),filas=0,buena=false;
+  for(var k in all){var x=all[k];if(!x||x.eliminado)continue;filas++;if(!viv[String(x.cron_id)])continue;if(x.activa||Number(x.ts)>1){buena=true;break}}
+  /* sin ninguna fila la copia no lleva configuracion heredada (lo vigila la guardia de F2) */
+  if(buena||!filas)return;
+  var falla=function(m){return new Error('La configuración de trabajo ACTUAL es la de un cronograma borrado y no se pudo fijar otra'+(m?(' ('+m+')'):'')+': la copia quedaría como ACTUAL. Fija el ACTUAL con «⚙ Trabajar con este» en el cronograma vigente y vuelve a duplicar (no se ha copiado nada)')};
+  var id='';try{window._ctAct=undefined;var a=_crActualDe(L);id=a?String(a.cron_id):''}catch(e){id=''}
+  if(!id)throw falla('');
+  window._ctAsegurando=1;
+  try{await _ctActivar(id,true)}catch(e){window._ctAsegurando=0;throw falla(_crDupMsg(e))}
+  window._ctAsegurando=0;
+  try{await _ctPush()}catch(e){}
+  var d=_ctDe(id);if(!(d&&d.activa))throw falla('no quedó activa en este equipo');
+  var s=null;try{s=await _crDupLee(function(){return sbSelect(T_CT,'select=cron_id,activa,eliminado&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(id)+'&limit=1')})}catch(e){throw falla(_crDupMsg(e))}
+  if(!(Array.isArray(s)&&s[0]&&s[0].activa===true&&!s[0].eliminado))throw falla('no quedó activa en el servidor');
+  window._ctAct=undefined}
+/* ---- la copia ---- */
+/* (t7) comprobacion de la foto EN EL SERVIDOR, sin depender del tiempo real: despues de leer el
+   original se vuelven a pedir, tabla por tabla, las claves con su ts y su lapida (la configuracion de
+   trabajo, entera: la fusion de retiros cambia el contenido sin tocar el ts), el ts de la cabecera y el
+   cursor. Si algo no coincide con lo leido, la foto mezcla dos momentos (otro equipo escribio mientras
+   se leia y su aviso no llego, o llego tarde, o el socket estaba caido) */
+function _crDupFirmaTs(d,R){var S2=String.fromCharCode(2);
+  if(d.t===T_CT)return (R||[]).map(function(r){var x=_crDupClon(r)||{};delete x.updated_at;delete x.created_at;delete x.id;return _crDupCanon(x)}).sort().join(S2);
+  return (R||[]).map(function(r){return _crDupClave(d.pk,r)+'#'+String(r&&r.ts)+'#'+((r&&r.eliminado)?1:0)}).sort().join(S2)}
+function _crDupHuellaLO(LO,TB){var o={};o.cab=String(LO.H?LO.H.ts:'');
+  TB.forEach(function(d){o[d.t]=_crDupFirmaTs(d,LO.R[d.t])});
+  o.cur=LO.CUR?(String(LO.CUR.ts)+'|'+_crDupCanon(LO.CUR.valor)):'';return o}
+async function _crDupHuellaDe(O,TB){var P=DATA.proyecto,enc=encodeURIComponent,fO='proyecto=eq.'+enc(P)+'&cron_id=eq.'+enc(O),o={};
+  var h=await sbSelect(T_CRO,'select=ts&'+fO+'&eliminado=is.false&limit=1');if(!Array.isArray(h))throw new Error(T_CRO+': comprobacion');
+  o.cab=String(h[0]?h[0].ts:'');
+  for(var i=0;i<TB.length;i++){var d=TB[i];_crDupLatido();
+    var R=await _sbSelectTodo(d.t,fO,d.ord,d.t===T_CT?null:(d.pk.join(',')+',ts,eliminado'));
+    o[d.t]=_crDupFirmaTs(d,R)}
+  var cu=await sbSelect(T_AJ,'select=ts,valor,eliminado&proyecto=eq.'+enc(P)+'&clave=eq.'+enc('rel_cursor:'+O)+'&limit=1');if(!Array.isArray(cu))throw new Error(T_AJ+': comprobacion');
+  o.cur=(cu[0]&&!cu[0].eliminado)?(String(cu[0].ts)+'|'+_crDupCanon(cu[0].valor)):'';
+  return o}
+function _crDupHuellaDif(a,b){var out=[];Object.keys(a).forEach(function(k){if(a[k]!==b[k])out.push(k)});return out}
+async function _crDuplicar(c,opc){
+  opc=opc||{};
+  if(!(typeof esAdmin==='function'&&esAdmin()))throw new Error('Solo el administrador');
+  if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))throw new Error('⚠ Sin conexión: la copia se hace en el servidor; prueba cuando vuelva la red');
+  if(window._mpFreeze)throw new Error('⚠ Hay una restauración de pruebas pendiente: no se puede duplicar ahora');
+  if(window._tabBloqueada)throw new Error('Esta pestaña está en pausa: usa la que está activa');
+  if(window._crDupBusy)throw new Error('Ya hay una copia en curso');
+  if(!c||c.cron_id==null||c.cron_id==='')throw new Error('Cronograma no válido');
+  var lk=null;try{lk=JSON.parse(localStorage.getItem('obf4_dup_lock')||'null')}catch(e){lk=null}
+  if(lk&&Number(lk.t)&&(Date.now()-Number(lk.t))<180000)throw new Error('Ya se está duplicando en otra pestaña');
+  window._crDupBusy=1;
+  var miLk={t:Date.now(),o:String(c.cron_id)};
+  try{localStorage.setItem('obf4_dup_lock',JSON.stringify(miLk))}catch(e){}
+  /* el cerrojo se renueva mientras dura la copia (una copia larga no deja entrar a otra pestana) */
+  var renueva=function(){try{var ahora=Date.now();if(ahora-miLk.t<20000)return;
+    var l=JSON.parse(localStorage.getItem('obf4_dup_lock')||'null');
+    if(l&&Number(l.t)===miLk.t&&l.o===miLk.o){miLk.t=ahora;localStorage.setItem('obf4_dup_lock',JSON.stringify(miLk))}}catch(e){}};
+  var bu=function(ev){try{ev.preventDefault();ev.returnValue=''}catch(_e){}return ''};
+  try{if(typeof window.addEventListener==='function')window.addEventListener('beforeunload',bu)}catch(e){}
+  window._crDupRenueva=renueva;
+  try{return await _crDupCorre(c,opc,renueva)}
+  finally{window._crDupBusy=0;window._crDupVigia=null;window._crDupRenueva=null;
+    try{var l2=JSON.parse(localStorage.getItem('obf4_dup_lock')||'null');if(l2&&Number(l2.t)===miLk.t)localStorage.removeItem('obf4_dup_lock')}catch(e){}
+    try{if(typeof window.removeEventListener==='function')window.removeEventListener('beforeunload',bu)}catch(e){}}}
+async function _crDupCorre(c,opc,renueva){
+  var prog=function(txt,h,n){try{if(renueva)renueva()}catch(e){}try{if(typeof opc.progreso==='function')opc.progreso(txt,h,n)}catch(e){}};
+  var O=String(c.cron_id),P=DATA.proyecto,enc=encodeURIComponent,TB=_crDupTablas(),avisos=[];
+  var fO='proyecto=eq.'+enc(P)+'&cron_id=eq.'+enc(O);
+  /* F0. lo pendiente del ORIGINAL sube antes de leerlo, y el ACTUAL queda fijado */
+  prog('Subiendo lo pendiente del original…',0,1);
+  try{if(window._ctPshT){clearTimeout(window._ctPshT);window._ctPshT=null}}catch(e){}
+  /* antes de subir se BAJA: un equipo sin tiempo real reciente tiene filas bajadas que no estan en _sent;
+     sin esto el push las re-subia VIEJAS y pisaba lo que otro equipo cambio (p.ej. el ACTUAL) */
+  try{window._ctReenvT=0}catch(e){}
+  try{var pulls0=[function(){return _ctPull()},function(){return _trPull()},function(){return _cnPull()},function(){return _cpPull()},function(){return _rlPull()},function(){return _rhPull()}];
+    for(var iq=0;iq<pulls0.length;iq++){var fq=pulls0[iq];await _crDupLee(function(){return fq()})}}
+  catch(e){throw new Error('No se pudo leer lo del servidor antes de copiar: no se ha copiado nada ('+_crDupMsg(e)+')')}
+  try{var pushes=[_ctPush,_trPush,_cnPush,_cpPush,_rlPush,_rhPush];
+    for(var ip=0;ip<pushes.length;ip++){var fp=pushes[ip];await _crDupLee(function(){return fp()})}}
+  catch(e){throw new Error('No se pudo subir lo pendiente del original: la copia saldría distinta ('+_crDupMsg(e)+')')}
+  try{var _lc=(_ajAll()||{})['rel_cursor:'+O];
+    if(_lc&&!_lc.eliminado&&Number(_lc.ts)>0&&_lc.valor!=null){
+      var _sc=await _crDupLee(function(){return sbSelect(T_AJ,'select=valor,ts,eliminado&proyecto=eq.'+enc(P)+'&clave=eq.'+enc('rel_cursor:'+O)+'&limit=1')});
+      var _s0=(Array.isArray(_sc)&&_sc[0])||null;
+      if(!_s0||_s0.eliminado||(Number(_lc.ts)>(Number(_s0.ts)||0)&&_crDupCanon(_lc.valor)!==_crDupCanon(_s0.valor)))
+        await _crDupLote(T_AJ,[{proyecto:P,clave:'rel_cursor:'+O,valor:_crDupClon(_lc.valor),descripcion:'cursor del historial de relaciones de '+O,
+          quien:(state.user&&state.user.supervisor)||'',ts:Number(_lc.ts),cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0}],'proyecto,clave')}}
+  catch(e){throw new Error('No se pudo subir el cursor del deshacer de relaciones del original: la copia saldría distinta ('+_crDupMsg(e)+')')}
+  /* la fila del original que el servidor perdio (mismo ts, sin retiros/_ok) se reenvia YA, sin el tope de 60 s */
+  try{window._ctReenvT=0}catch(e){}
+  try{await _crDupLee(function(){return _ctPull()})}
+  catch(e){throw new Error('No se pudo leer la configuración de trabajo: no se ha copiado nada ('+_crDupMsg(e)+')')}
+  try{await _crDupAseguraActual()}catch(e){}
+  await _crDupFijaActual();
+  /* F1. lectura COMPLETA del original, del servidor (solo lecturas) */
+  var nLee=TB.length+2;
+  var leeOriginal=async function(){var R={},H=null,CUR=null,tn='cabecera';
+    try{
+      prog('Leyendo el original… 1/'+nLee,0,nLee);
+      var h0=await _crDupLee(function(){return _sbSelectTodo(T_CRO,fO+'&eliminado=is.false','cron_id.asc')});
+      if(!h0||!h0.length)throw new Error('El cronograma '+O+' no está en la base');
+      H=_crDupClon(h0[0]);
+      for(var i=0;i<TB.length;i++){var d=TB[i];tn=d.nom;
+        prog('Leyendo el original… '+(i+2)+'/'+nLee,i+1,nLee);
+        R[d.t]=_crDupClon(await _crDupLee(function(){return _sbSelectTodo(d.t,fO,d.ord)}))||[]}
+      tn='cursor del deshacer';
+      var cu=await _crDupLee(function(){return sbSelect(T_AJ,'select=*&proyecto=eq.'+enc(P)+'&clave=eq.'+enc('rel_cursor:'+O)+'&limit=1')});
+      CUR=(cu&&cu[0]&&!cu[0].eliminado)?_crDupClon(cu[0]):null}
+    catch(e){if(/no está en la base/.test(_crDupMsg(e)))throw e;
+      throw new Error('No se pudo leer el original completo ('+tn+'): no se ha copiado nada · '+_crDupMsg(e))}
+    /* contraste con los espejos locales: si quedo algo sin subir, se fuerza UNA vez y se relee */
+    var ES=_crDupEspejos();
+    for(var ei=0;ei<ES.length;ei++){var e=ES[ei],pend=_crDupPendientes(e,O,R[e.t]);
+      if(!pend.length)continue;
+      try{pend.forEach(function(x){try{delete _sent[e.t+'|'+e.sent(x)]}catch(_e){}});await e.push();
+        var dd=null;TB.forEach(function(z){if(z.t===e.t)dd=z});
+        R[e.t]=_crDupClon(await _crDupLee(function(){return _sbSelectTodo(e.t,fO,dd.ord)}))||[]}catch(_e2){}
+      if(_crDupPendientes(e,O,R[e.t]).length){var dn='';TB.forEach(function(z){if(z.t===e.t)dn=z.nom});
+        throw new Error('Quedó un cambio del original sin subir ('+dn+'): reintenta en unos segundos')}}
+    return {R:R,H:H,CUR:CUR}};
+  /* vigia: si otro equipo toca el original mientras se lee, la foto podria
+     mezclar dos momentos; se relee una vez y, si vuelve a pasar, se para.
+     Lo marca _rtOnCambio (solo avisos con ts >= el inicio de la lectura: el eco
+     de los pushes de F0 no cuenta) */
+  /* y, sin depender del tiempo real (socket caido, aviso que llega tarde): se vuelven a pedir
+     al servidor las claves con su ts y su lapida (la configuracion de trabajo entera), el ts de la
+     cabecera y el cursor; si algo no coincide con lo leido, la foto mezcla dos momentos */
+  var huLee=async function(){try{return await _crDupLee(function(){return _crDupHuellaDe(O,TB)})}
+    catch(e){throw new Error('No se pudo leer el original completo (comprobación): no se ha copiado nada · '+_crDupMsg(e))}};
+  window._crDupVigia={orig:O,t:nowSrv(),sucio:false};
+  var LO=await leeOriginal();
+  var difH=_crDupHuellaDif(_crDupHuellaLO(LO,TB),await huLee());
+  if((window._crDupVigia&&window._crDupVigia.sucio)||difH.length){
+    window._crDupVigia={orig:O,t:nowSrv(),sucio:false};
+    LO=await leeOriginal();
+    difH=_crDupHuellaDif(_crDupHuellaLO(LO,TB),await huLee());
+    if((window._crDupVigia&&window._crDupVigia.sucio)||difH.length){window._crDupVigia=null;
+      throw new Error('El original se está editando en otro equipo: espera a que termine y vuelve a duplicar (no se ha copiado nada)')}}
+  window._crDupVigia=null;
+  var R=LO.R,H=LO.H,CUR=LO.CUR;
+  /* F2. id nuevo, etiqueta y RESERVA (la primera escritura) */
+  prog('Buscando un id libre…',0,1);
+  var cab=null;
+  try{cab=await _crDupCabeceras()}catch(e){throw new Error('No se pudo leer la lista de cronogramas: no se ha copiado nada · '+_crDupMsg(e))}
+  var vivos=_crDupVivosDe(cab);
+  /* sin configuracion de trabajo en el proyecto y sin cronograma de tipo ACTUAL,
+     la copia (la ultima de la lista) seria la elegida por defecto como ACTUAL:
+     no se copia (el admin ya intento fijar el ACTUAL en F0) */
+  var S0=(R[T_CT]||[])[0];
+  if(!(S0&&!S0.eliminado)){var B0=null;try{window._ctAct=undefined;B0=(typeof _crFilaDe==='function')?_crFilaDe(O):(_ctDe(O)||_ctActiva())}catch(e){B0=null}
+    if(!B0&&!vivos.some(function(z){return String(z.tipo||'').toUpperCase()==='ACTUAL'}))
+      throw new Error('No hay configuración de trabajo en el proyecto ni un cronograma de tipo ACTUAL: la copia quedaría como ACTUAL por defecto. Toca «⚙ Trabajar con este» en el cronograma vigente y vuelve a duplicar (no se ha copiado nada)')}
+  var salto={},N=null;
+  try{N=await _crDupIdNuevo(cab,salto)}catch(e){throw new Error('No se pudo elegir el id de la copia: no se ha copiado nada · '+_crDupMsg(e))}
+  var T0=nowSrv(),yo=(state.user&&state.user.supervisor)||'';
+  /* sin etiqueta pedida: la de por defecto (con el id y la lista frescos); '' pedida a proposito = se vera el id */
+  var eti=(opc.etiqueta!=null)?String(opc.etiqueta):_crDupEtiDef(c,N,vivos);if(!eti.trim())eti='';
+  var rep=_crDupRepetida(eti,N,vivos);if(rep)throw new Error(rep);
+  var tpO=String(H.tipo==null?'':H.tipo),tpP=String(opc.tipo==null?'':opc.tipo).toUpperCase(),tipo;
+  if(tpP==='LB'||tpP==='FORECAST')tipo=tpP;
+  else if(tpP==='ACTUAL'||tpO.toUpperCase()==='ACTUAL')tipo='FORECAST';
+  else tipo=H.tipo;
+  var maxO=0;(cab||[]).forEach(function(z){var v=Number(z&&z.orden);if(isFinite(v)&&v>maxO)maxO=v});
+  var arma=function(N){
+    var C=_crDupFila(H,N,T0,yo);
+    C.etiqueta=eti;if(opc.nombre!=null)C.nombre=String(opc.nombre);
+    C.tipo=tipo;if(opc.color)C.color=String(opc.color);
+    C.activo=(opc.activo===true);C.orden=Math.floor(maxO)+1;
+    C.eliminado=true;C.elim_por='copiando';C.elim_ts=T0;C.ts=T0;return C};
+  var CAB=null,reservado=false;
+  for(var vu=0;vu<3&&!reservado;vu++){
+    if(vu>0){salto[N]=1;try{cab=await _crDupCabeceras();vivos=_crDupVivosDe(cab);(cab||[]).forEach(function(z){var v=Number(z&&z.orden);if(isFinite(v)&&v>maxO)maxO=v})}catch(e){}
+      try{N=await _crDupIdNuevo(cab,salto)}catch(e){throw new Error('No se pudo elegir el id de la copia: no se ha copiado nada · '+_crDupMsg(e))}
+      if(opc.etiqueta==null){eti=_crDupEtiDef(c,N,vivos);if(!eti.trim())eti=''}
+      rep=_crDupRepetida(eti,N,vivos);if(rep)throw new Error(rep)}
+    CAB=arma(N);prog('Reservando '+N+'…',0,1);
+    var rs=null;try{rs=await _crDupReserva(CAB)}catch(e){throw new Error('No se hizo la copia (reserva): '+_crDupMsg(e)+' · no se ha copiado nada')}
+    if(rs==='ok')reservado=true}
+  if(!reservado)throw new Error('No se pudo reservar un id para la copia (otro equipo los está usando): no se ha copiado nada');
+  var tocadas=[],paso='armando las filas',conteos={},W={},WAJ=null,dudosa=false,ePub=null;
+  try{
+    /* las filas de la copia (clones: nada compartido con lo leido) */
+    TB.forEach(function(d){W[d.t]=(R[d.t]||[]).map(function(r){var x=_crDupFila(r,N,T0,yo);if(d.t===T_RH){x.hid=String(r.hid)+'~'+N;if('ts' in r)x.ts=r.ts}return x})});
+    W[T_CT]=_crDupTrabajo(O,(R[T_CT]||[])[0]||null,N,T0,yo,avisos);
+    WAJ=CUR?{proyecto:P,clave:'rel_cursor:'+N,valor:_crDupClon(CUR.valor),descripcion:'cursor del historial de relaciones de '+N,
+      quien:yo,ts:T0,cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0}:null;
+    /* F3. las hijas, con la cabecera todavia OCULTA */
+    var tot=0,hechas=0;TB.forEach(function(d){tot+=W[d.t].length});if(WAJ)tot++;
+    for(var j=0;j<TB.length;j++){var dj=TB[j],Fj=W[dj.t];if(!Fj.length)continue;
+      paso='copiando '+dj.nom;tocadas.push(dj.t);var base0=hechas;
+      await _crDupUpsert(dj.t,Fj,dj.oc,(function(nom,b0){return function(h,n){prog('Copiando '+nom+' '+h+'/'+n+'…',b0+h,tot)}})(dj.nom,base0));
+      hechas+=Fj.length}
+    if(WAJ){paso='copiando el cursor del deshacer';tocadas.push(T_AJ);await _crDupLote(T_AJ,[WAJ],'proyecto,clave');hechas++;prog('Copiando el cursor del deshacer…',hechas,tot)}
+    /* F4. verificacion en el servidor: mismas claves, mismas vivas y lapidas */
+    paso='verificando';
+    var vh0=await _crDupLee(function(){return sbSelect(T_CRO,'select=cron_id,eliminado,elim_por,elim_ts&proyecto=eq.'+enc(P)+'&cron_id=eq.'+enc(N)+'&limit=1')});
+    if(!(vh0&&vh0[0]&&vh0[0].elim_por==='copiando'&&Number(vh0[0].elim_ts)===Number(T0)))throw new Error('La cabecera reservada de la copia ya no está (¿la descartó otro equipo?)');
+    for(var k=0;k<TB.length;k++){var dk=TB[k];prog('Verificando… '+(k+1)+'/'+TB.length,k,TB.length);
+      var V=await _crDupLee(function(){return _sbSelectTodo(dk.t,'proyecto=eq.'+enc(P)+'&cron_id=eq.'+enc(N),dk.ord,dk.pk.join(',')+',eliminado')});
+      var cta=_crDupCuenta(dk.pk,R[dk.t]||[]),ctw=_crDupCuenta(dk.pk,W[dk.t]),ctv=_crDupCuenta(dk.pk,V||[]);
+      if(ctv.firma!==ctw.firma)throw new Error('La copia quedó con '+(ctv.vivas+ctv.lapidas)+'/'+(ctw.vivas+ctw.lapidas)+' filas en '+dk.nom);
+      conteos[dk.nom]={orig:{vivas:cta.vivas,lapidas:cta.lapidas},copia:{vivas:ctv.vivas,lapidas:ctv.lapidas}}}
+    var va=await _crDupLee(function(){return sbSelect(T_AJ,'select=clave,eliminado&proyecto=eq.'+enc(P)+'&clave=eq.'+enc('rel_cursor:'+N)+'&limit=1')});
+    var vivA=(va||[]).filter(function(r){return r&&!r.eliminado}).length;
+    if(vivA!==(WAJ?1:0))throw new Error('La copia quedó sin el cursor del deshacer de relaciones');
+    if(WAJ)conteos['cursor del deshacer']={orig:{vivas:1,lapidas:0},copia:{vivas:1,lapidas:0}};
+    var vh=await _crDupLee(function(){return sbSelect(T_CRO,'select=cron_id,eliminado,elim_por,elim_ts&proyecto=eq.'+enc(P)+'&cron_id=eq.'+enc(N)+'&limit=1')});
+    if(!(vh&&vh[0]&&vh[0].elim_por==='copiando'&&Number(vh[0].elim_ts)===Number(T0)))throw new Error('La cabecera reservada de la copia ya no está (¿la descartó otro equipo?)');
+    /* el nombre, otra vez contra las cabeceras FRESCAS: otro equipo pudo
+       publicar o reservar el mismo mientras se copiaba. Entre dos copias en
+       curso cede la de id mayor (la otra lo ve igual y sigue) */
+    paso='comprobando el nombre';
+    var cab2=null;try{cab2=await _crDupCabeceras()}catch(e){cab2=null}   /* sin lectura vale la comprobacion de F2 */
+    var L2=cab2?_crDupVivosDe(cab2).filter(function(z){return String(z.cron_id)!==N&&(!z._enCurso||String(z.cron_id)<N)}):[];
+    var rep2=cab2?_crDupRepetida(eti,N,L2):'';
+    if(rep2){if(opc.etiqueta!=null)throw new Error(rep2+' (otro equipo lo puso mientras se copiaba)');
+      var e2=_crDupEtiDef(c,N,L2);if(!e2||_crDupRepetida(e2,N,L2))throw new Error(rep2);
+      eti=e2}
+    /* el mismo orden que otra copia (publicada, o en curso con id menor): la lista y el 'ultimo marcado' quedarian al azar */
+    if(cab2&&L2.some(function(z){return Number(z.orden)===Number(CAB.orden)})){var mx2=0;
+      cab2.forEach(function(z){var v=Number(z&&z.orden);if(z&&String(z.cron_id)!==N&&isFinite(v)&&v>mx2)mx2=v});CAB.orden=Math.floor(mx2)+1}
+    /* F5. PUBLICAR: desde aqui la copia es definitiva */
+    paso='publicando';prog('Publicando…',0,1);
+    try{await _crDupPatch(T_CRO,'proyecto=eq.'+enc(P)+'&cron_id=eq.'+enc(N)+'&elim_por=eq.copiando',
+      {eliminado:false,elim_por:(H.elim_por==null?'':H.elim_por),elim_ts:(H.elim_ts==null?0:H.elim_ts),etiqueta:eti,orden:CAB.orden,ts:nowSrv(),cell_at:Date.now(),quien:yo})}
+    catch(e){ePub=e}
+    /* la comprobacion: si dice publicada, lo esta; si dice oculta, no lo esta
+       (se deshace); si NO se puede leer: con el PATCH respondido se da por
+       publicada (con aviso), y sin respuesta del PATCH no se sabe y no se
+       deshace nada (deshacer una copia visible la dejaria vacia) */
+    var vp=null,eVp=null;
+    try{vp=await _crDupLee(function(){return sbSelect(T_CRO,'select=cron_id,eliminado,elim_por&proyecto=eq.'+enc(P)+'&cron_id=eq.'+enc(N)+'&limit=1')})}catch(e){eVp=e}
+    if(eVp||!Array.isArray(vp)){
+      if(!ePub)avisos.push('no se pudo comprobar en el servidor que la copia quedó publicada (la red falló justo después); si no aparece al recargar la lista, se puede descartar desde la lista de cronogramas');
+      else{dudosa=true;throw new Error('No se pudo comprobar si la copia '+N+' quedó publicada ('+_crDupMsg(ePub)+' · '+_crDupMsg(eVp)+')')}}
+    else if(vp[0]&&vp[0].eliminado===false){if(ePub)avisos.push('se perdió la respuesta al publicar, pero la copia SÍ quedó publicada')}
+    else throw new Error('No se pudo publicar la copia'+(ePub?(' ('+_crDupMsg(ePub)+')'):''))}
+  catch(err){
+    if(dudosa)throw new Error(_crDupMsg(err)+'. Recarga la lista de cronogramas: si aparece «'+(eti||N)+'», la copia está completa (se verificó antes de publicar); si no aparece, no llegó a publicarse y se puede descartar desde la lista. No vuelvas a duplicar hasta comprobarlo.');
+    /* F-X. deshacer: solo lo de ESTA copia (id CP..., reservado en esta ejecucion) */
+    var fx=[];
+    if(reservado===true&&N!==O&&/^CP\d{6}-\d{1,3}$/.test(String(N))){
+      if(_crDupSinRed()){fx.push('sin conexión');_crDupPurgaLocal(N)}
+      else{prog('Deshaciendo lo copiado… no cierres la app',0,1);fx=await _crDupDeshaz(N,tocadas,function(h,n){prog('Deshaciendo lo copiado… '+h+'/'+n+' (no cierres la app)',h,n)})}
+      try{setTimeout(function(){_crDupPurgaLocal(N)},4000)}catch(e4){}
+      try{setTimeout(function(){_crDupReapaga(N,tocadas)},8000)}catch(e5){}}
+    if(fx.length)throw new Error('La copia de '+_crNomVis(c)+' se cortó en '+paso+': '+_crDupMsg(err)+'. Quedó OCULTA (id '+N+'); no afecta a nada. Lo que no se pudo apagar se reintenta solo en unos segundos; si aun así queda algo, en unos 10 minutos aparecerá en la lista de cronogramas como «copia a medias», con su botón Descartar');
+    throw new Error('No se hizo la copia ('+paso+'): '+_crDupMsg(err)+(reservado?' · lo escrito se dejó apagado y el original no se tocó':''))}
+  /* F6. estado local, despues del commit (cada paso por su lado: un fallo aqui ya no deshace) */
+  prog('Actualizando este equipo…',0,1);
+  /* la fila de trabajo de la copia, la que se escribio y verifico: sin ella, _ctFilaPara(copia) cae en la
+     ACTUAL y un 'Fuera' o un apartado tocado en la copia se guardaria en el ORIGINAL (si falla la bajada) */
+  try{var w0=(W[T_CT]||[])[0];if(w0&&!_ctDe(N)){_ctAll()[N]={cron_id:N,activa:false,hh_off:(w0.hh_off||[]).map(String),fuera:(w0.fuera||[]).map(String),
+      base_hh:(w0.base_hh==='proy'?'proy':'esp'),retiros:_crDupClon(w0.retiros||{}),apu_off:(w0.apu_off||[]).map(String),quien:String(w0.quien||''),
+      ts:Number(w0.ts)||1,cell_at:Number(w0.cell_at)||0,eliminado:!!w0.eliminado,elim_por:String(w0.elim_por||''),elim_ts:Number(w0.elim_ts)||0};_ctSaveLocal()}}catch(e){}
+  try{window._crCacheT=0;_crInvalida(N);
+    ['_crAlT','_crNT','_crHu','_crCalH2','_crAgr'].forEach(function(k){try{if(window[k])delete window[k][N]}catch(e){}});
+    if(window._agCronCargado===N){window._agCache=null;window._agCronCargado=null}
+    window._ctAct=undefined;window._hhCache=null;window._pgUniv=null}catch(e){}
+  try{_hhMemoTira()}catch(e){}
+  try{_t23Tira()}catch(e){}
+  var pulls=[function(){return _rlPull(N)},function(){return _rhPull(N)},function(){return _ctPull()},function(){return _cnPull()},function(){return _cpPull()},function(){return _trPull()}];
+  var faltoPull=false;
+  for(var p=0;p<pulls.length;p++){try{await _crDupLee(pulls[p])}catch(e){faltoPull=true}}
+  if(faltoPull)avisos.push('este equipo bajará parte de la copia en la próxima sincronización');
+  if(WAJ){try{_ajAll()['rel_cursor:'+N]={valor:_crDupClon(WAJ.valor),ts:T0,cell_at:Date.now(),eliminado:false};_ajSaveLocal()}catch(e){}}
+  try{var ce=JSON.parse(localStorage.getItem('obf4_curetq')||'{}')||{};if(ce[O]){ce[N]=_crDupClon(ce[O]);localStorage.setItem('obf4_curetq',JSON.stringify(ce))}}catch(e){}
+  var hay=function(){try{return _crLista().some(function(z){return z&&z.cron_id===N})}catch(e){return false}};
+  try{window._crCacheT=0;await _crPull()}catch(e){}
+  if(!hay()){try{window._crCacheT=0;await _crPull()}catch(e){}}
+  if(!hay())avisos.push('la copia está en la base; aparecerá al recargar la lista');
+  var nT=0;try{nT=(W[T_CRT]||[]).filter(function(r){return !r.eliminado}).length}catch(e){}
+  try{if(typeof logCambio==='function')logCambio('cronograma',N,'copia de '+O+' ('+nT+' tareas)')}catch(e){}
+  return {cron_id:N,etiqueta:eti,origen:O,tareas:nT,conteos:conteos,avisos:avisos,publicada:true}}
+/* vivas y lapidas de un conjunto de filas, y su firma (claves + estado) */
+function _crDupCuenta(pk,filas){var v=0,l=0,ks=[];
+  (filas||[]).forEach(function(r){if(r.eliminado)l++;else v++;ks.push(_crDupClave(pk,r)+'#'+(r.eliminado?1:0))});
+  ks.sort();return {vivas:v,lapidas:l,firma:ks.join(String.fromCharCode(2))}}
+/* la configuracion de trabajo de la copia: la propia del original, o la foto
+   congelada de la que usa ahora (si sigue a la ACTUAL). Nunca ACTUAL */
+function _crDupTrabajo(O,S,N,T0,yo,avisos){var x=null;
+  if(S&&!S.eliminado)x=_crDupFila(S,N,T0,yo);
+  else{var B=null;try{window._ctAct=undefined;B=(typeof _crFilaDe==='function')?_crFilaDe(O):(_ctDe(O)||_ctActiva())}catch(e){B=null}
+    if(B){x={proyecto:DATA.proyecto,cron_id:N,activa:false,hh_off:(_crDupClon(B.hh_off)||[]).map(String),fuera:(_crDupClon(B.fuera)||[]).map(String),
+        base_hh:(B.base_hh==='proy'?'proy':'esp'),retiros:_crDupClon(B.retiros||{}),apu_off:(_crDupClon(B.apu_off)||[]).map(String),
+        quien:yo,ts:1,cell_at:Date.now(),eliminado:false,elim_por:'',elim_ts:0};
+      avisos.push('el original sigue a la ACTUAL ('+((typeof _ctNombre==='function')?_ctNombre(B.cron_id):B.cron_id)+'); la copia se queda CONGELADA con la foto de hoy y ya no la sigue')}
+    else avisos.push('no hay configuración de trabajo en el proyecto; la copia usa los ajustes globales, igual que el original')}
+  if(!x)return [];
+  x.activa=false;x.ts=1;
+  if(!_ctConFoto2(x)){x.retiros=_ctRetirosGlobal();x.apu_off=_ctApuOffGlobal()}
+  return [x]}
+/* la reserva: POST SIN merge (si el id ya existe, 409 y se busca otro). El
+   crudo .xer viaja aqui: se le da hasta 120 s (el cinturon de fetch corta a 30 s) */
+async function _crDupReserva(CAB){
+  var esperas=[0,0,1500,4000],st=0,ult=null;
+  /* true = la fila es NUESTRA (un intento anterior llego sin respuesta); false = es de otro; null = no se sabe */
+  /* red colgada (navigator.onLine sigue en true): cada intento sin respuesta tarda lo que su tope (120 s el
+     POST, 30 s la comprobacion); dos esperas asi seguidas bastan para avisar (si la reserva llego, la cabecera
+     queda OCULTA y sale en la lista de copias a medias) */
+  var cuelgues=0;
+  var esMia=async function(){var m=null,t1=Date.now();try{m=await sbSelect(T_CRO,'select=cron_id,elim_por,elim_ts&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(CAB.cron_id)+'&limit=1')}catch(e){if((Date.now()-t1)>=5000)cuelgues++;return null}
+    if(!Array.isArray(m)||!m[0])return null;return (m[0].elim_por==='copiando'&&Number(m[0].elim_ts)===Number(CAB.elim_ts))};
+  for(var i=0;i<esperas.length;i++){if(i>0&&_crDupSinRed())break;if(cuelgues>=2)break;await _crDupEspera(esperas[i]);st=0;_crDupLatido();var t0=Date.now();
+    try{var ini={method:'POST',headers:sbHead({'Prefer':'return=minimal'}),body:JSON.stringify([CAB])};
+      try{if(typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function')ini.signal=AbortSignal.timeout(120000)}catch(eS){}
+      var r=await fetch(sbBase()+'/rest/v1/'+T_CRO,ini);
+      st=(r&&r.status)||0;if(r&&r.ok)return 'ok';
+      if(st===409){if(i===0)return 'choque';
+        var m9=await esMia();if(m9===true)return 'ok';if(m9===false)return 'choque';continue}}
+    catch(e){ult=e;st=0}
+    if(st===0&&(Date.now()-t0)>=5000)cuelgues++;else cuelgues=0;
+    if(!_crDupReintentable(st))throw new Error(T_CRO+': HTTP '+st+_crDupPista(st));
+    /* sin respuesta clara: se mira si la reserva llego */
+    var m2=await esMia();if(m2===true)return 'ok';if(m2===false)return 'choque'}
+  throw new Error('No se pudo reservar la copia en el servidor: HTTP '+st+_crDupPista(st)+(ult?(' · '+_crDupMsg(ult)):''))}
+/* ---- E3: copias que quedaron a medias (cabecera oculta 'copiando' de hace mas de 10 min) ---- */
+async function _crDupMedias(){
+  var R=await sbSelect(T_CRO,'select=cron_id,etiqueta,eliminado,elim_por,elim_ts&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&elim_por=in.(copiando,descartando)&limit=100');
+  if(!Array.isArray(R))throw new Error('no se pudo leer la lista');
+  var t=nowSrv();
+  return R.filter(function(z){return z&&z.eliminado===true&&/^CP\d{6}-\d{1,3}$/.test(String(z.cron_id))&&(t-Number(z.elim_ts||0))>600000})}
+/* descartar una copia a medias: primero se marca la cabecera (solo si sigue
+   oculta y 'copiando' con su sello), se comprueba que la marca es nuestra y
+   que sigue oculta, y solo entonces se apagan las hijas y lo local */
+async function _crDupDescarta(N,elimTs){
+  if(!(typeof esAdmin==='function'&&esAdmin()))throw new Error('Solo el administrador');
+  if(!/^CP\d{6}-\d{1,3}$/.test(String(N||'')))throw new Error('id de copia no válido');
+  if(window._crDupBusy)throw new Error('Ya hay una copia en curso');
+  var P=DATA.proyecto,enc=encodeURIComponent,t9=nowSrv();
+  await _crDupPatch(T_CRO,'proyecto=eq.'+enc(P)+'&cron_id=eq.'+enc(N)+'&elim_por=in.(copiando,descartando)&eliminado=is.true'+((elimTs!=null&&elimTs!=='')?('&elim_ts=eq.'+enc(String(elimTs))):''),
+    {elim_por:'descartando',ts:t9,cell_at:Date.now()});
+  var h=await _crDupLee(function(){return sbSelect(T_CRO,'select=cron_id,eliminado,elim_por,elim_ts,ts&proyecto=eq.'+enc(P)+'&cron_id=eq.'+enc(N)+'&limit=1')});
+  if(!(h&&h[0]&&h[0].eliminado===true&&h[0].elim_por==='descartando'&&Number(h[0].ts)===Number(t9)))
+    throw new Error('La copia '+N+' ya no está a medias (¿se publicó o la descartó otro equipo?): no se tocó nada');
+  var tb=_crDupTablas().map(function(d){return d.t});tb.push(T_AJ);
+  var fx=await _crDupApagaHijas(N,tb);
+  _crDupPurgaLocal(N,t9);
+  if(fx.length)throw new Error('No se pudieron apagar todas las filas de '+N+': '+fx.join('; ')+' · sigue en la lista de copias a medias: vuelve a tocar Descartar');
+  await _crDupCierraDescarte(N,t9);
+  try{if(typeof logCambio==='function')logCambio('cronograma',N,'copia a medias descartada')}catch(e){}
+  return true}
+/* SOLO LECTURA, para la consola (ningun boton la llama): compara lo que la app
+   calcula para el original y para la copia: Tabla 1, Tablas 2/3 y Tabla R
+   (sin el id, la etiqueta, el color ni los sellos). Uso:
+     await _crDupCompara('FORECAST-10-09','CP101026-01')
+     await _crDupCompara(o,n,{xer:true})   (arma tambien los dos .xer sin semana
+       y los compara sin GUID ni la tabla PROJECT; antes sube lo pendiente, como
+       al exportar) */
+async function _crDupCompara(o,n,opt){opt=opt||{};
+  try{window._crCacheT=0;await _crPull()}catch(e){}
+  var L=_crLista(),cO=L.filter(function(z){return z.cron_id===o})[0],cN=L.filter(function(z){return z.cron_id===n})[0];
+  if(!cO||!cN)throw new Error('no están los dos cronogramas en la lista ('+o+', '+n+')');
+  var fuera={cron_id:1,etiqueta:1,nombre:1,color:1,tipo:1,orden:1,activo:1,ts:1,cell_at:1,quien:1,created_at:1,updated_at:1,guid:1,proj_short_name:1};
+  var canon=function(x){var ruta=[];var f=function(v,d){if(d>40)return '"…"';if(typeof v==='function'||v===undefined)return 'null';
+      if(typeof v==='string')return JSON.stringify((v===o||v===n)?'@':v);if(v===null||typeof v!=='object')return JSON.stringify(v);
+      if(ruta.indexOf(v)>=0)return '"ciclo"';ruta.push(v);var s;
+      if(Array.isArray(v))s='['+v.map(function(z){return f(z,d+1)}).join(',')+']';
+      else s='{'+Object.keys(v).filter(function(k){return !fuera[k]}).sort().map(function(k){return JSON.stringify((k===o||k===n)?'@':k)+':'+f(v[k],d+1)}).join(',')+'}';
+      ruta.pop();return s};return f(x,0)};
+  var res={iguales:true,partes:{}};
+  var mira=async function(nom,fn){try{var a=canon(await fn(cO)),b=canon(await fn(cN));
+      if(a===b)res.partes[nom]='igual';
+      else{res.iguales=false;var i=0;while(i<a.length&&a.charAt(i)===b.charAt(i))i++;
+        res.partes[nom]='DISTINTO cerca de: '+a.slice(Math.max(0,i-80),i+80)+'  ||  '+b.slice(Math.max(0,i-80),i+80)}}
+    catch(e){res.iguales=false;res.partes[nom]='error: '+_crDupMsg(e)}};
+  await mira('Tabla 1',function(c){return _crTablaDatos(c)});
+  await mira('Tabla 2',function(c){return _t23Datos(c,(typeof _wgOpc2==='function')?_wgOpc2('alc'):{n:2})});
+  await mira('Tabla 3',function(c){return _t23Datos(c,{n:3})});
+  await mira('Tabla R',function(c){return (typeof _txDatos==='function')?_txDatos(c):null});
+  if(opt.xer)await mira('.xer',async function(c){var r=await _crXerArma(c,{modo:'tal'}),t=String((r&&r.txt)||''),tab='',out=[];var ids9={},ix9=-1,tb9='';t.split(/\r?\n/).forEach(function(l){var p=l.split(String.fromCharCode(9));if(p[0]==='%T')tb9=p[1];else if(tb9==='PROJECT'&&p[0]==='%F')ix9=p.indexOf('proj_short_name');else if(tb9==='PROJECT'&&p[0]==='%R'&&ix9>0&&p[ix9])ids9[p[ix9]]=1});
+    t.split(/\r?\n/).forEach(function(l){if(l.indexOf('%T')===0)tab=l;if(/^%T\s+PROJECT\s*$/.test(tab)&&l.indexOf('%R')===0)return;
+      out.push(l.split(String.fromCharCode(9)).map(function(x){return /^[A-Za-z0-9+\/]{22}$/.test(x)?'G':(ids9[x]?'P':x)}).join(String.fromCharCode(9)))});return out});
+  try{console.log('[_crDupCompara] '+o+' vs '+n+': '+(res.iguales?'IGUALES':'HAY DIFERENCIAS'),res)}catch(e){}
+  return res}
+
 /* El color de cada especialidad en las barras: apagados, que la barra es
    fondo y no debe competir con las lineas de la curva. */
 var _CR_COLESP={mecanica:'#1d3550',electrica:'#4a3d1b',civil:'#1d4a3a'};
@@ -3459,6 +4153,7 @@ function _crShow(){
     '<button id="_crX" style="margin-left:auto;background:#444;color:#fff;border:0;border-radius:8px;padding:8px 12px">✕ Cerrar</button></div>'+
     '<div style="font-size:11.5px;color:#9db4d6;margin-bottom:9px;line-height:1.5">Cada cronograma es independiente: sus tareas, sus fechas y sus horas. Con <b>Alcance</b> eliges qué partidas del aplicativo aportan HH a ese cronograma — así el LB0, que no trae horas, toma las que tú marques.</div>'+
     '<input type="file" id="_crFile" accept=".xer,.XER" style="display:none">'+
+    '<div id="_crDupMed"></div>'+
     '<div id="_crBody" style="flex:1;overflow:auto;background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:9px;-webkit-overflow-scrolling:touch">Cargando…</div>';
   document.body.appendChild(ov);
   document.getElementById('_crX').onclick=function(){ov.remove()};
@@ -3476,6 +4171,7 @@ function _crShow(){
       ps.push(_crConteos());
       return Promise.all(ps)})
     .then(_crPinta);
+  try{_crDupMediasUI()}catch(e){}
 }
 /* Cuantas tareas tiene HOY cada cronograma. La cabecera guarda el numero de
    cuando se cargo el .xer, y despues se anaden o se quitan tareas. */
@@ -3550,6 +4246,7 @@ function _crPinta(){
       '<button data-map="'+esc(c.cron_id)+'" style="background:#1B5E8A;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">🔗 Mapeo tareas ↔ partidas</button>'+
       '<button data-ver="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">👁 Tareas</button>'+
       '<button data-ed="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">✎ Nombre / tipo / color</button>'+
+      (esAdmin()?'<button data-dup="'+esc(c.cron_id)+'" title="Hace una copia EXACTA de este cronograma (tareas, alcance, relaciones, WBS, rendimientos, configuraci\u00f3n de trabajo, plan, agrupaciones, .xer\u2026) con id propio. Despu\u00e9s es independiente: lo que cambies en la copia no toca a este, ni al rev\u00e9s. Para hacer forecast." style="background:#1E5E5A;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">\u29c9 Duplicar</button>':'')+
       '<button data-del="'+esc(c.cron_id)+'" style="margin-left:auto;background:#5A1F1F;color:#FFD9D4;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">🗑</button>'+
       '</div></div>'});
   B.innerHTML=H;
@@ -3583,6 +4280,9 @@ function _crPinta(){
   B.querySelectorAll('[data-map]').forEach(function(b){b.onclick=function(){_crMapeoUI(elC(b.getAttribute('data-map')))}});
   B.querySelectorAll('[data-ver]').forEach(function(b){b.onclick=function(){_crTareasUI(elC(b.getAttribute('data-ver')))}});
   B.querySelectorAll('[data-ed]').forEach(function(b){b.onclick=function(){_crEditarUI(elC(b.getAttribute('data-ed')))}});
+  B.querySelectorAll('[data-dup]').forEach(function(b){b.onclick=function(){
+    if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return}
+    try{_crDuplicarUI(elC(b.getAttribute('data-dup')))}catch(e){toast('\u2716 '+((e&&e.message)||e))}}});
   B.querySelectorAll('[data-del]').forEach(function(b){b.onclick=function(){
     var c=elC(b.getAttribute('data-del'));
     _galConfirm('¿Borrar el cronograma '+c.cron_id+'?','Se va con lápida: sus '+(c.n_tareas||0)+' tareas quedan marcadas como eliminadas y se pueden recuperar desde la base.','Sí, borrar','#B42318',function(){
@@ -4363,6 +5063,7 @@ function _crEditarUI(c){
     '<div style="font-size:10.5px;color:#7d8590;margin-bottom:10px">id: '+esc(c.cron_id)+' — el id no cambia; lo que se cambia es cómo se muestra</div>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#8ECBF5;margin-bottom:4px">Nombre visible (etiqueta)</label>'+
     '<input id="_crEdEti" value="'+esc(c.etiqueta||'')+'" placeholder="'+esc(c.cron_id)+'" style="width:100%;box-sizing:border-box;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:9px;padding:10px;font-size:13px;margin-bottom:9px">'+
+    '<div id="_crEdAviso" style="font-size:10.5px;color:#FFD27A;margin:-6px 0 8px"></div>'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#8ECBF5;margin-bottom:4px">Descripción</label>'+
     '<input id="_crEdNom" value="'+esc(c.nombre||'')+'" style="width:100%;box-sizing:border-box;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:9px;padding:10px;font-size:13px;margin-bottom:9px">'+
     '<label style="display:block;font-size:11px;font-weight:800;color:#8ECBF5;margin-bottom:4px">Tipo</label>'+
@@ -4375,6 +5076,9 @@ function _crEditarUI(c){
     '<button id="_crEdOk" style="flex:2;background:#1B5E8A;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:800">💾 Guardar</button></div></div>';
   document.body.appendChild(ov);
   var color=c.color||cols[0];
+  try{var _eA=document.getElementById('_crEdEti'),_eAv=function(){try{var v=String(_eA.value||'').trim(),m=(typeof _crDupValEti==='function')?_crDupValEti(v,c.cron_id,_crLista()):'';
+      document.getElementById('_crEdAviso').textContent=(v.length?(v.length+'/15'):'')+(m?(' \u00b7 \u26a0 '+m+' (es un aviso: se puede guardar igual)'):'')}catch(_e){}};
+    _eA.addEventListener('input',_eAv);_eAv()}catch(_e){}
   ov.querySelectorAll('[data-c]').forEach(function(s){s.onclick=function(){
     color=s.getAttribute('data-c');
     ov.querySelectorAll('[data-c]').forEach(function(o){o.style.borderColor='transparent'});
@@ -4389,9 +5093,165 @@ function _crEditarUI(c){
         etiqueta:String((document.getElementById('_crEdEti')||{}).value||'').trim(),
         tipo:document.getElementById('_crEdTipo').value,color:color,
         quien:yo,ts:t,cell_at:Date.now()}],'proyecto,cron_id');
-      await _crPull();ov.remove();toast('✓ Guardado');_crPinta();
+      window._crCacheT=0;await _crPull();ov.remove();toast('✓ Guardado');_crPinta();
     }catch(e){b.disabled=false;b.textContent='💾 Guardar';toast('⚠ '+((e&&e.message)||e))}};
 }
+
+/* el dialogo de ⧉ Duplicar: nombre visible, descripcion, tipo, color y si
+   entra marcada en el Excel semanal; despues, el progreso y el cuadro de lo
+   copiado (original | copia) verificado en el servidor. Lo que el usuario NO
+   toca (nombre visible, descripcion, tipo, color) no se manda: la capa de
+   datos lo deja igual al original (y el nombre por defecto lo calcula con el
+   id y la lista frescos) */
+function _crDuplicarUI(c){
+  if(!c)return;
+  if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return}
+  var old=document.getElementById('_crDupOv');if(old)old.remove();
+  var cols=['#2E86C1','#E67E22','#8E44AD','#16A085','#C0392B','#7F8C8D'];
+  var cO=String(c.color||'');if(cO&&cols.indexOf(cO)<0)cols.unshift(cO);
+  var color=cO,colorTocado=false;
+  var tO=String(c.tipo==null?'':c.tipo),tU=tO.toUpperCase();
+  var tipos=[['LB','LB'],['FORECAST','FORECAST']];
+  if(tU!=='LB'&&tU!=='FORECAST'&&tU!=='ACTUAL')tipos.push([tO,tO?tO:'(sin tipo, como el original)']);
+  var tSel=(tU==='LB')?'LB':((tU==='FORECAST'||tU==='ACTUAL')?'FORECAST':tO);
+  var nt=(window._crNT||{})[c.cron_id],nTar=nt?nt.n:(c.n_tareas||0);
+  var nAlc=0;try{nAlc=Object.keys((window._crAl||{})[c.cron_id]||{}).length}catch(e){}
+  var est='sigue';try{est=_crActualEstado(c.cron_id)}catch(e){}
+  var nomAct='';try{var _ca=_ctActiva();nomAct=_ca?_ctNombre(_ca.cron_id):''}catch(e){nomAct=''}
+  var trab=(est==='activa')?'es la ACTUAL. La copia NO será la ACTUAL; para trabajar con ella, toca ⚙ Trabajar con este en su tarjeta'
+    :((typeof _ctDe==='function'&&_ctDe(c.cron_id))?'propia (se copia tal cual)':('sigue a la ACTUAL'+(nomAct?(' («'+nomAct+'»)'):'')+': la copia se quedará CONGELADA con la foto de hoy y ya no la seguirá'));
+  var nomO=_crNomVis(c);
+  var inp='width:100%;box-sizing:border-box;background:#0d1117;color:#cfe3ff;border:1px solid #1d3550;border-radius:9px;padding:10px;font-size:13px';
+  var lab='display:block;font-size:11px;font-weight:800;color:#8ECBF5;margin:9px 0 4px';
+  var ov=document.createElement('div');ov.id='_crDupOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(4,10,20,.86);display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box';
+  ov.innerHTML='<div style="background:#0f1a26;border:1px solid #1d3550;border-radius:14px;padding:15px;max-width:520px;width:100%;max-height:100%;overflow:auto;box-sizing:border-box;color:#cfe3ff">'+
+    '<div style="font-weight:900;font-size:14px;color:#8ECBF5;margin-bottom:2px;overflow-wrap:anywhere">⧉ Duplicar «'+esc(nomO)+'»</div>'+
+    '<div id="_crDupId" style="font-size:10.5px;color:#7d8590;margin-bottom:8px">Buscando un id libre…</div>'+
+    '<div style="font-size:11.5px;color:#9db4d6;line-height:1.55;background:#0d1526;border:1px solid #172033;border-radius:9px;padding:8px 10px">'+
+      '<b style="color:#cfe3ff">'+esc(String(nTar))+'</b> tareas · <b style="color:#cfe3ff">'+esc(String(nAlc))+'</b> partidas con ajuste de alcance · fecha de datos <b style="color:#cfe3ff">'+esc(c.fecha_datos||'—')+'</b><br>'+
+      'Configuración de trabajo: '+esc(trab)+'</div>'+
+    (window._modoPrueba?'<div style="margin-top:8px;font-size:11.5px;font-weight:800;color:#1B2433;background:#FFD27A;border-radius:8px;padding:7px 9px">Estás en MODO PRUEBAS: la copia es real y NO se borra al FINALIZAR</div>':'')+
+    '<div id="_crDupGate" style="margin-top:8px;font-size:11.5px;font-weight:800;color:#F0A3A3;min-height:0"></div>'+
+    '<div id="_crDupForm">'+
+    '<label style="'+lab+'">Nombre visible (etiqueta) <span id="_crDupCnt" style="color:#7d8590;font-weight:700"></span></label>'+
+    '<input id="_crDupEti" maxlength="15" style="'+inp+'">'+
+    '<div id="_crDupEtiMsg" style="font-size:11px;color:#F0A3A3;min-height:14px;margin-top:3px"></div>'+
+    '<label style="'+lab+'">Descripción</label>'+
+    '<input id="_crDupNom" style="'+inp+'">'+
+    '<label style="'+lab+'">Tipo</label>'+
+    '<select id="_crDupTipo" style="'+inp+'">'+tipos.map(function(t){return '<option value="'+esc(t[0])+'"'+(t[0]===tSel?' selected':'')+'>'+esc(t[1])+'</option>'}).join('')+'</select>'+
+    '<div style="font-size:10.5px;color:#7d8590;margin-top:3px">LB = costo contractual; FORECAST = costo sin los saldos retirados. Si el original es ACTUAL, la copia sale FORECAST con los mismos números.</div>'+
+    '<label style="'+lab+'">Color</label>'+
+    '<div id="_crDupCols" style="display:flex;gap:7px;flex-wrap:wrap">'+cols.map(function(x){
+      return '<span data-c="'+esc(x)+'" style="width:31px;height:31px;border-radius:8px;background:'+esc(x)+';border:3px solid '+(x===color?'#fff':'transparent')+';cursor:pointer"></span>'}).join('')+'</div>'+
+    '<div id="_crDupColMsg" style="font-size:10.5px;color:#7d8590;min-height:13px;margin-top:3px"></div>'+
+    '<label style="display:flex;align-items:center;gap:8px;margin-top:9px;font-size:12px;cursor:pointer"><input type="checkbox" id="_crDupAct" style="width:16px;height:16px">Marcar en el Excel semanal</label>'+
+    '<div id="_crDupActMsg" style="font-size:10.5px;color:#E8C9A0;min-height:13px;margin-top:2px"></div>'+
+    '<div style="margin-top:8px;font-size:10.5px;color:#9db4d6;line-height:1.5;border-left:3px solid #1E5E5A;padding:2px 0 2px 8px">La copia es independiente: lo que cambies en ella (tareas, alcance, relaciones, rendimientos, configuración de trabajo, WBS, plan) no toca a «'+esc(nomO)+'», ni al revés. Se comparten, porque son de todos: los avances (partes), las restricciones y el PPC visible por actividad, y la configuración de columnas y filtros de las Tablas 1/2/3/R. El .xer de la copia lleva su propio Project ID (sale de su nombre): en P6 entra como un proyecto aparte, no como el original. Guarda antes las ventanas de edición del original con cambios: la copia sale de lo guardado.</div>'+
+    '</div>'+
+    '<div id="_crDupProg" style="display:none;margin-top:10px"><div style="height:9px;background:#152436;border-radius:6px;overflow:hidden"><div id="_crDupBar" style="height:100%;width:0;background:#2FBF7E;transition:width .2s"></div></div>'+
+      '<div id="_crDupPaso" style="font-size:11.5px;color:#9db4d6;margin-top:5px">…</div></div>'+
+    '<div id="_crDupRes" style="margin-top:8px"></div>'+
+    '<div style="display:flex;gap:8px;margin-top:12px"><button id="_crDupNo" style="flex:1;background:#333;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:800">Cancelar</button>'+
+    '<button id="_crDupOk" disabled style="flex:2;background:#1E5E5A;color:#fff;border:0;border-radius:10px;padding:12px;font-weight:800;opacity:.55">⧉ Duplicar</button></div></div>';
+  document.body.appendChild(ov);
+  var $d=function(id){return document.getElementById(id)};
+  var N=null,busy=false,hecho=false,res=null,etiTocada=false;
+  var eEti=$d('_crDupEti'),eNom=$d('_crDupNom'),bOk=$d('_crDupOk'),bNo=$d('_crDupNo');
+  eNom.value=String(c.nombre||'');
+  var etiDef=function(){try{return _crDupEtiDef(c,N||'',_crLista())}catch(e){return ''}};
+  eEti.value=etiDef();
+  /* las puertas, en vivo: sin conexion o con una restauracion pendiente no se puede */
+  var puerta=function(){
+    if(!(typeof esAdmin==='function'&&esAdmin()))return 'Solo el administrador';
+    if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return '⚠ Sin conexión: la copia se hace en el servidor; prueba cuando vuelva la red';
+    if(window._mpFreeze)return '⚠ Hay una restauración de pruebas pendiente: no se puede duplicar ahora';
+    return ''};
+  var valida=function(){if(document.getElementById('_crDupOv')!==ov)return false;var v=String(eEti.value||'').trim(),m='',g=puerta();
+    try{m=_crDupValEti(v,N||'',_crLista())}catch(e){m=''}
+    $d('_crDupCnt').textContent=v.length?(v.length+'/15'):'';
+    $d('_crDupEtiMsg').textContent=m?('✖ '+m):(v?((!etiTocada&&v.indexOf(String(nomO).trim())<0)?'nombre por defecto abreviado (máx. 15): cámbialo si quieres que diga mejor de qué es':''):'vacío: se verá el id');
+    $d('_crDupEtiMsg').style.color=m?'#F0A3A3':'#7d8590';
+    if(!busy&&!hecho)$d('_crDupGate').textContent=g;
+    var ok=!m&&!g&&!busy&&!hecho&&N!==null;bOk.disabled=!ok;bOk.style.opacity=ok?'1':'.55';return !m&&!g};
+  var notaColor=function(){$d('_crDupColMsg').textContent=(color===cO&&cO)?'mismo color que el original: en Ver curva y en el gráfico del Excel se confunden':(cO?'':'el original no tiene color propio: la copia tampoco, salvo que elijas uno')};
+  eEti.oninput=function(){etiTocada=true;valida()};
+  notaColor();valida();
+  /* cada 2 s se repasan las puertas (la red puede caer con el dialogo abierto); se para al cerrarlo o al abrir otro */
+  var vigila=null;try{vigila=setInterval(function(){if(document.getElementById('_crDupOv')!==ov){try{clearInterval(vigila)}catch(e){}return}valida()},2000)}catch(e){}
+  ov.querySelectorAll('[data-c]').forEach(function(s){s.onclick=function(){if(busy||hecho)return;
+    color=s.getAttribute('data-c');colorTocado=true;
+    ov.querySelectorAll('[data-c]').forEach(function(o){o.style.borderColor='transparent'});
+    s.style.borderColor='#fff';notaColor()}});
+  $d('_crDupAct').onchange=function(){$d('_crDupActMsg').textContent=this.checked?'quedará la última de la lista; en el Excel semanal la espina sigue siendo el último marcado que no es una copia':''};
+  /* al cerrar tras una copia lista, se lleva la vista a la tarjeta nueva y se resalta */
+  var resalta=function(id){try{var B=document.getElementById('_crBody'),bt=null;
+    if(B)Array.prototype.forEach.call(B.querySelectorAll('[data-dup]'),function(x){if(x.getAttribute('data-dup')===id)bt=x});
+    var card=bt&&bt.parentNode&&bt.parentNode.parentNode;
+    if(card){card.scrollIntoView({block:'center'});card.style.outline='2px solid #2FBF7E';setTimeout(function(){try{card.style.outline=''}catch(e){}},2000)}}catch(e){}};
+  bNo.onclick=function(){if(busy)return;try{clearInterval(vigila)}catch(e){}ov.remove();if(hecho&&res)resalta(res.cron_id)};
+  var pideId=function(){N=null;$d('_crDupId').textContent='Buscando un id libre…';valida();
+    _crDupCabeceras().then(function(cab){return _crDupIdNuevo(cab,{})}).then(function(id){if(document.getElementById('_crDupOv')!==ov)return;N=id;
+        if($d('_crDupId'))$d('_crDupId').textContent='id nuevo: '+id+' · el id no cambia nunca; el nombre visible sí (✎)';
+        if(!etiTocada)eEti.value=etiDef();valida()},
+      function(e){if(document.getElementById('_crDupOv')!==ov)return;N='';if($d('_crDupId'))$d('_crDupId').textContent='id nuevo: se asigna al duplicar ('+_crDupMsg(e)+')';valida()})};
+  pideId();
+  var paso=function(txt,h,n){try{$d('_crDupPaso').textContent=txt;var p=(n>0)?Math.max(0,Math.min(1,h/n)):0;$d('_crDupBar').style.width=Math.round(p*100)+'%'}catch(e){}};
+  bOk.onclick=async function(){
+    if(busy||hecho)return;
+    var g=puerta();if(g){toast(g);valida();return}
+    if(!valida())return;
+    busy=true;bOk.disabled=true;bOk.style.opacity='.55';bOk.textContent='Copiando…';bNo.disabled=true;bNo.style.opacity='.55';
+    $d('_crDupForm').style.opacity='.5';$d('_crDupForm').style.pointerEvents='none';
+    $d('_crDupProg').style.display='block';$d('_crDupRes').innerHTML='';
+    var tSel2=$d('_crDupTipo').value,vEti=String(eEti.value||'').trim(),vNom=String(eNom.value||'').trim();
+    var op={activo:!!$d('_crDupAct').checked,progreso:paso};
+    if(etiTocada||vEti!==etiDef())op.etiqueta=vEti;
+    if(vNom!==String(c.nombre||'').trim())op.nombre=vNom;
+    if(tSel2!==tSel)op.tipo=tSel2;
+    if(colorTocado&&color!==cO)op.color=color;
+    try{
+      var r=await _crDuplicar(c,op);res=r;
+      hecho=true;busy=false;paso('✔ Copia lista y verificada en el servidor',1,1);$d('_crDupGate').textContent='';
+      var fil=Object.keys(r.conteos||{}).map(function(k){var x=r.conteos[k];
+        var t=function(o){return (o.vivas||0)+(o.lapidas?(' <span style="color:#7d8590">+'+o.lapidas+' borradas</span>'):'')};
+        return '<tr><td style="padding:2px 6px">'+esc(k)+'</td><td style="padding:2px 6px;text-align:right">'+t(x.orig)+'</td><td style="padding:2px 6px;text-align:right">'+t(x.copia)+'</td></tr>'}).join('');
+      $d('_crDupRes').innerHTML='<table style="width:100%;border-collapse:collapse;font-size:11px;color:#cfe3ff"><tr style="color:#8ECBF5"><th style="text-align:left;padding:2px 6px">tabla</th><th style="text-align:right;padding:2px 6px">original</th><th style="text-align:right;padding:2px 6px">copia</th></tr>'+fil+'</table>'+
+        '<div style="font-size:10.5px;color:#7d8590;margin-top:3px">«borradas» = filas con lápida (se copian apagadas: el .xer y el deshacer de relaciones las necesitan)</div>'+
+        ((r.avisos||[]).length?('<div style="margin-top:6px;font-size:11px;color:#E8C9A0">'+r.avisos.map(function(a){return '• '+esc(a)}).join('<br>')+'</div>'):'');
+      toast('⧉ Copia lista: '+(r.etiqueta||r.cron_id)+' ('+r.cron_id+') — '+r.tareas+' tareas. Es independiente de '+nomO);
+      bOk.style.display='none';bNo.disabled=false;bNo.style.opacity='1';bNo.textContent='Cerrar';
+      try{_crPinta()}catch(e){}
+      /* la tarjeta de la copia con SU alcance (F6 lo invalido): lectura de la copia ya publicada */
+      try{_crAlcTodos().then(function(){return _crConteos()}).then(function(){if(document.getElementById('_crBody'))_crPinta()},function(){try{_crPinta()}catch(_e){}})}catch(e){}}
+    catch(e){busy=false;var m=_crDupMsg(e);
+      $d('_crDupRes').innerHTML='<div style="font-size:12px;font-weight:800;color:#F0A3A3;overflow-wrap:anywhere">✖ '+esc(m)+'</div>';
+      toast('✖ '+m);
+      bOk.textContent='⧉ Duplicar';bNo.disabled=false;bNo.style.opacity='1';
+      $d('_crDupForm').style.opacity='1';$d('_crDupForm').style.pointerEvents='';$d('_crDupProg').style.display='none';
+      pideId()}};
+}
+/* E3: en la lista de cronogramas, las copias que quedaron a medias (ocultas,
+   'copiando', de hace mas de 10 min) con su boton Descartar */
+async function _crDupMediasUI(errs){errs=errs||{};
+  var box=document.getElementById('_crDupMed');if(!box)return;
+  if(!(typeof esAdmin==='function'&&esAdmin())||!(typeof sbReady==='function'&&sbReady()&&navigator.onLine)){box.innerHTML='';return}
+  var L=[];try{L=await _crDupMedias()}catch(e){box.innerHTML='';return}
+  box=document.getElementById('_crDupMed');if(!box)return;
+  /* el error de un Descartar se ve aqui mismo (el toast queda debajo de la ventana de la lista);
+     si la copia ya no esta a medias, su linea se va y queda solo el aviso */
+  var sinFila=Object.keys(errs).filter(function(k){return !L.some(function(z){return String(z.cron_id)===k})});
+  if(!L.length&&!sinFila.length){box.innerHTML='';return}
+  var err=function(t){return '<div style="flex-basis:100%;color:#F0A3A3;font-weight:800;overflow-wrap:anywhere">✖ '+esc(t)+'</div>'};
+  box.innerHTML=L.map(function(z){var id=String(z.cron_id);return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#3a2a10;border:1px solid #7a5a1a;color:#FFD27A;border-radius:9px;padding:7px 10px;margin-bottom:7px;font-size:11.5px;font-weight:700">'+
+    '<span style="flex:1;min-width:180px;overflow-wrap:anywhere">Quedó una copia a medias ('+esc(id)+(z.etiqueta?(' · '+esc(String(z.etiqueta))):'')+'): está oculta y no afecta a nada</span>'+
+    '<button data-dupdes="'+esc(id)+'" data-dupts="'+esc(String(z.elim_ts||''))+'" style="background:#7a3a1a;color:#fff;border:0;border-radius:8px;padding:6px 10px;font-weight:800;font-size:11px">Descartar</button>'+
+    (errs[id]?err(errs[id]):'')+'</div>'}).join('')+
+    sinFila.map(function(k){return '<div style="background:#3a1a1a;border:1px solid #7a2a2a;border-radius:9px;padding:7px 10px;margin-bottom:7px;font-size:11.5px">'+err(k+': '+errs[k])+'</div>'}).join('');
+  box.querySelectorAll('[data-dupdes]').forEach(function(b){b.onclick=function(){var id=b.getAttribute('data-dupdes'),ts=b.getAttribute('data-dupts');
+    _galConfirm('¿Descartar la copia a medias '+id+'?','Se apagan (borrado por apagado) sus filas: tareas, alcance, relaciones, rendimientos… Solo las de '+id+'; ningún otro cronograma se toca.','Sí, descartar','#B42318',function(){
+      b.disabled=true;_crDupDescarta(id,ts).then(function(){toast('Copia a medias '+id+' descartada');_crDupMediasUI()},function(e){b.disabled=false;var m=_crDupMsg(e),o={};o[id]=m;toast('✖ '+m);_crDupMediasUI(o)})})}})}
 
 /* --------- La curva del cronograma, dentro del aplicativo -------------------
    Dibuja la curva S del cronograma con sus semanas propias, las HH por semana,
@@ -4484,8 +5344,11 @@ async function _rlPush(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
   out=onlyChanged(T_REL,out,function(r){return r.cron_id+'|'+r.succ+'|'+r.pred});if(!out.length)return;
   for(var i=0;i<out.length;i+=150)await sbUpsert(T_REL,out.slice(i,i+150),'proyecto,cron_id,succ,pred');
   commitSent(out)}
+/* lo que el SERVIDOR tiene de cada fila bajada queda en _sent (con la forma del push): un _xxPush solo sube lo que
+   de verdad difiere del servidor; nunca reenvia con el ts viejo una fila que solo bajo (pisaria una edicion mas nueva) */
+function _crSentSrv(T,R,kf,sh){try{var n=0;(R||[]).forEach(function(r){try{if(!r)return;var k=T+'|'+kf(r);if(_sent[k]!==undefined)return;var h=_hashRow(sh(r));_sent[k]=h;n++}catch(e){}});if(n)localStorage.setItem(SENTKEY,JSON.stringify(_sent))}catch(e){}}
 async function _rlPull(cronId){if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return false;
-  var R=await sbSelect(T_REL,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+(cronId?('&cron_id=eq.'+encodeURIComponent(cronId)):'')+'&limit=5000');
+  var R=await _sbSelectTodo(T_REL,'proyecto=eq.'+encodeURIComponent(DATA.proyecto)+(cronId?('&cron_id=eq.'+encodeURIComponent(cronId)):''),'cron_id.asc,succ.asc,pred.asc');
   var all=_rlAll(),cambio=false;
   (R||[]).forEach(function(r){if(!r||!r.cron_id||!r.succ||!r.pred)return;var k=_rlKey(r.cron_id,r.succ,r.pred);
     var loc=all[k]||{},lts=Number(loc.ts)||0,sts=Number(r.ts)||0;
@@ -4497,6 +5360,9 @@ async function _rlPull(cronId){if(!(typeof sbReady==='function'&&sbReady()&&navi
       lag0:(r.lag0==null?null:Number(r.lag0)),
       origen:String(r.origen||''),quien:String(r.quien||''),ts:sts,cell_at:Number(r.cell_at)||0,
       eliminado:!!r.eliminado,elim_por:String(r.elim_por||''),elim_ts:Number(r.elim_ts)||0}});
+  _crSentSrv(T_REL,R,function(x){return x.cron_id+'|'+x.succ+'|'+x.pred},function(x){return {proyecto:DATA.proyecto,cron_id:String(x.cron_id),succ:String(x.succ),pred:String(x.pred),
+      tipo:String(x.tipo||'FS'),lag_d:Number(x.lag_d)||0,lag0:(x.lag0==null?null:Number(x.lag0)),origen:String(x.origen||''),quien:String(x.quien||''),
+      ts:Number(x.ts)||0,cell_at:Number(x.cell_at)||0,eliminado:!!x.eliminado,elim_por:String(x.elim_por||''),elim_ts:Number(x.elim_ts)||0}});
   if(cambio){_rlSaveLocal();try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(e){}}
   return cambio}
 try{var _rlPushBase=syncPush;syncPush=async function(){try{await _rlPush()}catch(e){}return await _rlPushBase.apply(this,arguments)};
@@ -4610,13 +5476,16 @@ async function _rhPush(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
   for(var i=0;i<out.length;i+=150)await sbUpsert(T_RH,out.slice(i,i+150),'proyecto,hid');
   commitSent(out)}
 async function _rhPull(cronId){if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return false;
-  var R=await sbSelect(T_RH,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+(cronId?('&cron_id=eq.'+encodeURIComponent(cronId)):'')+'&limit=5000');
+  var R=await _sbSelectTodo(T_RH,'proyecto=eq.'+encodeURIComponent(DATA.proyecto)+(cronId?('&cron_id=eq.'+encodeURIComponent(cronId)):''),'hid.asc');
   var all=_rhAll(),cambio=false;
   (R||[]).forEach(function(r){if(!r||!r.hid)return;var loc=all[r.hid]||{},lts=Number(loc.ts)||0,sts=Number(r.ts)||0;
     if(lts>sts)return;if(lts&&lts===sts)return;cambio=true;
     all[r.hid]={hid:String(r.hid),cron_id:String(r.cron_id),seq:Number(r.seq)||0,accion:String(r.accion||''),succ:String(r.succ||''),pred:String(r.pred||''),
       antes:r.antes||null,despues:r.despues||null,invalidado:!!r.invalidado,quien:String(r.quien||''),ts:sts,cell_at:Number(r.cell_at)||0,
       eliminado:!!r.eliminado,elim_por:String(r.elim_por||''),elim_ts:Number(r.elim_ts)||0}});
+  _crSentSrv(T_RH,R,function(x){return x.hid},function(x){return {proyecto:DATA.proyecto,hid:String(x.hid),cron_id:String(x.cron_id),seq:Number(x.seq)||0,accion:String(x.accion||''),
+      succ:String(x.succ||''),pred:String(x.pred||''),antes:x.antes||null,despues:x.despues||null,invalidado:!!x.invalidado,
+      quien:String(x.quien||''),ts:Number(x.ts)||0,cell_at:Number(x.cell_at)||0,eliminado:!!x.eliminado,elim_por:String(x.elim_por||''),elim_ts:Number(x.elim_ts)||0}});
   if(cambio){_rhSaveLocal();try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(e){}}
   return cambio}
 try{var _rhPushBase=syncPush;syncPush=async function(){try{await _rhPush()}catch(e){}return await _rhPushBase.apply(this,arguments)};
@@ -11960,7 +12829,9 @@ async function _wkDatosLibro(semN,corte,ids){
       tarDe:(function(){var m={};tar.forEach(function(t2){
         (t2.items||[]).forEach(function(i){(m[i]||(m[i]=[])).push(t2)})});return m})(),
       rp:_crReparto(tar)})}
-  var esp=C[C.length-1];
+  /* la espina: la MISMA regla que B y que el % de C (_wgEspina: la ultima marcada que no es una copia CP) */
+  var esp=null;try{var e9=(typeof _wgEspina==='function')?_wgEspina(L,{}):null;if(e9)C.forEach(function(z){if(String(z.id)===String(e9.cron_id))esp=z})}catch(_e9){esp=null}
+  if(!esp)esp=C[C.length-1];
   var porId={};_crPartidas().forEach(function(p){porId[p.id]=p});
   var vivas={};
   try{(DATA.partidas||[]).concat(state.nuevas||[]).forEach(function(p){if(p&&p.id)vivas[p.id]=p})}catch(e){}
@@ -15305,12 +16176,15 @@ function _wgOpcUI(opc){
   try{localStorage.setItem(WG_TOPE_KEY,tp)}catch(e4){}
   return {tope:tp,modoCorte:modo,espId:esp,gen:'B.001',rxEspina:false}}
 
-/* La ESPINA: la elegida a mano o, por defecto, la ultima marcada (igual que A). */
+/* La ESPINA: la elegida a mano o, por defecto, la ultima marcada que no es una copia CP (la misma
+   regla en A -_wkDatosLibro-, B, el % de C y la vista previa del Excel semanal). */
 function _wgEspina(L,opc){
   L=L||[];
   if(!L.length)return null;
   var id=String((opc&&opc.espId)||'');
   if(id)for(var i=0;i<L.length;i++)if(String(L[i].cron_id)===id)return L[i];
+  /* una copia de forecast (CP<ddmmyy>-nn, orden al final) no se queda la espina por ser la ultima marcada */
+  for(var j=L.length-1;j>=0;j--)if(!/^CP\d{6}-\d{1,3}$/.test(String(L[j].cron_id)))return L[j];
   return L[L.length-1]}
 
 /* La BASE de programacion, con reintento de _bkcPull anulando el freno de
@@ -20318,7 +21192,7 @@ async function _wkCLibroApp(semN,corte,ids){
         var fila=semanas.map(function(){return 0});L4.forEach(function(x){var d=x.ini,w=-1;if(d>semanas[ult].fin)w=ult;else if(d<semanas[0].ini)w=0;
           else for(var j=0;j<semanas.length;j++)if(d>=semanas[j].ini&&d<=semanas[j].fin){w=j;break}if(w>=0)fila[w]+=x.hh});out[it]=fila});return out}}
       catch(e){}return origPI.apply(this,arguments)};
-    var esp=L[L.length-1];if(esp){var D=await _crTablaDatosMemo(esp);(D.filas||[]).forEach(function(r){if(r&&r.id)mapa[r.id]=r})}
+    var esp=(typeof _wgEspina==='function')?_wgEspina(L,{}):L[L.length-1];if(esp){var D=await _crTablaDatosMemo(esp);(D.filas||[]).forEach(function(r){if(r&&r.id)mapa[r.id]=r})}
     pctOfAt=function(p,iso){var r=p&&mapa[p.id];if(!r)return orig.apply(this,arguments);var f=Number(_crFracHechaAt(r,iso))||0;return Math.max(0,Math.min(100,f*100))};
     _crPlanRecupera=async function(cronId,corte2,semN2){var R=await origPR.apply(this,arguments);
       try{await _wkCActualT2(R,cronId,corte2)}catch(e){try{console.warn('C.003 ACTUAL Tabla 2:',e)}catch(_e){}}return R};
@@ -21709,7 +22583,7 @@ function _wkExcel(){
        marcado), la misma de la curva y de PROGRAMACION */
     var marc=[].slice.call(document.querySelectorAll('._wkCk:checked')).map(function(k){return k.value});
     if(marc.length&&typeof _wkPctCron==='function'){
-      var esp=marc[marc.length-1];
+      var esp=marc[marc.length-1];try{var e8=(typeof _wgEspina==='function')?_wgEspina(marc.map(function(v){return {cron_id:v}}),{}):null;if(e8)esp=String(e8.cron_id)}catch(_e8){}
       Promise.all([_wgPctT2(esp,corte2),_wgPctT2(esp,hoy2)]).then(function(r){
         pinta(r[0],r[1],'Medido como la Tabla 2: % físico sobre las '+_nMil2(r[0].hhT)+' hh del alcance de '+esp+' ('+_nMil2(r[1].gan)+' hh ganadas hasta hoy).')}).catch(function(){
         pinta(_wkPctApp(_wkAcum(corte2),!topar2),_wkPctApp(_wkAcum(hoy2),!topar2),'')})}
@@ -23523,12 +24397,46 @@ async function sbSelect(tabla,qs){var k=tabla+'?'+qs;var p=_sbInFlight[k];
   var R9=await p;if(tabla==='actividades_create_110826')try{_qpsExacto(R9)}catch(_eq9){}
   return R9}
 async function sbDelete(tabla,qs){var url=sbBase()+'/rest/v1/'+tabla+'?'+qs;var r=await fetch(url,{method:'DELETE',headers:sbHead({'Prefer':'return=minimal'})});if(!r.ok&&r.status!==404)throw new Error('del '+tabla+' '+r.status)}
+/* lectura COMPLETA de una tabla: Supabase corta cada respuesta en max_rows
+   (1000) aunque se pida limit=5000, y lo hace sin avisar. Esta pagina por la
+   PK (orden estable) hasta que llega una pagina vacia o el total que da
+   content-range. Fetch propio (no sbSelect). Nunca devuelve a medias: si algo
+   falla, LANZA. Con comparte=true dos llamadas iguales en vuelo esperan la
+   MISMA lectura y reciben el mismo arreglo (como sbSelect): solo lo usan las
+   lecturas de cache (_crTareas/_crAlc); la copia de un cronograma lee siempre
+   con su propio fetch. */
+var _sbTodoVuelo={};
+async function _sbSelectTodo(tabla,qs,orden,sel,comparte){
+  if(comparte){var kv=tabla+'?'+(sel||'*')+'&'+(qs||'')+'&'+(orden||'');var pv=_sbTodoVuelo[kv];
+    if(!pv){pv=_sbSelectTodo(tabla,qs,orden,sel,false);_sbTodoVuelo[kv]=pv;var fv=function(){if(_sbTodoVuelo[kv]===pv)delete _sbTodoVuelo[kv]};pv.then(fv,fv)}
+    return await pv}
+  var out=[],off=0,total=null,total0=null,pag=1000;
+  for(var vuelta=0;vuelta<400;vuelta++){
+    var url=sbBase()+'/rest/v1/'+tabla+'?select='+(sel||'*')+(qs?('&'+qs):'')+(orden?('&order='+orden):'')+'&limit='+pag+'&offset='+off;
+    var r=await fetch(url,{headers:sbHead({'Prefer':'count=exact'})});
+    /* 416 = se pidio mas alla del final (PostgREST con count=exact): no hay mas filas */
+    if(r&&r.status===416&&out.length&&total!=null&&out.length>=total)break;
+    if(!r||!r.ok)throw new Error(tabla+' '+((r&&r.status)||0));
+    var cr='';try{cr=(r.headers&&r.headers.get&&r.headers.get('content-range'))||''}catch(e){cr=''}
+    var mt=/\/(\d+)\s*$/.exec(String(cr||''));if(mt)total=Number(mt[1]);
+    /* paginado por offset: si otro equipo apaga o mete filas entre una pagina y otra, el resto se desplaza
+       y se saltan filas vivas sin que el conteo final lo note */
+    if(mt){if(total0==null)total0=total;else if(total!==total0)throw new Error(tabla+': cambio durante la lectura ('+total0+' -> '+total+')')}
+    var R=await r.json();
+    if(!Array.isArray(R))throw new Error(tabla+': respuesta no valida');
+    for(var i=0;i<R.length;i++)out.push(R[i]);
+    off+=R.length;
+    if(!R.length)break;
+    if(total!=null&&out.length>=total)break}
+  if(vuelta>=400)throw new Error(tabla+': demasiadas paginas');
+  if(total!=null&&out.length!==total)throw new Error(tabla+': lectura incompleta ('+out.length+' de '+total+')');
+  return out}
 function pendingCount(){return (typeof _pendAll==='function')?_pendAll():state.partes.filter(function(p){return !p.synced}).length}
 var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c38';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c39';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -33084,7 +33992,7 @@ async function _crTablaQUI(c){
     try{pw.moveTo(0,0);pw.resizeTo(_sw,_sh)}catch(e){}
     doc.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();zoom=Math.max(.4,Math.min(3,zoom*(e.deltaY<0?1.1:1/1.1)));cuerpo.style.zoom=zoom;_tabZoomSet('_tq',zoom)},{passive:false});
     doc.getElementById('_tqCopiar').onclick=function(){try{var t=cuerpo.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_tqEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});(pw.navigator.clipboard||navigator.clipboard).writeText(out.join('\n')).then(function(){setRes('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){setRes('No se pudo copiar')})}catch(e){}};
-    var pinta=async function(){try{var seq=(window._tqSeq=(window._tqSeq||0)+1);var D2=await _tqDatos(c);if(seq!==window._tqSeq||cerrada)return;D=D2;var _f9=_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TQ_LS)||''}catch(e){return ''}})());if(_f9===pw._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaQRepinta==='function')window._crTablaQRepinta()}catch(e){}},2500);return}pw._t23FirmaUlt=_f9;pintaHTML();setRes(D.u.pend?'cargando tareas\u2026':_tqInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaQRepinta==='function')window._crTablaQRepinta()}catch(e){}},2500)}catch(e){try{cuerpo.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}catch(_e){}}};
+    var pinta=async function(){try{var seq=(window._tqSeq=(window._tqSeq||0)+1);var D2=await _tqDatos(c);if(seq!==window._tqSeq||cerrada)return;D=D2;var _f9=String((c&&c.cron_id)||'')+'§'+_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TQ_LS)||''}catch(e){return ''}})());if(_f9===pw._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaQRepinta==='function')window._crTablaQRepinta()}catch(e){}},2500);return}pw._t23FirmaUlt=_f9;pintaHTML();setRes(D.u.pend?'cargando tareas\u2026':_tqInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaQRepinta==='function')window._crTablaQRepinta()}catch(e){}},2500)}catch(e){try{cuerpo.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}catch(_e){}}};
     window._crTablaQRepinta=function(){try{if(cerrada||pw.closed){window._crTablaQRepinta=null;return}if(window._tqT)clearTimeout(window._tqT);window._tqT=setTimeout(function(){window._tqT=null;pinta()},150)}catch(e){}};
     pw.addEventListener('pagehide',function(){cerrada=true;if(window._crTablaQWin===pw)window._crTablaQWin=null;window._crTablaQRepinta=null;window._tqSelCol=null;window._tqRoot=null;window._tqClip=null});
     cuerpo.innerHTML='<div style="padding:12px;color:#9db4d6">Armando la tabla\u2026</div>';
@@ -33102,7 +34010,7 @@ async function _crTablaQUI(c){
   ov.insertBefore(top,body);try{_tabOpcToggle(document,top,'_tq')}catch(_eo){}
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
   var pintaHTMLF=function(){if(!D)return;var _sT=body.scrollTop,_sL=body.scrollLeft;wrap.innerHTML=_crTablaQHTML(D,q,ordRef.v);wrap.style.zoom=ov._zoom||(ov._zoom=_tabZoomGet('_tq'));body.scrollTop=_sT;body.scrollLeft=_sL;_crTablaQBind(wrap,ordRef,pintaHTMLF);try{var _r9=document.getElementById('_tqRes');if(_r9)_r9.textContent=_tqInfoTxt(D)}catch(e){}};
-  var pintaF=async function(){try{var seq=(window._tqSeq=(window._tqSeq||0)+1);var D2=await _tqDatos(c);if(seq!==window._tqSeq)return;D=D2;if(!document.getElementById('_crTabQOv'))return;var _f9=_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TQ_LS)||''}catch(e){return ''}})());if(_f9===ov._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaQRepinta==='function')window._crTablaQRepinta()}catch(e){}},2500);return}ov._t23FirmaUlt=_f9;pintaHTMLF();
+  var pintaF=async function(){try{var seq=(window._tqSeq=(window._tqSeq||0)+1);var D2=await _tqDatos(c);if(seq!==window._tqSeq)return;D=D2;if(!document.getElementById('_crTabQOv'))return;var _f9=String((c&&c.cron_id)||'')+'§'+_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TQ_LS)||''}catch(e){return ''}})());if(_f9===ov._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaQRepinta==='function')window._crTablaQRepinta()}catch(e){}},2500);return}ov._t23FirmaUlt=_f9;pintaHTMLF();
       var r=document.getElementById('_tqRes');if(r)r.textContent=(D.u.pend?'cargando tareas\u2026':_tqInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaQRepinta==='function')window._crTablaQRepinta()}catch(e){}},2500)}catch(e){wrap.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}};
   top.querySelector('#_tqBus').oninput=function(){q=this.value;pintaHTMLF()};
   _tqBarraBind(document,function(){pintaF()});
@@ -34100,7 +35008,7 @@ async function _crTablaVUI(c){
     try{pw.moveTo(0,0);pw.resizeTo(_sw,_sh)}catch(e){}
     doc.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();zoom=Math.max(.4,Math.min(3,zoom*(e.deltaY<0?1.1:1/1.1)));cuerpo.style.zoom=zoom;_tabZoomSet('_tv',zoom)},{passive:false});
     doc.getElementById('_tvCopiar').onclick=function(){try{var t=cuerpo.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_tvEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});(pw.navigator.clipboard||navigator.clipboard).writeText(out.join('\n')).then(function(){setRes('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){setRes('No se pudo copiar')})}catch(e){}};
-    var pinta=async function(){try{var seq=(window._tvSeq=(window._tvSeq||0)+1);var D2=await _tvDatos(c);if(seq!==window._tvSeq||cerrada)return;D=D2;var _f9=_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TV_LS)||''}catch(e){return ''}})());if(_f9===pw._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaVRepinta==='function')window._crTablaVRepinta()}catch(e){}},2500);return}pw._t23FirmaUlt=_f9;pintaHTML();setRes(D.u.pend?'cargando tareas\u2026':_tvInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaVRepinta==='function')window._crTablaVRepinta()}catch(e){}},2500)}catch(e){try{cuerpo.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}catch(_e){}}};
+    var pinta=async function(){try{var seq=(window._tvSeq=(window._tvSeq||0)+1);var D2=await _tvDatos(c);if(seq!==window._tvSeq||cerrada)return;D=D2;var _f9=String((c&&c.cron_id)||'')+'§'+_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TV_LS)||''}catch(e){return ''}})());if(_f9===pw._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaVRepinta==='function')window._crTablaVRepinta()}catch(e){}},2500);return}pw._t23FirmaUlt=_f9;pintaHTML();setRes(D.u.pend?'cargando tareas\u2026':_tvInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaVRepinta==='function')window._crTablaVRepinta()}catch(e){}},2500)}catch(e){try{cuerpo.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}catch(_e){}}};
     window._crTablaVRepinta=function(){try{if(cerrada||pw.closed){window._crTablaVRepinta=null;return}if(window._tvT)clearTimeout(window._tvT);window._tvT=setTimeout(function(){window._tvT=null;pinta()},150)}catch(e){}};
     pw.addEventListener('pagehide',function(){cerrada=true;if(window._crTablaVWin===pw)window._crTablaVWin=null;window._crTablaVRepinta=null;window._tvSelCol=null;window._tvRoot=null;window._tvClip=null});
     cuerpo.innerHTML='<div style="padding:12px;color:#9db4d6">Armando la tabla\u2026</div>';
@@ -34118,7 +35026,7 @@ async function _crTablaVUI(c){
   ov.insertBefore(top,body);try{_tabOpcToggle(document,top,'_tv')}catch(_eo){}
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
   var pintaHTMLF=function(){if(!D)return;var _sT=body.scrollTop,_sL=body.scrollLeft;wrap.innerHTML=_crTablaVHTML(D,q,ordRef.v);wrap.style.zoom=ov._zoom||(ov._zoom=_tabZoomGet('_tv'));body.scrollTop=_sT;body.scrollLeft=_sL;_crTablaVBind(wrap,ordRef,pintaHTMLF);try{var _r9=document.getElementById('_tvRes');if(_r9)_r9.textContent=_tvInfoTxt(D)}catch(e){}};
-  var pintaF=async function(){try{var seq=(window._tvSeq=(window._tvSeq||0)+1);var D2=await _tvDatos(c);if(seq!==window._tvSeq)return;D=D2;if(!document.getElementById('_crTabVOv'))return;var _f9=_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TV_LS)||''}catch(e){return ''}})());if(_f9===ov._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaVRepinta==='function')window._crTablaVRepinta()}catch(e){}},2500);return}ov._t23FirmaUlt=_f9;pintaHTMLF();
+  var pintaF=async function(){try{var seq=(window._tvSeq=(window._tvSeq||0)+1);var D2=await _tvDatos(c);if(seq!==window._tvSeq)return;D=D2;if(!document.getElementById('_crTabVOv'))return;var _f9=String((c&&c.cron_id)||'')+'§'+_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TV_LS)||''}catch(e){return ''}})());if(_f9===ov._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaVRepinta==='function')window._crTablaVRepinta()}catch(e){}},2500);return}ov._t23FirmaUlt=_f9;pintaHTMLF();
       var r=document.getElementById('_tvRes');if(r)r.textContent=(D.u.pend?'cargando tareas\u2026':_tvInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaVRepinta==='function')window._crTablaVRepinta()}catch(e){}},2500)}catch(e){wrap.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}};
   top.querySelector('#_tvBus').oninput=function(){q=this.value;pintaHTMLF()};
   _tvBarraBind(document,function(){pintaF()});
@@ -35360,7 +36268,7 @@ async function _crTablaRUI(c){
     try{pw.moveTo(0,0);pw.resizeTo(_sw,_sh)}catch(e){}
     doc.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();zoom=Math.max(.4,Math.min(3,zoom*(e.deltaY<0?1.1:1/1.1)));cuerpo.style.zoom=zoom;_tabZoomSet('_tx',zoom)},{passive:false});
     doc.getElementById('_txCopiar').onclick=function(){try{var t=cuerpo.querySelector('table');if(!t)return;var out=[];t.querySelectorAll('tr').forEach(function(tr){var cs=[];tr.querySelectorAll('th,td').forEach(function(td){if(td.classList.contains('_txEx'))return;var raw=td.getAttribute('data-num');var v=(raw!=null&&raw!=='')?raw:td.innerText.replace(/\s+/g,' ').trim();/* numeros como los entiende Excel: sin miles ni signo tipografico */if(/^[−-]?\s?[\d,']+(\.\d+)?%?$/.test(v))v=v.replace(/−/,'-').replace(/\s/g,'').replace(/[,']/g,'');cs.push(v);var _n=(parseInt(td.getAttribute('colspan'),10)||1)-1;while(_n-->0)cs.push('')});out.push(cs.join('\t'))});(pw.navigator.clipboard||navigator.clipboard).writeText(out.join('\n')).then(function(){setRes('\ud83d\udccb Copiada: p\u00e9gala en Excel')},function(){setRes('No se pudo copiar')})}catch(e){}};
-    var pinta=async function(){try{var seq=(window._txSeq=(window._txSeq||0)+1);var D2=await _txDatos(c);if(seq!==window._txSeq||cerrada)return;D=D2;var _f9=_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TX_LS)||''}catch(e){return ''}})());if(_f9===pw._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaRRepinta==='function')window._crTablaRRepinta()}catch(e){}},2500);return}pw._t23FirmaUlt=_f9;pintaHTML();setRes(D.u.pend?'cargando tareas\u2026':_txInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaRRepinta==='function')window._crTablaRRepinta()}catch(e){}},2500)}catch(e){try{cuerpo.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}catch(_e){}}};
+    var pinta=async function(){try{var seq=(window._txSeq=(window._txSeq||0)+1);var D2=await _txDatos(c);if(seq!==window._txSeq||cerrada)return;D=D2;var _f9=String((c&&c.cron_id)||'')+'§'+_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TX_LS)||''}catch(e){return ''}})());if(_f9===pw._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaRRepinta==='function')window._crTablaRRepinta()}catch(e){}},2500);return}pw._t23FirmaUlt=_f9;pintaHTML();setRes(D.u.pend?'cargando tareas\u2026':_txInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaRRepinta==='function')window._crTablaRRepinta()}catch(e){}},2500)}catch(e){try{cuerpo.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}catch(_e){}}};
     window._crTablaRRepinta=function(){try{if(cerrada||pw.closed){window._crTablaRRepinta=null;return}if(window._txT)clearTimeout(window._txT);window._txT=setTimeout(function(){window._txT=null;pinta()},150)}catch(e){}};
     pw.addEventListener('pagehide',function(){cerrada=true;if(window._crTablaRWin===pw)window._crTablaRWin=null;window._crTablaRRepinta=null;window._txSelCol=null;window._txRoot=null;window._txClip=null});
     cuerpo.innerHTML='<div style="padding:12px;color:#9db4d6">Armando la tabla\u2026</div>';
@@ -35378,7 +36286,7 @@ async function _crTablaRUI(c){
   ov.insertBefore(top,body);try{_tabOpcToggle(document,top,'_tx')}catch(_eo){}
   var wrap=document.createElement('div');wrap.style.cssText='display:inline-block;min-width:100%';body.appendChild(wrap);
   var pintaHTMLF=function(){if(!D)return;var _sT=body.scrollTop,_sL=body.scrollLeft;wrap.innerHTML=_crTablaRHTML(D,q,ordRef.v);wrap.style.zoom=ov._zoom||(ov._zoom=_tabZoomGet('_tx'));body.scrollTop=_sT;body.scrollLeft=_sL;_crTablaRBind(wrap,ordRef,pintaHTMLF);try{var _r9=document.getElementById('_txRes');if(_r9)_r9.textContent=_txInfoTxt(D)}catch(e){}};
-  var pintaF=async function(){try{var seq=(window._txSeq=(window._txSeq||0)+1);var D2=await _txDatos(c);if(seq!==window._txSeq)return;D=D2;if(!document.getElementById('_crTabROv'))return;var _f9=_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TX_LS)||''}catch(e){return ''}})());if(_f9===ov._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaRRepinta==='function')window._crTablaRRepinta()}catch(e){}},2500);return}ov._t23FirmaUlt=_f9;pintaHTMLF();
+  var pintaF=async function(){try{var seq=(window._txSeq=(window._txSeq||0)+1);var D2=await _txDatos(c);if(seq!==window._txSeq)return;D=D2;if(!document.getElementById('_crTabROv'))return;var _f9=String((c&&c.cron_id)||'')+'§'+_t23Firma(D2)+'|'+String((function(){try{return localStorage.getItem(_TX_LS)||''}catch(e){return ''}})());if(_f9===ov._t23FirmaUlt){if(D2.u&&D2.u.pend)setTimeout(function(){try{if(typeof window._crTablaRRepinta==='function')window._crTablaRRepinta()}catch(e){}},2500);return}ov._t23FirmaUlt=_f9;pintaHTMLF();
       var r=document.getElementById('_txRes');if(r)r.textContent=(D.u.pend?'cargando tareas\u2026':_txInfoTxt(D));if(D.u.pend)setTimeout(function(){try{if(typeof window._crTablaRRepinta==='function')window._crTablaRRepinta()}catch(e){}},2500)}catch(e){wrap.innerHTML='<div style="padding:12px;color:#FFB4A8">No se pudo armar la tabla: '+esc(String((e&&e.message)||e))+'</div>'}};
   top.querySelector('#_txBus').oninput=function(){q=this.value;pintaHTMLF()};
   _txBarraBind(document,function(){pintaF()});
@@ -35656,7 +36564,7 @@ async function _ctPush(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
     if(toco)_ctSaveLocal()}catch(e){}
   await sbUpsert(T_CT,out,'proyecto,cron_id');commitSent(out)}
 async function _ctPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return false;
-  var R=await sbSelect(T_CT,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto));
+  var R=await _sbSelectTodo(T_CT,'proyecto=eq.'+encodeURIComponent(DATA.proyecto),'cron_id.asc');
   var all=_ctAll(),cambio=false,reenviar=[];
   (R||[]).forEach(function(r){if(!r||!r.cron_id)return;var k=String(r.cron_id);
     var loc=all[k]||{},lts=Number(loc.ts)||0,sts=Number(r.ts)||0;
@@ -35670,6 +36578,10 @@ async function _ctPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
       retiros:(mr?mr.m:((r.retiros&&typeof r.retiros==='object'&&!Array.isArray(r.retiros))?r.retiros:{})),apu_off:(Array.isArray(r.apu_off)?r.apu_off:[]).map(String),
       quien:String(r.quien||''),ts:sts,cell_at:Number(r.cell_at)||0,eliminado:!!r.eliminado,elim_por:String(r.elim_por||''),elim_ts:Number(r.elim_ts)||0}});
   (R||[]).forEach(function(r){try{var k2=String(r.cron_id),l2=all[k2];if(l2&&_ctConFoto2(l2)&&r.retiros&&r.retiros._ok){var m2=_ctMergeRet(l2.retiros,r.retiros);if(m2.difB)window._ctMergePush=1}}catch(e){}});
+  _crSentSrv(T_CT,R,function(x){return String(x.cron_id)},function(x){return {proyecto:DATA.proyecto,cron_id:String(x.cron_id),activa:!!x.activa,hh_off:(x.hh_off||[]).map(String),fuera:(x.fuera||[]).map(String),base_hh:(x.base_hh==='proy'?'proy':'esp'),
+      retiros:(x.retiros&&typeof x.retiros==='object')?x.retiros:{},apu_off:(x.apu_off||[]).map(String),
+      quien:String(x.quien||''),ts:Number(x.ts)||0,cell_at:Number(x.cell_at)||0,
+      eliminado:!!x.eliminado,elim_por:String(x.elim_por||''),elim_ts:Number(x.elim_ts)||0}});
   if(cambio){_ctSaveLocal();_ctRefresca()}
   if(window._ctMergePush){window._ctMergePush=0;try{_ctPushPronto()}catch(e){}}
   if(reenviar.length&&(Date.now()-(window._ctReenvT||0))>60000){window._ctReenvT=Date.now();try{await _ctPushForzado(reenviar)}catch(e){}}
@@ -35716,7 +36628,7 @@ async function _trPush(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
   out=onlyChanged(T_TBR,out,function(r){return r.cron_id+'|'+r.partida_id});if(!out.length)return;
   await sbUpsert(T_TBR,out,'proyecto,cron_id,partida_id');commitSent(out)}
 async function _trPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return false;
-  var R=await sbSelect(T_TBR,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto));
+  var R=await _sbSelectTodo(T_TBR,'proyecto=eq.'+encodeURIComponent(DATA.proyecto),'cron_id.asc,partida_id.asc');
   var all=_trAll(),cambio=false;
   (R||[]).forEach(function(r){if(!r||!r.cron_id||!r.partida_id)return;var k=_trKey(r.cron_id,r.partida_id);
     var loc=all[k]||{},lts=Number(loc.ts)||0,sts=Number(r.ts)||0;
@@ -35724,6 +36636,9 @@ async function _trPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
     cambio=true;
     all[k]={cron_id:String(r.cron_id),partida_id:String(r.partida_id),rend:Number(r.rend)||0,quien:String(r.quien||''),
       ts:sts,cell_at:Number(r.cell_at)||0,eliminado:!!r.eliminado,elim_por:String(r.elim_por||''),elim_ts:Number(r.elim_ts)||0}});
+  _crSentSrv(T_TBR,R,function(x){return x.cron_id+'|'+x.partida_id},function(x){return {proyecto:DATA.proyecto,cron_id:String(x.cron_id),partida_id:String(x.partida_id),rend:Number(x.rend)||0,
+      quien:String(x.quien||''),ts:Number(x.ts)||0,cell_at:Number(x.cell_at)||0,
+      eliminado:!!x.eliminado,elim_por:String(x.elim_por||''),elim_ts:Number(x.elim_ts)||0}});
   if(cambio){_trSaveLocal();try{if(typeof window._crTablaRepinta==='function')window._crTablaRepinta();_t23Repinta()}catch(e){}}
   return cambio}
 try{setTimeout(function(){try{_trPull()}catch(e){}},4200)}catch(_tr0){}
@@ -35750,7 +36665,7 @@ async function _cnPush(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
   out=onlyChanged(T_CRN,out,function(r){return r.cron_id+'|'+r.task_code});if(!out.length)return;
   await sbUpsert(T_CRN,out,'proyecto,cron_id,task_code');commitSent(out)}
 async function _cnPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return false;
-  var R=await sbSelect(T_CRN,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto));
+  var R=await _sbSelectTodo(T_CRN,'proyecto=eq.'+encodeURIComponent(DATA.proyecto),'cron_id.asc,task_code.asc');
   var all=_cnAll(),cambio=false;
   (R||[]).forEach(function(r){if(!r||!r.cron_id||!r.task_code)return;var k=_cnKey(r.cron_id,r.task_code);
     var loc=all[k]||{},lts=Number(loc.ts)||0,sts=Number(r.ts)||0;
@@ -35758,6 +36673,9 @@ async function _cnPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
     cambio=true;
     all[k]={cron_id:String(r.cron_id),task_code:String(r.task_code),rend:Number(r.rend)||0,quien:String(r.quien||''),
       ts:sts,cell_at:Number(r.cell_at)||0,eliminado:!!r.eliminado,elim_por:String(r.elim_por||''),elim_ts:Number(r.elim_ts)||0}});
+  _crSentSrv(T_CRN,R,function(x){return x.cron_id+'|'+x.task_code},function(x){return {proyecto:DATA.proyecto,cron_id:String(x.cron_id),task_code:String(x.task_code),rend:Number(x.rend)||0,
+      quien:String(x.quien||''),ts:Number(x.ts)||0,cell_at:Number(x.cell_at)||0,
+      eliminado:!!x.eliminado,elim_por:String(x.elim_por||''),elim_ts:Number(x.elim_ts)||0}});
   if(cambio){_cnSaveLocal();try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(e){}try{_t23Repinta()}catch(e){}}
   return cambio}
 function _cpAll(){if(!state.cronrep){try{state.cronrep=JSON.parse(localStorage.getItem('obf4_cronrep')||'{}')||{}}catch(e){state.cronrep={}}}if(!state.cronrep)state.cronrep={};return state.cronrep}
@@ -35787,7 +36705,7 @@ async function _cpPush(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
   out=onlyChanged(T_CRP,out,function(r){return r.cron_id+'|'+r.item});if(!out.length)return;
   await sbUpsert(T_CRP,out,'proyecto,cron_id,item');commitSent(out)}
 async function _cpPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return false;
-  var R=await sbSelect(T_CRP,'select=*&proyecto=eq.'+encodeURIComponent(DATA.proyecto));
+  var R=await _sbSelectTodo(T_CRP,'proyecto=eq.'+encodeURIComponent(DATA.proyecto),'cron_id.asc,item.asc');
   var all=_cpAll(),cambio=false;
   (R||[]).forEach(function(r){if(!r||!r.cron_id||!r.item)return;var k=_cpKey(r.cron_id,r.item);
     var loc=all[k]||{},lts=Number(loc.ts)||0,sts=Number(r.ts)||0;
@@ -35796,6 +36714,10 @@ async function _cpPull(){if(!(typeof sbReady==='function'&&sbReady()&&navigator.
     var fz9={};try{fz9=(typeof r.fases==='string')?(JSON.parse(r.fases||'{}')||{}):((r.fases&&typeof r.fases==='object')?r.fases:{})}catch(_ej){fz9={}}
     all[k]={cron_id:String(r.cron_id),item:String(r.item),modo:String(r.modo||'orden'),primero:String(r.primero||''),fases:fz9,quien:String(r.quien||''),
       ts:sts,cell_at:Number(r.cell_at)||0,eliminado:!!r.eliminado,elim_por:String(r.elim_por||''),elim_ts:Number(r.elim_ts)||0}});
+  _crSentSrv(T_CRP,R,function(x){return x.cron_id+'|'+x.item},function(x){var fz=x.fases;if(typeof fz==='string'){try{fz=JSON.parse(fz||'{}')}catch(e){fz={}}}return {proyecto:DATA.proyecto,cron_id:String(x.cron_id),item:String(x.item),modo:String(x.modo||'orden'),primero:String(x.primero||''),
+      fases:(fz&&typeof fz==='object')?fz:{},
+      quien:String(x.quien||''),ts:Number(x.ts)||0,cell_at:Number(x.cell_at)||0,
+      eliminado:!!x.eliminado,elim_por:String(x.elim_por||''),elim_ts:Number(x.elim_ts)||0}});
   if(cambio){_cpSaveLocal();try{if(typeof window._crAlcRepinta==='function')window._crAlcRepinta()}catch(e){}try{_t23Repinta()}catch(e){}
     /* el analisis de restricciones mide por la parte enlazada */
     try{if(document.getElementById('_rxNoLista')&&typeof _rxNoLlena==='function'){window._rxNoR=null;window._rxNoHuella=null;_rxNoLlena()}}catch(e){}}
@@ -44987,6 +45909,7 @@ function _crXerCabecera(lineas,modelo){
   var nuevoId='';
   var actual=String(PR.filas[0].o.proj_short_name||'');
   if(sem>0)nuevoId=_crXerNomProy(base,'-SEMANA'+sem);
+  else if(/^CP\d{6}-\d{1,3}$/.test(String(modelo.cronId||'')))nuevoId=_crXerNomProy(base,'');   /* una copia de forecast lleva su propio Project ID */
   else if(!_crXerNomOk(actual))nuevoId=_crXerNomProy(actual||base,'');
   out.projShortAntes=actual;
 
@@ -45969,7 +46892,7 @@ function _crXerMenuUI(b,c,o){
     '<span style="color:#9db4d6">avance hasta ese día inclusive: la fecha de datos queda en ESE mismo día a las 23:59, lo que falta arranca el hábil siguiente y el archivo se abre ya corrido (sin F9)</span></div>'+
     bt('tal',0,'#4a2f7a','📄 Tal cual está · normal',
       'HH y costo <b>forecast</b> de la tabla, fechas, duraciones y predecesoras del aplicativo, y el calendario real del archivo. '+
-      '<b>Conserva</b> los avances y la fecha de datos que trae el .xer y su mismo Project ID: P6 te ofrecerá ACTUALIZAR el proyecto que ya tienes.')+
+      '<b>Conserva</b> los avances y la fecha de datos que trae el .xer'+((c&&/^CP\d{6}-\d{1,3}$/.test(String(c.cron_id||'')))?'; al ser una copia, lleva su propio Project ID (sale de su nombre): P6 la importa como un proyecto aparte.':' y su mismo Project ID: P6 te ofrecerá ACTUALIZAR el proyecto que ya tienes.'))+
     bt('tal',1,'#5c3b96','📄 Tal cual está · con mayor metrado',
       'Lo mismo, pero el presupuesto sale de <b>HH forecast mayor metrado</b> y <b>Costo forecast mayor metrado</b> de la tabla.')+
     bt('rep',0,'#1B5E8A','🔁 Para reprogramación · normal',
