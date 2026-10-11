@@ -24469,7 +24469,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c47';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c48';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -38646,7 +38646,14 @@ function _ptFilaArma(F,P){var ents=[],k0=F.rid,e0=P[k0];
     _pgTramosDe(F.pid).forEach(function(e){ents.push(tr(e))})}
   else if(F.tipo==='pcant'){var c=Number(_fzCantDe(F.fase))||0,pf=0;try{pf=Number(_fzPctParte(F.fase))||0}catch(e){}pf=Math.max(0,Math.min(100,pf));
     F.met=c;F.hecho=c*pf/100;F.und=String(F.fase.unidad||'');
-    if(e0&&_ptVivo(k0,e0))ents.push({k:k0,e:e0,ent:1,days:occupiedDays(e0.start,e0.dias||1),qd:c*(1-pf/100)/Math.max(1,Number(e0.dias)||1)});
+    /* el % de la fase cuenta el saldo RETIRADO como hecho: lo hecho de verdad es lo ejecutado (Tabla 1, av de la parte)
+       y el metrado al que se apunta es el FORECAST (metF, sin lo retirado) o el CONTRACTUAL, segun el boton */
+    try{var R7=(typeof _pgUnivRec==='function')?_pgUnivRec():null,r7=(R7&&R7.filas)?R7.filas[F.pid]:null,q7=null;
+      if(r7)(r7.partes||[]).forEach(function(z){if(!q7&&z&&String(z.pert||'')===String(F.fase.nombre||''))q7=z});
+      if(q7&&isFinite(Number(q7.av))){var mo7=(typeof _pgObjModo==='function')?_pgObjModo():'forecast';
+        var ob7=(mo7==='contrato')?Number(q7.met):Number(q7.metF);if(isFinite(ob7)&&ob7>=0)F.met=ob7;
+        F.hecho=Math.max(0,Number(q7.av)||0);F.retN=Number(q7.retN)||0}}catch(_e7){}
+    if(e0&&_ptVivo(k0,e0))ents.push({k:k0,e:e0,ent:1,days:occupiedDays(e0.start,e0.dias||1),qd:Math.max(0,F.met-F.hecho)/Math.max(1,Number(e0.dias)||1)});
     _pgTramosParte(F.pid,F.fase.id).forEach(function(e){ents.push(tr(e))})}
   else{if(e0&&_ptVivo(k0,e0))ents.push({k:k0,e:e0,ent:1,days:occupiedDays(e0.start,e0.dias||1),qd:1})}
   F.ents=ents;F.q={};F.ap={};
@@ -39002,7 +39009,7 @@ function _ptCeldaF(F,c,M,cfg,ri){var st=c.st?(' s" style="left:'+c.left+'px'):''
   if(k==='met')return num(cant?F.met:null,2);
   if(k==='metC')return num(cant?F.metC:null,2,'','Metrado contractual (QPS)');
   if(k==='metV')return num(cant?F.metV:null,2,'','Metrado vigente del cronograma ACTUAL (forecast de la Tabla 1)'+((cant&&F.metV!=null&&Math.abs((Number(F.metV)||0)-(Number(F.met)||0))>0.005)?(' · la programación descuenta sobre '+_ptN(F.met,2)+' (Def Metrados)'):''));
-  if(k==='hecho')return num(cant?F.hecho:null,2);
+  if(k==='hecho')return num(cant?F.hecho:null,2,'',(F.retN>0)?('Ejecutado real; además hay '+_ptN(F.retN,2)+' '+(F.und||'')+' retirado(s) del saldo, que NO cuentan como hecho'):'');
   if(k==='resta')return num(cant?F.resta:null,2);
   if(k==='prog'){if(cant)return num(F.prog,2,'',F.fuera?('Fuera de la ventana: '+_ptN(F.fuera,2)+' '+F.und):'');if(F.tipo==='marca'){var nd=Object.keys(F.q).length;return cls('n')+' data-num="'+nd+'">'+(nd?(nd+' d'):'')+'</td>'}return cls('n')+'></td>'}
   if(k==='porProg'){if(!cant)return cls('n')+'></td>';var x=(F.porProg<-0.004)?'':(Math.abs(F.porProg)<0.005?' pp0':'');
