@@ -24811,7 +24811,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c80';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c81';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -39499,6 +39499,40 @@ function _ptHTML(M,cfg){var sem=(cfg.modo==='sem'),dec=cfg.dec;
   H+='</tfoot></table>';return H}
 /* ---------- Excel con formulas ---------- */
 function _ptColL(i){var s='';i++;while(i>0){var m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s}
+/* Excel de la tabla: las columnas que el usuario tiene OCULTAS en la tabla no salen. Si una formula que si sale
+   las necesita (p.ej. las HH para el ratio), van en el Excel pero ocultas. Se quitan del XML de la hoja y se corren las
+   letras de todas las referencias (celdas, formulas, combinaciones, anchos, paneles, formatos). */
+function _ptXlsCols(hoja,cfg){
+  var ocu=(cfg&&cfg.ocultas)||{},K2C={und:'C',hecho:'E',resta:'F',prog:'H',porProg:'I',rinde:'J',dias:'K',pAct:'N',pRest:'O',w:'P',pctProg:'R',est:'S',esp:'T',metC:'V',metV:'W',wAv:'X',wRest:'Y',wRP:'Z',wPg:'AA'};
+  var cIx=function(l){var n=0;for(var i=0;i<l.length;i++)n=n*26+l.charCodeAt(i)-64;return n-1},cL=_ptColL;
+  var cand={};Object.keys(K2C).forEach(function(k){if(ocu[k])cand[cIx(K2C[k])]=1});
+  if(!Object.keys(cand).length)return hoja;
+  /* las formulas por columna y a que columnas de ESTA hoja apuntan */
+  var refsDe={},reC=/<c r="([A-Z]+)\d+"[^>]*>(?:(?!<\/c>).)*?<f>([^<]*)<\/f>/g,m;
+  var refsF=function(f){var out={},r=/(^|[^A-Za-z!'$\d])\$?([A-Z]{1,3})\$?(\d+)/g,x;f=f.replace(/"[^"]*"/g,'""').replace(/&quot;[^&]*&quot;/g,'');while((x=r.exec(f)))out[cIx(x[2])]=1;return out};
+  while((m=reC.exec(hoja))){var c=cIx(m[1]),rs=refsF(m[2]);var o=refsDe[c]||(refsDe[c]={});for(var k in rs)o[k]=1}
+  var hid={},cambio=true;
+  while(cambio){cambio=false;Object.keys(refsDe).forEach(function(c){c=+c;if(cand[c]&&!hid[c])return;var rs=refsDe[c];for(var k in rs){k=+k;if(cand[k]&&!hid[k]){hid[k]=1;cambio=true}}})}
+  var drop={};Object.keys(cand).forEach(function(c){if(!hid[c])drop[c]=1});
+  var dl=Object.keys(drop).map(Number).sort(function(a,b){return a-b});
+  var nuevo=function(c){if(drop[c])return -1;var n=c;for(var i=0;i<dl.length&&dl[i]<c;i++)n--;return n};
+  var mueve=function(l){var n=nuevo(cIx(l));return n<0?null:cL(n)};
+  if(dl.length){
+    /* celdas: fuera las quitadas, el resto con su letra nueva */
+    hoja=hoja.replace(/<c r="([A-Z]+)(\d+)"([^>]*?)(\/>|>(?:(?!<\/c>).)*?<\/c>)/g,function(all,col,row,at,rest){var n=mueve(col);if(n==null)return '';
+      rest=rest.replace(/<f>([^<]*)<\/f>/,function(_,f){return '<f>'+_ptXlsRefs(f,mueve)+'</f>'});return '<c r="'+n+row+'"'+at+rest});
+    /* un formato condicional sobre una columna quitada se va con ella */
+    hoja=hoja.replace(/<conditionalFormatting sqref="([A-Z]+)\d+[^"]*"[\s\S]*?<\/conditionalFormatting>/g,function(x,cc){return mueve(cc)==null?'':x});
+    /* combinaciones, formatos, validaciones, dimension */
+    hoja=hoja.replace(/(<mergeCell ref="|sqref="|<dimension ref=")([^"]+)"/g,function(_,p,v){return p+v.split(' ').map(function(x){return x.replace(/\$?([A-Z]{1,3})(\$?\d+)/g,function(z,cc,rr){var n=mueve(cc);return (n==null?cc:n)+rr})}).join(' ')+'"'});
+    /* paneles */
+    hoja=hoja.replace(/<pane xSplit="(\d+)"([^>]*?)topLeftCell="([A-Z]+)(\d+)"/,function(_,xs,mid,tl,tr){var k=0;for(var i=0;i<+xs;i++)if(!drop[i])k++;return '<pane xSplit="'+k+'"'+mid+'topLeftCell="'+cL(k)+tr+'"'})}
+  /* anchos: se rearman sin las quitadas y con las necesarias ocultas */
+  hoja=hoja.replace(/<cols>([\s\S]*?)<\/cols>/,function(_,inner){var out=[];(inner.match(/<col [^>]*\/>/g)||[]).forEach(function(x){var mi=+(/min="(\d+)"/.exec(x)[1])-1;if(drop[mi])return;var n=nuevo(mi)+1;
+      x=x.replace(/min="\d+"/,'min="'+n+'"').replace(/max="\d+"/,'max="'+n+'"');if(hid[mi]&&!/hidden="1"/.test(x))x=x.replace('/>',' hidden="1"/>');out.push(x)});return '<cols>'+out.join('')+'</cols>'});
+  return hoja}
+function _ptXlsRefs(f,mueve){var partes=f.split(/("[^"]*"|&quot;[^&]*&quot;)/);
+  return partes.map(function(p,i){if(i%2)return p;return p.replace(/(^|[^A-Za-z!'\d])(\$?)([A-Z]{1,3})(\$?)(\d+)/g,function(z,pre,d1,cc,d2,rr){var n=mueve(cc);return pre+d1+(n==null?cc:n)+d2+rr})}).join('')}
 async function _ptXlsxBlob(M,cfg){
   var X=_wkEsc,L=_ptColL;var fonts=['<font><sz val="10"/><color rgb="FF000000"/><name val="Calibri"/></font>'],fills=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>'],xfs=['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'],memo={};
   var font=function(o){var x='<font>'+(o.b?'<b/>':'')+(o.i?'<i/>':'')+'<sz val="'+(o.sz||10)+'"/><color rgb="'+(o.c||'FF000000')+'"/><name val="Calibri"/></font>';var i=fonts.indexOf(x);if(i<0){fonts.push(x);i=fonts.length-1}return i};
@@ -39521,13 +39555,13 @@ async function _ptXlsxBlob(M,cfg){
   var c0=FIX.length,pc=[],ci=c0;
   /* corte = el dia antes de la ventana; de ahi hasta ayer los dias ya se reportaron ('r': va lo reportado tal cual); de hoy en adelante, lo programado */
   var cort9=(M.sems[0]&&M.sems[0].ds[0])?_ptAdd(M.sems[0].ds[0],-1):M.hoy;
-  M.sems.forEach(function(Sm){var dcs=[];Sm.ds.forEach(function(ds){var d=M.dIx[ds];var o={ci:ci++,ds:ds,d:d,fl:((ds>cort9&&ds<M.hoy)?'r':(!d.lab?'n':(d.cuenta?'d':'p')))};pc.push(o);dcs.push(o)});pc.push({ci:ci++,tot:1,S:Sm,dcs:dcs,fl:'t'})});
+  M.sems.forEach(function(Sm){var dcs=[];Sm.ds.forEach(function(ds){var d=M.dIx[ds];var o={ci:ci++,ds:ds,d:d,fl:((ds>cort9&&(ds<M.hoy||(ds===M.hoy&&!d.lab)))?'r':(!d.lab?'n':(d.cuenta?'d':'p')))};pc.push(o);dcs.push(o)});pc.push({ci:ci++,tot:1,S:Sm,dcs:dcs,fl:'t'})});
   /* lo reportado por dia de cada fila: la partida por sus partes de metrado; la fase por sus movimientos */
   var repMemo={};var repDe=function(F,ds){var k=F.rid||F.pid,m=repMemo[k];if(!m){m={};try{
       if(F.tipo==='cant'&&F.nivel!=='parte')(partesOf(F.pid)||[]).forEach(function(p){if(p&&p.tipo==='cant'&&p.fecha)m[p.fecha]=(m[p.fecha]||0)+(Number(p.cant)||0)});
       else if(F.tipo==='pcant'&&F.fase){var mp=_fzFechasDe(F.pid),fz=_fzDe(F.pid),x=null;if(fz)(fz.fases||[]).forEach(function(z){if(!x&&String(z.nombre||'')===String(F.fase.nombre||''))x=z});x=x||F.fase;
         (x.movs||[]).forEach(function(mv){var f=String(_fzFechaMov(mv,mp)||'');if(f)m[f]=(m[f]||0)+(Number(mv.c)||0)})}}catch(_erp){}repMemo[k]=m}return Number(m[ds])||0};
-  var sRe=S({nf:N2,c:'FF0C5132',f:'FFE2F4E8'}),sReH=S({b:1,c:'FF0C5132',f:'FFCFEBD9',al:'center'});
+  var sRe=S({nf:N2,b:1,c:'FF00A040',f:'FFE2F4E8'}),sReH=S({b:1,c:'FF00A040',f:'FFCFEBD9',al:'center'});
   var lastC=L(ci-1),r0=7;
   var filas=[],merges=[],row=function(r,h,extra){filas.push('<row r="'+r+'"'+(extra||'')+'>'+h+'</row>')};
   var hojaNom=String('Programación '+(M.disc||'')).replace(/[\\\/\?\*\[\]:]/g,' ').slice(0,31);
@@ -39577,7 +39611,8 @@ async function _ptXlsxBlob(M,cfg){
     /* metrado (el forecast, o el contractual si se programa al contrato) y hecho: de la Tabla 1 */
     var hechoT1=(cant&&zT&&Math.abs((Number(zT.metA!=null?zT.metA:zT.av)||0)-(Number(F.hecho)||0))<1e-9);
     var metT1=zT?Number(modoC?zT.met:zT.metF):NaN;
-    h+=cant?(((tR!=null&&metT1>0)?cF('D'+r,T1+(modoC?'F':'G')+tR,sN):cN('D'+r,F.met,sN))+(function(){var hoyR=repDe(F,M.hoy),sufE='-SUMIF('+flags+',"r",'+dRng+')'+(Math.abs(hoyR)>1e-12?('-'+_nLimpio(hoyR)):'');
+    h+=cant?(((tR!=null&&metT1>0)?cF('D'+r,T1+(modoC?'F':'G')+tR,sN):cN('D'+r,F.met,sN))+(function(){var hoyR=repDe(F,M.hoy),oH=null;pc.forEach(function(o){if(!o.tot&&o.ds===M.hoy&&o.fl!=='r')oH=o});
+      var sufE='-SUMIF('+flags+',"r",'+dRng+')'+(Math.abs(hoyR)>1e-12?(oH?('-'+L(oH.ci)+r):('-'+_nLimpio(hoyR))):'');
       return cF('E'+r,(hechoT1?(T1+'H'+tR):_nLimpio(Number(F.hecho)||0))+sufE,sN)})()+cF('F'+r,'MAX(0,D'+r+'-E'+r+')',sN)):(cE('D'+r,sN)+cE('E'+r,sN)+cE('F'+r,sN));
     h+=env?cE('G'+r,sN):cN('G'+r,F.fuera||0,sN);
     h+=env?cE('H'+r,sN):cF('H'+r,'G'+r+'+SUMIF('+flags+',"<>t",'+dRng+')',sN);
@@ -39609,6 +39644,8 @@ async function _ptXlsxBlob(M,cfg){
     pc.forEach(function(o){var ref=L(o.ci)+r;
       if(o.tot){h+=cF(ref,'SUM('+L(o.dcs[0].ci)+r+':'+L(o.dcs[6].ci)+r+')',sTot);return}
       if(o.fl==='r'){var rv=env?0:repDe(F,o.ds);h+=(Math.abs(rv)>1e-12)?cN(ref,_ptR6(rv),sRe):cE(ref,sRe);return}
+      /* hoy: si la fila ya reporto avance hoy, va lo reportado (verde) y no lo programado */
+      if(o.ds===M.hoy&&!env){var hr=repDe(F,o.ds);if(Math.abs(hr)>1e-12){h+=cN(ref,_ptR6(hr),sRe);return}}
       if(o.fl==='n'){h+=cE(ref,sWe);return}
       var q=Number(F.q[o.ds])||0;var ed=!env&&!F.ro&&o.d.edit;h+=(q>0)?cN(ref,_ptR6(q),ed?sIn:sRo):cE(ref,ed?sIn:sRo)});
     row(r,h)});
@@ -39622,7 +39659,7 @@ async function _ptXlsxBlob(M,cfg){
     if(o.fl==='d'||o.fl==='r'){hP+=cF(col+rP,'IF('+HT+'>0,SUMPRODUCT($Q$'+r0+':$Q$'+rN+','+col+r0+':'+col+rN+')/'+HT+'*100,0)',sPie);hA+=cF(col+rA,(prevA?prevA:'$C$2')+'+'+col+rP,sPie);prevA=col+rA}
     else{hP+=cE(col+rP,sPie);hA+=cE(col+rA,sPie)}});
   row(rP,hP);row(rA,hA);
-  var rr=rA+2;row(rr,cT('B'+rr,'Datos: cantidades por día (azules: programado; verdes «real»: lo reportado después del corte), fuera de la ventana y rinde; Hecho = avance al corte (el de la Tabla 1 menos lo reportado después); HH forecast, metrados y % avance salen de la hoja Tabla 1. Todo lo demás son fórmulas: ratio = HH forecast / metrado forecast; HH ganadas = hecho × ratio; cada % = HH / HH del alcance (M2). Sáb/dom/feriados en rojo. [+]/[−] arriba agrupa los días de cada semana.',S({i:1,c:'FF5C6779'})));
+  var rr=rA+2;row(rr,cT('B'+rr,'Datos: cantidades por día (azules: programado; letra verde: lo reportado después del corte, también lo reportado hoy), fuera de la ventana y rinde; Hecho = avance al corte (el de la Tabla 1 menos lo reportado después); HH forecast, metrados y % avance salen de la hoja Tabla 1. Todo lo demás son fórmulas: ratio = HH forecast / metrado forecast; HH ganadas = hecho × ratio; cada % = HH / HH del alcance (M2). Sáb/dom/feriados en rojo. [+]/[−] arriba agrupa los días de cada semana.',S({i:1,c:'FF5C6779'})));
   /* columnas, paneles, agrupacion por semana */
   var sem=(cfg.modo==='sem');
   var W=[12,46,6,10,10,10,10,11,11,9,7,11,11,11,11,9,9,9,15,9,8,12,12,10,10,12,10];
@@ -39679,6 +39716,7 @@ async function _ptXlsxBlob(M,cfg){
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs>'+
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'+
     '<dxfs count="1"><dxf><font><b/><color rgb="FFC00000"/></font><fill><patternFill patternType="solid"><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf></dxfs></styleSheet>';
+  try{hoja=_ptXlsCols(hoja,cfg)}catch(_ecol){try{console.warn('Excel: columnas ocultas',_ecol)}catch(_e){}}
   var partes=[
     ['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet4.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
     ['_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
