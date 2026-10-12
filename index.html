@@ -24469,7 +24469,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c58';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c59';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -38862,7 +38862,11 @@ function _ptPila(a,d){var x={disc:progDisc,a:{},d:{}};var ks={};Object.keys(a).c
   if(!Object.keys(x.a).length)return;
   window._ptUndo=(window._ptUndo||[]).filter(function(z){return z.disc===progDisc});window._ptUndo.push(x);if(window._ptUndo.length>50)window._ptUndo.shift();window._ptRedo=[]}
 /* tras escribir: lo mismo que hace el calendario al soltar una actividad */
-function _ptTrasEscribir(){try{progSave()}catch(e){}try{renderProgSelect()}catch(e){}try{renderCal()}catch(e){}try{if(window._ptRepinta)window._ptRepinta()}catch(e){}}
+/* tras escribir: la TABLA se repinta al instante; guardar va enseguida y el panel de actividades y el calendario
+   (que son lentos con muchas actividades) se repintan justo despues, sin hacer esperar a la tabla */
+function _ptTrasEscribir(){try{if(window._ptPintaYa)window._ptPintaYa();else if(window._ptRepinta)window._ptRepinta()}catch(e){}
+  try{progSave()}catch(e){}
+  try{clearTimeout(window._ptTrasT)}catch(e){}window._ptTrasT=setTimeout(function(){window._ptTrasT=null;try{renderProgSelect()}catch(e){}try{renderCal()}catch(e){}},60)}
 function _ptCodigo(F,n){var p=F.p;return F.nivel==='parte'?(codeOf(p)+' · '+String(F.fase.nombre||'')+' ('+n+')'):(codeOf(p)+' ('+n+')')}
 function _ptNombre(F){var p=F.p;return F.nivel==='parte'?((p.nombre||'')+' · '+F.fase.nombre+' '+(Math.round((Number(F.fase.peso)||0)*10)/10)+'%'):(p.nombre||'')}
 /* fila medida en cantidad: V (cantidad por dia) -> tramos, con el menor cambio posible.
@@ -39456,6 +39460,7 @@ async function _ptUI(o){o=o||{};
     ov._sacar=function(){cerrada=true;ov.remove();try{ov._alCerrar()}catch(e){}window._ptRepinta=null;_ptUI()};
     var c0=ov._alCerrar;ov._alCerrar=function(){try{c0&&c0()}catch(e){}cerrada=true;window._ptRepinta=null;window._ptCtl=null;try{if(ctl&&ctl.ed)ctl.cancela()}catch(e){}}}
   window._ptCtl=ctl;window._ptPend=0;
+  window._ptPintaYa=function(){try{if(!ctl||ctl.cerrada()){window._ptPintaYa=null;return}clearTimeout(window._ptT);window._ptT=null;ctl.pinta()}catch(e){}};
   window._ptRepinta=function(){try{if(!ctl||ctl.cerrada()){window._ptRepinta=null;return}clearTimeout(window._ptT);window._ptT=setTimeout(function(){window._ptT=null;try{ctl.pinta()}catch(e){}},150)}catch(e){}};
   ctl.pinta();return ctl}
 try{if($('progTabla'))$('progTabla').onclick=function(){_ptUI()}}catch(e){}
