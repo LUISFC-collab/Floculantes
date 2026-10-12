@@ -22710,6 +22710,33 @@ async function _wk3wPost(R,cid,corte,hoy){if(!R||!R.fore||!(hoy>corte))return 0;
     Object.keys(f.p).forEach(function(k){if(k.indexOf('p_')!==0)return;var d=k.slice(2),v=Number(f.p[k])||0;
       if(d<=corte||d>hoy||v<=1e-9||d<R.gIni||d>R.gFin)return;m[d]=(m[d]||0)+v/hh;n++})});
   return n}
+/* F.002: las HH de cada dia despues del corte, por partida, con la MISMA cuenta del Excel de la Tabla de programacion:
+   ratio = HH forecast (Tabla 1) / metrado forecast; dias ya pasados = lo REPORTADO x ratio; hoy = lo reportado si hay,
+   si no lo programado; despues = lo programado x ratio. Por dias (sin metrado): (HH - ganadas) / dias puestos. */
+async function _wk3wHHTabla(corte,gFin){
+  try{if(typeof _pgUnivListo==='function')await Promise.race([_pgUnivListo(),new Promise(function(r){setTimeout(r,20000)})])}catch(e){}
+  var R1=(typeof _pgUnivRec==='function')?_pgUnivRec():null;if(!R1||!R1.filas)return null;
+  var hoy=todayISO(),cfg=_ptCfg(),n0=_ptSemN(hoy),nf=_ptSemN(gFin);cfg.semanas=Math.max(1,nf-n0+1);
+  var offPrev=window._ptOff,M;window._ptOff=0;try{M=_ptModelo({cfg:cfg,sinPct:true})}finally{window._ptOff=offPrev}
+  var modoC=((typeof _pgObjModo==='function')?_pgObjModo():'forecast')==='contrato';
+  var repMap=function(F){var m={};try{
+      if(F.tipo==='cant'&&F.nivel!=='parte')(partesOf(F.pid)||[]).forEach(function(p){if(p&&p.tipo==='cant'&&p.fecha)m[p.fecha]=(m[p.fecha]||0)+(Number(p.cant)||0)});
+      else if(F.tipo==='pcant'&&F.fase){var mp=_fzFechasDe(F.pid),fz=_fzDe(F.pid),x=null;if(fz)(fz.fases||[]).forEach(function(z){if(!x&&String(z.nombre||'')===String(F.fase.nombre||''))x=z});x=x||F.fase;
+        (x.movs||[]).forEach(function(mv){var f=String(_fzFechaMov(mv,mp)||'');if(f)m[f]=(m[f]||0)+(Number(mv.c)||0)})}}catch(e){}return m};
+  var out={},tot=0;
+  M.grupos.forEach(function(G){G.sis.forEach(function(Sg){Sg.filas.forEach(function(F){if(!F||F.tipo==='env')return;
+    var z=R1.filas[F.pid];if(z&&F.nivel==='parte'&&F.fase){var q=null;(z.partes||[]).forEach(function(y){if(!q&&y&&String(y.pert||'')===String(F.fase.nombre||''))q=y});z=q}
+    if(!z)return;var L=Number(z.hh)||0;if(!(L>0))return;
+    var cant=(F.tipo==='cant'||F.tipo==='pcant'),Q=0,rp={};
+    if(cant){var Dm=Number(modoC?z.met:z.metF)||0;if(!(Dm>0))Dm=Number(F.met)||0;Q=Dm>0?L/Dm:0;rp=repMap(F)}
+    else{var Mg=L*Math.max(0,Math.min(100,Number(z.pct)||0))/100,Hd=Number(F.fuera)||0;for(var d0 in (F.q||{}))Hd+=Number(F.q[d0])||0;Q=Hd>0?(L-Mg)/Hd:0}
+    if(!(Q>0))return;var o=out[F.pid]||(out[F.pid]={}),dias={};
+    for(var d1 in rp)if(d1>corte&&d1<=gFin)dias[d1]=1;for(var d2 in (F.q||{}))if(d2>corte&&d2<=gFin)dias[d2]=1;
+    Object.keys(dias).forEach(function(d){var v=0;
+      if(cant&&(d<hoy||(d===hoy&&Math.abs(Number(rp[d])||0)>1e-12)))v=Number(rp[d])||0;
+      else if(d>=hoy)v=Number((F.q||{})[d])||0;
+      if(v){o[d]=(o[d]||0)+v*Q;tot+=v*Q}})})})});
+  return {porPid:out,hhTot:tot,hoy:hoy}}
 async function _wk3wF2Arma(semN,corte,D,cid){
   var bl=null;(D.bloques||[]).forEach(function(b){if(String(b.id)===String(cid))bl=b});
   var valores=!bl;   /* sin su hoja P6 en el libro, la 3WLA lleva los datos de la actividad como valor */
@@ -22720,8 +22747,17 @@ async function _wk3wF2Arma(semN,corte,D,cid){
   try{var _bx=String(_ajGet('rx_base_comparar','')||'');window._crPlanFuenteOverride=(_bx===''||_bx==='cal')?'cal':(_bx==='vig'?'__base0__':_bx)}catch(_e){window._crPlanFuenteOverride=null}
   window._wk3wF2={hoy:hoy};
   try{R=await _crPlanRecupera(cid,corte,semN)}finally{window._crPlanFuenteOverride=_ov;window._wk3wF2=null}
-  var _t3ok=false;
-  try{var c3=((await _crPull())||[]).filter(function(z){return z&&!z.eliminado&&String(z.cron_id)===String(cid)})[0];
+  var _t3ok=false,_ptok=false;
+  var A0={};Object.keys(R.actual||{}).forEach(function(cod){var s=0,m=R.actual[cod]||{};for(var d in m)if(d<=corte)s+=m[d];A0[cod]=Math.max(0,Math.min(1,s))});
+  try{var PT=window._wk3wPT;if(PT&&PT.porPid){
+      var tar=((await _crTareas(cid))||[]).filter(function(t){return t&&!t.eliminado}),alc=await _crAlc(cid),u=_crUniverso(cid,alc),rp=_crReparto(tar);
+      var hhOf={};bl.filas.forEach(function(f){hhOf[String(f.cod)]=Number(f.hh)||0;R.fore[String(f.cod)]={}});
+      var tDe={};tar.forEach(function(t){var cod=String(t.task_code);(t.items||[]).forEach(function(i){if(u.items[i]==null)return;var hi=(Number(u.items[i])||0)/_crVeces(rp,i);(tDe[i]||(tDe[i]=[])).push({cod:cod,hi:hi,w:hi*Math.max(0,1-(A0[cod]||0))})})});
+      Object.keys(PT.porPid).forEach(function(pid){var L9=tDe[pid];if(!L9||!L9.length)return;var sw=0,sh=0;L9.forEach(function(x){sw+=x.w;sh+=x.hi});
+        var mp=PT.porPid[pid];L9.forEach(function(x){var fr=(sw>1e-12)?(x.w/sw):(sh>0?x.hi/sh:1/L9.length),h=hhOf[x.cod];if(!(h>0)||!(fr>0))return;var m=R.fore[x.cod]||(R.fore[x.cod]={});
+          for(var d in mp){if(d<R.gIni||d>R.gFin)continue;m[d]=(m[d]||0)+mp[d]*fr/h}})});
+      _ptok=_t3ok=true}}catch(e){try{console.warn('F.002 HH de la Tabla de programacion:',e)}catch(_e){}}
+  if(!_ptok)try{var c3=((await _crPull())||[]).filter(function(z){return z&&!z.eliminado&&String(z.cron_id)===String(cid)})[0];
     var inc3=(typeof _pgIncSem==='function')?_pgIncSem():false;
     var T3=window._wk3wT3||(c3?await _t23Datos(c3,{n:3,per:'dia',corte:4,vista:'agr',fuente:'cal',noLab:false,incSem:inc3}):null);
     if(T3&&T3.filas&&T3.filas.length){var by={};T3.filas.forEach(function(r){if(r&&r.id!=null&&!r._nosum)by[String(r.id)]=r});
@@ -22743,13 +22779,14 @@ async function _wk3wF2Arma(semN,corte,D,cid){
      que el % ACUM (Tabla 2 del cronograma elegido): % Restante + % ACUM al corte = 100 %. Va como valor. */
   var bl2={};for(var k9 in bl)bl2[k9]=bl[k9];
   bl2.filas=bl.filas.map(function(f){var g={};for(var q in f)g[q]=f[q];g.pctReal=A[f.cod]||0;return g});
-  return {bloque:bl2,R:R,valores:true,acum0:sJ>0?sA/sJ:0,fin:sJ>0?(sA+sF)/sJ:0,falta:falta,t3:_t3ok}}
+  return {bloque:bl2,R:R,valores:true,acum0:sJ>0?sA/sJ:0,fin:sJ>0?(sA+sF)/sJ:0,falta:falta,t3:_t3ok,tabla:_ptok}}
 async function _wkF2LibroApp(semN,corte,ids){
   var cid=_wk3wElegido();
-  window._wk3wCalc=cid||null;window._wkGenTag='F.002';window._wk3wInfo=null;window._wk3wT3=null;
+  window._wk3wCalc=cid||null;window._wkGenTag='F.002';window._wk3wInfo=null;window._wk3wT3=null;window._wk3wPT=null;
+  try{var G9=(typeof _wkSemanas==='function')?_wkSemanas():[];var gF=G9.length?String(G9[G9.length-1].fin):corte;window._wk3wPT=await _wk3wHHTabla(corte,gF)}catch(e){window._wk3wPT=null;try{console.warn('F.002 HH de la tabla:',e)}catch(_e){}}
   try{var c3=((await _crPull())||[]).filter(function(z){return z&&!z.eliminado&&String(z.cron_id)===String(cid)})[0];
     if(c3)window._wk3wT3=await _t23Datos(c3,{n:3,per:'dia',corte:4,vista:'agr',fuente:'cal',noLab:false,incSem:(typeof _pgIncSem==='function')?_pgIncSem():false})}catch(e){window._wk3wT3=null}
-  var LB;try{LB=await _wkGLibroApp(semN,corte,ids)}finally{window._wk3wCalc=null;window._wkGenTag=null;window._wk3wT3=null}
+  var LB;try{LB=await _wkGLibroApp(semN,corte,ids)}finally{window._wk3wCalc=null;window._wkGenTag=null;window._wk3wT3=null;window._wk3wPT=null}
   try{LB.info=LB.info||{};LB.info.gen='F.002';LB.info.calc3w=cid}catch(e){}
   return LB}
 /* ===================== GENERACION F.001 (fin) ===================== */
@@ -24811,7 +24848,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c83';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c84';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
