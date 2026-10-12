@@ -24811,7 +24811,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c73';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c74';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -39540,24 +39540,41 @@ async function _ptXlsxBlob(M,cfg){
     h6+=cT(col+'6',o.fl,sTxt)});
   row(3,h3);row(4,h4);row(5,h5,' ht="30" customHeight="1"');row(6,h6,' hidden="1"');
   var flags='$'+L(c0)+'$6:$'+lastC+'$6';
+  /* la fila de su partida (env) para cada parte, y el rango de partes de cada partida con fases */
+  var envDe={},partesDe={};dataRows.forEach(function(F,i){if(F&&F.tipo==='env'){var a=i+1,b=i;while(b+1<dataRows.length&&dataRows[b+1]&&!dataRows[b+1].tit&&dataRows[b+1].nivel==='parte'){b++;envDe[b]=r0+i}
+    if(b>=a)partesDe[i]=[r0+a,r0+b]}});
+  var modoC=((typeof _pgObjModo==='function')?_pgObjModo():'forecast')==='contrato';
   dataRows.forEach(function(F,i){var r=r0+i,h='';
     if(F.tit){h=cT('A'+r,F.txt,F.niv===1?sA:sSis);for(var j=1;j<ci;j++)h+=cE(L(j)+r,F.niv===1?sA:sSis);merges.push('A'+r+':U'+r);row(r,h);return}
     var cant=(F.tipo==='cant'||F.tipo==='pcant'),env=(F.tipo==='env'),sN=env?sEnvN:sNum,sP=env?sEnvP:sPct,sT=env?sEnv:sTxt;
     var dRng=L(c0)+r+':'+lastC+r;
     h+=cT('A'+r,F.nivel==='parte'?'':F.cod,sT)+cT('B'+r,F.nivel==='parte'?('↳ '+F.nom+' '+(Math.round((Number(F.fase.peso)||0)*10)/10)+'%'):F.nom,F.nivel==='parte'?sTxtP:sT)+cT('C'+r,F.und||'',sT);
-    h+=cant?(cN('D'+r,F.met,sN)+cN('E'+r,F.hecho,sN)+cF('F'+r,'MAX(0,D'+r+'-E'+r+')',sN)):(cE('D'+r,sN)+cE('E'+r,sN)+cE('F'+r,sN));
+    var dRef=modoC?F.metC:F.metV,dFx=(cant&&dRef!=null&&Math.abs(Number(dRef)-Number(F.met))<1e-9)?((modoC?'V':'W')+r):null;
+    h+=cant?((dFx?cF('D'+r,dFx,sN):cN('D'+r,F.met,sN))+cN('E'+r,F.hecho,sN)+cF('F'+r,'MAX(0,D'+r+'-E'+r+')',sN)):(cE('D'+r,sN)+cE('E'+r,sN)+cE('F'+r,sN));
     h+=env?cE('G'+r,sN):cN('G'+r,F.fuera||0,sN);
     h+=env?cE('H'+r,sN):cF('H'+r,'G'+r+'+SUMIF('+flags+',"<>t",'+dRng+')',sN);
     h+=cant?cF('I'+r,'F'+r+'-H'+r,sN):cE('I'+r,sN);
     h+=(cant&&F.rinde>0)?cN('J'+r,F.rinde,sIn):cE('J'+r,sN);
     h+=cant?cF('K'+r,'IF(AND(J'+r+'>0,I'+r+'>0),ROUNDUP(I'+r+'/J'+r+',0),0)',sN):cE('K'+r,sN);
-    h+=cN('L'+r,F.hh||0,sN)+cN('M'+r,F.hhA||0,sN)+cF('N'+r,'IF(L'+r+'>0,M'+r+'/L'+r+'*100,"")',sP)+cF('O'+r,'IF(L'+r+'>0,100-N'+r+',"")',sP);
-    h+=(F.w==null)?cE('P'+r,sP):cN('P'+r,F.w,sP);
+    var pR=partesDe[i];
+    var sPL=0,sPM=0;if(env&&pR)for(var q9=pR[0];q9<=pR[1];q9++){var Fq=dataRows[q9-r0];sPL+=Number(Fq.hh)||0;sPM+=Number(Fq.hhA)||0}
+    var okL=!!(env&&pR&&Math.abs(sPL-(Number(F.hh)||0))<1e-6),okM=!!(env&&pR&&Math.abs(sPM-(Number(F.hhA)||0))<1e-6);
+    h+=(okL?cF('L'+r,'SUM(L'+pR[0]+':L'+pR[1]+')',sN):cN('L'+r,F.hh||0,sN))+(okM?cF('M'+r,'SUM(M'+pR[0]+':M'+pR[1]+')',sN):cN('M'+r,F.hhA||0,sN));h+=cF('N'+r,'IF(L'+r+'>0,M'+r+'/L'+r+'*100,"")',sP)+cF('O'+r,'IF(L'+r+'>0,100-N'+r+',"")',sP);
+    var pesoP=(F.nivel==='parte'&&F.fase)?Math.max(0,Math.min(100,Number(F.fase.peso)||0)):null;
+    h+=(F.w==null)?cE('P'+r,sP):((pesoP!=null&&envDe[i]!=null)?cF('P'+r,'P'+envDe[i]+'*'+_nLimpio(pesoP)+'/100',sP):cN('P'+r,F.w,sP));
     var fac=(F.qCuenta>1e-12)?(F.pctProg/F.qCuenta):0;h+=cN('Q'+r,fac,sN);
     h+=cF('R'+r,'Q'+r+'*SUMIF('+flags+',"d",'+dRng+')',sP);
     h+=cT('S'+r,F.estTxt||'',sT)+cT('T'+r,String((F.p&&F.p.esp)||''),sT)+cT('U'+r,F.nivel==='parte'?'Parte':'Partida',sT);
     h+=(cant&&F.metC!=null)?cN('V'+r,F.metC,sN):cE('V'+r,sN);h+=(cant&&F.metV!=null)?cN('W'+r,F.metV,sN):cE('W'+r,sN);
-    var wa9=_ptWAv(F),wr9=_ptWRest(F);h+=(wa9!=null)?cN('X'+r,wa9,sP):cE('X'+r,sP);h+=(wr9!=null)?cN('Y'+r,wr9,sP):cE('Y'+r,sP);var wp9=_ptWRP(F);h+=(wp9!=null)?cN('Z'+r,wp9,sP):cE('Z'+r,sP);var wg9=_ptWPg(F);h+=(wg9!=null)?cN('AA'+r,wg9,sP):cE('AA'+r,sP);
+    h+=cF('X'+r,'IF(AND(ISNUMBER(P'+r+'),N(L'+r+')>0),P'+r+'*MAX(0,MIN(1,N(M'+r+')/L'+r+')),"")',sP);
+    h+=cF('Y'+r,'IF(ISNUMBER(X'+r+'),MAX(0,P'+r+'-X'+r+'),"")',sP);
+    var zF;
+    if(env)zF=pR?('IF(COUNT(Z'+pR[0]+':Z'+pR[1]+')>0,MIN(Y'+r+',SUM(Z'+pR[0]+':Z'+pR[1]+')),Y'+r+')'):('Y'+r);
+    else if(cant)zF='IF(ROUND(F'+r+',2)>0,Y'+r+'*MIN(1,MAX(0,ROUND(F'+r+',2)-ROUND(H'+r+',2))/ROUND(F'+r+',2)),0)';
+    else if(F.tipo==='marca')zF='IF(SUMIF('+flags+',"<>t",'+dRng+')>0,0,Y'+r+')';
+    else zF='Y'+r;
+    h+=cF('Z'+r,'IF(ISNUMBER(Y'+r+'),'+zF+',"")',sP);
+    h+=cF('AA'+r,'IF(AND(ISNUMBER(Y'+r+'),ISNUMBER(Z'+r+')),MAX(0,Y'+r+'-Z'+r+'),"")',sP);
     pc.forEach(function(o){var ref=L(o.ci)+r;
       if(o.tot){h+=cF(ref,'SUM('+L(o.dcs[0].ci)+r+':'+L(o.dcs[6].ci)+r+')',sTot);return}
       if(o.fl==='n'){h+=cE(ref,sWe);return}
@@ -39574,7 +39591,7 @@ async function _ptXlsxBlob(M,cfg){
     else{hP+=cE(col+rP,sPie);hA+=cE(col+rA,sPie)}
     var v=Number((M.pct.esp||{})[o.ds])||0;hH+=cN(col+rH,v,sApp);hT+=cN(col+rT,Number(M.pct.dia[o.ds])||0,sApp);hHA+=cN(col+rHA,M.pct.acum[o.ds],sApp);hD+=(o.fl==='d')?cF(col+rD,col+rP+'-'+col+rH,sDif):cE(col+rD,sDif)});
   row(rP,hP);row(rA,hA);row(rH,hH);row(rHA,hHA);row(rD,hD);row(rT,hT);
-  var rr=rT+2;row(rr,cT('B'+rr,'Las celdas azules son datos (cantidad por día); lo demás son fórmulas. Sáb/dom/feriados en rojo. [+]/[−] arriba agrupa los días de cada semana. La app reparte lo programado con la cuenta de la Tabla 3 (saldo físico y topes): la fila «Diferencia» muestra cuánto se aparta la fórmula simple.',S({i:1,c:'FF5C6779'})));
+  var rr=rT+2;row(rr,cT('B'+rr,'Las celdas azules son datos (cantidad por día); también son datos el metrado/hecho, las HH, las HH ganadas y el Vale % de cada partida (sale del cronograma), la base real y el factor oculto; todo lo demás son fórmulas. Sáb/dom/feriados en rojo. [+]/[−] arriba agrupa los días de cada semana. La app reparte lo programado con la cuenta de la Tabla 3 (saldo físico y topes): la fila «Diferencia» muestra cuánto se aparta la fórmula simple.',S({i:1,c:'FF5C6779'})));
   /* columnas, paneles, agrupacion por semana */
   var sem=(cfg.modo==='sem');
   var W=[12,46,6,10,10,10,10,11,11,9,7,11,11,11,11,9,9,9,15,9,8,12,12,10,10,12,10];
