@@ -24811,7 +24811,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c82';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c83';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -39574,9 +39574,13 @@ async function _ptXlsxBlob(M,cfg){
   var rgL='$L$'+r0+':$L$'+rN,rgM='$M$'+r0+':$M$'+rN,rgU='$U$'+r0+':$U$'+rN;
   var tA='IF(SUMIF('+rgU+',"Partida",'+rgL+')>0,SUMIF('+rgU+',"Partida",'+rgM+')/SUMIF('+rgU+',"Partida",'+rgL+')*100,0)';
   var hayT1=!!(function(){try{var R9=_pgUnivRec();return R9&&R9.filas&&Object.keys(R9.filas).some(function(k){return Number(R9.filas[k].hh)>0})}catch(e){return false}})();
-  row(2,cT('A2','Avance al corte '+_ptDM(cort9)+' (%)',sLbl)+cF('C2','O2',sVal)+cT('E2','Incluye avance semanal',sLbl)+cT('G2',M.pct.incSem?'Sí':'No',sLbl)+cT('H2','% ACTUAL (HH) total',sLbl)+cF('I2',tA,sVal)+cT('J2','% RESTANTE (HH)',sLbl)+cF('K2','100-I2',sVal)+cT('L2','HH del alcance',sLbl)+(hayT1?cF('M2',"'Tabla 1'!$J$2",sNum):cF('M2','SUMIF('+rgU+',"Partida",'+rgL+')',sNum))
-    +cT('N2','Avanzado %',sLbl)+cF('O2','SUMIF('+rgU+',"Partida",$X$'+r0+':$X$'+rN+')',sVal)+cT('P2','Programado %',sLbl)+cF('Q2','SUMIF('+rgU+',"Partida",$AA$'+r0+':$AA$'+rN+')',sVal)
-    +cT('R2','Por programar %',sLbl)+cF('S2','SUMIF('+rgU+',"Partida",$Z$'+r0+':$Z$'+rN+')',sVal));
+  /* fila 2: el total de cada columna encima de ella (si la columna no sale, su total tampoco). L2 = HH del alcance
+     (Tabla 1) y X2 = avance al corte: de ellas cuelgan los % de todas las filas y el pie */
+  var sumP=function(c){return 'SUMIF('+rgU+',"Partida",$'+c+'$'+r0+':$'+c+'$'+rN+')'};
+  row(2,cT('A2','Totales (partidas) · corte '+_ptDM(cort9),sLbl)
+    +(hayT1?cF('L2',"'Tabla 1'!$J$2",sNum):cF('L2','SUMIF('+rgU+',"Partida",'+rgL+')',sNum))+cF('M2',sumP('M'),sNum)
+    +cF('N2','IF(SUMIF('+rgU+',"Partida",'+rgL+')>0,M2/SUMIF('+rgU+',"Partida",'+rgL+')*100,0)',sVal)+cF('O2','100-N2',sVal)+cF('P2',sumP('P'),sVal)
+    +cF('R2','SUM($R$'+r0+':$R$'+rN+')',sVal)+cF('X2',sumP('X'),sVal)+cF('Y2',sumP('Y'),sVal)+cF('Z2',sumP('Z'),sVal)+cF('AA2',sumP('AA'),sVal));
   var h3='',h4='',h5='',h6='';
   FIX.forEach(function(t,i){h5+=cT(L(i)+'5',t,sH)});
   pc.forEach(function(o){var col=L(o.ci);
@@ -39600,7 +39604,7 @@ async function _ptXlsxBlob(M,cfg){
     if(!z||!(Number(z.hh)>0))return;   /* solo las ACTIVAS del alcance: con HH forecast */
     t1Fila[pid]=t1r;t1Rows.push({r:t1r++,pid:pid,z:z,parte:null});
     (z.partes||[]).forEach(function(q){if(!q)return;var kq=pid+'|'+String(q.pert||'');if(t1Fila[kq]==null)t1Fila[kq]=t1r;t1Rows.push({r:t1r++,pid:pid,z:q,parte:String(q.pert||'')})})});
-  var t1Last=Math.max(5,t1r-1),HT='$M$2';
+  var t1Last=Math.max(5,t1r-1),HT='$L$2';
   dataRows.forEach(function(F,i){var r=r0+i,h='';
     if(F.tit){h=cT('A'+r,F.txt,F.niv===1?sA:sSis);for(var j=1;j<ci;j++)h+=cE(L(j)+r,F.niv===1?sA:sSis);merges.push('A'+r+':U'+r);row(r,h);return}
     var cant=(F.tipo==='cant'||F.tipo==='pcant'),env=(F.tipo==='env'),sN=env?sEnvN:sNum,sP=env?sEnvP:sPct,sT=env?sEnv:sTxt;
@@ -39650,16 +39654,16 @@ async function _ptXlsxBlob(M,cfg){
       var q=Number(F.q[o.ds])||0;var ed=!env&&!F.ro&&o.d.edit;h+=(q>0)?cN(ref,_ptR6(q),ed?sIn:sRo):cE(ref,ed?sIn:sRo)});
     row(r,h)});
   /* pie: % de cada dia = Σ (cantidad programada x ratio) / HH del alcance; acumulado = avance real (C2) + los dias */
-  var rP=rN+2,rA=rN+3,hP=cT('B'+rP,'% programado del día = Σ (cantidad × ratio) / HH del alcance',sPieL),hA=cT('B'+rA,'% acumulado = avance al corte (C2) + lo reportado (días «real») + lo programado',sPieL);
+  var rP=rN+2,rA=rN+3,hP=cT('B'+rP,'% programado del día = Σ (cantidad × ratio) / HH del alcance',sPieL),hA=cT('B'+rA,'% acumulado = avance al corte (X2) + lo reportado (días «real») + lo programado',sPieL);
   hP+=cF('R'+rP,'SUM(R'+r0+':R'+rN+')',sPie);
   var prevA=null;
   pc.forEach(function(o){var col=L(o.ci);
-    if(o.tot){var a=L(o.dcs[0].ci),b=L(o.dcs[6].ci);hP+=cF(col+rP,'SUM('+a+rP+':'+b+rP+')',sPie);hA+=prevA?cF(col+rA,prevA,sPie):cF(col+rA,'$C$2',sPie);return}
+    if(o.tot){var a=L(o.dcs[0].ci),b=L(o.dcs[6].ci);hP+=cF(col+rP,'SUM('+a+rP+':'+b+rP+')',sPie);hA+=prevA?cF(col+rA,prevA,sPie):cF(col+rA,'$X$2',sPie);return}
     if(o.fl==='n'){hP+=cE(col+rP,sWe);hA+=cE(col+rA,sWe);return}
-    if(o.fl==='d'||o.fl==='r'){hP+=cF(col+rP,'IF('+HT+'>0,SUMPRODUCT($Q$'+r0+':$Q$'+rN+','+col+r0+':'+col+rN+')/'+HT+'*100,0)',sPie);hA+=cF(col+rA,(prevA?prevA:'$C$2')+'+'+col+rP,sPie);prevA=col+rA}
+    if(o.fl==='d'||o.fl==='r'){hP+=cF(col+rP,'IF('+HT+'>0,SUMPRODUCT($Q$'+r0+':$Q$'+rN+','+col+r0+':'+col+rN+')/'+HT+'*100,0)',sPie);hA+=cF(col+rA,(prevA?prevA:'$X$2')+'+'+col+rP,sPie);prevA=col+rA}
     else{hP+=cE(col+rP,sPie);hA+=cE(col+rA,sPie)}});
   row(rP,hP);row(rA,hA);
-  var rr=rA+2;row(rr,cT('B'+rr,'Datos: cantidades por día (azules: programado; letra verde: lo reportado después del corte, también lo reportado hoy), fuera de la ventana y rinde; Hecho = avance al corte (el de la Tabla 1 menos lo reportado después); HH forecast, metrados y % avance salen de la hoja Tabla 1. Todo lo demás son fórmulas: ratio = HH forecast / metrado forecast; HH ganadas = hecho × ratio; cada % = HH / HH del alcance (M2). Sáb/dom/feriados en rojo. [+]/[−] arriba agrupa los días de cada semana.',S({i:1,c:'FF5C6779'})));
+  var rr=rA+2;row(rr,cT('B'+rr,'Datos: cantidades por día (azules: programado; letra verde: lo reportado después del corte, también lo reportado hoy), fuera de la ventana y rinde; Hecho = avance al corte (el de la Tabla 1 menos lo reportado después); HH forecast, metrados y % avance salen de la hoja Tabla 1. Todo lo demás son fórmulas: ratio = HH forecast / metrado forecast; HH ganadas = hecho × ratio; cada % = HH / HH del alcance (L2). Sáb/dom/feriados en rojo. [+]/[−] arriba agrupa los días de cada semana.',S({i:1,c:'FF5C6779'})));
   /* columnas, paneles, agrupacion por semana */
   var sem=(cfg.modo==='sem');
   var W=[12,46,6,10,10,10,10,11,11,9,7,11,11,11,11,9,9,9,15,9,8,12,12,10,10,12,10];
