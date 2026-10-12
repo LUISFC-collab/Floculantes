@@ -24469,7 +24469,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c50';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c51';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -38667,6 +38667,14 @@ function _ptFilaArma(F,P){var ents=[],k0=F.rid,e0=P[k0];
   return F}
 /* el modelo completo de la especialidad (sin escribir nada) */
 /* el modelo se arma con los tramos indexados (la programacion no cambia mientras se arma) */
+/* especialidades que entran en la tabla: el ADMIN ve todas; un supervisor, la suya y las que tiene
+   aprobadas (permiso 'Cambiar entre especialidades' + especialidades permitidas de su rol) */
+function _ptDiscs(){try{var L=(typeof DISC!=='undefined'&&DISC&&DISC.length)?DISC.slice():['Mecanica','Electrica','Civil'];
+  if(typeof esAdmin==='function'&&esAdmin())return L;
+  var own=(state.user&&state.user.disc)||progDisc,cam=(typeof puedeCambiarEsp==='function')&&puedeCambiarEsp();
+  var out=L.filter(function(d){return d===own||(cam&&(typeof puedeEsp!=='function'||puedeEsp(d)))});
+  if(progDisc&&out.indexOf(progDisc)<0)out.unshift(progDisc);return out}catch(e){return [progDisc]}}
+function _ptDiscDe(pid){try{return (window._ptDiscMap&&window._ptDiscMap[pid])||progDisc}catch(e){return progDisc}}
 function _ptModelo(o){var prev=window._ptTrMemo;window._ptTrMemo={};try{return _ptModelo0(o)}finally{window._ptTrMemo=prev}}
 function _ptTrMemoDe(P,pid,parte,fid){var M=window._ptTrMemo;if(!M||typeof pid!=='string'||(parte&&typeof fid!=='string'))return null;
   if(M.P!==P||!M.de){M.P=P;M.de=Object.create(null);M.pa=Object.create(null);var del=state.progDel||{};
@@ -38689,7 +38697,8 @@ function _ptModelo0(o){o=o||{};var cfg=o.cfg||_ptCfg();var hoy=todayISO(),adm=_p
   var pD=window._pgPctDia||{},pA=window._pgPctAcum||{},base=Number(window._pgPctBase)||0;
   var acK=Object.keys(pA).sort();
   var acumEn=function(ds){var v=null;for(var i=0;i<acK.length;i++){if(acK[i]<=ds)v=pA[acK[i]];else break}return v==null?base:v};
-  var all=acts(progDisc)||[];if(o.solo)all=all.filter(function(p){return !!o.solo[p.id]});var C=_ptClasif(all,P);
+  var _ds9=_ptDiscs(),all=[],_vi9={},_dm9={};_ds9.forEach(function(d){(acts(d)||[]).forEach(function(p){if(!p||_vi9[p.id])return;_vi9[p.id]=1;_dm9[p.id]=d;all.push(p)})});window._ptDiscMap=_dm9;
+  if(o.solo)all=all.filter(function(p){return !!o.solo[p.id]});var C=_ptClasif(all,P);
   var U=null;try{U=(typeof _pgUnivU==='function')?_pgUnivU():null}catch(e){U=null}
   var sinPeso=(!U&&typeof _pgHayActual==='function'&&_pgHayActual());
   var filas=[],porId={};
@@ -38753,7 +38762,7 @@ function _ptModelo0(o){o=o||{};var cfg=o.cfg||_ptCfg();var hoy=todayISO(),adm=_p
     hh:{hh:tHH,hhA:tA,pAct:(tHH>0?tA/tHH*100:null),pRest:(tHH>0?100-tA/tHH*100:null)},winFilas:winPct,cfg:cfg}}
 /* las filas que se ven: buscador, estado y plegados */
 /* especialidad de la fila y valor de cada columna para los filtros (lo mismo que se ve) */
-function _ptEspDe(F){try{var p=F.p||{};var bp=(DATA._byId&&DATA._byId[p.id])||p;return String(p.esp||bp.esp||p.disc||bp.disc||F.disc||'')}catch(e){return ''}}
+function _ptEspDe(F){try{if(window._ptDiscMap&&window._ptDiscMap[F.pid])return window._ptDiscMap[F.pid];var p=F.p||{};var bp=(DATA._byId&&DATA._byId[p.id])||p;return String(p.esp||bp.esp||p.disc||bp.disc||F.disc||'')}catch(e){return ''}}
 function _ptWAv(F){if(F.w==null)return null;var h=Number(F.hh)||0;if(!(h>0))return null;return F.w*Math.max(0,Math.min(1,(Number(F.hhA)||0)/h))}
 function _ptWRest(F){var a=_ptWAv(F);return (a==null)?null:Math.max(0,F.w-a)}
 function _ptFltVal(F,k){if(k==='wAv')return _ptWAv(F);if(k==='wRest')return _ptWRest(F);var cant=(F.tipo==='cant'||F.tipo==='pcant');
@@ -38860,7 +38869,7 @@ function _ptGuardaCant(F,V,ctx){var res={n:0,avisos:[],txt:''};var lock=function
   var ts=nowSrv();
   poner.forEach(function(x){var n=_pgTramoN(x.k);var prev=state.prog[x.k];
     if(prev&&prev.start===x.t.start&&Number(prev.dias)===x.t.dias&&Math.abs((Number(prev.cant)||0)-x.t.cant)<1e-9&&_ptVivo(x.k,prev))return;
-    var o={partida_id:x.k,codigo:_ptCodigo(F,n),nombre:_ptNombre(F),disc:progDisc,start:x.t.start,dias:x.t.dias,cant:x.t.cant,cell_at:Date.now(),_lo:1,ts:ts};
+    var o={partida_id:x.k,codigo:_ptCodigo(F,n),nombre:_ptNombre(F),disc:_ptDiscDe(F.pid),start:x.t.start,dias:x.t.dias,cant:x.t.cant,cell_at:Date.now(),_lo:1,ts:ts};
     if(x.old&&x.old.orden!=null)o.orden=x.old.orden;
     state.prog[x.k]=o;if(typeof progUntomb==='function')progUntomb(x.k);res.n++});
   borrar.forEach(function(k){if(state.prog[k]){delete state.prog[k];if(typeof progTomb==='function')progTomb(k);_pgBorraSrv(k);res.n++}});
@@ -38873,7 +38882,7 @@ function _ptGuardaMarca(F,V,ctx){var res={n:0,avisos:[],txt:''};
   var s=T[0],e=T[T.length-1],n=0,d=s,sf=0;while(d<=e&&sf<900){if(esLaborable(d))n++;d=_ptAdd(d,1);sf++}
   if(n>T.length)res.avisos.push(F.cod+': lo que no se mide en cantidad va en un bloque seguido; quedó del '+_ptDM(s)+' al '+_ptDM(e)+' ('+n+' días laborables)');
   if(old&&_ptVivo(k,old)&&occupiedDays(old.start,old.dias||1)[0]===s&&Number(old.dias)===n)return res;
-  var o={partida_id:k,codigo:(old&&old.codigo)||codeOf(F.p),nombre:(old&&old.nombre)||_ptNombre(F),disc:progDisc,start:s,dias:n,cell_at:Date.now(),_lo:1,ts:nowSrv()};
+  var o={partida_id:k,codigo:(old&&old.codigo)||codeOf(F.p),nombre:(old&&old.nombre)||_ptNombre(F),disc:_ptDiscDe(F.pid),start:s,dias:n,cell_at:Date.now(),_lo:1,ts:nowSrv()};
   if(old&&old.orden!=null)o.orden=old.orden;
   state.prog[k]=o;if(typeof progUntomb==='function')progUntomb(k);res.n++;res.txt=n+' día(s) desde '+_ptDM(s);return res}
 /* EL UNICO ESCRITOR: cambios=[{rid,ds,v}] (cantidad por dia). Tope por fila: lo que queda
