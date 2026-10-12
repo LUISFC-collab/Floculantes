@@ -15985,7 +15985,7 @@ var _WK_GENS=[
    fn:'_wkGLibroApp'},
   {id:'F.002',
    nombre:'F.002 — F.001 con la 3WLA calculada con el cronograma elegido (por defecto el ACTUAL)',
-   desc:'La F.001 tal cual y solo cambia la hoja 3WLA: se calcula con el cronograma marcado con 🧮 en la lista (por defecto el ACTUAL), aunque no esté entre los que salen en la curva. Lo programado se mide como la Tabla de programación (metrado forecast y lo que falta hoy) y lo ejecutado después del corte cuenta como programado ese día, así el % ACUM llega al 100 % cuando todo está programado.',
+   desc:'La F.001 tal cual y solo cambia la hoja 3WLA: se calcula con el cronograma marcado con 🧮 en la lista (por defecto el ACTUAL), aunque no esté entre los que salen en la curva. Lo programado es la misma curva de la Tabla de programación (calendario, con o sin Avance semanal según esté puesto): lo ejecutado después del corte cuenta ese día y luego lo programado, así los % semanales y el % ACUM son los de la tabla y llegan al 100 % cuando todo está programado.',
    fn:'_wkF2LibroApp'}];
 var _WK_GEN_DEF='A.001';              /* hasta que B.001 este validada */
 var _WK_GEN_KEY='obf4_wk_gen';
@@ -22714,17 +22714,26 @@ async function _wk3wF2Arma(semN,corte,D,cid){
   try{var _bx=String(_ajGet('rx_base_comparar','')||'');window._crPlanFuenteOverride=(_bx===''||_bx==='cal')?'cal':(_bx==='vig'?'__base0__':_bx)}catch(_e){window._crPlanFuenteOverride=null}
   window._wk3wF2={hoy:hoy};
   try{R=await _crPlanRecupera(cid,corte,semN)}finally{window._crPlanFuenteOverride=_ov;window._wk3wF2=null}
-  try{await _wk3wPost(R,cid,corte,hoy)}catch(e){try{console.warn('F.002 lo hecho tras el corte:',e)}catch(_e){}}
+  var _t3ok=false;
+  try{var c3=((await _crPull())||[]).filter(function(z){return z&&!z.eliminado&&String(z.cron_id)===String(cid)})[0];
+    var inc3=(typeof _pgIncSem==='function')?_pgIncSem():false;
+    var T3=c3?await _t23Datos(c3,{n:3,per:'dia',corte:4,vista:'agr',fuente:'cal',noLab:false,incSem:inc3}):null;
+    if(T3&&T3.filas&&T3.filas.length){var by={};T3.filas.forEach(function(r){if(r&&r.id!=null&&!r._nosum)by[String(r.id)]=r});
+      var hhOf={};bl.filas.forEach(function(f){hhOf[String(f.cod)]=Number(f.hh)||0});
+      Object.keys(hhOf).forEach(function(cod){var h=hhOf[cod],r=by[cod],m={};R.fore[cod]=m;if(!r||!(h>0))return;var p=r.p||{};
+        for(var k in p){if(k.indexOf('p_')!==0)continue;var d=k.slice(2),v=Number(p[k])||0;if(d>corte&&v>1e-9&&d>=R.gIni&&d<=R.gFin)m[d]=(m[d]||0)+v/h}});
+      _t3ok=true}}catch(e){try{console.warn('F.002 curva de la Tabla 3:',e)}catch(_e){}}
+  if(!_t3ok)try{await _wk3wPost(R,cid,corte,hoy)}catch(e){try{console.warn('F.002 lo hecho tras el corte:',e)}catch(_e){}}
   /* lo hecho al corte (la linea ACTUAL, medida como la Tabla 2) y el tope de lo programado */
   var A={};Object.keys(R.actual||{}).forEach(function(cod){var s=0,m=R.actual[cod]||{};for(var d in m)if(d<=corte)s+=m[d];A[cod]=Math.max(0,Math.min(1,s))});
   var falta=[];
   Object.keys(R.fore||{}).forEach(function(cod){var m=R.fore[cod]||{},s=0;for(var d in m)s+=m[d];
     var need=Math.max(0,1-(A[cod]||0));
-    if(s>need+1e-9&&s>0){var k=need/s;for(var d2 in m)m[d2]*=k}});
+    if(!_t3ok&&s>need+1e-9&&s>0){var k=need/s;for(var d2 in m)m[d2]*=k}});
   var sJ=0,sA=0,sF=0;
   bl.filas.forEach(function(f){var h=Number(f.hh)||0,a=A[f.cod]||0,s=0,m=R.fore[f.cod]||{};for(var d in m)s+=m[d];
     sJ+=h;sA+=h*a;sF+=h*s;if(h>0&&a+s<0.9999)falta.push({cod:f.cod,nom:f.nom,hecho:a,prog:s})});
-  return {bloque:bl,R:R,valores:valores,acum0:sJ>0?sA/sJ:0,fin:sJ>0?(sA+sF)/sJ:0,falta:falta}}
+  return {bloque:bl,R:R,valores:valores,acum0:sJ>0?sA/sJ:0,fin:sJ>0?(sA+sF)/sJ:0,falta:falta,t3:_t3ok}}
 async function _wkF2LibroApp(semN,corte,ids){
   var cid=_wk3wElegido();
   window._wk3wCalc=cid||null;window._wkGenTag='F.002';window._wk3wInfo=null;
@@ -24790,7 +24799,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c68';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c69';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
