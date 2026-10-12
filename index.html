@@ -7765,7 +7765,7 @@ function _crColLetra(i){
    (ver _crPlanSemanal). Se admite un final distinto por si algun dia hace
    falta, pero por defecto manda el formato. */
 function _crRejilla(hasta){
-  var fin=Number(hasta)||44,out=[];
+  var fin=Number(hasta)||_wkUltN(),out=[];
   for(var n=27;n<=fin;n++){
     var ini=46199+(n-27)*7;
     out.push({n:n,col:_crColLetra(n-27),serIni:ini,serFin:ini+6,
@@ -9427,13 +9427,43 @@ function _crExportUI(){
    las 3 hojas tocadas, el resto viaja byte a byte. */
 var WK_COLS=['P','Q','R','S','T','U','V','W','X','Y','Z','AA','AB','AC','AD','AE','AF','AG'];
 function _wkSem(n){var ini=46199+(n-27)*7;return {n:n,ini:ini,fin:ini+6}}
+/* LA ULTIMA SEMANA DEL REPORTE (semdin). El formato trae 18 semanas, S27..S44, y esa es la rejilla minima;
+   si la programacion (state.prog: el ultimo dia que ocupa cada fila, occupiedDays) o las tareas de los
+   cronogramas elegidos (fin, fin del remanente y fin efectivo por el alcance) llegan mas lejos, el reporte
+   llega hasta la semana -viernes a jueves, la misma cuenta de _wkSem- que contiene ese ultimo dia.
+   _WK_ULTN solo vale mientras se arma un libro (_wkConRejilla): fuera de eso todo sigue en la S44. */
+var _WK_ULT0=44,_WK_ULTMAX=78,_WK_ULTN=null;
+function _wkUltN(){var u=Number(_WK_ULTN)||0;return u>_WK_ULT0?Math.min(u,_WK_ULTMAX):_WK_ULT0}
+function _wkSemDeISO(iso){var t=Date.parse(String(iso||'').slice(0,10)+'T00:00:00Z');if(isNaN(t))return 0;
+  var ser=Math.round((t-Date.UTC(1899,11,30))/864e5);return 27+Math.floor((ser-46199)/7)}
+/* el ultimo dia con algo: programacion viva + tareas de los cronogramas (ids; null = los marcados activos) */
+function _wkUltDia(ids){var ult='';var mx=function(d){d=String(d||'').slice(0,10);if(/^\d{4}-\d{2}-\d{2}$/.test(d)&&d>ult)ult=d};
+  try{var P=(typeof state!=='undefined'&&state&&state.prog)||{},del=(typeof state!=='undefined'&&state&&state.progDel)||{};
+    Object.keys(P).forEach(function(id){var pr=P[id];if(!pr||!pr.start||pr._elim)return;
+      var dT=Number(del[id])||0;if(dT&&!(Number(pr.ts)>dT))return;
+      var ds=[];try{ds=(typeof occupiedDays==='function')?occupiedDays(pr.start,pr.dias||1):[pr.start]}catch(e){ds=[pr.start]}
+      if(ds.length)mx(ds[ds.length-1])})}catch(e){}
+  try{var L=(typeof _crLista==='function'&&_crLista())||[];
+    L.forEach(function(c){if(!c||c.eliminado)return;if(ids?ids.indexOf(c.cron_id)<0:c.activo===false)return;
+      var T=(window._crTar||{})[c.cron_id]||[],alc=(window._crAl||{})[c.cron_id]||{};
+      T.forEach(function(t){if(!t||t.eliminado)return;mx(t.fin);mx(t.fin_rem);
+        try{if(typeof _crFechaTarea==='function')mx(_crFechaTarea(t,alc).fin)}catch(e){}})})}catch(e){}
+  return ult}
+function _wkUltCalc(ids){var d=_wkUltDia(ids),n=d?_wkSemDeISO(d):0;return Math.min(_WK_ULTMAX,Math.max(_WK_ULT0,n||0))}
+/* arma un libro con la rejilla alargada hasta la ultima semana (lee antes las tareas de los elegidos);
+   semN: la semana del reporte, que nunca queda fuera de la rejilla */
+async function _wkConRejilla(ids,fn,semN){var prev=_WK_ULTN;
+  try{try{if(ids&&ids.length&&typeof _crRefresca==='function')_crRefresca(ids)}catch(e){}
+    for(var i=0;i<(ids||[]).length;i++){try{await _crTareas(ids[i]);await _crAlc(ids[i])}catch(e){}}
+    _WK_ULTN=Math.min(_WK_ULTMAX,Math.max(_wkUltCalc(ids||null),Number(semN)||0))}catch(e){_WK_ULTN=null}
+  try{return await fn()}finally{_WK_ULTN=prev}}
 function _wkISO(ser){return new Date(Date.UTC(1899,11,30)+ser*864e5).toISOString().slice(0,10)}
 function _wkLbl(n){var s=_wkSem(n);var F=function(iso){var x=new Date(iso+'T00:00:00');
   var M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   return x.getDate()+' '+M[x.getMonth()]};
   return 'S'+n+' · vie '+F(_wkISO(s.ini))+' → jue '+F(_wkISO(s.fin))}
 function _wkQueToca(){var hoy=(typeof todayISO==='function')?todayISO():'';var mejor=27;
-  for(var n=27;n<=44;n++){if(_wkISO(_wkSem(n).fin)<=hoy)mejor=n}return mejor}
+  for(var n=27;n<=_wkUltN();n++){if(_wkISO(_wkSem(n).fin)<=hoy)mejor=n}return mejor}
 /* el item QPS a su forma canonica x.yy.zz: '3.04.01' queda igual; 1.0101 se parte en pares */
 function _wkClave(txt){
   var t=String(txt==null?'':txt).trim();
@@ -9772,7 +9802,7 @@ function _wkLeerSS(xml){
    obligaria a correr el localSheetId de decenas de miles de nombres definidos. */
 function _wkSemanas(){
   var out=[];
-  for(var n=27;n<=44;n++){var s=_wkSem(n);
+  for(var n=27;n<=_wkUltN();n++){var s=_wkSem(n);
     out.push({n:n,ini:_wkISO(s.ini),fin:_wkISO(s.fin),serial:s.fin})}
   return out}
 /* la curva programada de cada cronograma elegido */
@@ -11018,7 +11048,7 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
       ?('<dataValidations count="2">'+
         '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" '+
         'sqref="N'+r0+':N'+(n-1)+'"><formula1>'+
-        "'PPC ANALISIS'!$C$40:$C$"+(39+((typeof _wkRazonesLista==='function')?_wkRazonesLista(semN).length:14))+'</formula1></dataValidation>'+
+        "'PPC ANALISIS'!$C$"+(40+Math.max(0,nSem-_WK_NSEM0))+":$C$"+(39+Math.max(0,nSem-_WK_NSEM0)+((typeof _wkRazonesLista==='function')?_wkRazonesLista(semN).length:14))+'</formula1></dataValidation>'+
         '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" '+
         'sqref="O'+r0+':O'+(n-1)+'"><formula1>&quot;MY,CPQ-Columbito,MY/CPQ-Columbito&quot;</formula1></dataValidation>'+
         '</dataValidations>')
@@ -11344,6 +11374,28 @@ function _wkCaratulaBase(xml,semN,proyecto){
     _wkTab(_WK_VERDE));
   else x=x.replace('<worksheet','§§WS§§').replace('§§WS§§','<worksheet')
           .replace(/(<worksheet[^>]*>)/,'$1'+_wkTab(_WK_VERDE));
+  return x}
+/* semdin: la tabla de semanas de la caratula (L = numero, M = viernes, N = jueves; S27 en la fila 11) sigue
+   a la rejilla: con mas de 18 semanas se anaden sus filas con el estilo de la fila 28 y el BUSCARV de C18/E18
+   (y cualquier otro que mire $L$11:$N$28) abarca la tabla entera. Con 18 semanas no cambia nada. */
+function _wkCarRejilla(xml,sem){
+  if(!xml||!sem||sem.length<=_WK_NSEM0)return xml;
+  var est=function(c){var m=new RegExp('<c r="'+c+'28"((?:\\s[^>]*?)?)(?:/>|>)').exec(xml);var s2=m?(/\ss="(\d+)"/.exec(m[1])||[])[1]:null;return s2?(' s="'+s2+'"'):''};
+  var eL=est('L'),eM=est('M'),eN=est('N'),ult=10+sem.length;
+  var i0=xml.indexOf('<sheetData'),i1=xml.indexOf('</sheetData>');if(i0<0||i1<0)return xml;
+  var cab=xml.slice(0,xml.indexOf('>',i0)+1),cu=xml.slice(xml.indexOf('>',i0)+1,i1),pie=xml.slice(i1);
+  var filas=[],re=/<row r="(\d+)"((?:\s[^>]*?)?)(?:\/>|>([\s\S]*?)<\/row>)/g,m;
+  while((m=re.exec(cu)))filas.push({r:+m[1],at:m[2],cs:m[3]==null?[]:_wkCeldas(m[3])});
+  for(var i=_WK_NSEM0;i<sem.length;i++){var r=11+i,w=sem[i],f=null;
+    filas.forEach(function(z){if(z.r===r)f=z});if(!f){f={r:r,at:'',cs:[]};filas.push(f)}
+    f.cs=f.cs.filter(function(c){return c.col!=='L'&&c.col!=='M'&&c.col!=='N'})
+      .concat([{col:'L',r:r,at:eL,inner:'<v>'+w.n+'</v>'},{col:'M',r:r,at:eM,inner:'<v>'+w.serIni+'</v>'},{col:'N',r:r,at:eN,inner:'<v>'+w.serFin+'</v>'}])
+      .sort(function(a,b){return _wkColN(a.col)-_wkColN(b.col)})}
+  filas.sort(function(a,b){return a.r-b.r});
+  var out=filas.map(function(z){return '<row r="'+z.r+'"'+z.at.replace(/\sspans="[^"]*"/,'')+(z.cs.length?('>'+z.cs.map(_wkArmaCelda).join('')+'</row>'):'/>')}).join('');
+  var x=cab+out+pie;
+  x=x.replace(/\$L\$11:\$N\$28\b/g,function(){return '$L$11:$N$'+ult});
+  x=x.replace(/<dimension ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/,function(t,a,b,c,d){return '<dimension ref="'+a+b+':'+c+Math.max(+d,ult)+'"/>'});
   return x}
 /* ================= El libro armado por el aplicativo ========================
    Hasta ahora el reporte salia de rellenar una plantilla con un numero de
@@ -12893,7 +12945,8 @@ async function _wkLibroApp(semN,corte,ids){
     bl.ib=ib;
     var h=_wkHojaP6Esp(bl,sem,ib);
     p6[bl.id]=h.xml;p6Ult[bl.id]=h.ultima;p6Fila[bl.id]=h.filaDe});
-  var prog=_wkProgApp({base:base.hojas['PROGRAMACION'],
+  var _wkMas=sem.length-_WK_NSEM0;   /* semdin: semanas de mas sobre las 18 de la plantilla */
+  var prog=_wkProgApp({base:_wkEnsancha(base.hojas['PROGRAMACION'],_wkgCol('N',_WK_NSEM0),_wkMas),
     espina:{id:D.esp.id},bloques:D.bloques,
     semanas:sem,sem:semN,corte:corte,iSem:D.iSem,
     hhTot:D.hhTot,p6Ult:p6Ult,p6Fila:p6Fila,
@@ -12961,7 +13014,7 @@ async function _wkLibroApp(semN,corte,ids){
      y con eso las referencias de las demas hojas resuelven solas. Su dibujo
      -logos y firmas- va con ella. */
   var acp=(base.activos||{})['Car\u00e1tula (P)']||null;
-  hojas.push(['Carátula (P)',_wkLimpiaSalvoDibujo(carXml||car.xml),
+  hojas.push(['Carátula (P)',_wkCarRejilla(_wkLimpiaSalvoDibujo(carXml||car.xml),sem),
     acp?{relsHoja:acp.rels,partes:acp.partes}:null]);
   /* La portada de numeros. Necesita saber en que fila quedo cada resumen, y
      eso solo lo sabe PROGRAMACION, asi que se arma con su mapa. */
@@ -12996,6 +13049,10 @@ async function _wkLibroApp(semN,corte,ids){
     if(ap&&chg.cambios)Object.keys(ap.partes).forEach(function(rp){
       if(!/^xl\/charts\/chart\d+\.xml$/.test(rp))return;
       var ch=_wkChartFilas(ap.partes[rp],'PHYSICAL % PROGRESS',chg.cambios);
+      if(_wkMas>0){var _uP=_wkgCol('O',sem.length),_aP=_wkgCol('O',_WK_NSEM0);
+        ch=ch.replace(new RegExp("('PHYSICAL % PROGRESS'![$]P[$][0-9]+:[$])"+_aP+"([$][0-9]+)","g"),function(_t,a1,b1){return a1+_uP+b1});
+        var _uA=_wkgCol('U',_wkMas);
+        ch=ch.replace(/('(?:STAFFING TABULATION CHART|CONSTRUCTION EQUIPMENT SCHE )'![$][A-Z]+[$][0-9]+:[$])U([$][0-9]+)/g,function(_t,a1,b1){return a1+_uA+b1})}
       /* La serie del ACTUAL termina donde panel.xlsx quedo guardado -la
          columna de SU ultima semana-, y las celdas ya llegan al corte: se le
          corre el final a la columna de la semana generada, semana la que sea.
@@ -13034,14 +13091,14 @@ async function _wkLibroApp(semN,corte,ids){
     colFeeder:sem.map(function(x,i){return _wkFCol(i)})};
   if(base.hojas['METRADO'])
     mete('METRADO',_wkLimpiaHoja(_wkMetradoApp(Object.assign({
-      base:base.hojas['METRADO']},comun)).xml),10);
+      base:_wkEnsancha(base.hojas['METRADO'],_wkgCol('P',_WK_NSEM0),_wkMas)},comun)).xml),10);
   var phy=null;
   if(base.hojas['PHYSICAL % PROGRESS']){
     phy=_wkPhysicalApp(Object.assign({
-      base:base.hojas['PHYSICAL % PROGRESS'],filaIni:15},comun));
+      base:_wkEnsancha(base.hojas['PHYSICAL % PROGRESS'],_wkgCol('O',_WK_NSEM0),_wkMas),filaIni:15},comun));
     mete('PHYSICAL % PROGRESS',phy.xml,15,{grafico:phy.grafico,dibujo:phy.dibujo})}
   if(base.hojas['COSTO']){
-    var cos=_wkCostoApp(Object.assign({base:base.hojas['COSTO'],filaIni:7,
+    var cos=_wkCostoApp(Object.assign({base:_wkEnsancha(base.hojas['COSTO'],_wkgCol('G',_WK_NSEM0),_wkMas),filaIni:7,
       desfasePhy:15-10,
       p6Ult:p6Ult,hojaGG:HGG,celdaGG:'F$86',
       phyAcum:(phy&&phy.acum)||null},comun));
@@ -13050,7 +13107,8 @@ async function _wkLibroApp(semN,corte,ids){
   if(pan)['STAFFING TABULATION CHART','CONSTRUCTION EQUIPMENT SCHE '].forEach(function(nm){
     if(!pan.hojas[nm])return;
     var a2=pan.activos[nm]||null;
-    hojas.push([nm,_wkCorreEstilos(_wkLimpiaSalvoDibujo(pan.hojas[nm]),offPan),
+    /* semdin: sus semanas van de la D a la U (S27..S44); las de mas, detras, con la cabecera (filas 9-11) en serie */
+    hojas.push([nm,_wkCorreEstilos(_wkLimpiaSalvoDibujo(_wkEnsancha(pan.hojas[nm],'U',_wkMas,11)),offPan),
       a2?{relsHoja:a2.rels,partes:a2.partes}:null])});
   ['RFI','FCR'].forEach(function(nm){
     if(!base.hojas[nm])return;
@@ -13084,6 +13142,9 @@ async function _wkLibroApp(semN,corte,ids){
       /* sin indices de metadatos de celda: apuntan al metadata.xml del libro
          origen, que no viaja, y Excel se niega a abrir si los ve */
       x=x.replace(/ (?:cm|vm)="\d+"/g,'');
+      /* semdin: con mas de 18 semanas, una fila mas por semana tras la 27 (S44) y una columna mas tras la U */
+      var _dA=(nm==='PPC ANALISIS')?Math.max(0,(sem||[]).length-_WK_NSEM0):0;
+      if(_dA){x=_wkInserta(x,'r',28,_dA,'PPC ANALISIS');x=_wkInserta(x,'c',22,_dA,'PPC ANALISIS')}
       /* El PPC ANALISIS se recablea a NUESTRO PPC: los conteos del periodo
          miran la columna L (EMP/SI/NO), la malla de razones la columna N
          contra el texto C de su fila, y los responsables la columna O
@@ -13110,38 +13171,41 @@ async function _wkLibroApp(semN,corte,ids){
            ejecutadas programadas (SI) y ejecutadas no programadas (EMP);
            D30, D33 y el PPC (D35) siguen por formula sobre ellos */
         try{var _pm=window._rxPpcMemo;if(_pm&&_pm.sem===semN){
-          x=_wkPonEn(x,'D31',{v:_pm.nOk+_pm.nNo});
-          x=_wkPonEn(x,'D32',{v:_pm.nOk});
-          x=_wkPonEn(x,'D34',{v:_pm.nEmp})}}catch(_e8){}
+          x=_wkPonEn(x,'D'+(31+_dA),{v:_pm.nOk+_pm.nNo});
+          x=_wkPonEn(x,'D'+(32+_dA),{v:_pm.nOk});
+          x=_wkPonEn(x,'D'+(34+_dA),{v:_pm.nEmp})}}catch(_e8){}
         /* RAZONES (desde la fila 40) y RESPONSABLES (desde la 56): las filas
            que hagan falta, con el formato de la plantilla y sus formulas por
            semana (columnas D..U = semanas 27..44, V = total) */
         try{
           var _CAR="'Car\u00e1tula (P)'!$C$17";
-          var _colsSem=[];for(var _c9=3;_c9<=20;_c9++)_colsSem.push(_wkColL(_c9));   /* D..U */
+          var _colsSem=[];for(var _c9=3;_c9<=20+_dA;_c9++)_colsSem.push(_wkColL(_c9));   /* D..U (+ las semanas de mas) */
+          var _cT=_wkColL(21+_dA),_cU=_wkColL(20+_dA),_r39=39+_dA;   /* TOTAL (V) y la fila de las semanas (39) */
           var _fRaz=function(r){var c9={B:{t:r.sigla},C:{t:r.nombre}};
-            _colsSem.forEach(function(cl){c9[cl]={f:'IF('+cl+'$39='+_CAR+',COUNTIF(PPC!$N$'+_f0+':$N$'+_f1+',$C{R}),0)'}});
-            c9.V={f:'SUM(D{R}:U{R})'};return {celdas:c9}};
+            _colsSem.forEach(function(cl){c9[cl]={f:'IF('+cl+'$'+_r39+'='+_CAR+',COUNTIF(PPC!$N$'+_f0+':$N$'+_f1+',$C{R}),0)'}});
+            c9[_cT]={f:'SUM(D{R}:'+_cU+'{R})'};return {celdas:c9}};
           var _RZ=_wkRazonesLista(semN).map(_fRaz);
           var _d1=_RZ.length-14;
-          x=_wkCuerpoFilas(x,40,53,_RZ);
+          x=_wkCuerpoFilas(x,40+_dA,53+_dA,_RZ);
           var _fResp=function(nom,i){var c9={B:{v:i+1},C:{t:nom}};
-            _colsSem.forEach(function(cl){c9[cl]={f:'IF('+cl+'$39='+_CAR+',COUNTIFS('+_L9+',"NO",PPC!$O$'+_f0+':$O$'+_f1+',$C{R}),0)'}});
-            c9.V={f:'SUM(D{R}:U{R})'};return {celdas:c9}};
+            _colsSem.forEach(function(cl){c9[cl]={f:'IF('+cl+'$'+_r39+'='+_CAR+',COUNTIFS('+_L9+',"NO",PPC!$O$'+_f0+':$O$'+_f1+',$C{R}),0)'}});
+            c9[_cT]={f:'SUM(D{R}:'+_cU+'{R})'};return {celdas:c9}};
           var _RS=_wkResponsablesLista(semN).map(_fResp);
-          var _r56=56+_d1;
+          var _r56=56+_dA+_d1;
           x=_wkCuerpoFilas(x,_r56,_r56+1,_RS);
           /* la fila de RESPONSABLE DE RESTRICCION suma todas las filas */
-          var _r55=55+_d1,_rFin=_r56+_RS.length-1;
-          _colsSem.concat(['V']).forEach(function(cl){x=_wkPonEn(x,cl+_r55,{f:'SUM('+cl+_r56+':'+cl+_rFin+')'})});
+          var _r55=55+_dA+_d1,_rFin=_r56+_RS.length-1;
+          _colsSem.concat([_cT]).forEach(function(cl){x=_wkPonEn(x,cl+_r55,{f:'SUM('+cl+_r56+':'+cl+_rFin+')'})});
           /* {R}: la fila propia de cada celda */
           x=x.replace(/<c r="([A-Z]+)(\d+)"([^>]*)><f>([^<]*\{R\}[^<]*)<\/f>/g,function(_t,c,r,at,f){return '<c r="'+c+r+'"'+at+'><f>'+f.split('{R}').join(r)+'</f>'});
         }catch(_e9r){}
-        for(var _r9=10;_r9<=27;_r9++){
+        for(var _r9=10;_r9<=27+_dA;_r9++){
           var _s9=_r9+17;
+          /* semdin: las filas de las semanas de mas llevan su numero y su formula */
+          if(_r9>27){x=_wkPonEn(x,'B'+_r9,{v:_s9});if(_s9>semN)x=_wkPonEn(x,'C'+_r9,{f:'IF($I$3='+_s9+',$D$'+(35+_dA)+',"")'})}
           if(_s9<semN)x=_wkPonEn(x,'C'+_r9,
             {f:"IFERROR('3WLookahead_PPC'!"+_wkColL(2+_s9-27)+'11,"")'});
-          else if(_s9===semN)x=_wkPonEn(x,'C'+_r9,{f:'$D$35'})}}
+          else if(_s9===semN)x=_wkPonEn(x,'C'+_r9,{f:'$D$'+(35+_dA)})}}
       /* El Analisis de Restricciones jala de la hoja 3WLA y del aplicativo:
          E, F, G y L con formula a la 3WLA (nombre, restriccion, solucion y
          quien de la fila de esa actividad); H = cuando se registro la
@@ -13199,6 +13263,11 @@ async function _wkLibroApp(semN,corte,ids){
             .forEach(function(z9){_fila(z9,true)})}
         x=_wkCuerpoFilas(x,9,27,FIL)}
       var a=ana.activos[nH]||null;
+      /* semdin: el dibujo y los graficos de la hoja siguen a las filas y columnas insertadas (copia: la cache no se toca) */
+      if(a&&_dA){var _pz={};Object.keys(a.partes||{}).forEach(function(q){var v=a.partes[q];
+          if(typeof v==='string'&&/drawings\/drawing\d+\.xml$/.test(q))v=_wkInsDibujo(_wkInsDibujo(v,'r',28,_dA),'c',22,_dA);
+          else if(typeof v==='string'&&/charts\/chart\d+\.xml$/.test(q))v=_wkInsGrafico(_wkInsGrafico(v,'r',28,_dA,'PPC ANALISIS'),'c',22,_dA,'PPC ANALISIS');
+          _pz[q]=v});a={rels:a.rels,partes:_pz}}
       hojas.push([nm,_wkPonTab(x,_WK_AZUL),a?{relsHoja:a.rels,partes:a.partes}:null])});
   }catch(_ea9){}
   }catch(_elk){try{console.warn('lookahead:',_elk)}catch(_e5){}}
@@ -13892,6 +13961,152 @@ function _wkCeldas(cuerpo){
 function _wkArmaCelda(c){
   if(c.inner==null||c.inner==='')return '<c r="'+c.col+c.r+'"'+c.at+'/>';
   return '<c r="'+c.col+c.r+'"'+c.at+'>'+c.inner+'</c>'}
+var _WK_NSEM0=18;   /* las semanas que trae la plantilla (S27..S44) */
+/* ---- semdin: insertar n filas (eje 'r') o n columnas (eje 'c') en una hoja, como lo haria Excel ----
+   _wkInsRefs(f,eje,desde,n,yo): las referencias de la formula a ESTA hoja (sin prefijo o con el prefijo de su
+   nombre `yo`) cuya fila (o columna) sea >= desde se corren n, con $ o sin el; un rango que cruza el punto de
+   insercion se estira. Las de otras hojas no se tocan. */
+function _wkInsRefs(f,eje,desde,n,yo){
+  f=String(f);var out='',i=0,L=f.length,hoja=null,self=String(yo||'');
+  var rxA=/^(\$?)([A-Z]{1,3})(\$?)([0-9]{1,7})(?::(\$?)([A-Z]{1,3})(\$?)([0-9]{1,7}))?/,rxC=/^(\$?)([A-Z]{1,3}):(\$?)([A-Z]{1,3})(?![0-9A-Za-z_(])/,rxR=/^(\$?)([0-9]{1,7}):(\$?)([0-9]{1,7})(?![0-9A-Za-z_(])/;
+  var mueve=function(){return hoja==null||hoja===self};
+  var cR=function(r){r=+r;return (eje==='r'&&r>=desde)?r+n:r},cC=function(c){var k=_wkColN(c);return _wkColDe((eje==='c'&&k>=desde)?k+n:k)};
+  while(i<L){var ch=f.charAt(i),prev=i?f.charAt(i-1):'';
+    if(ch==='"'){var j=f.indexOf('"',i+1);while(j>=0&&f.charAt(j+1)==='"')j=f.indexOf('"',j+2);if(j<0)j=L-1;out+=f.slice(i,j+1);i=j+1;hoja=null;continue}
+    if(ch==="'"){var k=i+1;while(k<L){if(f.charAt(k)==="'"){if(f.charAt(k+1)==="'"){k+=2;continue}break}k++}
+      var nom=f.slice(i+1,k).replace(/''/g,"'");out+=f.slice(i,k+1);i=k+1;if(f.charAt(i)==='!'){out+='!';i++;hoja=nom;continue}hoja=null;continue}
+    if(!/[A-Za-z0-9_.]/.test(prev)){
+      var r=f.slice(i),m;
+      if(/[A-Z$]/.test(ch)&&(m=rxC.exec(r))){out+=mueve()?(m[1]+cC(m[2])+':'+m[3]+cC(m[4])):m[0];i+=m[0].length;hoja=null;continue}
+      if(/[0-9$]/.test(ch)&&(m=rxR.exec(r))){out+=mueve()?(m[1]+cR(m[2])+':'+m[3]+cR(m[4])):m[0];i+=m[0].length;hoja=null;continue}
+      if(/[A-Z$]/.test(ch)&&(m=rxA.exec(r))&&!/[A-Za-z0-9_(]/.test(r.charAt(m[0].length))){
+        if(mueve()){out+=m[1]+cC(m[2])+m[3]+cR(m[4]);if(m[6])out+=':'+m[5]+cC(m[6])+m[7]+cR(m[8])}else out+=m[0];
+        i+=m[0].length;hoja=null;continue}
+      var w=/^[A-Za-z_][A-Za-z0-9_.]*/.exec(r);
+      if(w){out+=w[0];i+=w[0].length;if(f.charAt(i)==='!'){hoja=w[0];out+='!';i++}else hoja=null;continue}}
+    out+=ch;i++;if(ch!=='$')hoja=(ch==='!')?hoja:null}
+  return out}
+/* la hoja entera: celdas, filas, formulas, combinaciones, sqref/ref, validaciones, formatos condicionales,
+   columnas y dimension. Las celdas nuevas se clonan de la fila (o columna) anterior al punto de insercion:
+   mismo estilo, la formula con sus relativas corridas y un numero que crece sigue la serie. */
+function _wkInserta(xml,eje,desde,n,yo){
+  n=Number(n)||0;if(!(n>0)||!xml)return xml;
+  var i0=xml.indexOf('<sheetData'),i1=xml.indexOf('</sheetData>');if(i0<0||i1<0)return xml;
+  var cab=xml.slice(0,xml.indexOf('>',i0)+1),cuerpo=xml.slice(xml.indexOf('>',i0)+1,i1),pie=xml.slice(i1);
+  var F=function(t){return _wkEsc(_wkInsRefs(_wkXmlTxt(t),eje,desde,n,yo))};
+  var fCel=function(inner){return inner==null?inner:inner.replace(/(<f\b[^>]*>)([\s\S]*?)(<\/f>)/,function(t,a,b,c){
+      a=a.replace(/\bref="([^"]+)"/,function(z,v){return 'ref="'+_wkInsRefs(v,eje,desde,n,null)+'"'});return a+F(b)+c})
+    .replace(/<f\b([^>]*?)\/>/,function(t,a){return '<f'+a.replace(/\bref="([^"]+)"/,function(z,v){return 'ref="'+_wkInsRefs(v,eje,desde,n,null)+'"'})+'/>'})};
+  var numDe=function(c){if(!c||c.inner==null||/<f\b/.test(c.inner)||/\bt="/.test(c.at))return null;var v=/<v>([^<]*)<\/v>/.exec(c.inner);if(!v)return null;var x=Number(v[1]);return isFinite(x)?x:null};
+  var clon=function(c,ref,k,prev){var st=(/\ss="(\d+)"/.exec(c.at)||[])[1],a='<c r="'+ref+'"'+(st?(' s="'+st+'"'):'');
+    var fm=c.inner?/<f\b[^>]*>([\s\S]+?)<\/f>/.exec(c.inner):null;
+    if(fm)return a+'><f>'+_wkEsc(_wkCorreRefs(_wkInsRefs(_wkXmlTxt(fm[1]),eje,desde,n,yo),eje==='c'?k:0,eje==='r'?k:0))+'</f></c>';
+    var v1=numDe(c),v0=numDe(prev);if(v1!=null&&v0!=null)return a+'><v>'+(v1+k*(v1-v0))+'</v></c>';
+    return a+'/>'};
+  var filas=[],re=/<row r="(\d+)"((?:\s[^>]*?)?)(\/>|>([\s\S]*?)<\/row>)/g,m;
+  while((m=re.exec(cuerpo)))filas.push({r:+m[1],at:m[2],cs:m[4]==null?null:_wkCeldas(m[4])});
+  var out=[];
+  if(eje==='r'){
+    var mod=null,modP=null;filas.forEach(function(f){if(f.r===desde-1)mod=f;if(f.r===desde-2)modP=f});
+    filas.forEach(function(f){
+      var r2=f.r>=desde?f.r+n:f.r;
+      var cs=f.cs?f.cs.map(function(c){return _wkArmaCelda({col:c.col,r:r2,at:c.at,inner:fCel(c.inner)})}).join(''):null;
+      out.push({r:r2,x:'<row r="'+r2+'"'+f.at+(cs==null?'/>':('>'+cs+'</row>'))});
+      if(f===mod)for(var k=1;k<=n;k++){var rr=desde-1+k,pv={};(modP&&modP.cs||[]).forEach(function(c){pv[c.col]=c});
+        var cs2=(mod.cs||[]).map(function(c){return clon(c,c.col+rr,k,pv[c.col])}).join('');
+        out.push({r:rr,x:'<row r="'+rr+'"'+mod.at.replace(/\s*hidden="1"/,'')+'>'+cs2+'</row>'})}});
+    out.sort(function(a,b){return a.r-b.r})}
+  else{
+    var cm=_wkColDe(desde-1),cp=_wkColDe(desde-2);
+    filas.forEach(function(f){
+      var at=f.at.replace(/\sspans="(\d+):(\d+)"/,function(z,a,b){return ' spans="'+(+a>=desde?+a+n:a)+':'+(+b>=desde-1?+b+n:b)+'"'});
+      if(f.cs==null){out.push({r:f.r,x:'<row r="'+f.r+'"'+at+'/>'});return}
+      var s='',mod=null,pv=null;f.cs.forEach(function(c){if(c.col===cm)mod=c;if(c.col===cp)pv=c});
+      var pon=function(){if(mod){for(var k=1;k<=n;k++)s+=clon(mod,_wkColDe(desde-1+k)+f.r,k,pv)}mod=null};
+      f.cs.forEach(function(c){var k0=_wkColN(c.col);if(k0>=desde)pon();
+        s+=_wkArmaCelda({col:k0>=desde?_wkColDe(k0+n):c.col,r:f.r,at:c.at,inner:fCel(c.inner)})});
+      pon();out.push({r:f.r,x:'<row r="'+f.r+'"'+at+'>'+s+'</row>'})})}
+  var rango=function(v){return String(v).split(' ').map(function(rg){return _wkInsRefs(rg,eje,desde,n,null)}).join(' ')};
+  /* ref= abarca las combinaciones (mergeCell), el autofiltro y los hipervinculos; sqref los formatos y validaciones */
+  pie=pie.replace(/\b(sqref|ref)="([^"]+)"/g,function(t,k,v){return k+'="'+rango(v)+'"'})
+    .replace(/<(formula|formula1|formula2)>([\s\S]*?)<\/\1>/g,function(t,k,v){return '<'+k+'>'+F(v)+'</'+k+'>'});
+  cab=cab.replace(/<dimension ref="([^"]+)"\/>/,function(t,v){return '<dimension ref="'+rango(v)+'"/>'});
+  if(eje==='c')cab=cab.replace(/<cols>([\s\S]*?)<\/cols>/,function(t,inner){var o='';
+    inner.replace(/<col\b([^>]*?)\/>/g,function(z,at){var a=+(/\bmin="(\d+)"/.exec(at)||[])[1],b=+(/\bmax="(\d+)"/.exec(at)||[])[1];
+      var put=function(x,y){o+='<col'+at.replace(/\bmin="\d+"/,'min="'+x+'"').replace(/\bmax="\d+"/,'max="'+y+'"')+'/>'};
+      if(b<desde-1)put(a,b);
+      else if(a>=desde)put(a+n,Math.min(16384,b+n));
+      else{put(a,desde-1);put(desde,desde-1+n);if(b>=desde)put(desde+n,Math.min(16384,b+n))}
+      return z});return '<cols>'+o+'</cols>'});
+  return cab+out.map(function(q){return q.x}).join('')+pie}
+/* los anclajes de un dibujo (0 = primera fila/columna) y los rangos de un grafico, para la misma insercion */
+function _wkInsDibujo(dx,eje,desde,n){var tag=eje==='r'?'row':'col';
+  return String(dx).replace(new RegExp('<xdr:'+tag+'>(\\d+)</xdr:'+tag+'>','g'),function(t,v){v=+v;return '<xdr:'+tag+'>'+(v>=desde-1?v+n:v)+'</xdr:'+tag+'>'})}
+function _wkInsGrafico(cx,eje,desde,n,yo){return String(cx).replace(/<c:f>([\s\S]*?)<\/c:f>/g,function(t,f){return '<c:f>'+_wkEsc(_wkInsRefs(_wkXmlTxt(f),eje,desde,n,yo))+'</c:f>'})}
+/* ---- semdin: semanas de mas en las hojas que vienen de una plantilla de 18 semanas ----
+   _wkCorreRefs(f,dc,dr): corre las referencias RELATIVAS de una formula dc columnas y dr filas (las de $ no se
+   mueven; se saltan las cadenas "..." y los nombres de hoja); las de columna entera (Z:Z) corren su columna. */
+function _wkColN(c){var n=0;c=String(c);for(var i=0;i<c.length;i++)n=n*26+(c.charCodeAt(i)-64);return n}
+function _wkColDe(n){var s='';while(n>0){var r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26)}return s}
+function _wkCorreRefs(f,dc,dr){
+  f=String(f);var out='',i=0,n=f.length;
+  var rx=/^(\$?)([A-Z]{1,3})(\$?)([0-9]{1,7})/,rxc=/^(\$?)([A-Z]{1,3}):(\$?)([A-Z]{1,3})(?![0-9A-Za-z_(])/;
+  while(i<n){var ch=f.charAt(i);
+    if(ch==='"'){var j=f.indexOf('"',i+1);while(j>=0&&f.charAt(j+1)==='"')j=f.indexOf('"',j+2);if(j<0)j=n-1;out+=f.slice(i,j+1);i=j+1;continue}
+    if(ch==="'"){var k=i+1;while(k<n){if(f.charAt(k)==="'"){if(f.charAt(k+1)==="'"){k+=2;continue}break}k++}out+=f.slice(i,k+1);i=k+1;continue}
+    var prev=i?f.charAt(i-1):'';
+    if(/[A-Z$]/.test(ch)&&!/[A-Za-z0-9_.]/.test(prev)){
+      var r=f.slice(i),mc=rxc.exec(r);
+      if(mc){var c1=_wkColN(mc[2]),c2=_wkColN(mc[4]);out+=mc[1]+_wkColDe(mc[1]?c1:c1+dc)+':'+mc[3]+_wkColDe(mc[3]?c2:c2+dc);i+=mc[0].length;continue}
+      var m=rx.exec(r);
+      if(m&&!/[A-Za-z0-9_(]/.test(r.charAt(m[0].length))){
+        var cc=_wkColN(m[2]),rr=+m[4];out+=m[1]+_wkColDe(m[1]?cc:cc+dc)+m[3]+(m[3]?rr:rr+dr);i+=m[0].length;continue}
+      var w=/^[A-Za-z_][A-Za-z0-9_.]*/.exec(r);if(w){out+=w[0];i+=w[0].length;continue}}
+    if(/[A-Za-z_]/.test(ch)){var w2=/^[A-Za-z_][A-Za-z0-9_.]*/.exec(f.slice(i));out+=w2[0];i+=w2[0].length;continue}
+    out+=ch;i++}
+  return out}
+/* _wkEnsancha(xml, ult, n): la hoja de la plantilla con n semanas mas detras de su ultima columna de semana
+   (ult, p.ej. 'AF'): cada celda de la columna ult se clona en las n siguientes con su estilo; la formula
+   (tambien la compartida, que se resuelve desde su maestra) se corre k columnas; un numero suelto que crece
+   de columna en columna (27, 28.. o los seriales de la semana) sigue la serie; el texto no se copia. Las
+   columnas (<cols>), los spans, la dimension, las combinaciones y los sqref que acaban en ult se estiran.
+   Con n<=0 devuelve la hoja tal cual. filaSerie (opcional): solo hasta esa fila un numero sigue la serie; debajo
+   (datos escritos a mano) la celda nueva va vacia, con su estilo: no se inventan datos. */
+function _wkEnsancha(xml,ult,n,filaSerie){
+  n=Number(n)||0;if(!(n>0)||!xml)return xml;
+  var U=_wkColN(ult),i0=xml.indexOf('<sheetData'),i1=xml.indexOf('</sheetData>');if(i0<0||i1<0)return xml;
+  var cab=xml.slice(0,xml.indexOf('>',i0)+1),cuerpo=xml.slice(xml.indexOf('>',i0)+1,i1),pie=xml.slice(i1);
+  var M={};cuerpo.replace(/<c r="([A-Z]+)(\d+)"(?:\s[^>]*[^\/])?>(?:(?!<\/c>|<c )[\s\S])*?<f(\s[^>]*[^\/])?>([\s\S]*?)<\/f>/g,function(t,c,r,at,fx){at=at||'';
+    var si=/\bsi="(\d+)"/.exec(at);if(/t="shared"/.test(at)&&si&&/\bref="/.test(at))M[si[1]]={c:_wkColN(c),r:+r,f:_wkXmlTxt(fx)};return t});
+  var numDe=function(inner,at){if(inner==null||/<f\b/.test(inner)||/\bt="/.test(at))return null;var v=/<v>([^<]*)<\/v>/.exec(inner);if(!v)return null;var x=Number(v[1]);return isFinite(x)?x:null};
+  var cuerpo2=cuerpo.replace(/<row r="(\d+)"((?:\s[^>]*?)?)(\/>|>([\s\S]*?)<\/row>)/g,function(t,r,at,cierre,inner){
+    var at2=at.replace(/\sspans="(\d+):(\d+)"/,function(z,a,b){return (+b===U)?(' spans="'+a+':'+(U+n)+'"'):z});
+    if(inner==null)return '<row r="'+r+'"'+at2+'/>';
+    var cs=_wkCeldas(inner),k0=-1,pv=null;
+    cs.forEach(function(c,ix){if(c.col===ult)k0=ix;if(_wkColN(c.col)===U-1)pv=c});
+    if(k0<0)return '<row r="'+r+'"'+at2+'>'+inner+'</row>';
+    var c=cs[k0],st=(/\ss="(\d+)"/.exec(c.at)||[])[1],fx=null,fm=c.inner?/<f\b([^>]*?)(?:\/>|>([\s\S]*?)<\/f>)/.exec(c.inner):null;
+    if(fm){var fat=fm[1]||'',si=/\bsi="(\d+)"/.exec(fat);
+      if(fm[2]!=null&&fm[2]!=='')fx=_wkXmlTxt(fm[2]);
+      else if(/t="shared"/.test(fat)&&si&&M[si[1]]){var q=M[si[1]];fx=_wkCorreRefs(q.f,U-q.c,+r-q.r)}}
+    var v1=numDe(c.inner,c.at),v0=pv?numDe(pv.inner,pv.at):null,nuevas='';if(filaSerie!=null&&+r>filaSerie)v1=null;
+    for(var k=1;k<=n;k++){var ref=_wkColDe(U+k)+r,a='<c r="'+ref+'"'+(st?(' s="'+st+'"'):'');
+      if(fx!=null)nuevas+=a+'><f>'+_wkEsc(_wkCorreRefs(fx,k,0))+'</f></c>';
+      else if(v1!=null&&v0!=null)nuevas+=a+'><v>'+(v1+k*(v1-v0))+'</v></c>';
+      else nuevas+=a+'/>'}
+    var out='';cs.forEach(function(x,ix){out+=_wkArmaCelda(x);if(ix===k0)out+=nuevas});
+    return '<row r="'+r+'"'+at2+'>'+out+'</row>'});
+  var estira=function(rg){var m=/^(\$?)([A-Z]{1,3})(\$?)(\d+):(\$?)([A-Z]{1,3})(\$?)(\d+)$/.exec(rg);
+    if(m&&_wkColN(m[6])===U&&_wkColN(m[2])<U)return m[1]+m[2]+m[3]+m[4]+':'+m[5]+_wkColDe(U+n)+m[7]+m[8];return rg};
+  pie=pie.replace(/<mergeCell ref="([^"]+)"\/>/g,function(t,rg){var m=/^([A-Z]{1,3})(\d+):([A-Z]{1,3})(\d+)$/.exec(rg);if(!m)return t;
+    if(m[1]===ult&&m[3]===ult){var o=t;for(var k=1;k<=n;k++){var cl=_wkColDe(U+k);o+='<mergeCell ref="'+cl+m[2]+':'+cl+m[4]+'"/>'}return o}
+    return '<mergeCell ref="'+estira(rg)+'"/>'});
+  pie=pie.replace(/<mergeCells count="\d+"/,function(){return '<mergeCells count="'+(pie.match(/<mergeCell ref=/g)||[]).length+'"'});
+  pie=pie.replace(/\bsqref="([^"]+)"/g,function(t,v){return 'sqref="'+v.split(' ').map(estira).join(' ')+'"'});
+  cab=cab.replace(/<dimension ref="([^"]+)"\/>/,function(t,v){return '<dimension ref="'+estira(v)+'"/>'});
+  cab=cab.replace(/<col\b([^>]*?)\/>/g,function(t,at){var a=/\bmin="(\d+)"/.exec(at),b=/\bmax="(\d+)"/.exec(at);if(!a||!b)return t;
+    if(+a[1]<=U&&+b[1]>=U&&+b[1]<U+n)return '<col'+at.replace(/\bmax="\d+"/,'max="'+(U+n)+'"')+'/>';return t});
+  return cab+cuerpo2+pie}
 /* crons: [{cron_id,...}] en el orden en que deben salir. La primera se queda
    con la fila que ya existe; las demas son clones nuevos. */
 function _wkTresLineas(xml,crons,p6s){
@@ -15762,7 +15977,7 @@ function _wkGenSuf(){return ' — Gen '+_wkGenActiva().id}
 async function _wkLibroGen(semN,corte,ids){
   var g=_wkGenActiva(),f=(typeof window!=='undefined')?window[g.fn]:null;
   if(typeof f!=='function')throw new Error('la generación '+g.id+' no tiene armador ('+g.fn+')');
-  return await f(semN,corte,ids)}
+  return await _wkConRejilla(ids,function(){return f(semN,corte,ids)},semN)}
 /* ---- Notas de la generacion ---------------------------------------------
    Nada inventado: cuando un dato NO existe en el aplicativo la celda se
    deja vacia y se apunta aqui de que hoja y de que celda se trata, y por
@@ -20955,7 +21170,8 @@ async function _wkBLibroApp(semN,corte,ids,opc){
     Z.car=[_WGB5_CAR,_wkLimpiaSalvoDibujo(xmlDe(_WGB5_CAR,car)),
       acp?{relsHoja:acp.rels,partes:acp.partes}:null];
     /* PROGRAMACION: el builder de A con los bloques de B, y sus arreglos */
-    var Pp={base:base.hojas['PROGRAMACION'],espina:{id:idEsp},bloques:BL,
+    var _bMas=Math.max(0,sem.length-_WK_NSEM0);   /* semdin: plantilla de 18 semanas ensanchada a la rejilla */
+    var Pp={base:_wkEnsancha(base.hojas['PROGRAMACION'],_wkgCol('N',_WK_NSEM0),_bMas),espina:{id:idEsp},bloques:BL,
       semanas:sem,sem:semN,corte:CTX.K.corte,iSem:CTX.iSem,hhTot:hhTot,
       p6Ult:p6Ult,p6Fila:p6Fila,
       colFeeder:sem.map(function(x,k){return _wkFCol(k)}),
@@ -20976,20 +21192,20 @@ async function _wkBLibroApp(semN,corte,ids,opc){
       t1Hojas:t1Nom,t23Hojas:t23Nom,t1Filas:t1Fila,t23Filas:t23Fila};
     if(base.hojas['METRADO']){
       var met=await arma('METRADO',function(){
-        return _wkBMetrado(Object.assign({base:base.hojas['METRADO']},comun))});
+        return _wkBMetrado(Object.assign({base:_wkEnsancha(base.hojas['METRADO'],_wkgCol('P',_WK_NSEM0),_bMas)},comun))});
       Z.met=['METRADO',pinta(_wkLimpiaHoja(xmlDe('METRADO',met)),10),null]}
     else nota('METRADO','(hoja)','la hoja METRADO','el libro guía no la trae');
     var phy=null;
     if(base.hojas['PHYSICAL % PROGRESS']){
       phy=await arma('PHYSICAL % PROGRESS',function(){
-        return _wkBPhysical(Object.assign({base:base.hojas['PHYSICAL % PROGRESS'],
+        return _wkBPhysical(Object.assign({base:_wkEnsancha(base.hojas['PHYSICAL % PROGRESS'],_wkgCol('O',_WK_NSEM0),_bMas),
           filaIni:15},comun))});
       Z.phy=['PHYSICAL % PROGRESS',pinta(xmlDe('PHYSICAL % PROGRESS',phy),15),
         (phy.grafico?{grafico:phy.grafico,dibujo:phy.dibujo}:null)]}
     else nota('PHYSICAL % PROGRESS','(hoja)','la hoja PHYSICAL','el libro guía no la trae');
     if(base.hojas['COSTO']){
       var cos=await arma('COSTO',function(){
-        return _wkBCosto(Object.assign({base:base.hojas['COSTO'],filaIni:7,
+        return _wkBCosto(Object.assign({base:_wkEnsancha(base.hojas['COSTO'],_wkgCol('G',_WK_NSEM0),_bMas),filaIni:7,
           desfasePhy:15-10,p6Ult:p6Ult,hojaGG:HGG,celdaGG:'F$86',
           phyAcum:(phy&&phy.acum)||null},comun))});
       Z.cos=['COSTO',pinta(xmlDe('COSTO',cos),7),null]}
@@ -21571,7 +21787,7 @@ function _wkECtx(LB,opt){
     var ult=0;I.m.rows.forEach(function(rw){if(rw.r<4)return;rw.c.forEach(function(c){if(c.c>15&&c.c>ult&&(_wkeTieneDato(c)||c.s))ult=c.c})});
     var w9=9;if(k==='PPC'&&E.opt.ppcUnaFila&&c0&&n&&typeof _wkGPCtx==='function')w9=_wkGPCtx(E,I,c0,n)||9;   /* G.001: semanas de 18 */
     I.loFin=(k==='3WLA')?14:15;   /* 3WLA: FILTRO (O) no se muda, se queda tras las fijas */
-    if(c0&&n){I.colN=Math.max(c0+w9*n,ult+1);I.mueve=true;if(c0+w9*n!==ult+1)_wkeLog(E,k+': bloque de semanas inesperado (fin '+_wkeCL(c0+w9*n-1)+', ultima usada '+_wkeCL(ult)+'); L:O va a '+_wkeCL(I.colN))}
+    if(c0&&n){I.colN=Math.max(c0+w9*n,ult+1);I.mueve=true;I.sem={c0:c0,n:n,w:w9};if(c0+w9*n!==ult+1)_wkeLog(E,k+': bloque de semanas inesperado (fin '+_wkeCL(c0+w9*n-1)+', ultima usada '+_wkeCL(ult)+'); L:O va a '+_wkeCL(I.colN))}
     else _wkeLog(E,k+': no se encontraron las semanas de la fila 4; L:O no se mueve')});
   return E}
 /* ancho visible (px) de cada columna y alto (pt) de cada fila */
@@ -22226,10 +22442,28 @@ function _wkEValida(E){var err=[],nom={};E.hojas.forEach(function(h){nom[h[0]]=1
     String(ex.partes[q]).replace(/<c:f>([\s\S]*?)<\/c:f>/g,function(a,f){mira(q,_wkeUnesc(f),null);return a})})});
   E.errores=err;if(err.length)_wkeLog(E,'VALIDACION: '+err.length+' problemas; p.ej. '+err.slice(0,5).join(' | '));return err}
 /* ---------- orquestador puro ---------- */
+/* semdin: la cabecera de cada semana de PPC y 3WLA (fila SEMANA n, la de fechas y la de las letras del dia:
+   filas 11 a 13 del libro; en la PPC de una fila de la G, de la 11 a la 14 con la banda PROGRAMADO | REALIZADO)
+   lleva un MARCO GRUESO alrededor de cada bloque de semana. Solo cambia el borde exterior de las celdas del
+   borde del bloque: misma letra, relleno, formato y alineacion; ni valores ni formulas. */
+function _wkEMarcoMod(E,s,lados){var S=E.S,ld=lados.slice().sort(),key='EMS|'+(s||0)+'|'+ld.join(',');
+  if(S.cache[key]!=null){if(S.toc)S.toc[S.cache[key]]=1;return S.cache[key]}
+  var X=_wkeXfInfo(S,s||0),B0=_wkeBordeInfo(S,X.border),B={};
+  ['left','right','top','bottom'].forEach(function(sd){if(B0[sd])B[sd]=[B0[sd][0],'FF'+B0[sd][1]]});
+  ld.forEach(function(sd){B[sd]=['thick',_WKE_PAL.NOCHE]});
+  var r=_wkeXf(S,{nf:X.nf,font:X.font,fill:X.fill,border:_wkeBorder(S,B),xfId:X.xfId,prot:X.prot,al:X.al});
+  if(S.toc)S.toc[r]=1;return (S.cache[key]=r)}
+function _wkEMarcoSem(E){['PPC','3WLA'].forEach(function(k){var I=E.by[k];if(!I||!I.sem)return;
+  var Q=I.sem,m=I.m,r1=11,r2=(k==='PPC'&&I.g)?14:13;
+  for(var b=0;b<Q.n;b++){var a=Q.c0+Q.w*b,z=a+Q.w-1;
+    for(var r=r1;r<=r2;r++){if(!_wkeRow(m,r))continue;
+      for(var c=a;c<=z;c++){var ld=[];if(c===a)ld.push('left');if(c===z)ld.push('right');if(r===r1)ld.push('top');if(r===r2)ld.push('bottom');
+        if(!ld.length)continue;var ce=_wkeCel(m,c,r,true);ce.s=_wkEMarcoMod(E,ce.s,ld)}}}})}
 function _wkEPost(LB,opt){var E=_wkECtx(LB,opt);
   E.S.toc={};E._tocado=function(s){return !!E.S.toc[s]};
   _wkELeePrevios(E);_wkEAnclasFijas(E);_wkERemap(E);_wkEDatoPorCelda(E);_wkFDatoPorCelda(E);_wkEAnchos(E);_wkFAnchos(E);_wkERoles(E);if(E.opt.ppcUnaFila&&typeof _wkGPMarco==='function')_wkGPMarco(E);
   _wkEEncabezado(E);_wkEVistasImpresion(E);_wkEDerecha(E);_wkEAltos(E);_wkELogos(E);
+  _wkEMarcoSem(E);   /* semdin: al final, para que sus estilos nuevos no corran los indices de los demas */
   /* dimension y serializacion */
   Object.keys(E.by).forEach(function(k){var I=E.by[k],m=I.m,mc=1,mr=1;m.rows.forEach(function(r){if(r.r>mr)mr=r.r;r.c.forEach(function(c){if(c.c>mc)mc=c.c})});
     m.hp.dimension='<dimension ref="A1:'+_wkeCL(mc)+mr+'"/>';E.hojas[I.i][1]=_wkeSer(m);E.hojas[I.i][2]=I.ex||E.hojas[I.i][2]});
@@ -22364,28 +22598,32 @@ function _wkFAnchos(E){
     if(s0[0]===s1[0]&&s0[1]===s1[1]){Object.keys(W).forEach(function(q){_wkFColsSet(RG.m,+q,+q,W[q])});_wkFReancla(E,RG,2,14)}
     else _wkeLog(E,'Registro Fot SEM: la plantilla cambio de anchos (B:G '+s0[0]+' px, I:N '+s0[1]+' px); no se redistribuyen')}}
 /* roles de tabla de las 5 hojas (lo que no toquen aqui lo pasa a la paleta el barrido GEN de _wkERoles) */
+/* semdin: la ultima columna de semanas de STAFFING / EQUIPMENT (fila 16 = numero de semana tras el remapeo); minimo la U */
+function _wkFUltSem(E,I){var u=21,row=I?_wkeRow(I.m,16):null;
+  if(row)row.c.forEach(function(ce){if(ce.c>u&&!_wkeFml(ce)){var L=_wkeLit(ce,E.SS);if(L&&L.t!=='s'&&isFinite(Number(L.v))&&Number(L.v)>=27)u=ce.c}});return u}
 function _wkFRoles(E){
   var tx=function(I,c,r){return _wkFTxt(E,I,c,r).trim()};
   var datos=function(row,c1,c2){return row.c.some(function(ce){return ce.c>=c1&&ce.c<=c2&&_wkeTieneDato(ce)&&!/^<is><t[^>]*><\/t><\/is>$/.test(ce.i)})};
   var nb=function(I){return function(ce,rr){return {nb:!_wkeEsTxt(E,I,ce,rr)}}};
   var ST=E.by['STAFFING TABULATION CHART'],EQ=E.by['CONSTRUCTION EQUIPMENT SCHE'];
   /* cabecera de semanas: numero / desde / hasta (sin negrita en numeros y fechas) */
-  if(ST){for(var r=16;r<=18;r++)_wkEPintaFila(E,ST,r,'TH',nb(ST),3,21,true);
+  var uST=_wkFUltSem(E,ST),uEQ=_wkFUltSem(E,EQ);
+  if(ST){for(var r=16;r<=18;r++)_wkEPintaFila(E,ST,r,'TH',nb(ST),3,uST,true);
     _wkEPintaFila(E,ST,16,'TH',{},2,2,true);_wkEPintaFila(E,ST,17,'THX',{l:1},2,2,true);_wkEPintaFila(E,ST,18,'THX',{l:1},2,2,true)}
-  if(EQ){[16,17,18].forEach(function(r2){_wkEPintaFila(E,EQ,r2,'TH',nb(EQ),4,21,true);
+  if(EQ){[16,17,18].forEach(function(r2){_wkEPintaFila(E,EQ,r2,'TH',nb(EQ),4,uEQ,true);
       _wkEPintaFila(E,EQ,r2,'THX',function(ce){return {l:ce.c===2?1:0,r:ce.c===3?1:0,t:r2===16?1:0}},2,3,true)});
-    _wkEPintaFila(E,EQ,19,'TH',nb(EQ),2,21,true)}
+    _wkEPintaFila(E,EQ,19,'TH',nb(EQ),2,uEQ,true)}
   /* cuerpo B..U: secciones, pares Plan/Act., bloque TOTAL (Plan + Act.) y separadores */
-  [[ST,19,false],[EQ,20,true]].forEach(function(p){var I=p[0];if(!I)return;var eq=p[2],tot=-9;
+  [[ST,19,false,uST],[EQ,20,true,uEQ]].forEach(function(p){var I=p[0];if(!I)return;var eq=p[2],tot=-9,U=p[3];
     I.m.rows.forEach(function(row){if(row.r<p[1]||!row.c.length||_wkeAttrGet(row.at,'hidden')==='1')return;
       var b=tx(I,2,row.r),c=tx(I,3,row.r);
-      if(!datos(row,2,21)){_wkEAplicaRol(E,I,row,{rol:'SEP'},null,21);return}
-      if(!eq&&b&&!c&&!datos(row,4,21)){_wkEPintaFila(E,I,row.r,'SEC',{},2,21,true);return}
-      if(eq?/^TOTAL/i.test(b):(c==='Plan'&&(/^TOTAL/i.test(b)||!b))){tot=row.r;_wkEPintaFila(E,I,row.r,'TOT',{t2:0,b2:1},2,21,true);return}
-      if(c==='Act.'&&row.r===tot+1){_wkEPintaFila(E,I,row.r,'TOT',{t2:1,b2:0},2,21,true);return}
-      if(c==='Plan'){_wkEPintaFila(E,I,row.r,'DP',function(ce){return {b:ce.c===2?1:0}},2,21,true);return}
-      if(c==='Act.'){_wkEPintaFila(E,I,row.r,'DR',{},2,21,true);return}
-      _wkEPintaFila(E,I,row.r,'DP',{},2,21,false)})});
+      if(!datos(row,2,U)){_wkEAplicaRol(E,I,row,{rol:'SEP'},null,U);return}
+      if(!eq&&b&&!c&&!datos(row,4,U)){_wkEPintaFila(E,I,row.r,'SEC',{},2,U,true);return}
+      if(eq?/^TOTAL/i.test(b):(c==='Plan'&&(/^TOTAL/i.test(b)||!b))){tot=row.r;_wkEPintaFila(E,I,row.r,'TOT',{t2:0,b2:1},2,U,true);return}
+      if(c==='Act.'&&row.r===tot+1){_wkEPintaFila(E,I,row.r,'TOT',{t2:1,b2:0},2,U,true);return}
+      if(c==='Plan'){_wkEPintaFila(E,I,row.r,'DP',function(ce){return {b:ce.c===2?1:0}},2,U,true);return}
+      if(c==='Act.'){_wkEPintaFila(E,I,row.r,'DR',{},2,U,true);return}
+      _wkEPintaFila(E,I,row.r,'DP',{},2,U,false)})});
   /* RFI: cabecera 15 (B:M) y filas con dato; la horizontal de cada columna es la de la primera fila */
   var RF=E.by['RFI'];if(RF){_wkEPintaFila(E,RF,15,'TH',nb(RF),2,13,true);
     var s16={},r16=_wkeRow(RF.m,16);if(r16)r16.c.forEach(function(ce){s16[ce.c]=ce.s});
@@ -22523,8 +22761,8 @@ function _wkExcel(){
   var ov=document.getElementById('_wkOv');if(ov)ov.remove();
   ov=document.createElement('div');ov.id='_wkOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483590;background:rgba(10,18,32,.62);display:flex;align-items:flex-end;justify-content:center';
-  var toca=_wkQueToca(),ops='';
-  for(var n=27;n<=44;n++)ops+='<option value="'+n+'"'+(n===toca?' selected':'')+'>'+_wkLbl(n)+(n===toca?' · TOCA':'')+'</option>';
+  var toca=_wkQueToca(),ops='',_ultSel=44;try{_ultSel=_wkUltCalc(null)}catch(_eu){}
+  for(var n=27;n<=_ultSel;n++)ops+='<option value="'+n+'"'+(n===toca?' selected':'')+'>'+_wkLbl(n)+(n===toca?' · TOCA':'')+'</option>';
   ov.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:17px 16px;box-sizing:border-box;max-height:92vh;overflow:auto">'+
     '<div style="font-weight:900;font-size:15.5px;color:#1F3864;margin-bottom:4px">📊 Excel semanal (Contractor Weekly Report)</div>'+
     '<div style="font-size:12px;color:#5C6779;line-height:1.5;margin-bottom:12px"><b>⚡ Solo desde el aplicativo</b>: el libro se genera solo — TODAS las semanas (S27 → la elegida) se reconstruyen con lo del aplicativo sobre el formato de guía que viaja con la app; no necesitas ningún archivo. <b>📄 Desde tu plantilla</b>: solo se llena la semana elegida y lo ya cargado en tu archivo se respeta.</div>'+
@@ -22656,7 +22894,7 @@ function _wkExcel(){
       msg.textContent='Armando el libro (S'+semN+')…';
       try{if(typeof syncPull==='function')await syncPull()}catch(_e){}
       await _crCatPull();
-      var LB=await _wkLibroApp(semN,corte,ids);
+      var LB=await _wkConRejilla(ids,function(){return _wkLibroApp(semN,corte,ids)},semN);
       /* el nombre lleva el JUEVES de cierre de la semana elegida: el viernes
          de apertura cae justo despues del cierre de la semana anterior y el
          archivo se leeria como el de esa */
@@ -24472,7 +24710,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c65';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c66';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
