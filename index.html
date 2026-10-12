@@ -10314,6 +10314,8 @@ async function _crPlanRecupera(cronId,corte,semN){
         itsQ.forEach(function(i){var q=porId[i],u9=String(q.und||'').trim().toLowerCase();
           if(!u9||!(Number(q.cant)>0)){okQ=false;return}unQ[u9]=1;totQ+=Number(q.cant)/_crVeces(rp,i)});
         if(Object.keys(unQ).length!==1||!(totQ>0))okQ=false}catch(_eq){okQ=false}
+      /* F.002 (3WLA): la fraccion sale de las HH, no del metrado contractual */
+      if(window._wk3wF2)okQ=false;
       (t.items||[]).forEach(function(i){
         var hi=0,excl=false;
         if(u.items[i]!=null)hi=(Number(u.items[i])||0)/_crVeces(rp,i);
@@ -10336,15 +10338,18 @@ async function _crPlanRecupera(cronId,corte,semN){
           if(k===i){
             if(tieneP)return;   /* la envoltura no aporta: aportan sus partes */
             var hecho=0;
-            try{var a2=_crAvanceDe([i],corte,{cod:cod,rp:rp});hecho=Math.max(0,Math.min(100,a2.pct||0))/100}catch(_ea){}
+            try{var a2=_crAvanceDe([i],(window._wk3wF2&&window._wk3wF2.hoy)||corte,{cod:cod,rp:rp});hecho=Math.max(0,Math.min(100,a2.pct||0))/100}catch(_ea){}
             fr=Math.max(0,1-hecho)}
           else if(typeof _pgEsTramo==='function'&&_pgEsTramo(k)&&!_pgEsParte(k)){
-            var m9=metaOf(i),t9=Number(m9&&m9.total)||0,c9=Number(pr.cant)||0;
+            var m9=(window._wk3wF2&&typeof _pgMetaProg==='function')?_pgMetaProg(i):metaOf(i),t9=Number(m9&&m9.total)||0,c9=Number(pr.cant)||0;
             fr=(t9>0&&c9>0)?Math.min(1,c9/t9):0}
           else{
             var inf=(typeof _pgParteInfo==='function')?_pgParteInfo(k):null;if(!inf)return;
             var wP=Math.max(0,Math.min(100,Number(inf.fase.peso)||0))/100;
-            if(typeof _pgEsTramo==='function'&&_pgEsTramo(k)){var cP=Number(_fzCantDe(inf.fase))||0,cT=Number(pr.cant)||0;fr=(cP>0&&cT>0)?wP*Math.min(1,cT/cP):0}
+            if(typeof _pgEsTramo==='function'&&_pgEsTramo(k)){var cP=Number(_fzCantDe(inf.fase))||0,cT=Number(pr.cant)||0;
+              if(window._wk3wF2)try{var R8=(typeof _pgUnivRec==='function')?_pgUnivRec():null,r8=(R8&&R8.filas)?R8.filas[i]:null,q8=null;if(r8)(r8.partes||[]).forEach(function(z){if(!q8&&z&&String(z.pert||'')===String(inf.fase.nombre||''))q8=z});
+                if(q8){var ob8=((typeof _pgObjModo==='function')?_pgObjModo():'forecast')==='contrato'?Number(q8.met):Number(q8.metF);if(isFinite(ob8)&&ob8>0)cP=ob8}}catch(_e8){}
+              fr=(cP>0&&cT>0)?wP*Math.min(1,cT/cP):0}
             else{var pcp=0;try{pcp=Number(_fzPctParte(inf.fase))||0}catch(_e){}
               fr=wP*(1-Math.max(0,Math.min(100,pcp))/100)}}
           /* y en metrado: el tramo su cantidad; la entera lo que le falta
@@ -10822,6 +10827,8 @@ function _wkHoja3WLA(semN,bloque,base,R,corte,valores,opc){
               :("'PPC'!"+_wkColL(17+b*9+8)+"11"));
         else if(b>_bSem)
           _fAc=_wkColL(BLQ[b-1]+8)+n+'+'+T1+(8+k)}
+      /* F.002: la 3WLA con su propio cronograma de calculo arranca de SU avance real al corte */
+      if(acum&&_K0[k]===2&&b===_bSem&&opc&&opc.acum0!=null){cs.push(_wkCelE(U1,n,Number(opc.acum0)||0,false,tinta(stPct,PLOMO,PLOMOB)));return}
       cs.push(_wkCelE(U1,n,'',false,tinta(stPct,PLOMO,PLOMOB),acum?_fAc:null))});
     fila(n,cs)};
   /* G.001: DOS filas, 8 = DE LA SEMANA y 9 = ACUMULADO, cada % bajo su cuadro (PROGRAMADO | REALIZADO).
@@ -13007,7 +13014,12 @@ async function _wkLibroApp(semN,corte,ids){
        (_rr.emp||[]).forEach(function(q){_cl[q.cod]='EMP'});
        window._rxPpcMemo={sem:semN,clase:_cl,nNo:(_rr.lista||[]).length,nOk:(_rr.cumplidas||[]).length,nEmp:(_rr.emp||[]).length}}}catch(_e3){window._rxPpcMemo=null}
      try{_hdPPC=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,false,{idx:[0,1],sobrio:true,quien:1,filtro:1,sem1:1})}catch(_e4){}
-    try{_hd3W=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,false,{idx:[2,3],sobrio:true,lmn:1,filtro:1,sig3:1})}catch(_e5){}
+    var _c3w=(typeof window!=='undefined')?window._wk3wCalc:null;
+    if(_c3w)try{var _x3=await _wk3wF2Arma(semN,corte,D,_c3w);
+      _hd3W=_wkHoja3WLA(semN,_x3.bloque,base,_x3.R,corte,_x3.valores,{idx:[2,3],sobrio:true,lmn:1,filtro:1,sig3:1,acum0:_x3.acum0});
+      try{window._wk3wInfo={cron:_c3w,acum0:_x3.acum0,fin:_x3.fin,falta:_x3.falta}}catch(_ei){}}
+      catch(_e3w){try{console.warn('F.002 3WLA con '+_c3w+':',_e3w)}catch(_e){}_hd3W=null}
+    if(!_hd3W)try{_hd3W=_wkHoja3WLA(semN,D.bloques[0],base,_R,corte,false,{idx:[2,3],sobrio:true,lmn:1,filtro:1,sig3:1})}catch(_e5){}
   }catch(_ehd){try{console.warn('PARA 3WLA no se pudo armar:',_ehd)}catch(_e2){}}
   /* la caratula no se pinta: su aspecto tiene que quedar como el de siempre */
   /* La caratula del reporte conserva su nombre del original -`Carátula (P)`-,
@@ -15962,7 +15974,11 @@ var _WK_GENS=[
   {id:'G.001',
    nombre:'G.001 — F.001 con la PPC en una fila: PROGRAMADO | REALIZADO',
    desc:'La F.001 tal cual y solo cambia la hoja PPC: cada actividad ocupa UNA fila y cada semana lleva dos cuadros iguales frente a frente, PROGRAMADO a la izquierda (lo que era la fila PROG. SEM. ANT.: 7 d\u00edas, % de la semana y % acumulado) y REALIZADO a la derecha (lo que era la fila ACTUAL). El resumen va en 2 filas (DE LA SEMANA y ACUMULADO) con cada % bajo su cuadro; Cumplimiento, Comentarios, Raz\u00f3n y QUIEN siguen al final. Mismos n\u00fameros en PPC, PPC AN\u00c1LISIS, 3WLA y 3WLookahead.',
-   fn:'_wkGLibroApp'}];
+   fn:'_wkGLibroApp'},
+  {id:'F.002',
+   nombre:'F.002 — F.001 con la 3WLA calculada con el cronograma elegido (por defecto el ACTUAL)',
+   desc:'La F.001 tal cual y solo cambia la hoja 3WLA: se calcula con el cronograma marcado con 🧮 en la lista (por defecto el ACTUAL), aunque no esté entre los que salen en la curva. Lo programado se mide como la Tabla de programación (metrado forecast y lo que falta hoy) y lo ejecutado después del corte cuenta como programado ese día, así el % ACUM llega al 100 % cuando todo está programado.',
+   fn:'_wkF2LibroApp'}];
 var _WK_GEN_DEF='A.001';              /* hasta que B.001 este validada */
 var _WK_GEN_KEY='obf4_wk_gen';
 function _wkGenDe(id){for(var i=0;i<_WK_GENS.length;i++)if(_WK_GENS[i].id===id)return _WK_GENS[i];return null}
@@ -22646,7 +22662,7 @@ async function _wkFLibroApp(semN,corte,ids){
   try{LB=await _wkDLibroApp(semN,corte,ids)}finally{window._wkEPal=false}
   var crons=[];try{(((typeof _crLista==='function')&&_crLista())||[]).forEach(function(c){if(c&&c.cron_id)crons.push(c.cron_id)})}catch(e){}
   var R;
-  try{R=_wkEPost(LB,{semN:semN,gen:'F.001',hojas:_WKE_NUEVE.concat(_WKF_CINCO),crons:crons,nomCr:(typeof _wkNomCr==='function'?_wkNomCr:null),
+  try{R=_wkEPost(LB,{semN:semN,gen:(window._wkGenTag||'F.001'),hojas:_WKE_NUEVE.concat(_WKF_CINCO),crons:crons,nomCr:(typeof _wkNomCr==='function'?_wkNomCr:null),
       logoCli:_wkeB64(_WKE_LOGO_CLI),logoCtta:_wkeB64(_WKE_LOGO_CTTA)})}
   catch(e){try{console.error('F.001:',e)}catch(_e){}throw new Error('F.001 no pudo dar formato al libro: '+((e&&e.message)||e))}
   try{if(R.log&&R.log.length)console.warn('F.001:',R.log.join(' | '));var mal=_wkEDomCheck(R);if(mal.length)console.warn('F.001 XML mal formado:',mal)}catch(_e){}
@@ -22658,6 +22674,55 @@ async function _wkFLibroApp(semN,corte,ids){
   window._wkCHojas=LB.hojas;              /* el empaquetador no traduce por subcadena */
   window._wkEDefNames=R.defNames;window._wkEHojas=LB.hojas;   /* el envoltorio de la E mete los Print_Titles */
   try{LB.info=LB.info||{};LB.info.gen='F.001'}catch(e){}return LB}
+/* ===================== GENERACION F.002 =====================
+   F.002 = la F.001 tal cual; SOLO la hoja 3WLA se calcula con el cronograma elegido con 🧮 en el menu (por
+   defecto el ACTUAL). Lo programado (linea PROG. SEM. SIG.) se mide como la Tabla de programacion: tramos sobre
+   el metrado al que se programa (forecast/contractual), la partida entera lo que le falta HOY; lo ejecutado
+   despues del corte (Tabla 2, por dia) cuenta como programado ese dia; y ninguna actividad pasa de lo que le
+   faltaba al corte. El % ACUM arranca del avance real al corte de ESE cronograma, asi llega al 100 %. */
+function _wk3wElegido(){var v='';
+  try{var r=document.querySelector('input[name="_wk3w"]:checked');if(r)v=r.value}catch(e){}
+  if(!v)try{var a=_crActualDe((typeof _crLista==='function'&&_crLista())||[]);if(a)v=String(a.cron_id)}catch(e){}
+  return v}
+async function _wk3wPost(R,cid,corte,hoy){if(!R||!R.fore||!(hoy>corte))return 0;
+  var c=((await _crPull())||[]).filter(function(z){return z&&!z.eliminado&&String(z.cron_id)===String(cid)})[0];if(!c)return 0;
+  var T2=await _t23Datos(c,{n:2,per:'dia',corte:4,vista:'agr',noLab:false});
+  var porCod={};(T2.filas||[]).forEach(function(f){if(f&&f.id&&!f._nosum)porCod[String(f.id)]=f});
+  var tar=((await _crTareas(cid))||[]).filter(function(t){return t&&!t.eliminado});
+  var alc=await _crAlc(cid),u=_crUniverso(cid,alc),rp=_crReparto(tar),n=0;
+  tar.forEach(function(t){var cod=String(t.task_code),hh=0,f=porCod[cod];if(!f||!f.p)return;
+    (t.items||[]).forEach(function(i){if(u.items[i]!=null)hh+=(Number(u.items[i])||0)/_crVeces(rp,i)});if(!(hh>0))return;
+    var m=R.fore[cod]||(R.fore[cod]={});
+    Object.keys(f.p).forEach(function(k){if(k.indexOf('p_')!==0)return;var d=k.slice(2),v=Number(f.p[k])||0;
+      if(d<=corte||d>hoy||v<=1e-9||d<R.gIni||d>R.gFin)return;m[d]=(m[d]||0)+v/hh;n++})});
+  return n}
+async function _wk3wF2Arma(semN,corte,D,cid){
+  var bl=null;(D.bloques||[]).forEach(function(b){if(String(b.id)===String(cid))bl=b});
+  var valores=!bl;   /* sin su hoja P6 en el libro, la 3WLA lleva los datos de la actividad como valor */
+  if(!bl){var D2=await _wkDatosLibro(semN,corte,[cid]);bl=D2.bloques[0]}
+  if(!bl)throw new Error('el cronograma '+cid+' no tiene actividades');
+  var hoy=(typeof todayISO==='function')?todayISO():corte;
+  var R=null,_ov=window._crPlanFuenteOverride;
+  try{var _bx=String(_ajGet('rx_base_comparar','')||'');window._crPlanFuenteOverride=(_bx===''||_bx==='cal')?'cal':(_bx==='vig'?'__base0__':_bx)}catch(_e){window._crPlanFuenteOverride=null}
+  window._wk3wF2={hoy:hoy};
+  try{R=await _crPlanRecupera(cid,corte,semN)}finally{window._crPlanFuenteOverride=_ov;window._wk3wF2=null}
+  try{await _wk3wPost(R,cid,corte,hoy)}catch(e){try{console.warn('F.002 lo hecho tras el corte:',e)}catch(_e){}}
+  /* lo hecho al corte (la linea ACTUAL, medida como la Tabla 2) y el tope de lo programado */
+  var A={};Object.keys(R.actual||{}).forEach(function(cod){var s=0,m=R.actual[cod]||{};for(var d in m)if(d<=corte)s+=m[d];A[cod]=Math.max(0,Math.min(1,s))});
+  var falta=[];
+  Object.keys(R.fore||{}).forEach(function(cod){var m=R.fore[cod]||{},s=0;for(var d in m)s+=m[d];
+    var need=Math.max(0,1-(A[cod]||0));
+    if(s>need+1e-9&&s>0){var k=need/s;for(var d2 in m)m[d2]*=k}});
+  var sJ=0,sA=0,sF=0;
+  bl.filas.forEach(function(f){var h=Number(f.hh)||0,a=A[f.cod]||0,s=0,m=R.fore[f.cod]||{};for(var d in m)s+=m[d];
+    sJ+=h;sA+=h*a;sF+=h*s;if(h>0&&a+s<0.9999)falta.push({cod:f.cod,nom:f.nom,hecho:a,prog:s})});
+  return {bloque:bl,R:R,valores:valores,acum0:sJ>0?sA/sJ:0,fin:sJ>0?(sA+sF)/sJ:0,falta:falta}}
+async function _wkF2LibroApp(semN,corte,ids){
+  var cid=_wk3wElegido();
+  window._wk3wCalc=cid||null;window._wkGenTag='F.002';window._wk3wInfo=null;
+  var LB;try{LB=await _wkFLibroApp(semN,corte,ids)}finally{window._wk3wCalc=null;window._wkGenTag=null}
+  try{LB.info=LB.info||{};LB.info.gen='F.002';LB.info.calc3w=cid}catch(e){}
+  return LB}
 /* ===================== GENERACION F.001 (fin) ===================== */
 /* ===================== GENERACION G.001 (inicio) =====================
    G.001 = la F.001 tal cual y SOLO cambia la hoja PPC: cada actividad ocupa UNA fila y cada semana de la
@@ -22814,6 +22879,7 @@ function _wkExcel(){
     if(d)d.innerHTML=_wkEsc(g.desc);
     var bs=document.getElementById('_wkSolo');
     if(bs&&!bs.disabled)bs.textContent='⚡ Generar SOLO desde el aplicativo · Gen '+g.id;
+    document.querySelectorAll('._wk3wR').forEach(function(z){z.style.display=(g.id==='F.002')?'inline-flex':'none'});
   }catch(_eg){}};
   try{var _sg=document.getElementById('_wkGen');
     if(_sg)_sg.onchange=function(){_wkGenEscribe(_sg.value);_genPinta()};
@@ -22829,6 +22895,7 @@ function _wkExcel(){
     var B=document.getElementById('_wkCronBox');if(!B)return;
     if(!L.length){B.innerHTML='No hay cronogramas cargados. Cárgalos en <b>📅 Cronogramas</b> (dentro de Reporte semanal) para que sus curvas salgan en el Excel.';return}
     B.style.overflowX='hidden';
+    var _act3=null;try{_act3=_crActualDe(L)}catch(_ea3){}
     B.innerHTML=L.map(function(c){
       var nt=(window._crNT||{})[c.cron_id];
       var n=nt?nt.n:(c.n_tareas||0);
@@ -22839,7 +22906,12 @@ function _wkExcel(){
         '<span style="flex:1;min-width:0;color:#5C6779;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
           esc(String(c.nombre||''))+'</span>'+
         '<span style="flex:none;font-size:10.5px;color:#8A94A6;white-space:nowrap">'+n+' tar · '+
-          esc(String(c.inicio||'').slice(5))+'→'+esc(String(c.fin||'').slice(5))+'</span></label>'}).join('')})}catch(e){}})();
+          esc(String(c.inicio||'').slice(5))+'→'+esc(String(c.fin||'').slice(5))+'</span>'+
+        '<span class="_wk3wR" title="La hoja 3WLA (F.002) se calcula con este cronograma" style="flex:none;display:none;align-items:center;gap:3px;font-size:10.5px;font-weight:800;color:#0C5132;border:1px solid #9FD3B4;border-radius:7px;padding:1px 5px;background:#EEF8F2">'+
+          '<input type="radio" name="_wk3w" value="'+esc(c.cron_id)+'"'+((_act3&&String(_act3.cron_id)===String(c.cron_id))?' checked':'')+' style="margin:0">🧮 3WLA</span></label>'}).join('');
+    try{B.querySelectorAll('input[name="_wk3w"]').forEach(function(r){r.onclick=function(e){e.stopPropagation()}});
+      B.querySelectorAll('._wk3wR').forEach(function(z){z.onclick=function(e){if(e.target===z){e.preventDefault();var r=z.querySelector('input');if(r)r.checked=true}}})}catch(_er3){}
+    try{_genPinta()}catch(_eg3){}})}catch(e){}})();
   /* la vista previa del corte: que el % de la semana no parezca error */
   var previa=function(){try{
     var n2=+document.getElementById('_wkSel').value;
@@ -24710,7 +24782,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c66';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c67';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
