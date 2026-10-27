@@ -24864,7 +24864,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c95';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c96';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -31939,7 +31939,9 @@ async function _crTablaDatos(c,corte){
   /* agrupaciones por cronograma, cacheadas (se pedian al servidor en cada
      repintado; el realtime de agrupaciones tira la cache) */
   var grupos={};try{window._crAgr=window._crAgr||{};var _ag=window._crAgr[c.cron_id];
-    if(!_ag||(Date.now()-_ag.t)>300000){var G=await sbSelect(T_AGR,'select=grupo_id,nombre,miembros&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(c.cron_id)+'&eliminado=is.false&limit=500');_ag={t:Date.now(),G:G||[]};window._crAgr[c.cron_id]=_ag}
+    var _agQ='select=grupo_id,nombre,miembros&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&cron_id=eq.'+encodeURIComponent(c.cron_id)+'&eliminado=is.false&limit=500';
+    if(!_ag){var G=await sbSelect(T_AGR,_agQ);_ag={t:Date.now(),G:G||[]};window._crAgr[c.cron_id]=_ag}
+    else if((Date.now()-_ag.t)>300000&&!_ag.ren){_ag.ren=1;(function(cid,ag0){sbSelect(T_AGR,_agQ).then(function(G2){ag0.ren=0;var nv={t:Date.now(),G:G2||[]};var cam=JSON.stringify(G2||[])!==JSON.stringify(ag0.G);window._crAgr=window._crAgr||{};window._crAgr[cid]=nv;if(cam)try{if(typeof window._crTablaRepinta==='function')window._crTablaRepinta()}catch(_er){}},function(){ag0.ren=0})})(c.cron_id,_ag)}
     _ag.G.forEach(function(g){(g.miembros||[]).forEach(function(m){grupos[m]=g.nombre||g.grupo_id})})}catch(e){}
   /* EL RENDIMIENTO DEL ALCANCE, por actividad (hoja 2): el propio del
      engranaje (hh/dia) o, sin el, las HH de la actividad entre sus dias del
@@ -32381,15 +32383,15 @@ function _tbFilaSwap(root,D,q,ord,ids){var n=0;try{var doc=root.ownerDocument||d
   var keys=null;try{keys=_tabKeys(root)}catch(_ek){keys=null}
   var celdaDe=function(tr,kk){var x=null;try{if(keys)_tabCeldas(tr,keys,'_tb',function(td,k){if(!x&&k===kk)x=td})}catch(_e){}return x};
   var cfgD=null;try{cfgD=_tbCfg()}catch(_ec0){}var dec=(cfgD&&cfgD.dec)||{},conDec=(Object.keys(dec).length>0)||!!root._decTocada;
-  var tpl=doc.createElement('template');tpl.innerHTML=H;var hayQueFijar=false;
+  var tpl=doc.createElement('template');tpl.innerHTML=H;var hayQueFijar=false,mapaRn={},nuevas=[];
   Array.prototype.forEach.call(tpl.content.querySelectorAll('tbody tr[data-rk]'),function(nr){var rk=nr.getAttribute('data-rk');var old=viejas[rk];if(!old)return;
     var nu=doc.importNode(nr,true);
     /* lo que es de la tabla ENTERA se conserva de la fila vieja: su numeracion (celda N° y data-rn, de la que cuelgan
        las formulas para Excel) y lo que le ponen los pasos de despues de pintar (clases: punto de avance, fila elegida;
        estilo: fila oculta por el usuario) */
     try{var on=celdaDe(old,'num'),nn=celdaDe(nu,'num');if(on&&nn)nu.replaceChild(on.cloneNode(true),nn)}catch(_en){}
-    try{var rnO=old.getAttribute('data-rn'),rnN=nu.getAttribute('data-rn');if(rnO!=null){nu.setAttribute('data-rn',rnO);
-      if(rnN&&rnO!==rnN){var reRn=new RegExp('([A-Z]+)'+rnN+'(?![0-9])','g');Array.prototype.forEach.call(nu.querySelectorAll('td[data-f]'),function(td){td.setAttribute('data-f',String(td.getAttribute('data-f')).replace(reRn,'$1'+rnO))})}}}catch(_er){}
+    try{var rnO=old.getAttribute('data-rn'),rnN=nu.getAttribute('data-rn');if(rnO!=null){if(rnN!=null)mapaRn[rnN]=rnO;nu.setAttribute('data-rn',rnO)}}catch(_er){}
+    nuevas.push(nu);
     nu.className=old.className;nu.style.cssText=old.style.cssText;
     /* columnas inmovilizadas y colores: el estilo de cada celda depende de su columna, no del valor; se copia de la
        fila vieja (recalcular toda la tabla con _tbAplicaFijas costaba ~0.7 s) */
@@ -32401,6 +32403,9 @@ function _tbFilaSwap(root,D,q,ord,ids){var n=0;try{var doc=root.ownerDocument||d
     /* los decimales elegidos por el usuario (solo esta fila) */
     if(conDec&&keys)try{var rkD=_tabRowKey(nu);_tabCeldas(nu,keys,'_tb',function(td,k){if(_TAB_DEC_NO[k]||!_tabEsNum(td))return;_tabDecCelda(td,_tabDecDe(dec,rkD,k))})}catch(_edc){}
     old.parentNode.replaceChild(nu,old);n++});
+  /* las formulas para Excel apuntan a filas de la tabla armada sola (la propia y las de sus partes): se traducen a las de la tabla entera */
+  try{if(Object.keys(mapaRn).length)nuevas.forEach(function(nu){Array.prototype.forEach.call(nu.querySelectorAll('td[data-f]'),function(td){
+    td.setAttribute('data-f',String(td.getAttribute('data-f')).replace(/(\$?[A-Z]{1,3}\$?)(\d+)(?![0-9])/g,function(z,col,rn){return (mapaRn[rn]!=null)?(col+mapaRn[rn]):z}))})})}catch(_emf){}
   if(n){if(hayQueFijar)try{_tbAplicaFijas(root)}catch(_ef){}try{if(window._tbCalRk&&typeof _tbCalMarca==='function')_tbCalMarca(window._tbCalRk)}catch(_em){}try{if(typeof _tabRowPinta==='function')_tabRowPinta(root,'_tb')}catch(_erp){}}}catch(e){}return n}
 function _crTablaBind(root,ordRef,rerender){
   var doc=root.ownerDocument||document;
