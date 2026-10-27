@@ -6542,7 +6542,11 @@ function _crHechoDias(id,corte,desde){
   var pp=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0]);
   if(!pp)return [];
   var ps=[];try{ps=partesOf(id)||[]}catch(e){}
-  var k=id+'|'+(corte||'')+'|'+desde+'|'+ps.length;
+  /* la clave lleva la FIRMA de las cargas (fecha, cantidad, % y hora) y de los movimientos de sus partes: corregir
+     una carga (Mod, desde la lista o la suma) cambia la firma y la Tabla 1 se repinta con el valor nuevo sin cerrar nada */
+  var sg='';try{ps.forEach(function(x){sg+=(x.fecha||'')+':'+(Number(x.cant)||0)+':'+(Number(x.pctGlb)||0)+':'+(x.ts||0)+';'});
+    var r0=(typeof _fzDe==='function')?_fzDe(id):null;if(r0)(r0.fases||[]).forEach(function(x){(x.movs||[]).forEach(function(m){sg+=(m.cid||'')+'='+(Number(m.c)||0)+','})})}catch(_es){}
+  var k=id+'|'+(corte||'')+'|'+desde+'|'+ps.length+'|'+sg;
   if(M[k])return M[k];
   var fechas={};ps.forEach(function(x){var f=String(x.fecha||'');if(f&&(!corte||f<=corte))fechas[f]=1});
   try{var r=(typeof _fzDe==='function')?_fzDe(id):null,mapa=(typeof _fzFechasDe==='function')?_fzFechasDe(id):{};
@@ -24860,7 +24864,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c87';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c88';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
