@@ -24579,7 +24579,8 @@ function _cgTablaHTML(filas,off,uU,meta,titulo){var ac=0,nOn=0,nOff=0;
   filas.forEach(function(r){var ex=!!off[r.k];if(ex)nOff++;else{nOn++;ac+=r.v}
     var chip=ex?'border:1.5px solid #C9CED6;background:#E5E7EB;color:#8A93A0;text-decoration:line-through':'border:1.5px solid #9CD3AE;background:#EAF7EF;color:#1E7A46';
     H+='<tr style="border-top:1px solid #E4EAF3;text-align:right'+(ex?';opacity:.75':'')+'"><td style="text-align:left;padding:4px 0;color:'+(ex?'#9AA3AF':'#34496a')+'">'+esc(r.fecha||'')+'</td>'+
-      '<td><span class="_cgChip" data-k="'+r.k+'" role="button" tabindex="0" title="'+(ex?'Volver a sumar esta carga':'Quitar esta carga de la suma')+'" style="display:inline-block;cursor:pointer;user-select:none;border-radius:7px;padding:1px 8px;font-weight:800;'+chip+'">+'+_cgX(r.v)+'</span></td>'+
+      '<td><span class="_cgChip" data-k="'+r.k+'" role="button" tabindex="0" title="'+(ex?'Volver a sumar esta carga':'Quitar esta carga de la suma')+'" style="display:inline-block;cursor:pointer;user-select:none;border-radius:7px;padding:1px 8px;font-weight:800;'+chip+'">+'+_cgX(r.v)+'</span>'+
+        ((window._cgEditOk&&r.pi!=null&&r.pi>=0)?(' <button type="button" class="_cgEd" data-pi="'+r.pi+'" title="Modificar esta carga (admin)" style="background:#1F6FEB;color:#fff;border:0;border-radius:6px;padding:1px 6px;font-weight:800;font-size:11px;cursor:pointer;vertical-align:middle">\u270f</button>'):'')+'</td>'+
       '<td style="color:'+(ex?'#9AA3AF':'#1F3864')+'">'+(ex?String.fromCharCode(8212):_cgX(ac))+'</td></tr>'});
   ac=Math.round(ac*1e10)/1e10;
   H+='</tbody><tfoot><tr style="border-top:2px solid #1F3864;text-align:right"><td colspan="2" style="text-align:left;padding:6px 0;font-weight:900;color:#1F3864">Suma de '+(nOff?(nOn+' de '+filas.length):filas.length)+' carga'+(filas.length>1?'s':'')+(titulo?(' '+esc(titulo)):'')+'</td><td style="font-weight:900;color:#1F3864;font-size:13.5px">'+_cgX(ac)+' '+esc(uU)+'</td></tr></tfoot></table>';
@@ -24587,7 +24588,7 @@ function _cgTablaHTML(filas,off,uU,meta,titulo){var ac=0,nOn=0,nOff=0;
     if(nOff)H+='<div style="margin-top:6px;font-size:11.5px;font-weight:800;color:'+(d<-1e-9?'#8A4B00':'#1F3864')+'">Con esta selecci\u00f3n: '+_cgDifTxt(d,esc(meta.u))+'</div>';
     H+='<div style="margin-top:4px;font-size:11px;color:#5C6779">Con dos decimales: <b>'+qty(ac)+' / '+qty(meta.obj)+' '+esc(meta.u)+'</b>'+(nOff?' (sin las cargas en gris)':'')+'</div>'}
   return {html:H,ac:ac,nOff:nOff}}
-function _cgSumaHTML(p,ps,uU,off){off=off||{};var M=_cgMeta(p);var cs=ps.filter(function(x){return x.tipo==='cant'}).slice().sort(function(a,b){return String(a.fecha).localeCompare(String(b.fecha))||((a.ts||0)-(b.ts||0))});
+function _cgSumaHTML(p,ps,uU,off){off=off||{};var M=_cgMeta(p);try{window._cgEditOk=!!(typeof esAdmin==='function'&&esAdmin())}catch(_ea){window._cgEditOk=false}var cs=ps.filter(function(x){return x.tipo==='cant'}).slice().sort(function(a,b){return String(a.fecha).localeCompare(String(b.fecha))||((a.ts||0)-(b.ts||0))});
   if(!cs.length)return '<div style="font-size:12px;color:#5C6779;padding:8px 0">Esta actividad no tiene cargas de cantidad para sumar.</div>';
   var fz=null;try{fz=(typeof _fzDe==='function')?_fzDe(p.id):null}catch(e){}var H='',algunaOff=false;
   if(fz&&(fz.fases||[]).length){
@@ -24595,7 +24596,7 @@ function _cgSumaHTML(p,ps,uU,off){off=off||{};var M=_cgMeta(p);var cs=ps.filter(
     var grupos=(fz.fases||[]).map(function(x){return {x:x,filas:[]}}),sinP={x:null,filas:[]};
     cs.forEach(function(c,k){var g=null,v=+c.cant||0;
       grupos.forEach(function(G){if(g)return;var mv=(G.x.movs||[]).filter(function(m){return m.cid&&m.cid===c.client_id});if(mv.length){g=G;v=mv.reduce(function(t,m){return t+(Number(m.c)||0)},0)}});
-      (g||sinP).filas.push({k:k,fecha:c.fecha,v:v})});
+      (g||sinP).filas.push({k:k,fecha:c.fecha,v:v,pi:ps.indexOf(c)})});
     if(sinP.filas.length)grupos.push(sinP);
     grupos.forEach(function(G){var x=G.x,u=(x&&x.unidad)||uU,nom=x?String(x.nombre||'Parte'):'Sin parte';
       var obj=x?Math.max(0,(Number(x.cantidad)||0)-(Number(x._ret)||0)):0;var meta=(x&&obj>0)?{obj:obj,u:u}:null;
@@ -24607,7 +24608,7 @@ function _cgSumaHTML(p,ps,uU,off){off=off||{};var M=_cgMeta(p);var cs=ps.filter(
         (meta&&d!=null?'<span style="display:inline-block;font-size:11px;font-weight:800;border-radius:20px;padding:2px 9px;'+_cgDifSt(d)+'">'+_cgDifTxt(d,esc(u))+'</span>':'')+'</div>'+
         (T?T.html:'<div style="font-size:11.5px;color:#8A93A0;padding:4px 0">Sin cargas en esta parte todav\u00eda.</div>')+'</div>'});
   }else{
-    var T1=_cgTablaHTML(cs.map(function(c,k){return {k:k,fecha:c.fecha,v:+c.cant||0}}),off,uU,M?{obj:M.mT,u:M.u}:null,'');algunaOff=!!T1.nOff;H+=T1.html}
+    var T1=_cgTablaHTML(cs.map(function(c,k){return {k:k,fecha:c.fecha,v:+c.cant||0,pi:ps.indexOf(c)}}),off,uU,M?{obj:M.mT,u:M.u}:null,'');algunaOff=!!T1.nOff;H+=T1.html}
   H+='<div style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:10.5px;color:#8A93A0"><span style="flex:1">Toca una carga para quitarla de la suma (queda en gris) o volver a sumarla. Solo se ve aqu\u00ed; no cambia nada guardado.</span>'+(algunaOff?'<button type="button" class="_cgTodas" style="background:#fff;color:#1F3864;border:1.5px solid #1F3864;border-radius:8px;padding:3px 9px;font-weight:800;font-size:11px;cursor:pointer">Sumar todas</button>':'')+'</div>';
   return H}
 function _cgCajaHTML(p,ps,rows,uU){var on=_cgSumaOn();var dif=_cgDifHTML(p,ps);
@@ -24618,7 +24619,18 @@ function _cgCajaHTML(p,ps,rows,uU){var on=_cgSumaOn();var dif=_cgDifHTML(p,ps);
     '<div id="_cgSumaBox" style="max-height:340px;overflow:auto;'+(on?'':'display:none')+'">'+(on?_cgSumaHTML(p,ps,uU,null):'')+'</div>'+
     '<div id="_cgListaBox" style="max-height:340px;overflow:auto;'+(on?'display:none':'')+'">'+rows+'</div></div>'}
 function _cgCajaWire(w,p,ps,uU){try{w._cgOff={};var sb0=w.querySelector('#_cgSumaBox');
-  if(sb0){var tog=function(ev){var t=ev.target;var all=t&&t.closest&&t.closest('._cgTodas');var c=t&&t.closest&&t.closest('._cgChip');if(!all&&!c)return;ev.stopPropagation();ev.preventDefault();
+  if(sb0){var tog=function(ev){var t=ev.target;
+      /* admin en modo admin: modificar una carga desde la suma */
+      var ed=t&&t.closest&&t.closest('._cgEd'),okB=t&&t.closest&&t.closest('._cgOk'),inp=t&&t.closest&&t.closest('._cgIn');
+      if(inp&&!(ev.type==='keydown'&&ev.key==='Enter'))return;
+      if(ed){ev.stopPropagation();ev.preventDefault();if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador en modo admin');return}
+        var pi=+ed.getAttribute('data-pi'),c0=ps[pi];if(!c0)return;var td=ed.closest('td');
+        td.innerHTML='<input class="_cgIn" data-pi="'+pi+'" type="text" inputmode="decimal" autocomplete="off" value="'+(Number(c0.cant)||0)+'" style="width:70px;font-size:13px;font-weight:800;color:#1F3864;border:2px solid #1E7A46;border-radius:7px;padding:2px 5px;text-align:right"> <button type="button" class="_cgOk" data-pi="'+pi+'" title="Aplicar cambio" style="background:#1E7A46;color:#fff;border:0;border-radius:6px;padding:2px 8px;font-weight:900;cursor:pointer">\u27a4</button>';
+        var i9=td.querySelector('._cgIn');if(i9){i9.focus();try{i9.select()}catch(_e){}}return}
+      if(okB||inp){ev.stopPropagation();ev.preventDefault();var pi2=+(okB||inp).getAttribute('data-pi');var iv=w.querySelector('._cgIn[data-pi="'+pi2+'"]');var val=iv?String(iv.value||'').trim():'';
+        var mb=document.getElementById('_amModP'+pi2);if(!mb){toast('No se pudo modificar: abre la actividad de nuevo');return}
+        mb.click();var nvI=document.getElementById('_amNV'+pi2);if(!nvI){return}nvI.value=val;mb.click();return}
+      var all=t&&t.closest&&t.closest('._cgTodas');var c=t&&t.closest&&t.closest('._cgChip');if(!all&&!c)return;ev.stopPropagation();ev.preventDefault();
       if(all)w._cgOff={};else{var k=c.getAttribute('data-k');if(w._cgOff[k])delete w._cgOff[k];else w._cgOff[k]=1}
       var st=sb0.scrollTop;sb0.innerHTML=_cgSumaHTML(p,ps,uU,w._cgOff);sb0.scrollTop=st};
     sb0.onclick=tog;sb0.onkeydown=function(ev){if(ev.key==='Enter'||ev.key===' ')tog(ev)}}
@@ -24848,7 +24860,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c86';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c87';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
