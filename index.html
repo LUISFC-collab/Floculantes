@@ -24864,7 +24864,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c90';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c91';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -32371,11 +32371,20 @@ function _crTablaHTML(D,q,ord){
    titulos) se repinta un momento despues. */
 function _tbFilaSwap(root,D,q,ord,ids){var n=0;try{var doc=root.ownerDocument||document;var vivas=root.querySelectorAll('tbody tr[data-rk]');if(!vivas.length)return 0;
   var es=function(rk){for(var k=0;k<ids.length;k++){var id=String(ids[k]);if(rk===id||rk.indexOf(id+':')===0||rk.indexOf(id+'|')===0||rk.indexOf(id+'~')===0)return true}return false};
-  var obj=[];Array.prototype.forEach.call(vivas,function(tr){var rk=tr.getAttribute('data-rk')||'';if(es(rk))obj.push(tr)});if(!obj.length)return 0;
-  var H=_crTablaHTML(D,q,ord);
-  obj.forEach(function(tr){var rk=tr.getAttribute('data-rk');var at='data-rk="'+String(rk).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"';var p=H.indexOf(at);if(p<0)return;
-    var a=H.lastIndexOf('<tr',p),b=H.indexOf('</tr>',p);if(a<0||b<0)return;
-    var tb=doc.createElement('tbody');tb.innerHTML=H.slice(a,b+5);var nu=tb.firstElementChild;if(!nu)return;tr.parentNode.replaceChild(doc.importNode(nu,true),tr);n++});
+  var viejas={};Array.prototype.forEach.call(vivas,function(tr){var rk=tr.getAttribute('data-rk')||'';if(es(rk))viejas[rk]=tr});if(!Object.keys(viejas).length)return 0;
+  /* la tabla armada SOLO con esa(s) partida(s): unos milisegundos en vez de medio segundo. Lo global que escribe el
+     armador (lineas para el exportador y los filtros, lo ultimo pintado) se deja como estaba */
+  var set={};ids.forEach(function(i){set[String(i)]=1});var Ds={};for(var k9 in D)Ds[k9]=D[k9];Ds.filas=(D.filas||[]).filter(function(r){return r&&set[String(r.id)]});
+  var sv=[window._tbLineas,window._tbLineasTodas,window._tbFltTxt,window._tbUltimo],H,lin;
+  try{H=_crTablaHTML(Ds,q,ord);lin=window._tbLineas}finally{window._tbLineas=sv[0];window._tbLineasTodas=sv[1];window._tbFltTxt=sv[2];window._tbUltimo=sv[3]}
+  try{if(lin&&window._tbLineas)for(var kl in lin)window._tbLineas[kl]=lin[kl]}catch(_el){}
+  var ths=root.querySelectorAll('thead th[data-k]'),iNum=-1;Array.prototype.forEach.call(ths,function(th,i){if(th.getAttribute('data-k')==='num')iNum=i});
+  var tpl=doc.createElement('template');tpl.innerHTML=H;
+  Array.prototype.forEach.call(tpl.content.querySelectorAll('tbody tr[data-rk]'),function(nr){var rk=nr.getAttribute('data-rk');var old=viejas[rk];if(!old)return;
+    var nu=doc.importNode(nr,true);
+    /* la numeracion de la fila es la de la tabla entera: se conserva la que tenia */
+    try{if(iNum>=0&&old.children[iNum]&&nu.children[iNum])nu.replaceChild(old.children[iNum].cloneNode(true),nu.children[iNum])}catch(_en){}
+    old.parentNode.replaceChild(nu,old);n++});
   if(n){try{_tbAplicaFijas(root)}catch(_ef){}try{if(window._tbCalRk&&typeof _tbCalMarca==='function')_tbCalMarca(window._tbCalRk)}catch(_em){}}}catch(e){}return n}
 function _crTablaBind(root,ordRef,rerender){
   var doc=root.ownerDocument||document;
