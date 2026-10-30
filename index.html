@@ -24868,7 +24868,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c99';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c100';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -29586,8 +29586,16 @@ function _fzDeRaw(id,cronId){var r=_fzAll()[id];
   /* la cadena siempre termina en la unidad del contrato: si ninguna parte
      cierra (dato viejo o manual mal guardado), cierra la ultima */
   try{if(!r.fases.some(function(f){return f.cierra}))r.fases[r.fases.length-1].cierra=true}catch(_e){}
-  /* pesos que vinieron del APU: se guardaron con 1 decimal (53.1); valen los exactos del APU (53.0566...) mientras lo guardado sea ese mismo valor redondeado */
-  try{if(r.origen==='apu'&&typeof _apuDe==='function'){var _ra=_apuDe(id);if(_ra){var _gs=(_apuGrupos(_ra)||[]).filter(function(g){return !g.off&&_apuGrupoTot(_ra,g.id)>0});var _sR=0,_sX=0,_ok=true,_lib=[];r.fases.forEach(function(x){var g=_gs.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0];var w=Number(x.peso)||0;if(g){var e=_apuGrupoPct(_ra,g.id);if(Math.abs(Math.round(e*10)/10-w)<1e-9||Math.abs(e-w)<1e-9){x._pX=e;_sR+=Math.round(e*10)/10;_sX+=e}else _ok=false}else _lib.push(x)});if(_ok&&_lib.length===1){var x1=_lib[0],w1=Number(x1.peso)||0;if(Math.abs(w1-Math.round((100-Math.round(_sR*10)/10)*10)/10)<1e-9||Math.abs(w1-(100-_sX))<1e-9)x1._pX=100-_sX;else _ok=false}else if(_lib.length)_ok=false;r.fases.forEach(function(x){if(_ok&&x._pX!=null)x.peso=x._pX;delete x._pX})}}}catch(_ep){}
+  /* el APU manda: la parte que se llama igual que un apartado del APU pesa lo que ese apartado (segun los % de
+     los insumos repartidos); las partes que no son apartado se reparten el resto, en la proporcion que tenian.
+     Asi la ficha y la Tabla 1 dan el mismo peso. Si no hay donde poner el resto, se deja lo guardado */
+  try{if(typeof _apuDe==='function'){var _ra=_apuDe(id);if(_ra){var _gs=(_apuGrupos(_ra)||[]).filter(function(g){return g&&!g.off&&_apuGrupoTot(_ra,g.id)>0});
+    if(_gs.length){var _sX=0,_lib=[],_px={};r.fases.forEach(function(x,ix){var g=_gs.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0];
+        if(g){var e=Number(_apuGrupoPct(_ra,g.id));if(isFinite(e)){_px[ix]=e;_sX+=e}}else _lib.push(ix)});
+      var _rs=100-_sX;
+      if(Object.keys(_px).length&&(_lib.length?_rs>-1e-6:Math.abs(_rs)<1e-6)){var _tl=0;_lib.forEach(function(ix){_tl+=Number(r.fases[ix].peso)||0});
+        _lib.forEach(function(ix){_px[ix]=Math.max(0,_rs)*(_tl>0?(Number(r.fases[ix].peso)||0)/_tl:1/_lib.length)});
+        r.fases.forEach(function(x,ix){if(_px[ix]!=null)x.peso=_px[ix]})}}}}}catch(_ep){}
   /* lo retirado de cada parte (saldo que ya no se realiza), fresco de ajustes */
   try{var _rm=(typeof _retMapa==='function')?_retMapa(id,cronId):{};
     r.fases.forEach(function(x){var e=_rm[String(x.nombre||'').trim().toLowerCase()];x._ret=(e&&isFinite(Number(e.cant)))?Number(e.cant):0})}catch(_e2){}
