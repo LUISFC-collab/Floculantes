@@ -24868,7 +24868,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c101';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c102';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -32766,7 +32766,9 @@ async function _tbExportarXlsx2(root,doc,opt){
   var txt=function(el){return String(el.innerText||el.textContent||'').replace(/\s+/g,' ').trim()};
   var celT=function(ref,v,st){return '<c r="'+ref+'" s="'+st+'" t="inlineStr"><is><t xml:space="preserve">'+esc9(v)+'</t></is></c>'};
   var celN=function(ref,v,st){var n=Number(v);if(!isFinite(n))return '<c r="'+ref+'" s="'+st+'"/>';return '<c r="'+ref+'" s="'+st+'"><v>'+n+'</v></c>'};
-  var celF=function(ref,f,st){return '<c r="'+ref+'" s="'+st+'"><f>'+esc9(f)+'</f></c>'};
+  /* toda formula exportada va con SI.ERROR(...;0): una celda vacia (p. ej. HH unitario de un apartado sin HH)
+     multiplicada daba #VALOR! y arrastraba al TOTAL; sin HH, lo que vale es 0 */
+  var celF=function(ref,f,st){f=String(f==null?'':f).replace(/^=/,'');if(f&&!/^IFERROR\(/i.test(f))f='IFERROR('+f+',0)';return '<c r="'+ref+'" s="'+st+'"><f>'+esc9(f)+'</f></c>'};
   var NUM=164,PCT=165,DIF=166;
   var filas=[],merges=[],r=1;
   /* --- cabecera --- */
@@ -34315,7 +34317,9 @@ async function _tqExportarXlsx2(root,doc){
   var txt=function(el){return String(el.innerText||el.textContent||'').replace(/\s+/g,' ').trim()};
   var celT=function(ref,v,st){return '<c r="'+ref+'" s="'+st+'" t="inlineStr"><is><t xml:space="preserve">'+esc9(v)+'</t></is></c>'};
   var celN=function(ref,v,st){var n=Number(v);if(!isFinite(n))return '<c r="'+ref+'" s="'+st+'"/>';return '<c r="'+ref+'" s="'+st+'"><v>'+n+'</v></c>'};
-  var celF=function(ref,f,st){return '<c r="'+ref+'" s="'+st+'"><f>'+esc9(f)+'</f></c>'};
+  /* toda formula exportada va con SI.ERROR(...;0): una celda vacia (p. ej. HH unitario de un apartado sin HH)
+     multiplicada daba #VALOR! y arrastraba al TOTAL; sin HH, lo que vale es 0 */
+  var celF=function(ref,f,st){f=String(f==null?'':f).replace(/^=/,'');if(f&&!/^IFERROR\(/i.test(f))f='IFERROR('+f+',0)';return '<c r="'+ref+'" s="'+st+'"><f>'+esc9(f)+'</f></c>'};
   var NUM=164,PCT=165,DIF=166;
   var filas=[],merges=[],r=1;
   /* --- cabecera --- */
@@ -35326,7 +35330,9 @@ async function _tvExportarXlsx2(root,doc){
   var txt=function(el){return String(el.innerText||el.textContent||'').replace(/\s+/g,' ').trim()};
   var celT=function(ref,v,st){return '<c r="'+ref+'" s="'+st+'" t="inlineStr"><is><t xml:space="preserve">'+esc9(v)+'</t></is></c>'};
   var celN=function(ref,v,st){var n=Number(v);if(!isFinite(n))return '<c r="'+ref+'" s="'+st+'"/>';return '<c r="'+ref+'" s="'+st+'"><v>'+n+'</v></c>'};
-  var celF=function(ref,f,st){return '<c r="'+ref+'" s="'+st+'"><f>'+esc9(f)+'</f></c>'};
+  /* toda formula exportada va con SI.ERROR(...;0): una celda vacia (p. ej. HH unitario de un apartado sin HH)
+     multiplicada daba #VALOR! y arrastraba al TOTAL; sin HH, lo que vale es 0 */
+  var celF=function(ref,f,st){f=String(f==null?'':f).replace(/^=/,'');if(f&&!/^IFERROR\(/i.test(f))f='IFERROR('+f+',0)';return '<c r="'+ref+'" s="'+st+'"><f>'+esc9(f)+'</f></c>'};
   var NUM=164,PCT=165,DIF=166;
   var filas=[],merges=[],r=1;
   /* --- cabecera --- */
@@ -36582,7 +36588,9 @@ async function _txExportarXlsx2(root,doc){
   var txt=function(el){return String(el.innerText||el.textContent||'').replace(/\s+/g,' ').trim()};
   var celT=function(ref,v,st){return '<c r="'+ref+'" s="'+st+'" t="inlineStr"><is><t xml:space="preserve">'+esc9(v)+'</t></is></c>'};
   var celN=function(ref,v,st){var n=Number(v);if(!isFinite(n))return '<c r="'+ref+'" s="'+st+'"/>';return '<c r="'+ref+'" s="'+st+'"><v>'+n+'</v></c>'};
-  var celF=function(ref,f,st){return '<c r="'+ref+'" s="'+st+'"><f>'+esc9(f)+'</f></c>'};
+  /* toda formula exportada va con SI.ERROR(...;0): una celda vacia (p. ej. HH unitario de un apartado sin HH)
+     multiplicada daba #VALOR! y arrastraba al TOTAL; sin HH, lo que vale es 0 */
+  var celF=function(ref,f,st){f=String(f==null?'':f).replace(/^=/,'');if(f&&!/^IFERROR\(/i.test(f))f='IFERROR('+f+',0)';return '<c r="'+ref+'" s="'+st+'"><f>'+esc9(f)+'</f></c>'};
   var NUM=164,PCT=165,DIF=166;
   var filas=[],merges=[],r=1;
   /* --- cabecera --- */
@@ -37324,7 +37332,13 @@ function _noHaceFrac(id,cronId){var M=_hhMemo(),k='nh|'+String(cronId==null?'':c
   try{var H9=_noHaceHH(id,cronId);if(H9!=null)return (M[k]=H9)}catch(_eh9){}
   return (M[k]=_noHaceCostoFrac(id,cronId))}
 /* la fraccion del COSTO de la partida que no se hace: apartados apagados + saldos retirados, por costo */
-function _noHaceCostoFrac(id,cronId){try{var a=(typeof _apuOffFrac==='function')?_apuOffFrac(id,cronId):0;if(a>=1)return 1;var b=_retFrac(id,cronId);var s9=a+b;if(s9>1-1e-12)s9=1;return Math.max(-4,Math.min(1,s9))}catch(e){return 0}}
+function _noHaceCostoFrac(id,cronId){try{var a=(typeof _apuOffFrac==='function')?_apuOffFrac(id,cronId):0;if(a>=1)return 1;var b=_retFrac(id,cronId);
+  /* un apartado apagado Y retirado cuenta una vez: lo retirado de una parte que es un apartado apagado ya salio con el apagado */
+  try{var fz=(typeof _fzDe==='function')?_fzDe(id,cronId):null,ra=(typeof _apuDe==='function')?_apuDe(id):null;
+    if(a>0&&fz&&fz.fases&&fz.fases.length&&ra){var gs=_apuGrupos(ra)||[],tw=0,dup=0;fz.fases.forEach(function(x){var w=Number(x.pesoC!=null?x.pesoC:x.peso)||0;tw+=w;
+      var g=gs.filter(function(z){return z&&_retNk(z.nombre)===_retNk(x.nombre)})[0];if(!g||!_apuGOffEf(id,g,cronId))return;
+      var c=Number(x.cantidad)||0,q=_retCantDe(x);if(c>0&&q>0)dup+=w*Math.min(1,q/c)});if(tw>0)b-=dup/tw}}catch(_ed){}
+  var s9=a+b;if(s9>1-1e-12)s9=1;return Math.max(-4,Math.min(1,s9))}catch(e){return 0}}
 /* la fraccion de las HH de la partida que no se hace, por HH del APU; null si el APU no tiene HH o las partes no
    casan con sus apartados (entonces sigue la regla por costo de siempre) */
 function _noHaceHH(id,cronId){var r=(typeof _apuDe==='function')?_apuDe(id):null;if(!r||!r.grupos||!r.grupos.length)return null;if(!r.partida_id)r.partida_id=id;
