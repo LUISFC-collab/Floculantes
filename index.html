@@ -29586,16 +29586,28 @@ function _fzDeRaw(id,cronId){var r=_fzAll()[id];
   /* la cadena siempre termina en la unidad del contrato: si ninguna parte
      cierra (dato viejo o manual mal guardado), cierra la ultima */
   try{if(!r.fases.some(function(f){return f.cierra}))r.fases[r.fases.length-1].cierra=true}catch(_e){}
-  /* el APU manda: la parte que se llama igual que un apartado del APU pesa lo que ese apartado (segun los % de
-     los insumos repartidos); las partes que no son apartado se reparten el resto, en la proporcion que tenian.
-     Asi la ficha y la Tabla 1 dan el mismo peso. Si no hay donde poner el resto, se deja lo guardado */
-  try{if(typeof _apuDe==='function'){var _ra=_apuDe(id);if(_ra){var _gs=(_apuGrupos(_ra)||[]).filter(function(g){return g&&!g.off&&_apuGrupoTot(_ra,g.id)>0});
-    if(_gs.length){var _sX=0,_lib=[],_px={};r.fases.forEach(function(x,ix){var g=_gs.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0];
-        if(g){var e=Number(_apuGrupoPct(_ra,g.id));if(isFinite(e)){_px[ix]=e;_sX+=e}}else _lib.push(ix)});
-      var _rs=100-_sX;
-      if(Object.keys(_px).length&&(_lib.length?_rs>-1e-6:Math.abs(_rs)<1e-6)){var _tl=0;_lib.forEach(function(ix){_tl+=Number(r.fases[ix].peso)||0});
-        _lib.forEach(function(ix){_px[ix]=Math.max(0,_rs)*(_tl>0?(Number(r.fases[ix].peso)||0)/_tl:1/_lib.length)});
-        r.fases.forEach(function(x,ix){if(_px[ix]!=null)x.peso=_px[ix]})}}}}}catch(_ep){}
+  /* el APU manda. Las HH de avance son HH: con APU que tiene mano de obra, cada parte pesa las HH de su apartado
+     (un apartado de solo materiales pesa 0) y las partes que no son apartado se quedan con la mano de obra que no
+     esta en ningun apartado (en la proporcion que tenian; si no hay, la que cierra). Un apartado apagado en este
+     cronograma que no es parte no le da su mano de obra a nadie: sale de las HH. El reparto por COSTO queda solo
+     para el APU sin mano de obra (y para el costo). Si no hay donde poner el resto, se deja lo guardado */
+  try{r._pesoHH=false;if(typeof _apuDe==='function'){var _ra=_apuDe(id);if(_ra){if(!_ra.partida_id)_ra.partida_id=id;var _gs=(_apuGrupos(_ra)||[]).filter(function(g){return g&&!g.off});
+    var _mg=function(x){return _gs.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0]};
+    var _pvH=window._apuVistaHH,_tH=0,_gH={};window._apuVistaHH=true;try{_tH=Number(_apuTotal(_ra))||0;_gs.forEach(function(g){_gH[g.id]=Number(_apuGrupoTot(_ra,g.id))||0})}finally{window._apuVistaHH=_pvH}
+    var _px={},_sX=0,_lib=[],_n=0,_rs=0;
+    if(_tH>0){var _usa={};r.fases.forEach(function(x,ix){var g=_mg(x);if(g){_usa[g.id]=1;_px[ix]=_gH[g.id]/_tH*100;_sX+=_px[ix];_n++}else _lib.push(ix)});
+      var _oN=0;_gs.forEach(function(g){if(_usa[g.id])return;var off=false;try{off=_apuGOffEf(id,g,cronId)}catch(_eo){}if(off)_oN+=_gH[g.id]/_tH*100});
+      _rs=100-_sX-_oN;
+      if(_n){if(_lib.length){if(_rs>-1e-6){var _tl=0;_lib.forEach(function(ix){_tl+=Number(r.fases[ix].peso)||0});_lib.forEach(function(ix){_px[ix]=Math.max(0,_rs)*(_tl>0?(Number(r.fases[ix].peso)||0)/_tl:1/_lib.length)})}else _n=0}
+        else if(_rs>1e-9){var _ic=-1;r.fases.forEach(function(x,ix){if(x.cierra)_ic=ix});if(_ic<0)_ic=r.fases.length-1;_px[_ic]+=_rs}}
+      if(_n){r.fases.forEach(function(x,ix){if(_px[ix]!=null)x.peso=_px[ix]});r._pesoHH=true}}
+    else{var _gs2=_gs.filter(function(g){return _apuGrupoTot(_ra,g.id)>0});
+      if(_gs2.length){r.fases.forEach(function(x,ix){var g=_gs2.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0];
+          if(g){var e=Number(_apuGrupoPct(_ra,g.id));if(isFinite(e)){_px[ix]=e;_sX+=e}}else _lib.push(ix)});
+        _rs=100-_sX;
+        if(Object.keys(_px).length&&(_lib.length?_rs>-1e-6:Math.abs(_rs)<1e-6)){var _tl2=0;_lib.forEach(function(ix){_tl2+=Number(r.fases[ix].peso)||0});
+          _lib.forEach(function(ix){_px[ix]=Math.max(0,_rs)*(_tl2>0?(Number(r.fases[ix].peso)||0)/_tl2:1/_lib.length)});
+          r.fases.forEach(function(x,ix){if(_px[ix]!=null)x.peso=_px[ix]})}}}}}}catch(_ep){}
   /* lo retirado de cada parte (saldo que ya no se realiza), fresco de ajustes */
   try{var _rm=(typeof _retMapa==='function')?_retMapa(id,cronId):{};
     r.fases.forEach(function(x){var e=_rm[String(x.nombre||'').trim().toLowerCase()];x._ret=(e&&isFinite(Number(e.cant)))?Number(e.cant):0})}catch(_e2){}
@@ -32048,18 +32060,20 @@ async function _crTablaDatos(c,corte){
         r.fases.forEach(function(x,_ix9){var w=Number(x.peso)||0,cq=Number(x.cantidad)||0,av=(_at?(Number(_fzAvanceAt(x,_at,_fzFechasDe(id)))||0):(Number(x.avance)||0)),e=rm[_retNk(x.nombre)],saldo=Math.max(0,cq-av),rq=e?((Number(e.cant)||0)<0?(Number(e.cant)||0):Math.max(0,Math.min(Number(e.cant)||0,saldo))):0;
           var g=gs.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0];if(g)usados[g.id]=1;var go=g?_apuGOffEf(id,g,c.cron_id):false;
           var frac=(_fx9&&_fx9[_ix9]!=null)?_fx9[_ix9]:_pw(w)*(1-aOff),nh=(go||off)?1:((cq>0&&rq!==0)?Math.max(-4,Math.min(1,rq/cq)):0);
-          var hhK=hhC*frac,hhKc=(cuenta>0?Math.max(0,hhK-hhC*_pw(w)*nh):0);
+          var fracH=r._pesoHH?Math.max(0,w/100):frac;   /* las HH del apartado: las de su mano de obra (peso por HH) */
+          var hhK=hhC*fracH,hhKc=(cuenta>0?(r._pesoHH?Math.max(0,hhK*(1-nh)):Math.max(0,hhK-hhC*_pw(w)*nh)):0);
           var estK=go?'Apagado':((est!=='Activa')?est:(rq<0?'Metrado ampliado':rq>0?((rq>=saldo-1e-9)?'Todo el saldo retirado':'Saldo retirado'):((cq>0&&av>=cq-1e-9)?'Cerrado':'Activo')));
-          var costoK=costo*frac,costoKF=considera?Math.max(0,costo*frac-costo*_pw(w)*nh):0;
+          var costoK=costo*frac,costoKF=considera?(r._pesoHH?Math.max(0,costoK*(1-nh)):Math.max(0,costo*frac-costo*_pw(w)*nh)):0;
           var metFk=(cq>0?(considera?(go?0:Math.max(0,cq-rq)):0):null);var metMk=(metFk!=null)?Math.max(metFk,(considera&&!go)?av:0):null;var escK=(metFk>0&&metMk>metFk)?(metMk/metFk):1;
           var avFk=(considera&&!go)?av:0,rAk=(metFk>0)?Math.min(1,avFk/metFk):0,rAMk=(metMk>0)?Math.min(1,avFk/metMk):0,hhMk=hhKc*escK,costoMk=costoKF*escK;
           /* restantes y duracion del apartado: su rendimiento es el de la partida si comparten unidad */
           var metAk=(metFk!=null?Math.min(avFk,metFk):null),rendK=((((x.unidad||und||'')===(und||''))&&rendA9>0&&cq>0&&metK>0)?rendA9*cq/metK:null);
-          partes.push(_tbConRest({pert:x.nombre||'',rendQ:(((x.unidad||und||'')===(und||''))?rendQ9:null),rendEd:(rendEd9!=null),rendBase:rendA9,metM:metMk,hhM:hhMk,costoM:costoMk,metA:metAk,hhA:hhKc*rAk,costoA:costoKF*rAk,metAM:(metMk!=null?Math.min(avFk,metMk):null),hhAM:hhMk*rAMk,costoAM:costoMk*rAMk,av:(cq>0?av:null),met:(cq>0?cq:null),metF:metFk,und:x.unidad||und||'',pu:(cq>0?costo*frac/cq:null),hhu:((cq>0&&hhK>0)?hhK/cq:null),peso:frac*100,hhC:hhK,hh:hhKc,noHace:nh*100,est:estK,
+          partes.push(_tbConRest({pert:x.nombre||'',rendQ:(((x.unidad||und||'')===(und||''))?rendQ9:null),rendEd:(rendEd9!=null),rendBase:rendA9,metM:metMk,hhM:hhMk,costoM:costoMk,metA:metAk,hhA:hhKc*rAk,costoA:costoKF*rAk,metAM:(metMk!=null?Math.min(avFk,metMk):null),hhAM:hhMk*rAMk,costoAM:costoMk*rAMk,av:(cq>0?av:null),met:(cq>0?cq:null),metF:metFk,und:x.unidad||und||'',pu:(cq>0?costo*frac/cq:null),hhu:((cq>0&&hhK>0)?hhK/cq:null),peso:frac*100,hhC:hhK,hh:hhKc,pesoHH:(r._pesoHH?w:null),noHace:nh*100,est:estK,
             retN:(rq>0?rq:0),ret:(rq<0?('+'+_apuCant(-rq)+' '+(x.unidad||'')+' m\u00e1s \u00b7 metrado final '+_apuCant(cq-rq)):rq>0?(_apuCant(rq)+' '+(x.unidad||'')+(rq<saldo-1e-9?(' \u00b7 metrado final '+_apuCant(Math.max(0,cq-rq))):'')):''),apOff:(go?(g.nombre||g.id):''),costo:costoK,costoC:costoKF,dCosto:costoK-costoKF,pct:(function(){var mF9=(rq<0?cq-rq:Math.max(0,cq-rq));return mF9>0?av/mF9*100:(av>0?100:0)})()},_tbRestantes((cq>0?cq:null),(cq>0?av:null),metFk,metAk,metMk,hhK,costoK,rendK)))})}
       /* apartados del APU apagados en este cronograma que no son parte: su fila, con lo que se llevan */
       try{var atot=(ra&&typeof _apuTotal==='function')?_apuTotal(ra):0;if(atot>0&&r&&r.fases&&r.fases.length)gs.forEach(function(g){if(usados[g.id])return;var go=_apuGOffEf(id,g,c.cron_id);if(!go)return;var gf=_apuGrupoTot(ra,g.id)/atot;if(!(gf>0))return;
-        var hhG=hhC*gf,cG=costo*gf;
+        var gfH=gf;if(r._pesoHH)try{var _pv7=window._apuVistaHH;window._apuVistaHH=true;try{var _t7=Number(_apuTotal(ra))||0;gfH=_t7>0?(Number(_apuGrupoTot(ra,g.id))||0)/_t7:0}finally{window._apuVistaHH=_pv7}}catch(_e7){}
+        var hhG=hhC*gfH,cG=costo*gf;
         partes.push({pert:(g.nombre||g.id)+' (apartado del APU)',av:null,met:null,metF:null,metM:null,hhM:0,costoM:0,metA:null,hhA:0,costoA:0,metAM:null,hhAM:0,costoAM:0,rendQ:null,rendEd:false,rendBase:rendA9,metR:null,metRF:null,hhR:null,hhRF:null,costoR:null,costoRF:null,rend:null,durC:null,durF:null,durM:null,durR:null,dur:null,und:und,pu:null,hhu:null,peso:gf*100,hhC:hhG,hh:0,noHace:100,est:'Apagado',ret:'',apOff:(g.nombre||g.id),costo:cG,costoC:0,dCosto:cG,pct:null})})}catch(e){}}catch(e){}
     if(partes.length){
       /* la cabecera de una partida con apartados repite lo que suman sus
@@ -37315,7 +37329,11 @@ function _noHaceHH(id,cronId){var r=(typeof _apuDe==='function')?_apuDe(id):null
   var off=0;Object.keys(G).forEach(function(k){if(G[k].off)off+=G[k].hh});
   /* retirados: cada parte pesa sus HH (la que cierra, las HH que no estan en ningun apartado); las apagadas no se cuentan otra vez */
   var ret=0,fz=null;try{fz=(typeof _fzDe==='function')?_fzDe(id,cronId):null}catch(_e){fz=null}
-  if(fz&&fz.fases&&fz.fases.length){var rm=(cronId!=null&&cronId!=='')?_retMapa(id,cronId):null,sumG=0,casan=true;
+  if(fz&&fz.fases&&fz.fases.length&&fz._pesoHH){var rmH=(cronId!=null&&cronId!=='')?_retMapa(id,cronId):null;
+    fz.fases.forEach(function(x){var g=porNom[nk(x.nombre)];if(g&&g.off)return;var hhP=tot*(Number(x.peso)||0)/100;
+      var c=Number(x.cantidad)||0;var xx=x;if(rmH){var e=rmH[_retNk(x.nombre)];xx={cantidad:x.cantidad,avance:x.avance,_ret:(e&&isFinite(Number(e.cant)))?Number(e.cant):0}}
+      var q=_retCantDe(xx);if(c>0&&q!==0)ret+=hhP*Math.min(1,q/c)})}
+  else if(fz&&fz.fases&&fz.fases.length){var rm=(cronId!=null&&cronId!=='')?_retMapa(id,cronId):null,sumG=0,casan=true;
     fz.fases.forEach(function(x){if(x.cierra)return;var g=porNom[nk(x.nombre)];if(!g){casan=false;return}sumG+=g.hh});
     if(!casan)return null;
     fz.fases.forEach(function(x){var g=x.cierra?null:porNom[nk(x.nombre)];var hhP=x.cierra?Math.max(0,tot-sumG):g.hh;if(g&&g.off)return;
