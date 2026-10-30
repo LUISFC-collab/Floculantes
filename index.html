@@ -24868,7 +24868,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c97';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c98';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -37292,7 +37292,29 @@ function _retFrac(id,cronId){try{var r=(typeof _fzDe==='function')?_fzDe(id,cron
    + saldos retirados */
 function _noHaceFrac(id,cronId){var M=_hhMemo(),k='nh|'+String(cronId==null?'':cronId)+'|'+String(id);
   if(M[k]!==undefined)return M[k];
+  /* con APU que tiene mano de obra, lo que se lleva cada apartado apagado o retirado se mide en HH (no en costo):
+     un apartado de solo materiales no le quita HH a la partida; y un apartado apagado Y retirado cuenta una vez */
+  try{var H9=_noHaceHH(id,cronId);if(H9!=null)return (M[k]=H9)}catch(_eh9){}
   try{var a=(typeof _apuOffFrac==='function')?_apuOffFrac(id,cronId):0;if(a>=1)return (M[k]=1);var b=_retFrac(id,cronId);var s9=a+b;if(s9>1-1e-12)s9=1;return (M[k]=Math.max(-4,Math.min(1,s9)))}catch(e){return (M[k]=0)}}
+/* la fraccion de las HH de la partida que no se hace, por HH del APU; null si el APU no tiene HH o las partes no
+   casan con sus apartados (entonces sigue la regla por costo de siempre) */
+function _noHaceHH(id,cronId){var r=(typeof _apuDe==='function')?_apuDe(id):null;if(!r||!r.grupos||!r.grupos.length)return null;if(!r.partida_id)r.partida_id=id;
+  var prev=window._apuVistaHH,tot=0,G={};window._apuVistaHH=true;
+  try{tot=_apuTotal(r);(_apuGrupos(r)||[]).forEach(function(g){if(g)G[g.id]={g:g,hh:_apuGrupoTot(r,g.id),off:_apuGOffEf(id,g,cronId)}})}finally{window._apuVistaHH=prev}
+  if(!(tot>0))return null;
+  var nk=function(t){return String(t||'').trim().toLowerCase()};var porNom={};Object.keys(G).forEach(function(k){porNom[nk(G[k].g.nombre)]=G[k]});
+  /* apagados: sus HH */
+  var off=0;Object.keys(G).forEach(function(k){if(G[k].off)off+=G[k].hh});
+  /* retirados: cada parte pesa sus HH (la que cierra, las HH que no estan en ningun apartado); las apagadas no se cuentan otra vez */
+  var ret=0,fz=null;try{fz=(typeof _fzDe==='function')?_fzDe(id,cronId):null}catch(_e){fz=null}
+  if(fz&&fz.fases&&fz.fases.length){var rm=(cronId!=null&&cronId!=='')?_retMapa(id,cronId):null,sumG=0,casan=true;
+    fz.fases.forEach(function(x){if(x.cierra)return;var g=porNom[nk(x.nombre)];if(!g){casan=false;return}sumG+=g.hh});
+    if(!casan)return null;
+    fz.fases.forEach(function(x){var g=x.cierra?null:porNom[nk(x.nombre)];var hhP=x.cierra?Math.max(0,tot-sumG):g.hh;if(g&&g.off)return;
+      var c=Number(x.cantidad)||0;var xx=x;if(rm){var e=rm[_retNk(x.nombre)];xx={cantidad:x.cantidad,avance:x.avance,_ret:(e&&isFinite(Number(e.cant)))?Number(e.cant):0}}
+      var q=_retCantDe(xx);if(c>0&&q!==0)ret+=hhP*Math.min(1,q/c)})}
+  else{try{ret=tot*(Number(_retFrac(id,cronId))||0)}catch(_er){}}   /* sin partes: el retiro de la partida entera, como siempre */
+  var f=(off+ret)/tot;if(f>1-1e-12)f=1;return Math.max(-4,Math.min(1,f))}
 function _retRefresca(){try{window._hhCache=null;window._crCat=null;window._crCatIx=null;window._pgPesoTot=null;window._pgUniv=null;window._crHechoMemo=null}catch(e){}
   try{var _sp=document.getElementById('scrProg');if(_sp&&!_sp.classList.contains('hidden')&&typeof renderCal==='function')renderCal()}catch(e){}
   try{if(typeof window._crTablaRepinta==='function')window._crTablaRepinta();_t23Repinta()}catch(e){}
