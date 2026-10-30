@@ -29586,28 +29586,33 @@ function _fzDeRaw(id,cronId){var r=_fzAll()[id];
   /* la cadena siempre termina en la unidad del contrato: si ninguna parte
      cierra (dato viejo o manual mal guardado), cierra la ultima */
   try{if(!r.fases.some(function(f){return f.cierra}))r.fases[r.fases.length-1].cierra=true}catch(_e){}
-  /* el APU manda. Las HH de avance son HH: con APU que tiene mano de obra, cada parte pesa las HH de su apartado
-     (un apartado de solo materiales pesa 0) y las partes que no son apartado se quedan con la mano de obra que no
-     esta en ningun apartado (en la proporcion que tenian; si no hay, la que cierra). Un apartado apagado en este
-     cronograma que no es parte no le da su mano de obra a nadie: sale de las HH. El reparto por COSTO queda solo
-     para el APU sin mano de obra (y para el costo). Si no hay donde poner el resto, se deja lo guardado */
-  try{r._pesoHH=false;if(typeof _apuDe==='function'){var _ra=_apuDe(id);if(_ra){if(!_ra.partida_id)_ra.partida_id=id;var _gs=(_apuGrupos(_ra)||[]).filter(function(g){return !!g});   /* tambien los que no se consideran: se casan por nombre */
-    var _mg=function(x){return _gs.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0]};
+  /* el APU manda, con DOS pesos por parte:
+     - pesoC (COSTO): la parte que se llama igual que un apartado pesa su % del costo del APU; las que no son
+       apartado se reparten el resto. Sirve para el costo y para lo retirado en soles.
+     - peso (HH, el del avance): con APU que tiene mano de obra, cada parte pesa las HH de su apartado (uno de
+       solo materiales pesa 0) y las que no son apartado se quedan con la mano de obra que no esta en ningun
+       apartado (si no hay, la que cierra). Un apartado apagado en este cronograma que no es parte no le da su
+       mano de obra a nadie. Sin mano de obra en el APU, el peso del avance es el de costo.
+     Las partes que no son apartado se reparten el resto en la proporcion que tenian; si no hay donde ponerlo,
+     se deja lo guardado */
+  try{r._pesoHH=false;if(typeof _apuDe==='function'){var _ra=_apuDe(id);if(_ra){if(!_ra.partida_id)_ra.partida_id=id;var _gs=(_apuGrupos(_ra)||[]).filter(function(g){return !!g});
+    var _mg=function(L,x){return L.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0]};
+    var _lpr=function(L,R,px){var tl=0;L.forEach(function(ix){tl+=Number(r.fases[ix].peso)||0});L.forEach(function(ix){px[ix]=Math.max(0,R)*(tl>0?(Number(r.fases[ix].peso)||0)/tl:1/L.length)})};
+    /* por costo */
+    var _pC={},_gs2=_gs.filter(function(g){return !g.off&&_apuGrupoTot(_ra,g.id)>0});
+    if(_gs2.length){var _sC=0,_lC=[];r.fases.forEach(function(x,ix){var g=_mg(_gs2,x);if(g){var e=Number(_apuGrupoPct(_ra,g.id));if(isFinite(e)){_pC[ix]=e;_sC+=e}}else _lC.push(ix)});
+      var _rC=100-_sC;if(Object.keys(_pC).length&&(_lC.length?_rC>-1e-6:Math.abs(_rC)<1e-6))_lpr(_lC,_rC,_pC);else _pC={}}
+    /* por HH */
     var _pvH=window._apuVistaHH,_tH=0,_gH={};window._apuVistaHH=true;try{_tH=Number(_apuTotal(_ra))||0;_gs.forEach(function(g){_gH[g.id]=Number(_apuGrupoTot(_ra,g.id))||0})}finally{window._apuVistaHH=_pvH}
-    var _px={},_sX=0,_lib=[],_n=0,_rs=0;
-    if(_tH>0){var _usa={};r.fases.forEach(function(x,ix){var g=_mg(x);if(g){_usa[g.id]=1;_px[ix]=_gH[g.id]/_tH*100;_sX+=_px[ix];_n++}else _lib.push(ix)});
+    var _pH={},_n=0;
+    if(_tH>0){var _sX=0,_lib=[],_usa={};r.fases.forEach(function(x,ix){var g=_mg(_gs,x);if(g){_usa[g.id]=1;_pH[ix]=_gH[g.id]/_tH*100;_sX+=_pH[ix];_n++}else _lib.push(ix)});
       var _oN=0;_gs.forEach(function(g){if(_usa[g.id])return;var off=false;try{off=_apuGOffEf(id,g,cronId)}catch(_eo){}if(off)_oN+=_gH[g.id]/_tH*100});
-      _rs=100-_sX-_oN;
-      if(_n){if(_lib.length){if(_rs>-1e-6){var _tl=0;_lib.forEach(function(ix){_tl+=Number(r.fases[ix].peso)||0});_lib.forEach(function(ix){_px[ix]=Math.max(0,_rs)*(_tl>0?(Number(r.fases[ix].peso)||0)/_tl:1/_lib.length)})}else _n=0}
-        else if(_rs>1e-9){var _ic=-1;r.fases.forEach(function(x,ix){if(x.cierra)_ic=ix});if(_ic<0)_ic=r.fases.length-1;_px[_ic]+=_rs}}
-      if(_n){r.fases.forEach(function(x,ix){if(_px[ix]!=null)x.peso=_px[ix]});r._pesoHH=true}}
-    else{var _gs2=_gs.filter(function(g){return !g.off&&_apuGrupoTot(_ra,g.id)>0});
-      if(_gs2.length){r.fases.forEach(function(x,ix){var g=_gs2.filter(function(z){return _retNk(z.nombre)===_retNk(x.nombre)})[0];
-          if(g){var e=Number(_apuGrupoPct(_ra,g.id));if(isFinite(e)){_px[ix]=e;_sX+=e}}else _lib.push(ix)});
-        _rs=100-_sX;
-        if(Object.keys(_px).length&&(_lib.length?_rs>-1e-6:Math.abs(_rs)<1e-6)){var _tl2=0;_lib.forEach(function(ix){_tl2+=Number(r.fases[ix].peso)||0});
-          _lib.forEach(function(ix){_px[ix]=Math.max(0,_rs)*(_tl2>0?(Number(r.fases[ix].peso)||0)/_tl2:1/_lib.length)});
-          r.fases.forEach(function(x,ix){if(_px[ix]!=null)x.peso=_px[ix]})}}}}}}catch(_ep){}
+      var _rs=100-_sX-_oN;
+      if(_n){if(_lib.length){if(_rs>-1e-6)_lpr(_lib,_rs,_pH);else _n=0}
+        else if(_rs>1e-9){var _ic=-1;r.fases.forEach(function(x,ix){if(x.cierra)_ic=ix});if(_ic<0)_ic=r.fases.length-1;_pH[_ic]+=_rs}}}
+    r.fases.forEach(function(x,ix){x.pesoC=(_pC[ix]!=null)?_pC[ix]:(Number(x.peso)||0)});
+    if(_n){r.fases.forEach(function(x,ix){if(_pH[ix]!=null)x.peso=_pH[ix]});r._pesoHH=true}
+    else r.fases.forEach(function(x){x.peso=x.pesoC})}}}catch(_ep){}
   /* lo retirado de cada parte (saldo que ya no se realiza), fresco de ajustes */
   try{var _rm=(typeof _retMapa==='function')?_retMapa(id,cronId):{};
     r.fases.forEach(function(x){var e=_rm[String(x.nombre||'').trim().toLowerCase()];x._ret=(e&&isFinite(Number(e.cant)))?Number(e.cant):0})}catch(_e2){}
@@ -31997,7 +32002,7 @@ async function _crTablaDatos(c,corte){
        linea base: LB1-FLOCULANTES es la foto del forecast y salia con el costo
        del contrato entero mientras sus HH si descontaban. Sin redondear: el QPS
        trae centesimas de centimo y la suma debe cuadrar. */
-    var costoC=considera?costo*(1-f):0;
+    var fC=f;try{fC=_noHaceCostoFrac(id,c.cron_id)}catch(_efc){}var costoC=considera?costo*(1-fC):0;
     /* el metrado del APLICATIVO (el que se edita) y el del CONTRATO son dos
        cosas: las columnas de contrato salen del catalogo */
     var met=null,und='';try{var m=(typeof metaOf==='function')?metaOf(id):null;if(m&&m.total!=null){met=Number(m.total)||0;und=m.unidad||pp.und||''}else if(pp.cant!==''&&pp.cant!=null){met=Number(pp.cant)||0;und=pp.und||''}}catch(e){}
@@ -32083,7 +32088,7 @@ async function _crTablaDatos(c,corte){
       partes.forEach(function(q){_sA+=Number(q.hhA)||0;_sCA+=Number(q.costoA)||0;_sM+=Number(q.hhM)||0;_sCM+=Number(q.costoM)||0;_sAM+=Number(q.hhAM)||0;_sCAM+=Number(q.costoAM)||0;_sH+=Number(q.hh)||0});
       hhA=_sA;costoA=_sCA;hhM=_sM;costoM=_sCM;hhAM=_sAM;costoAM=_sCAM;
       if(metF!=null&&_sH>0){metA=Math.min(metF,metF*_sA/_sH);metM=Math.max(metF,metF*_sM/_sH);metAM=(_sM>0)?Math.min(metM,metM*_sAM/_sM):metA}}
-    filas.push(_tbConRest({id:id,nom:pp.nom,rendQ:rendQ9,rendEd:(rendEd9!=null),rendBase:rendA9,esp:pp.esp,sis:pp.sis||'(sin sistema)',wbs:_tbWbsDe(pp),tareas:(tareasDe[id]||[]).join(', '),grupo:grupos[id]||'',est:est,av:av,met:met,metF:metF,und:und,pu:pu,hhu:((metK>0&&hhC>0)?hhC/metK:null),pct:pct,hhC:hhC,hh:cuenta,noHace:(off?100:(Math.abs(f)<1e-12?0:f*100)),apOff:apOff.join(', '),ret:ret.join(' \u00b7 '),costo:costo,costoC:costoC,metM:metM,hhM:hhM,costoM:costoM,metA:metA,hhA:hhA,costoA:costoA,metAM:metAM,hhAM:hhAM,costoAM:costoAM,dCosto:costo-costoC,nva:!!pp.nva,partes:partes},_tbRestantes(met,av,metF,metA,metM,hhC,costo,rendA9)))});
+    filas.push(_tbConRest({id:id,nom:pp.nom,rendQ:rendQ9,rendEd:(rendEd9!=null),rendBase:rendA9,esp:pp.esp,sis:pp.sis||'(sin sistema)',wbs:_tbWbsDe(pp),tareas:(tareasDe[id]||[]).join(', '),grupo:grupos[id]||'',est:est,av:av,met:met,metF:metF,und:und,pu:pu,hhu:((metK>0&&hhC>0)?hhC/metK:null),pct:pct,hhC:hhC,hh:cuenta,noHace:(off?100:(Math.abs(f)<1e-12?0:f*100)),apOff:apOff.join(', '),ret:ret.join(' \u00b7 '),retN:(function(){/* sin partes, lo retirado de la partida completa (lo que sale del contrato) */if(r&&r.fases&&r.fases.length)return null;var e=rm&&rm['partida completa'];var q=e?Number(e.cant):0;return (isFinite(q)&&q>0)?q:null})(),costo:costo,costoC:costoC,metM:metM,hhM:hhM,costoM:costoM,metA:metA,hhA:hhA,costoA:costoA,metAM:metAM,hhAM:hhAM,costoAM:costoAM,dCosto:costo-costoC,nva:!!pp.nva,partes:partes},_tbRestantes(met,av,metF,metA,metM,hhC,costo,rendA9)))});
   return {filas:filas,u:u,c:c}}
 /* columnas: orden y ocultas se recuerdan en el equipo */
 /* Titulo WBS de nivel mas alto (el del QPS): la especialidad segun el primer digito del item.
@@ -37306,7 +37311,7 @@ function _retFrac(id,cronId){try{var r=(typeof _fzDe==='function')?_fzDe(id,cron
   if(!r){var xi=_retParteImplicita(id);if(!xi)return 0;var rm0=_retMapa(id,cronId);var e0=rm0[_retNk(xi.nombre)];if(!e0)return 0;
     var q0=_retCantDe({cantidad:xi.cantidad,avance:xi.avance,_ret:Number(e0.cant)||0});return xi.cantidad>0?Math.max(-4,Math.min(1,q0/xi.cantidad)):0}
   var rm=(cronId!=null&&cronId!=='')?_retMapa(id,cronId):null;
-  var tot=0,ret=0;(r.fases||[]).forEach(function(x){var w=Number(x.peso)||0;tot+=w;var c=Number(x.cantidad)||0;var xx=x;
+  var tot=0,ret=0;(r.fases||[]).forEach(function(x){var w=Number(x.pesoC!=null?x.pesoC:x.peso)||0;tot+=w;var c=Number(x.cantidad)||0;var xx=x;
     if(rm){var e=rm[_retNk(x.nombre)];xx={cantidad:x.cantidad,avance:x.avance,_ret:(e&&isFinite(Number(e.cant)))?Number(e.cant):0}}
     var q=_retCantDe(xx);if(c>0&&q!==0)ret+=w*Math.min(1,q/c)});
   return tot>0?Math.max(-4,Math.min(1,ret/tot)):0}catch(e){return 0}}
@@ -37317,7 +37322,9 @@ function _noHaceFrac(id,cronId){var M=_hhMemo(),k='nh|'+String(cronId==null?'':c
   /* con APU que tiene mano de obra, lo que se lleva cada apartado apagado o retirado se mide en HH (no en costo):
      un apartado de solo materiales no le quita HH a la partida; y un apartado apagado Y retirado cuenta una vez */
   try{var H9=_noHaceHH(id,cronId);if(H9!=null)return (M[k]=H9)}catch(_eh9){}
-  try{var a=(typeof _apuOffFrac==='function')?_apuOffFrac(id,cronId):0;if(a>=1)return (M[k]=1);var b=_retFrac(id,cronId);var s9=a+b;if(s9>1-1e-12)s9=1;return (M[k]=Math.max(-4,Math.min(1,s9)))}catch(e){return (M[k]=0)}}
+  return (M[k]=_noHaceCostoFrac(id,cronId))}
+/* la fraccion del COSTO de la partida que no se hace: apartados apagados + saldos retirados, por costo */
+function _noHaceCostoFrac(id,cronId){try{var a=(typeof _apuOffFrac==='function')?_apuOffFrac(id,cronId):0;if(a>=1)return 1;var b=_retFrac(id,cronId);var s9=a+b;if(s9>1-1e-12)s9=1;return Math.max(-4,Math.min(1,s9))}catch(e){return 0}}
 /* la fraccion de las HH de la partida que no se hace, por HH del APU; null si el APU no tiene HH o las partes no
    casan con sus apartados (entonces sigue la regla por costo de siempre) */
 function _noHaceHH(id,cronId){var r=(typeof _apuDe==='function')?_apuDe(id):null;if(!r||!r.grupos||!r.grupos.length)return null;if(!r.partida_id)r.partida_id=id;
