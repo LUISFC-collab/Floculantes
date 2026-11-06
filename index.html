@@ -24886,7 +24886,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c108';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c109';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -26681,11 +26681,20 @@ function _wbsMover(t){try{
    if(espN){if(d!==espAct){espN.style.display='block';espN.innerHTML='Pasa'+(items.length===1?'':'n')+' a <b>'+esc(d)+'</b>. Si el área o el sistema no existen allá, se crean con el mismo nombre.'}else espN.style.display='none'}
    fillSys()};
  if(selE)selE.onchange=fillEsp;
+ var _rstConf=function(){var b=document.getElementById('_wmvGo'),c=document.getElementById('_wmvConf');if(c)c.remove();if(b){b.removeAttribute('data-ok');b.textContent='📦 Mover';b.style.background='#1F3864'}};
+ [selE,selA,selS,inpN].forEach(function(el){if(!el)return;el.addEventListener('change',_rstConf);el.addEventListener('input',_rstConf)});
  document.getElementById('_wmvGo').onclick=function(){
   var ar=selA.value;var sy=null;var esD=(selE&&selE.value)||espAct,cambiaEsp=(esD!==espAct);
   if(selS){sy=selS.value==='__nuevo__'?String((inpN&&inpN.value)||'').trim():selS.value;
    if(selS.value==='__nuevo__'&&!sy){toast('Escribe el nombre del sistema nuevo');return}}
-  if(!confirm('📦 ¿Mover '+(esSys?('el sistema "'+t.sys+'" con sus '+items.length+' actividad(es)'):'esta actividad')+' a:\n\n'+(cambiaEsp?('Especialidad: '+espAct+' → '+esD+'\n'):'')+'Área: '+ar+(sy?('\nSistema: '+sy):(esSys?('\nSistema: '+t.sys):''))+'\n\nSe aplica para TODOS los equipos (los avances, metrados y fotos viajan con la actividad).'))return;
+  var _msgMv='📦 ¿Mover '+(esSys?('el sistema "'+t.sys+'" con sus '+items.length+' actividad(es)'):'esta actividad')+' a:\n\n'+(cambiaEsp?('Especialidad: '+espAct+' → '+esD+'\n'):'')+'Área: '+ar+(sy?('\nSistema: '+sy):(esSys?('\nSistema: '+t.sys):''))+'\n\nSe aplica para TODOS los equipos (los avances, metrados y fotos viajan con la actividad).';
+  /* confirmacion dentro de la ventana: el primer clic muestra el resumen, el segundo mueve (un aviso del navegador
+     puede estar bloqueado y entonces Mover no hacia nada) */
+  var _bGo=document.getElementById('_wmvGo'),_cf=document.getElementById('_wmvConf');
+  var _firma=[esD,ar,sy||''].join('|');
+  if(!_bGo||_bGo.getAttribute('data-ok')!==_firma){
+    if(!_cf){_cf=document.createElement('div');_cf.id='_wmvConf';_cf.style.cssText='white-space:pre-wrap;font-size:12.5px;color:#7A4A00;background:#FFF6E5;border:1px solid #F0D9A8;border-radius:8px;padding:8px 10px;margin:8px 0 0';_bGo.parentNode.parentNode.insertBefore(_cf,_bGo.parentNode)}
+    _cf.textContent=_msgMv;if(_bGo){_bGo.setAttribute('data-ok',_firma);_bGo.textContent='✓ Confirmar y mover';_bGo.style.background='#1E7A46'}return}
   /* en la otra especialidad quedan el area y el sistema con los mismos nombres (wbs_extra, en tiempo real) */
   if(cambiaEsp)try{var _rv={eliminado:false,elim_por:'',elim_ts:null};var _sN=esSys?t.sys:(sy||t.p.sistema||'');
     if(ar&&ar!=='General')_wbsXSet('area',ar,esD,_rv,'');
