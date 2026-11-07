@@ -3250,17 +3250,18 @@ async function _crCatPullYa(){
     /* las adicionales creadas en la app que aun no estan en el catalogo */
     (state.nuevas||[]).forEach(function(p){
       if(!p||!p.id||vis[p.id])return;vis[p.id]=1;
-      var hh=0;try{hh=Number(p.hh)||0}catch(e){}   /* crudas, como las del catalogo: lo que no cuenta lo resta cada cronograma */
+      var hh=0;try{hh=Number(p.hh)||_hhNuevaApu(p.id)||0}catch(e){}   /* crudas, como las del catalogo (sin HH del QPS: las de la mano de obra de su APU); lo que no cuenta lo resta cada cronograma */
+      var pu9=(p.pu!=null)?Number(p.pu):_puNuevaApu(p.id),met9=(m&&m.unidad==='glb')?1:((m&&m.total!=null)?Number(m.total):null),tot9=(p.total_oferta!=null)?Number(p.total_oferta):((pu9!=null&&met9!=null)?pu9*met9:null);
       /* el metrado de la nueva: sin esta m declarada, el ReferenceError se
          llevaba el catalogo entero y METRADO/COSTO salian en ceros */
       var m=null;try{m=(typeof metaOf==='function')?metaOf(p.id):null}catch(e){}
       var off=false;try{off=(typeof _hhOff==='function')&&!!_hhOff(p.id)}catch(e){}
       var nom='';try{nom=(typeof _nomAct==='function'?_nomAct(p):p.nombre)||p.id}catch(e){nom=p.id}
-      out.push({id:p.id,nom:String(nom),hh:hh,off:off,
+      out.push({id:p.id,nom:String(nom),hh:hh,hhRaw:hh,off:off,
         esp:p.esp||'',ret:false,viva:true,
         und:String((m&&m.unidad)||p.unidad||''),cant:(m&&m.total!=null?Number(m.total):''),
-        pu:(p.pu!=null?Number(p.pu):''),tot:(p.total_oferta!=null?Number(p.total_oferta):''),
-        totRet:(p.total_oferta!=null?(function(){var t=Number(p.total_oferta)||0,f=0;try{f=(typeof _retFrac==='function')?_retFrac(p.id):0}catch(e){}return t*(1-f)})():''),
+        pu:(pu9!=null?pu9:''),tot:(tot9!=null?tot9:''),
+        totRet:(tot9!=null?(function(){var t=Number(tot9)||0,f=0;try{f=(typeof _retFrac==='function')?_retFrac(p.id):0}catch(e){}return t*(1-f)})():''),
         sis:String(p.sistema||''),nva:true})});
     out.sort(function(a,b){return a.id<b.id?-1:a.id>b.id?1:0});
     window._crCat=out;try{window._crCatT=Date.now()}catch(e){}
@@ -3289,7 +3290,7 @@ function _crPartidas(){
     /* HH CRUDAS del contrato, como las trae el catalogo del servidor (tambien
        las apagadas: lo que no cuenta lo decide la configuracion de cada
        cronograma o su alcance, igual que con el catalogo del servidor) */
-    var hh=0;try{hh=Number(p.hh)||0}catch(e){}
+    var hh=0;try{hh=Number(p.hh)||(p.nueva?_hhNuevaApu(p.id):0)||0}catch(e){}
     var nom='';try{nom=(typeof _nomAct==='function'?_nomAct(p):p.nombre)||p.id}catch(e){nom=p.id}
     out.push({id:p.id,nom:String(nom),hh:hh,off:off,esp:p.esp||'',
       ret:false,viva:true,und:p.unidad||'',cant:'',pu:'',tot:'',nva:!!p.nueva})});
@@ -3333,7 +3334,7 @@ function _crUniverso(cronId,alc){
     var inc=_crPorDefecto(p,cronId);   /* configuracion del cronograma; el check ya no manda */
     if(!inc)return;
     if(enT&&!enT[p.id])return;
-    var hh=(a&&a.hh!=null)?a.hh:p.hh;
+    var hh=(a&&a.hh!=null)?a.hh:(p.nva?(_hhNuevaApu(p.id)||p.hh):p.hh);
     if(!(hh>0))return;
     /* los apartados del APU que no se realizan se llevan su fraccion de las
        HH: asi el universo, la curva, el forecast, 3WLA/PPC y el .xer cuentan
@@ -25127,7 +25128,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c112';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c113';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -30650,8 +30651,8 @@ function _apuMon(n){n=Number(n);if(!isFinite(n))return '—';
   return (n<0&&(s[0]!=='0'||/[1-9]/.test(s[1]))?'-':'')+s[0].replace(/\B(?=(\d{3})+(?!\d))/g,"'")+'.'+s[1]}
 async function _apuGuardar(id,r,borrar){
   var t=(typeof nowSrv==='function'?nowSrv():Date.now());
-  /* el APU cambia las HH que cuentan (apartados apagados): fuera el cache */
-  try{window._hhCache=null}catch(_eh){}
+  /* el APU cambia las HH que cuentan (apartados apagados y, en las adicionales, sus HH): fuera el cache */
+  try{window._hhCache=null;window._crCat=null;window._crCatIx=null;window._pgUniv=null;if(typeof _hhMemoTira==='function')_hhMemoTira()}catch(_eh){}
   var yo=(state.user&&state.user.supervisor)||'';
   r.partida_id=id;r.quien=yo;r.ts=t;
   r.eliminado=!!borrar;r.elim_por=borrar?yo:'';r.elim_ts=borrar?t:0;
@@ -31303,7 +31304,18 @@ function _apuInject(){try{
 
 /* HH crudas del contrato: las del catalogo del SERVIDOR si ya llego (la misma
    base que la tarjeta y la curva); si no, las locales */
-function _hhCruda(p){try{var C=window._crCat;if(C&&C.length){if(!window._crCatIx||window._crCatIxN!==C.length){var ix={};C.forEach(function(q){ix[q.id]=q});window._crCatIx=ix;window._crCatIxN=C.length}var q=window._crCatIx[p.id];if(q)return Number(q.hh)||0}}catch(e){}return Number(p&&p.hh)||0}
+/* HH de contrato de una actividad CREADA (adicional, sin HH del QPS): las de la mano de obra de su APU por unidad
+   x su metrado de Def Metrados (una global = 1 glb). Sin APU o sin metrado, 0. Lo que no cuenta (fuera del
+   cronograma, HH apagadas, sin tarea, apartados apagados o retirados) lo resta despues el motor, igual que en las
+   del contrato */
+function _hhNuevaApu(id){try{var M=(typeof _hhMemo==='function')?_hhMemo():null,k='nva|'+String(id);if(M&&M[k]!==undefined)return M[k];
+  var r=(typeof _apuDe==='function')?_apuDe(id):null,m=(typeof metaOf==='function')?metaOf(id):null,h=0;
+  if(r&&m&&m.unidad&&m.unidad!=='na'){var met=(m.unidad==='glb')?1:(Number(m.total)||0);
+    if(met>0){if(!r.partida_id)r.partida_id=id;var pv=window._apuVistaHH;try{window._apuVistaHH=true;h=(Number(_apuTotal(r))||0)*met}finally{window._apuVistaHH=pv}}}
+  h=(isFinite(h)&&h>0)?Math.round(h*10000)/10000:0;if(M)M[k]=h;return h}catch(e){return 0}}
+/* su precio unitario y costo, del mismo APU */
+function _puNuevaApu(id){try{var r=(typeof _apuDe==='function')?_apuDe(id):null;if(!r)return null;if(!r.partida_id)r.partida_id=id;var pu=Number(_apuTotal(r));if(!(pu>0)&&Number(r.costo_excel)>0)pu=Number(r.costo_excel);return pu>0?pu:null}catch(e){return null}}
+function _hhCruda(p){try{var C=window._crCat;if(C&&C.length){if(!window._crCatIx||window._crCatIxN!==C.length){var ix={};C.forEach(function(q){ix[q.id]=q});window._crCatIx=ix;window._crCatIxN=C.length}var q=window._crCatIx[p.id];if(q)return (q.nva?(_hhNuevaApu(p.id)||Number(q.hh)||0):(Number(q.hh)||0))}}catch(e){}return Number(p&&p.hh)||((p&&p.id&&(p.nueva||p.nva))?_hhNuevaApu(p.id):0)}
 /* pertenencia a alguna tarea del cronograma ACTUAL (si sus tareas ya se
    leyeron): sin tarea no cuenta, igual que en su tarjeta y su curva */
 function _hhEnTarea(id){try{var a=(typeof _ctActiva==='function')?_ctActiva():null;if(!a)return true;var T=(window._crTar||{})[a.cron_id];if(!T)return true;var S=window._crEnT;if(!S||S.cid!==a.cron_id||S.n!==T.length){var m={};T.forEach(function(t){(t.items||[]).forEach(function(i){m[i]=1})});S=window._crEnT={cid:a.cron_id,n:T.length,m:m}}return !!S.m[id]}catch(e){return true}}
@@ -37886,7 +37898,7 @@ function _actDeNueva(id){try{var nv=(state.nuevas||[]).filter(function(n){return
   q.hh=(isFinite(hhU)&&isFinite(met))?hhU*met:NaN;q.total=(isFinite(pu)&&isFinite(met))?pu*met:NaN;
   q.dias=(m&&m.unidad==='glb'&&Number(m.dias)>0)?Number(m.dias):((isFinite(met)&&rend>0)?Math.ceil(met/rend):null);
   q.alcance='Actividad creada (adicional): datos de su APU';q._nueva=true;
-  /* lo que hoy cuenta en el avance es lo de la actividad real, no lo calculado para la ficha */
+  /* lo que cuenta en el avance: el motor, con las HH de su APU (y lo que reste el cronograma) */
   try{q._hhC=(typeof _hhDe==='function')?(Number(_hhDe(base))||0):0}catch(e){q._hhC=0}
   try{q._peso=(typeof _hhPeso==='function')?(Number(_hhPeso(base))||0):0}catch(e){q._peso=0}
   return q}catch(e){return null}}
