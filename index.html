@@ -5895,7 +5895,7 @@ async function _crTareaP6(c,cod,dir){
 /* ===== TITULOS WBS de la hoja 2: crear, ordenar (▲▼◀▶), renombrar, borrar, deshacer y "solo titulos" =====
    La ruta ("A / B / C") es la llave del titulo (cron_wbs) y del wbs de cada actividad (cron_tareas). El orden de
    los titulos lo da el orden de sus actividades, como en todas las vistas; un titulo vacio vive en cron_wbs con un
-   orden intercalado (las actividades van de 10 en 10 y el vacio en medio). Mover con ◀▶ reescribe la ruta del
+   orden intercalado (las actividades van de 100 en 100 y los vacios en medio, cada uno con su numero). Mover con ◀▶ reescribe la ruta del
    bloque entero: primero los titulos nuevos, luego las actividades y al final la lapida de lo viejo (si se corta,
    ninguna actividad queda huerfana). La equivalencia ruta nueva -> ruta del .xer queda en ajustes (wbsxer:<cron>)
    para que el .xer exportado reubique el nodo original en vez de crear otro. */
@@ -5944,8 +5944,10 @@ function _crWbsPila(cid){window._crWbsPilas=window._crWbsPilas||{};return (windo
 async function _crWbsAplica(c,seq,ren,snap){
   var cid=c.cron_id,t9=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'';
   var f=function(w){w=String(w||'');if(!ren)return w;return (w===ren.de)?ren.a:(w.indexOf(ren.de+' / ')===0?ren.a+w.slice(ren.de.length):w)};
-  var oT={},oW={},n=0,ult=0;
-  seq.forEach(function(x){if(x.k==='t'){n+=10;oT[x.t.task_code]=n;ult=n}else oW[f(x.w)]=ult+5});
+  /* actividades de 100 en 100; los titulos vacios seguidos, cada uno con su propio numero (+1, +2...): con el mismo
+     numero no se podian ordenar entre ellos (ADICIONAL 01, 03 y 02 quedaban todos en 915 y ▲▼ no hacia nada) */
+  var oT={},oW={},n=0,ult=0,e9=0;
+  seq.forEach(function(x){if(x.k==='t'){n+=100;oT[x.t.task_code]=n;ult=n;e9=0}else{e9++;oW[f(x.w)]=ult+Math.min(e9,99)}});
   var rows=snap.rows,pk='proyecto,cron_id,task_code',pw='proyecto,cron_id,ruta';
   if(ren){
     /* 1. los titulos con su ruta nueva (el titulo y todo lo que cuelga de el) */
@@ -25125,7 +25127,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c110';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c111';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
