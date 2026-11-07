@@ -25129,7 +25129,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c117';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c118';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -37758,7 +37758,6 @@ async function _retPonerParte(id,nombre,cronId){
      final al que se llegara; 0 devuelve el saldo */
   var v=await _retDialogo(x,c,a,saldo,act);
   if(v==null)return false;v=Number(String(v).replace(',','.'));
-  if(isFinite(v)&&v<-c*4-1e-9){toast('Ampliación demasiado grande: el metrado final puede ser como máximo '+_qtyU(c*5,x.unidad)+' '+(x.unidad||''));return false}
   if(!isFinite(v)||v>saldo+1e-9){toast('Cantidad no v\u00e1lida: como m\u00e1ximo '+_qtyU(saldo,x.unidad)+' '+(x.unidad||''));return false}
   if(v<0){   /* metrado ampliado: se hara MAS que lo contemplado */
     if(!_retSet(id,x.nombre,{nombre:x.nombre,cant:v,hecho:a,total:c,unidad:x.unidad||''},false,cronId))return false;
@@ -37810,8 +37809,12 @@ function _retDialogo(x,c,a,saldo,act){
     iC.oninput=pinta;iF.oninput=pinta;pinta();
     document.getElementById('_rdX').onclick=function(){fin(null)};
     document.getElementById('_rdTodo').onclick=function(){fin(saldo)};
-    document.getElementById('_rdCantOk').onclick=function(){var v=lee(iC);if(!isFinite(v)||v<0||v>saldo+1e-9){toast('Entre 0 y '+_qtyU(saldo,u)+' '+u);return}fin(Math.min(v,saldo))};
-    document.getElementById('_rdFinOk').onclick=function(){var v=lee(iF);if(isFinite(v)&&v>c*5+1e-9){toast('Como máximo 5 veces lo contemplado: '+_qtyU(c*5,u)+' '+u);return}if(!isFinite(v)||v<a-1e-9){toast('Como m\u00ednimo lo ya hecho: '+_qtyU(a,u)+' '+u);return}var d9=c-v;fin(Math.abs(d9)<=1e-9*Math.max(1,Math.abs(c))?0:d9)};
+    document.getElementById('_rdCantOk').onclick=function(){var v=lee(iC);if(!isFinite(v)||v<0||v>saldo+1e-9){avisa(tC,'Entre 0 y '+_qtyU(saldo,u)+' '+u);return}fin(Math.min(v,saldo))};
+    /* el metrado final puede ser cualquiera desde lo ya hecho (antes: tope de 5 veces lo contemplado, y el aviso salia
+       detras del cuadro: el boton parecia no hacer nada). Los avisos van dentro del cuadro */
+    var avisa=function(el,t){el.textContent=t;el.style.color='#B42318';el.style.fontWeight='800'};
+    document.getElementById('_rdFinOk').onclick=function(){var v=lee(iF);if(!isFinite(v)){avisa(tF,'Escribe el metrado final');return}if(v<a-1e-9){avisa(tF,'Como mínimo lo ya hecho: '+_qtyU(a,u)+' '+u);return}var d9=c-v;
+      if(Math.abs(d9)<=1e-9*Math.max(1,Math.abs(c))){if(!act){avisa(tF,'Es el mismo metrado contemplado: no hay nada que fijar');return}fin(0);return}fin(d9)};
     var bd=document.getElementById('_rdDev');if(bd)bd.onclick=function(){fin(0)};
   })}
 /* La ficha de retiros de una actividad: cada apartado con su saldo y su
