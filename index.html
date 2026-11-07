@@ -3251,7 +3251,8 @@ async function _crCatPullYa(){
     (state.nuevas||[]).forEach(function(p){
       if(!p||!p.id||vis[p.id])return;vis[p.id]=1;
       var hh=0;try{hh=Number(p.hh)||_hhNuevaApu(p.id)||0}catch(e){}   /* crudas, como las del catalogo (sin HH del QPS: las de la mano de obra de su APU); lo que no cuenta lo resta cada cronograma */
-      var pu9=(p.pu!=null)?Number(p.pu):_puNuevaApu(p.id),met9=(m&&m.unidad==='glb')?1:((m&&m.total!=null)?Number(m.total):null),tot9=(p.total_oferta!=null)?Number(p.total_oferta):((pu9!=null&&met9!=null)?pu9*met9:null);
+      var m8=null;try{m8=(typeof metaOf==='function')?metaOf(p.id):null}catch(_e8){}   /* su metrado (aqui m aun no esta leida: el costo salia vacio) */
+      var pu9=(p.pu!=null)?Number(p.pu):_puNuevaApu(p.id),met9=(m8&&m8.unidad==='glb')?1:((m8&&m8.unidad!=='na'&&m8.total!=null)?Number(m8.total):null),tot9=(p.total_oferta!=null)?Number(p.total_oferta):((pu9!=null&&met9!=null)?pu9*met9:null);
       /* el metrado de la nueva: sin esta m declarada, el ReferenceError se
          llevaba el catalogo entero y METRADO/COSTO salian en ceros */
       var m=null;try{m=(typeof metaOf==='function')?metaOf(p.id):null}catch(e){}
@@ -3259,7 +3260,7 @@ async function _crCatPullYa(){
       var nom='';try{nom=(typeof _nomAct==='function'?_nomAct(p):p.nombre)||p.id}catch(e){nom=p.id}
       out.push({id:p.id,nom:String(nom),hh:hh,hhRaw:hh,off:off,
         esp:p.esp||'',ret:false,viva:true,
-        und:String((m&&m.unidad)||p.unidad||''),cant:(m&&m.total!=null?Number(m.total):''),
+        und:String((m&&m.unidad)||p.unidad||''),cant:((m&&m.unidad==='glb')?1:(m&&m.total!=null?Number(m.total):'')),   /* una global es 1 glb (su 100 de Def Metrados es %) */
         pu:(pu9!=null?pu9:''),tot:(tot9!=null?tot9:''),
         totRet:(tot9!=null?(function(){var t=Number(tot9)||0,f=0;try{f=(typeof _retFrac==='function')?_retFrac(p.id):0}catch(e){}return t*(1-f)})():''),
         sis:String(p.sistema||''),nva:true})});
@@ -25128,7 +25129,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c114';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c115';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
