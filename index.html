@@ -25129,7 +25129,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c116';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c117';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -32304,6 +32304,8 @@ async function _crTablaDatos(c,corte){
     var rm={};try{rm=_retMapa(id,c.cron_id);Object.keys(rm).forEach(function(k){var x=rm[k];ret.push((x.nombre||k)+': '+((Number(x.cant)||0)<0?('+'+_apuCant(-x.cant)+' '+(x.unidad||'')+' más'):(_apuCant(x.cant)+' '+(x.unidad||'')))+(Number(x.total)>0?(' · metrado final '+_apuCant(Number(x.total)-Number(x.cant))+' '+(x.unidad||'')):''))})}catch(e){}
     var considera=!!(inc&&dueno[id]&&!tomb);
     var costo=tomb?0:(Number(pp.tot)||0),_costoB=costo;if(_esN)costo=0;
+    /* el costo de la adicional, directo de su APU x su metrado (no depende de que el catalogo ya lo traiga) */
+    if(_esN&&!tomb){try{var _pu8=_puNuevaApu(id),_m8b=metaOf(id),_q8=(_m8b&&_m8b.unidad==='glb')?1:((_m8b&&_m8b.unidad!=='na')?(Number(_m8b.total)||0):0);if(_pu8&&_q8>0)_costoB=_pu8*_q8}catch(_ec8){}}
     /* costo forecast: lo que se consideraria en ESTE cronograma, ya sin lo retirado, lo limitado y lo apagado */
     /* el costo forecast sigue la MISMA regla que las HH forecast (menos lo
        apagado, lo retirado y los apartados que no se hacen), tambien en una
@@ -32315,6 +32317,7 @@ async function _crTablaDatos(c,corte){
        cosas: las columnas de contrato salen del catalogo */
     var met=null,und='';try{var m=(typeof metaOf==='function')?metaOf(id):null;if(m&&m.total!=null){met=Number(m.total)||0;und=m.unidad||pp.und||''}else if(pp.cant!==''&&pp.cant!=null){met=Number(pp.cant)||0;und=pp.und||''}}catch(e){}
     var metK=(pp.cant!==''&&pp.cant!=null)?(Number(pp.cant)||0):met;
+    if(_esN){try{var _m7=metaOf(id);if(_m7&&_m7.unidad==='glb')metK=1;else if(_m7&&_m7.unidad!=='na'&&Number(_m7.total)>0)metK=Number(_m7.total)}catch(_e7){}}   /* una global es 1 glb */
     var pct=0;try{var p0=(DATA._byId&&DATA._byId[id])||((state.nuevas||[]).filter(function(n){return n&&n.id===id})[0]);if(p0)pct=Number(_at?pctOfAt(p0,_at):pctOf(p0))||0;
       /* con apartados, el % de la partida es el de sus fases (como la tarjeta) */
       var _pf=_at?((typeof _fzPctAtX==='function')?_fzPctAtX(id,_at):null):((typeof _fzPctX==='function')?_fzPctX(id):null);if(_pf!=null&&isFinite(Number(_pf)))pct=Number(_pf)||0}catch(e){}
