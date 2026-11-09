@@ -16265,7 +16265,11 @@ var _WK_GENS=[
   {id:'H.001',
    nombre:'H.001 — F.002 sin tope de semanas: las hojas se alargan con columnas del mismo formato',
    desc:'La F.002 tal cual (PPC en una fila y 3WLA con el cronograma elegido). Solo cambia el ancho: la rejilla de semanas llega hasta la semana elegida + 3 (el lookahead de la 3WLA) y hasta lo último programado, sin tope del formato. Cada hoja con semanas (3WLA, PPC, PROGRAMACION, METRADO, PHYSICAL % PROGRESS, COSTO, curvas…) recibe las columnas que falten copiando el formato de su última semana.',
-   fn:'_wkHLibroApp',mas:3}];
+   fn:'_wkHLibroApp',mas:3},
+  {id:'I.001',
+   nombre:'I.001 — H.001 con el REALIZADO de la PPC hasta el corte (también lo cargado después del fin del cronograma)',
+   desc:'La H.001 tal cual (sin tope de semanas). Solo cambia de dónde sale el REALIZADO de la PPC: las HH hechas por día de la Tabla 2 se leen hasta la fecha de corte. Antes la Tabla 2 se cortaba en el fin del cronograma (B1 FORECAST0611 termina el 29/10), así que lo cargado después (S45, S46…) no salía en la PPC aunque hubiera avance.',
+   fn:'_wkILibroApp',mas:3}];
 var _WK_GEN_DEF='A.001';              /* hasta que B.001 este validada */
 var _WK_GEN_KEY='obf4_wk_gen';
 function _wkGenDe(id){for(var i=0;i<_WK_GENS.length;i++)if(_WK_GENS[i].id===id)return _WK_GENS[i];return null}
@@ -21714,7 +21718,7 @@ if(!window._wkCPaqOrig){window._wkCPaqOrig=_wkPaqueteApp;
 async function _wkCActualT2(R,cronId,corte){
   if(!R||!R.actual)return;
   var c=((await _crPull())||[]).filter(function(z){return z&&!z.eliminado&&String(z.cron_id)===String(cronId)})[0];if(!c)return;
-  var T2=await _t23Datos(c,{n:2,per:'dia',corte:4,vista:'agr',noLab:false});
+  var T2=await _t23Datos(c,{n:2,per:'dia',corte:4,vista:'agr',noLab:false,hasta:(window._wkT2Hasta||'')});
   var porCod={};(T2.filas||[]).forEach(function(f){if(f&&f.id&&!f._nosum)porCod[String(f.id)]=f});
   var tar=((await _crTareas(cronId))||[]).filter(function(t){return t&&!t.eliminado});
   var alc=await _crAlc(cronId),u=_crUniverso(cronId,alc),rp=_crReparto(tar);
@@ -22980,7 +22984,7 @@ function _wk3wElegido(){var v='';
   return v}
 async function _wk3wPost(R,cid,corte,hoy){if(!R||!R.fore||!(hoy>corte))return 0;
   var c=((await _crPull())||[]).filter(function(z){return z&&!z.eliminado&&String(z.cron_id)===String(cid)})[0];if(!c)return 0;
-  var T2=await _t23Datos(c,{n:2,per:'dia',corte:4,vista:'agr',noLab:false});
+  var T2=await _t23Datos(c,{n:2,per:'dia',corte:4,vista:'agr',noLab:false,hasta:(window._wkT2Hasta||'')});
   var porCod={};(T2.filas||[]).forEach(function(f){if(f&&f.id&&!f._nosum)porCod[String(f.id)]=f});
   var tar=((await _crTareas(cid))||[]).filter(function(t){return t&&!t.eliminado});
   var alc=await _crAlc(cid),u=_crUniverso(cid,alc),rp=_crReparto(tar),n=0;
@@ -23069,6 +23073,10 @@ async function _wkF2LibroApp(semN,corte,ids){
   var LB;try{LB=await _wkGLibroApp(semN,corte,ids)}finally{window._wk3wCalc=null;window._wkGenTag=null;window._wk3wT3=null;window._wk3wPT=null}
   try{LB.info=LB.info||{};LB.info.gen=window._wkGenTagX||'F.002';LB.info.calc3w=cid}catch(e){}
   return LB}
+/* I.001: la H.001 con la Tabla 2 (REALIZADO de la PPC) leida hasta el corte, aunque el cronograma ya haya terminado */
+async function _wkILibroApp(semN,corte,ids){window._wkGenTagX='I.001';window._wkT2Hasta=String(corte||'');var LB;
+  try{LB=await _wkF2LibroApp(semN,corte,ids)}finally{window._wkGenTagX=null;window._wkT2Hasta=null}
+  try{LB.info=LB.info||{};LB.info.gen='I.001'}catch(e){}return LB}
 /* H.001: la F.002 con la rejilla alargada (lo hace _wkLibroGen con mas:3) y su propia marca */
 async function _wkHLibroApp(semN,corte,ids){window._wkGenTagX='H.001';var LB;try{LB=await _wkF2LibroApp(semN,corte,ids)}finally{window._wkGenTagX=null}
   try{LB.info=LB.info||{};LB.info.gen='H.001'}catch(e){}return LB}
@@ -23229,7 +23237,7 @@ function _wkExcel(){
     if(d)d.innerHTML=_wkEsc(g.desc);
     var bs=document.getElementById('_wkSolo');
     if(bs&&!bs.disabled)bs.textContent='⚡ Generar SOLO desde el aplicativo · Gen '+g.id;
-    document.querySelectorAll('._wk3wR').forEach(function(z){z.style.display=(g.id==='F.002'||g.id==='H.001')?'inline-flex':'none'});
+    document.querySelectorAll('._wk3wR').forEach(function(z){z.style.display=(g.id==='F.002'||g.id==='H.001'||g.id==='I.001')?'inline-flex':'none'});
   }catch(_eg){}};
   try{var _sg=document.getElementById('_wkGen');
     if(_sg)_sg.onchange=function(){_wkGenEscribe(_sg.value);_genPinta()};
@@ -25144,7 +25152,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c123';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c124';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -33855,7 +33863,9 @@ async function _t23Datos(c,o){
     for(var id in proy.M)for(var iso in proy.M[id]){if(!d0||iso<d0)d0=iso;if(!d1||iso>d1)d1=iso}}
   else{for(var id2 in u.items){var ev=_t23Eventos(id2);if(ev.length&&(!d0||ev[0]<d0))d0=ev[0]}
     if(!d1||d1>hoy)d1=hoy;if(d0&&d0>hoy)d0=hoy}
-  if(n===3){if(o.desde&&(!d0||o.desde<d0))d0=o.desde;if(o.hasta&&(!d1||o.hasta>d1))d1=o.hasta}   /* rango forzado: la Tabla 3 con diferencia llega hasta el fin de la curva S */
+  if(n===3){if(o.desde&&(!d0||o.desde<d0))d0=o.desde;if(o.hasta&&(!d1||o.hasta>d1))d1=o.hasta}
+  /* Tabla 2 pedida hasta una fecha (reporte I.001): lo cargado despues del fin del cronograma tambien cuenta; nunca mas alla de hoy */
+  if(n===2&&o.hasta){var h9=String(o.hasta).slice(0,10);if(h9>hoy)h9=hoy;if(!d1||h9>d1)d1=h9}   /* rango forzado: la Tabla 3 con diferencia llega hasta el fin de la curva S */
   if(!d0)d0=hoy;if(!d1)d1=hoy;if(d1<d0)d1=d0;
   var per=_t23Periodos(d0,d1,o.per==='dia'?'dia':'sem',o.corte,o.noLab!==false);
   if(!per.length)per=_t23Periodos(hoy,hoy,'sem',o.corte,true);
