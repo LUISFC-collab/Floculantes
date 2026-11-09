@@ -1904,7 +1904,8 @@ function _showFiltros(){var old=document.getElementById('_fltOv');if(old)old.rem
       var op='<option value="">todas las semanas</option>';
       try{
         var F=function(iso){return iso.slice(8,10)+'/'+iso.slice(5,7)};
-        for(var w=27;w<=44;w++){
+        var _wTop=44;try{_wTop=Math.min(_WK_ULTMAX,Math.max(_wkUltCalc(null),_wkEnCurso()))}catch(_ew){}
+        for(var w=27;w<=_wTop;w++){
           var sm=_wkSem(w);
           op+='<option value="'+w+'"'+(String(window._planSem)===String(w)?' selected':'')+
             '>hasta S'+w+' · '+F(_wkISO(sm.fin))+'</option>'}
@@ -9698,7 +9699,8 @@ function _wkSem(n){var ini=46199+(n-27)*7;return {n:n,ini:ini,fin:ini+6}}
    llega hasta la semana -viernes a jueves, la misma cuenta de _wkSem- que contiene ese ultimo dia.
    _WK_ULTN solo vale mientras se arma un libro (_wkConRejilla): fuera de eso todo sigue en la S44. */
 var _WK_ULT0=44,_WK_ULTMAX=78,_WK_ULTN=null;
-function _wkUltN(){var u=Number(_WK_ULTN)||0;return u>_WK_ULT0?Math.min(u,_WK_ULTMAX):_WK_ULT0}
+/* la rejilla minima avanza con el calendario: nunca termina antes de la semana en curso */
+function _wkUltN(){var u=Number(_WK_ULTN)||0,b=_WK_ULT0;try{b=Math.max(b,_wkEnCurso())}catch(e){}return Math.min(_WK_ULTMAX,u>b?u:b)}
 function _wkSemDeISO(iso){var t=Date.parse(String(iso||'').slice(0,10)+'T00:00:00Z');if(isNaN(t))return 0;
   var ser=Math.round((t-Date.UTC(1899,11,30))/864e5);return 27+Math.floor((ser-46199)/7)}
 /* el ultimo dia con algo: programacion viva + tareas de los cronogramas (ids; null = los marcados activos) */
@@ -9727,8 +9729,12 @@ function _wkLbl(n){var s=_wkSem(n);var F=function(iso){var x=new Date(iso+'T00:0
   var M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   return x.getDate()+' '+M[x.getMonth()]};
   return 'S'+n+' · vie '+F(_wkISO(s.ini))+' → jue '+F(_wkISO(s.fin))}
+/* la semana que toca reportar: la ULTIMA CERRADA segun el calendario (antes se cortaba en la rejilla del formato,
+   S44, y el 09/11/2026 seguia diciendo S44 con la S45 ya cerrada) */
 function _wkQueToca(){var hoy=(typeof todayISO==='function')?todayISO():'';var mejor=27;
-  for(var n=27;n<=_wkUltN();n++){if(_wkISO(_wkSem(n).fin)<=hoy)mejor=n}return mejor}
+  for(var n=27;n<=_WK_ULTMAX;n++){if(_wkISO(_wkSem(n).fin)<=hoy)mejor=n;else break}return mejor}
+/* la semana en curso (la que contiene hoy) */
+function _wkEnCurso(){var hoy=(typeof todayISO==='function')?todayISO():'';var n=_wkSemDeISO(hoy);return Math.min(_WK_ULTMAX,Math.max(27,n||27))}
 /* el item QPS a su forma canonica x.yy.zz: '3.04.01' queda igual; 1.0101 se parte en pares */
 function _wkClave(txt){
   var t=String(txt==null?'':txt).trim();
@@ -23161,7 +23167,7 @@ function _wkExcel(){
   var ov=document.getElementById('_wkOv');if(ov)ov.remove();
   ov=document.createElement('div');ov.id='_wkOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483590;background:rgba(10,18,32,.62);display:flex;align-items:flex-end;justify-content:center';
-  var toca=_wkQueToca(),ops='',_ultSel=44;try{_ultSel=_wkUltCalc(null)}catch(_eu){}
+  var toca=_wkQueToca(),ops='',_ultSel=44;try{_ultSel=_wkUltCalc(null)}catch(_eu){}_ultSel=Math.min(_WK_ULTMAX,Math.max(_ultSel,toca,_wkEnCurso()));   /* la lista llega al menos a la semana en curso */
   for(var n=27;n<=_ultSel;n++)ops+='<option value="'+n+'"'+(n===toca?' selected':'')+'>'+_wkLbl(n)+(n===toca?' · TOCA':'')+'</option>';
   ov.innerHTML='<div style="background:#fff;width:100%;max-width:560px;border-radius:16px 16px 0 0;padding:17px 16px;box-sizing:border-box;max-height:92vh;overflow:auto">'+
     '<div style="font-weight:900;font-size:15.5px;color:#1F3864;margin-bottom:4px">📊 Excel semanal (Contractor Weekly Report)</div>'+
@@ -25129,7 +25135,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c121';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c122';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
