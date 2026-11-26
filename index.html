@@ -5792,6 +5792,16 @@ function _crSemNum(iso){
   return 27+Math.ceil((d-46205)/7)}
 function _crSemSerial(n){return 46205+(n-27)*7}
 function _crSemISO(ser){return new Date(Date.UTC(1899,11,30)+ser*864e5).toISOString().slice(0,10)}
+/* hasta donde tiene que llegar la rejilla de la curva: la semana de HOY (las semanas pasan aunque el
+   cronograma haya terminado) y el ultimo dia puesto en la tabla de programacion para alguna partida de
+   este alcance; asi la proyeccion del calendario tiene casillas donde caer */
+function _crFinCurva(u){var h=(typeof todayISO==='function')?todayISO():'';
+  try{var P=(typeof _pgProg==='function')?_pgProg():(state.prog||{});
+    Object.keys(P||{}).forEach(function(id){var pr=P[id];if(!pr||!pr.start)return;if(state.progDel&&state.progDel[id])return;
+      var bid=(typeof _pgBaseId==='function')?_pgBaseId(id):id;if(!(u&&u.items&&u.items[bid]>0))return;
+      var ds=(typeof occupiedDays==='function')?(occupiedDays(pr.start,pr.dias||1)||[]):[pr.start];
+      var f=String(ds.length?ds[ds.length-1]:pr.start).slice(0,10);if(f>h)h=f})}catch(e){}
+  return h}
 function _crSemDe(tar,conRem,hasta){
   var d0='',d1='',d1r='';
   tar.forEach(function(t){
@@ -7693,7 +7703,7 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     var it2={},hh2=0,n2=0;
     for(var _k in uTodo.items)if(espDe[_k]===esp){it2[_k]=uTodo.items[_k];hh2+=it2[_k];n2++}
     u={items:it2,hh:hh2,n:n2}}
-  var sem=_crSemDe(tar,true);   /* la curva si cubre el fin del remanente */
+  var sem=_crSemDe(tar,true,_crFinCurva(u));   /* la curva cubre el fin del remanente, la semana de hoy y lo programado en el calendario */
   var wbsBD=[];try{wbsBD=await _crWbsDe(c.cron_id)}catch(_ew){}
   var nomWbs={};wbsBD.forEach(function(w){nomWbs[w.ruta]=w.nombre});
   var grupoDe={},gsCron=[];
@@ -7758,6 +7768,8 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
   var ov=document.createElement('div');ov.id='_crCurOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box'+(window._crCurOculta?';visibility:hidden':'');
   var W=Math.max(320,Math.min(900,(window.innerWidth||360)-40)),H=310;
+  /* con muchas semanas el dibujo se ensancha (y se desliza) en vez de apretar las casillas */
+  W=Math.max(W,44+14+sem.length*16);
   var mx=44,my=30,gw=W-mx-14,gh=H-my-42;
   var maxSem=0;cur.porSem.forEach(function(v){if(v>maxSem)maxSem=v});
   var barras='',linea='',ptos='',lreal='',preal='',lproy='',pproy='';
@@ -25641,7 +25653,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c130';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c131';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
