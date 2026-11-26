@@ -7452,7 +7452,7 @@ function _crProyFilas(u,hoy,antD,progMap){try{
       if(!(wRow>0)||!(share>0))return;
       var ds=(typeof occupiedDays==='function')?(occupiedDays(pr.start,pr.dias||1)||[]):[];
       if(!ds.length)return;
-      var f=filaDe[key]||(filaDe[key]={w:wRow,done:doneF,doneAnt:doneA,days:{},daysT:{},used:0,disc:String(pr.disc||(p&&p.esp)||'')});
+      var f=filaDe[key]||(filaDe[key]={bid:bid,w:wRow,done:doneF,doneAnt:doneA,days:{},daysT:{},used:0,disc:String(pr.disc||(p&&p.esp)||'')});
       /* la entera reparte su SALDO en sus dias (se escala al sumar); el tramo, su cantidad */
       if(esTr)ds.forEach(function(d){f.daysT[d]=(f.daysT[d]||0)+share/ds.length});
       else ds.forEach(function(d){f.days[d]=(f.days[d]||0)+1/ds.length});
@@ -7475,10 +7475,10 @@ function _crProyeccion(u,semanas,real){
        _crDeSerial daba basura y no se encontraba nunca la semana de hoy. */
     var base=(real&&real.acum&&real.acum[iHoy]!=null)?real.acum[iHoy]:0;
     var cuotaEn=function(f,ini,fin,fac){var t=0;for(var k in f.days)if(k>=ini&&k<=fin)t+=f.days[k];t=Math.min(1,t)*Math.max(0,fac);for(var k2 in (f.daysT||{}))if(k2>=ini&&k2<=fin)t+=f.daysT[k2];return t};
-    var out=[],hay=[],t=base,ultima=iHoy;
+    var out=[],hay=[],porId=[],t=base,ultima=iHoy;
     for(var j=0;j<semanas.length;j++){
-      if(j<iHoy){out.push(null);hay.push(false);continue}
-      var ini=String(semanas[j].ini||''),fin=String(semanas[j].fin||''),suma=0;
+      if(j<iHoy){out.push(null);hay.push(false);porId.push(null);continue}
+      var ini=String(semanas[j].ini||''),fin=String(semanas[j].fin||''),suma=0,pid={};
       /* cada semana suma su cuota del calendario; la semana en curso, su
          cuota menos lo hecho EN ella; nunca mas de lo que le queda a la fila */
       filas.forEach(function(f){var enCurso=(j===iHoy);
@@ -7487,7 +7487,8 @@ function _crProyeccion(u,semanas,real){
         var c=cuotaEn(f,ini,fin,enCurso?(1-(f.doneAnt||0)):(1-f.done));
         if(enCurso)c=Math.max(0,c-Math.max(0,f.done-(f.doneAnt||0)));
         var rem=Math.max(0,(1-f.done)*f.w-(f.used||0));var add=Math.min(c*f.w,rem);
-        if(add>0){suma+=add;f.used=(f.used||0)+add}});
+        if(add>0){suma+=add;f.used=(f.used||0)+add;if(f.bid)pid[f.bid]=(pid[f.bid]||0)+add}});
+      porId.push(pid);
       if(suma>0){t+=suma/hhT;ultima=j}
       out.push(Math.min(1.2,t));hay.push(suma>0)}
     /* La linea muere donde muere la programacion: prolongarla plana hasta el
@@ -7496,7 +7497,7 @@ function _crProyeccion(u,semanas,real){
        vea de donde sale. */
     for(var z=ultima+1;z<out.length;z++)out[z]=null;
     hay[iHoy]=true;
-    return {acum:out,hay:hay,ultima:ultima,desde:iHoy}}catch(e){return null}}
+    return {acum:out,hay:hay,ultima:ultima,desde:iHoy,porId:porId}}catch(e){return null}}
 /* La fraccion YA EJECUTADA de una partida a una fecha, con la MISMA regla que
    la columna "HH actual" de la tabla del alcance: lo ejecutado FISICAMENTE
    (el saldo retirado NO cuenta como hecho) sobre el metrado forecast, y por
@@ -7767,13 +7768,27 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
   try{document.querySelectorAll('#_crCurOv').forEach(function(x){x.remove()})}catch(e){}   /* nunca dos curvas apiladas */
   var ov=document.createElement('div');ov.id='_crCurOv';
   ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0b1220;color:#cfe3ff;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;display:flex;flex-direction:column;padding:12px;box-sizing:border-box'+(window._crCurOculta?';visibility:hidden':'');
-  var W=Math.max(320,Math.min(900,(window.innerWidth||360)-40)),H=310;
+  var W=Math.max(320,Math.min(900,(window.innerWidth||360)-40-((window.innerWidth||360)>=760?215:0))),H=310;
   /* con muchas semanas el dibujo se ensancha (y se desliza) en vez de apretar las casillas */
   W=Math.max(W,44+14+sem.length*16);
   var mx=44,my=30,gw=W-mx-14,gh=H-my-42;
   var maxSem=0;cur.porSem.forEach(function(v){if(v>maxSem)maxSem=v});
   var barras='',linea='',ptos='',lreal='',preal='',lproy='',pproy='';
   var proy=null;try{proy=_crProyeccion(u,sem,real)}catch(_ep){}
+  /* los histogramas de HH por especialidad de la REAL (lo ganado cada semana, con la misma regla de la
+     curva roja) y de la PROYECCION (lo que el calendario pone cada semana) */
+  var rSem=sem.map(function(){return {}}),rTot=sem.map(function(){return 0});
+  try{var _pR={};_filT.forEach(function(r){if(r&&r.id)_pR[r.id]=r});
+    var _d0=_crDeSerial(_crASerial(String(sem[0].ini))-1);
+    for(var _ir in u.items){var _w=Number(u.items[_ir])||0;if(!(_w>0))continue;var _e=espDe[_ir]||'(sin especialidad)';
+      var _prev=Number(_crFracHechaAt(_pR[_ir],_d0))||0;
+      for(var _s9=0;_s9<sem.length;_s9++){if(!hoy||sem[_s9].ini>hoy)break;
+        var _f9=Number(_crFracHechaAt(_pR[_ir],sem[_s9].fin<hoy?sem[_s9].fin:hoy))||0,_dd=(_f9-_prev)*_w;_prev=_f9;
+        if(_dd>1e-9){rSem[_s9][_e]=(rSem[_s9][_e]||0)+_dd;rTot[_s9]+=_dd}}}}catch(_erb){}
+  var ySem=sem.map(function(){return {}}),yTot=sem.map(function(){return 0});
+  try{if(proy&&proy.porId)proy.porId.forEach(function(o,j){if(!o)return;for(var b in o){var e=espDe[b]||'(sin especialidad)';ySem[j][e]=(ySem[j][e]||0)+o[b];yTot[j]+=o[b]}})}catch(_eyb){}
+  [rSem,ySem].forEach(function(A){A.forEach(function(o){for(var e in o)if(espOrden.indexOf(e)<0)espOrden.push(e)})});
+  rTot.concat(yTot).forEach(function(v){if(v>maxSem)maxSem=v});
   var casilla=gw/Math.max(1,sem.length);
   /* el centro de la casilla de cada semana: asi la barra cae DENTRO de su
      semana y no a caballo entre dos */
@@ -7806,10 +7821,10 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
       espOrden.forEach(function(e){
         var q=mez[e]||0;if(!(q>0))return;
         var ha=alto*q/sumE;yy-=ha;
-        barras+='<rect x="'+(x-bw/2).toFixed(1)+'" y="'+yy.toFixed(1)+'" width="'+bw.toFixed(1)+
+        barras+='<rect class="k-bp e-'+espOrden.indexOf(e)+'" data-w="'+i+'" data-k="p" data-cx="'+x.toFixed(1)+'" data-bw="'+bw.toFixed(1)+'" data-h="'+ha.toFixed(2)+'" x="'+(x-bw/2).toFixed(1)+'" y="'+yy.toFixed(1)+'" width="'+bw.toFixed(1)+
           '" height="'+ha.toFixed(1)+'" fill="'+_crColorEsp(e)+'"/>'})}
-    else
-      barras+='<rect x="'+(x-bw/2).toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bw.toFixed(1)+
+    else if(alto>0)
+      barras+='<rect class="k-bp" data-w="'+i+'" data-k="p" data-cx="'+x.toFixed(1)+'" data-bw="'+bw.toFixed(1)+'" data-h="'+alto.toFixed(2)+'" x="'+(x-bw/2).toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bw.toFixed(1)+
         '" height="'+alto.toFixed(1)+'" fill="#1d3550"/>';
     /* el % que toca hacer esa semana, sobre su barra: todas las semanas, y
        si la casilla no da, inclinado antes que quitarlo */
@@ -7817,20 +7832,25 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     if(pw>0.001){
       var tx=x.toFixed(1),ty=(by-3).toFixed(1);
       var pc=(Math.round(pw*1000)/10)+'%';
-      if(casilla<24)
-        barras+='<text x="'+tx+'" y="'+ty+'" fill="#7FB3D5" font-size="7.5" '+
-          'text-anchor="start" transform="rotate(-60 '+tx+' '+ty+')">'+pc+'</text>';
-      else
-        barras+='<text x="'+tx+'" y="'+ty+'" fill="#7FB3D5" font-size="8" '+
+      barras+='<text class="k-bpt" data-w="'+i+'" data-k="p" x="'+tx+'" y="'+ty+'" fill="#7FB3D5" font-size="7.5" '+
           'text-anchor="middle">'+pc+'</text>'}
+    /* las barras de la real y de la proyeccion, al lado de la programada */
+    [['r',rSem[i],rTot[i],'#F0A3A3'],['y',ySem[i],yTot[i],'#2ECC71']].forEach(function(K){
+      if(!(K[2]>0)||!(maxSem>0))return;var al=(K[2]/maxSem)*gh*0.55,y2=my+gh;
+      espOrden.forEach(function(e){var q=K[1][e]||0;if(!(q>0))return;var ha=al*q/K[2];y2-=ha;
+        barras+='<rect class="k-b'+K[0]+' e-'+espOrden.indexOf(e)+'" data-w="'+i+'" data-k="'+K[0]+'" data-cx="'+x.toFixed(1)+'" data-bw="'+bw.toFixed(1)+'" data-h="'+ha.toFixed(2)+'" x="'+(x-bw/2).toFixed(1)+'" y="'+y2.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+ha.toFixed(1)+'" fill="'+_crColorEsp(e)+'"'+
+          (K[0]==='y'?' fill-opacity=".45" stroke="#2ECC71" stroke-width=".8" stroke-dasharray="2 1.5"':' stroke="#F0A3A3" stroke-width=".8"')+'/>'});
+      barras+='<text class="k-b'+K[0]+'t" data-w="'+i+'" data-k="'+K[0]+'" x="'+x.toFixed(1)+'" y="'+(my+gh-al-3).toFixed(1)+'" fill="'+K[3]+'" font-size="7.5" text-anchor="middle">'+
+        (Math.round(K[2]/(u.hh||1)*1000)/10)+'%</text>'});
     var y=my+gh-cur.acum[i]*gh;
     linea+=(i?' L':'M')+x.toFixed(1)+' '+y.toFixed(1);
-    ptos+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="2.6" fill="'+esc(c.color||'#2E86C1')+'"/>';
+    ptos+='<circle class="k-p" cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="2.6" fill="'+esc(c.color||'#2E86C1')+'"/>';
     /* la real, hasta la ultima semana cerrada */
     if(iHoy>=0&&i<=iHoy){
       var yr=my+gh-real.acum[i]*gh;
       lreal+=(i?' L':'M')+x.toFixed(1)+' '+yr.toFixed(1);
-      preal+='<circle cx="'+x.toFixed(1)+'" cy="'+yr.toFixed(1)+'" r="2.6" fill="#C0392B"/>';
+      preal+='<circle class="k-r" cx="'+x.toFixed(1)+'" cy="'+yr.toFixed(1)+'" r="2.6" fill="#C0392B"/>';
+      if(casilla>=24||!(i%2)||i===iHoy)preal+='<text class="k-rt" x="'+x.toFixed(1)+'" y="'+(yr+13).toFixed(1)+'" fill="#F0A3A3" font-size="8" font-weight="700" text-anchor="middle">'+(Math.round(real.acum[i]*1000)/10)+'%</text>';
       }
     /* la proyeccion: a donde se llega con lo puesto en el calendario */
     if(proy&&proy.acum&&proy.acum[i]!=null){
@@ -7853,13 +7873,13 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
         if(_fin)_ly=yp-7;   /* al borde de la semana: la cifra va encima del punto */
         else if(_hx!=null&&Math.abs(xpv-_hx)<76&&Math.abs(yp-_hy)<26)_ly=yp+24;
         if(_ly>my+gh+8)_ly=yp-7;
-        pproy+='<circle cx="'+xpv.toFixed(1)+'" cy="'+yp.toFixed(1)+'" r="3" fill="#2ECC71" stroke="#0d1117" stroke-width="1"/>'+
-          '<text x="'+xpv.toFixed(1)+'" y="'+_ly.toFixed(1)+'" fill="#2ECC71" font-size="8.5" '+
+        pproy+='<circle class="k-y" cx="'+xpv.toFixed(1)+'" cy="'+yp.toFixed(1)+'" r="3" fill="#2ECC71" stroke="#0d1117" stroke-width="1"/>'+
+          '<text class="k-yt" x="'+xpv.toFixed(1)+'" y="'+_ly.toFixed(1)+'" fill="#2ECC71" font-size="8.5" '+
           'font-weight="800" text-anchor="middle">'+(proy.acum[i]*100).toFixed(2)+'%</text>'}}
     /* el acumulado, sobre el punto de la curva */
     /* el acumulado va pegado a la linea: si no hay sitio, alterna */
     if(casilla>=24||!(i%2)||i===sem.length-1)
-      ptos+='<text x="'+x.toFixed(1)+'" y="'+(y-7).toFixed(1)+'" fill="#CFE3FF" font-size="8.5" font-weight="700" text-anchor="middle">'+
+      ptos+='<text class="k-pt" x="'+x.toFixed(1)+'" y="'+(y-7).toFixed(1)+'" fill="#CFE3FF" font-size="8.5" font-weight="700" text-anchor="middle">'+
         (Math.round(cur.acum[i]*1000)/10)+'%</text>'});
   var ejes='';
   [0,0.25,0.5,0.75,1].forEach(function(p){
@@ -7896,6 +7916,13 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     if(_nf>0){fRet+=pp.hh;nRet++;return}
     fMan+=pp.hh;nMan++});
   var r1=function(x){return Math.round(x*100)/100};
+  var _leg=_crLegArma([
+    ['p','Curva programada',esc(c.color||'#2E86C1'),'l',true],
+    ['r','Curva real del aplicativo','#C0392B','l',true],
+    ['y','Proyección del calendario','#2ECC71','d',!!lproy],
+    ['bp','HH programadas por semana','#7FB3D5','b',true],
+    ['br','HH reales por semana','#F0A3A3','br',rTot.some(function(v){return v>0})],
+    ['by','HH proyectadas por semana','#2ECC71','by',yTot.some(function(v){return v>0})]],espOrden);
   ov.innerHTML='<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'+
     '<b style="font-size:14.5px;color:'+esc(c.color||'#8ECBF5')+'">📈 Curva de '+esc(_crNomVis(c))+
       (esp?(' · <span style="color:#C39BD3">'+esc(esp)+'</span>'):'')+'</b>'+
@@ -7945,11 +7972,12 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
         'real <b>'+(Math.round(re*1000)/10)+'%</b> · '+(d>=0?'adelanto':'atraso')+' de <b>'+
         (Math.round(Math.abs(d)*1000)/10)+' puntos</b>'+hoyTxt+
         '<br><span style="font-weight:400;color:#9db4d6;font-size:11px">medido sobre las '+_nHH4(real.hh)+' hh del alcance de este cronograma</span>')})():'')+
-    '<div id="_crGraf" style="background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:8px;overflow-x:auto">'+
-    '<svg width="'+W+'" height="'+H+'" style="display:block">'+ejes+barras+
-    '<path d="'+linea+'" fill="none" stroke="'+esc(c.color||'#2E86C1')+'" stroke-width="2.2" stroke-linejoin="round"/>'+
-    (lreal?('<path d="'+lreal+'" fill="none" stroke="#C0392B" stroke-width="2.4" stroke-linejoin="round"/>'):'')+
-    (lproy?('<path d="'+lproy+'" fill="none" stroke="#2ECC71" stroke-width="2.2" stroke-dasharray="5 4" stroke-linejoin="round"/>'):'')+
+    '<div id="_crGraf" style="background:#0d1117;border:1px solid #1d2c47;border-radius:10px;padding:8px;display:flex;gap:8px;align-items:stretch;flex-wrap:wrap">'+
+    '<div class="_crSvgBox" style="flex:1 1 300px;min-width:0;overflow-x:auto">'+
+    '<svg class="'+_leg.cls+'" data-base="'+(my+gh)+'" width="'+W+'" height="'+H+'" style="display:block">'+_leg.css+ejes+barras+
+    '<path class="k-p" d="'+linea+'" fill="none" stroke="'+esc(c.color||'#2E86C1')+'" stroke-width="2.2" stroke-linejoin="round"/>'+
+    (lreal?('<path class="k-r" d="'+lreal+'" fill="none" stroke="#C0392B" stroke-width="2.4" stroke-linejoin="round"/>'):'')+
+    (lproy?('<path class="k-y" d="'+lproy+'" fill="none" stroke="#2ECC71" stroke-width="2.2" stroke-dasharray="5 4" stroke-linejoin="round"/>'):'')+
     (function(){
       if(!realHoy)return '';
       var xh=(_hx!=null)?_hx:(mx+(realHoy.i+0.5)*casilla+(realHoy.frac-0.5)*casilla);
@@ -7957,28 +7985,14 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
       var col='';
       if(iHoy>=0&&iHoy<sem.length){
         var xa=mx+(iHoy+0.5)*casilla,ya=my+gh-real.acum[iHoy]*gh;
-        col='<path d="M'+xa.toFixed(1)+' '+ya.toFixed(1)+' L'+xh.toFixed(1)+' '+yh.toFixed(1)+
+        col='<path class="k-r" d="M'+xa.toFixed(1)+' '+ya.toFixed(1)+' L'+xh.toFixed(1)+' '+yh.toFixed(1)+
           '" fill="none" stroke="#C0392B" stroke-width="2.4" stroke-dasharray="4 3"/>'}
-      return col+'<circle cx="'+xh.toFixed(1)+'" cy="'+yh.toFixed(1)+'" r="4" fill="#C0392B" stroke="#fff" stroke-width="1.4"/>'+
-        '<text x="'+xh.toFixed(1)+'" y="'+(yh+15).toFixed(1)+'" fill="#F0A3A3" font-size="9.5" font-weight="800" text-anchor="middle">HOY '+
+      return col+'<circle class="k-r" cx="'+xh.toFixed(1)+'" cy="'+yh.toFixed(1)+'" r="4" fill="#C0392B" stroke="#fff" stroke-width="1.4"/>'+
+        '<text class="k-rt" x="'+xh.toFixed(1)+'" y="'+(yh+15).toFixed(1)+'" fill="#F0A3A3" font-size="9.5" font-weight="800" text-anchor="middle">HOY '+
         (realHoy.v*100).toFixed(2)+'%</text>'})()+
     ptos+preal+pproy+etq+
     '<text x="'+mx+'" y="'+(my-18)+'" fill="#7d8590" font-size="9">'+(cur.rep?('reprogramaci\u00f3n \u00b7 hasta '+esc(cur.corte||'')+' la azul es lo GANADO ('+_nMil2(cur.ganado)+' hh); desde ah\u00ed, el remanente ('+_nMil2(cur.remanente)+' hh) por d\u00eda laboral entre reinicio y fin'+(cur.sinFechas?(' \u00b7 '+cur.sinFechas+' actividad(es) sin reinicio/fin en el archivo: regla del remanente'):'')):'barras = % que toca hacer esa semana \u00b7 n\u00fameros en blanco = programado acumulado')+'</text>'+
-    '<rect x="'+mx+'" y="'+(my-13)+'" width="16" height="2.5" fill="'+esc(c.color||'#2E86C1')+'"/>'+
-    '<text x="'+(mx+20)+'" y="'+(my-9)+'" fill="#9db4d6" font-size="9">programado</text>'+
-    (lproy?('<rect x="'+(mx+gw-168)+'" y="'+(my-13)+'" width="16" height="2.5" fill="#2ECC71"/>'+
-      '<text x="'+(mx+gw-148)+'" y="'+(my-9)+'" fill="#9db4d6" font-size="9">proyección del calendario</text>'):'')+
-    '<rect x="'+(mx+90)+'" y="'+(my-13)+'" width="16" height="2.5" fill="#C0392B"/>'+
-    '<text x="'+(mx+110)+'" y="'+(my-9)+'" fill="#F0A3A3" font-size="9">real del aplicativo</text>'+
-    /* de que es cada trozo de las barras */
-    (function(){
-      var x0=mx+205,h='';
-      espOrden.forEach(function(e){
-        h+='<rect x="'+x0+'" y="'+(my-16)+'" width="9" height="9" fill="'+_crColorEsp(e)+'"/>'+
-          '<text x="'+(x0+12)+'" y="'+(my-9)+'" fill="#8899ad" font-size="9">'+esc(e)+'</text>';
-        x0+=12+Math.max(34,String(e).length*5.3)+10});
-      return h})()+
-    '</svg></div>'+
+    '</svg></div>'+_leg.html+'</div>'+
     ((duras.length&&nivel==='tarea')?_crNota('duras','Ver las tareas que piden demasiada gente',
       'background:#2a1414;border:1px solid #5A2A2A;border-radius:10px;padding:9px 11px;margin-top:9px;font-size:11.5px;color:#F0A3A3;line-height:1.6',
       '<b>⚠ '+duras.length+' tarea(s) piden demasiada gente</b> — por eso la curva sale a escalones en vez de en banana. '+
@@ -8346,12 +8360,68 @@ async function _crCurvaUI(c,nivel,conWbs,esp){
     ov.remove();_crCurvaUI(c,nivel,conWbs,b.getAttribute('data-esp'))}});
   var ck=ov.querySelector('#_crCurWbs');
   if(ck)ck.onchange=function(){ov.remove();_crCurvaUI(c,nivel,ck.checked,esp)};
+  try{_crBarLay(ov.querySelector('#_crGraf svg'))}catch(_eb){}
   try{_crEtqMovibles(ov,String(c.cron_id||''))}catch(_em){}
 }
 /* Las cifras del dibujo (acumulados, proyeccion, HOY, % por semana) se
    pueden arrastrar para que no se monten unas sobre otras. Donde se dejan
    se recuerda por cronograma y por etiqueta, asi que sobreviven al
    repintado. Un doble toque devuelve la etiqueta a su sitio. */
+/* LEYENDA de la curva (a la derecha del dibujo): cada curva y cada histograma de HH se ve o no, y sus
+   porcentajes tambien, por separado; cada especialidad de las barras se puede apagar; y la leyenda entera se
+   puede plegar. Se recuerda en este equipo (obf4_curleg). Funciona igual en la curva flotante del calendario. */
+function _crLegLee(){var o=null;try{o=JSON.parse(localStorage.getItem('obf4_curleg')||'null')}catch(e){o=null}
+  if(!o||typeof o!=='object')o={};if(!o.off)o.off={brt:true,byt:true};if(!o.esp)o.esp={};return o}
+function _crLegGuarda(o){try{localStorage.setItem('obf4_curleg',JSON.stringify(o))}catch(e){}}
+function _crLegArma(filas,esps){var L=_crLegLee(),cls=['cv'],css='',K=['p','r','y','bp','br','by'];
+  K.forEach(function(k){css+='svg.o-'+k+' .k-'+k+',svg.o-'+k+'t .k-'+k+'t{display:none}';
+    if(L.off[k])cls.push('o-'+k);if(L.off[k+'t'])cls.push('o-'+k+'t')});
+  (esps||[]).forEach(function(e,i){css+='svg.o-e'+i+' .e-'+i+'{display:none}';if(L.esp[e])cls.push('o-e'+i)});
+  var ck=function(a,on,tit){return '<input type="checkbox" '+a+(on?' checked':'')+' title="'+tit+'" onchange="_crLegTog(this)" style="width:15px;height:15px;margin:0;cursor:pointer;accent-color:#2E86C1">'};
+  var mues=function(col,t){
+    if(t==='l')return '<span style="display:inline-block;width:18px;height:3px;background:'+col+';border-radius:2px"></span>';
+    if(t==='d')return '<span style="display:inline-block;width:18px;border-top:3px dashed '+col+'"></span>';
+    if(t==='b')return '<span style="display:inline-block;width:10px;height:12px;background:'+col+';opacity:.85"></span>';
+    if(t==='br')return '<span style="display:inline-block;width:10px;height:12px;background:#4a5a70;border:1.5px solid '+col+'"></span>';
+    return '<span style="display:inline-block;width:10px;height:12px;background:rgba(46,204,113,.25);border:1.5px dashed '+col+'"></span>'};
+  var fila=function(m,nom,a1,a2){return '<div style="display:grid;grid-template-columns:22px 1fr 20px 20px;align-items:center;gap:4px;padding:3px 0">'+
+    '<span style="display:flex;justify-content:center">'+m+'</span><span style="line-height:1.25">'+nom+'</span>'+
+    '<span style="display:flex;justify-content:center">'+a1+'</span><span style="display:flex;justify-content:center">'+(a2||'')+'</span></div>'};
+  var cab=function(t,c2){return '<div style="display:grid;grid-template-columns:22px 1fr 20px 20px;gap:4px;margin:6px 0 1px;color:#7d8590;font-size:10px;letter-spacing:.04em;text-transform:uppercase">'+
+    '<span></span><span>'+t+'</span><span style="text-align:center">'+(c2?'ver':'')+'</span><span style="text-align:center">'+(c2?'%':'')+'</span></div>'};
+  var h='<div class="_crLegBox" style="'+(L.hide?'display:none;':'display:block;')+'flex:0 0 205px;max-width:100%;box-sizing:border-box;background:#0b1424;border:1px solid #1d2c47;border-radius:9px;padding:7px 9px;font-size:11px;color:#cfe3ff;overflow-y:auto">'+
+    '<div style="display:flex;align-items:center;gap:6px"><b style="flex:1;font-size:11.5px;color:#8ECBF5">Leyenda</b>'+
+    '<button onclick="_crLegVer(this,false)" title="Ocultar la leyenda" style="background:#243b55;color:#cfe3ff;border:0;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:800;cursor:pointer">Ocultar ▸</button></div>';
+  h+=cab('Curvas',1);
+  filas.slice(0,3).forEach(function(f){if(f[4])h+=fila(mues(f[2],f[3]),f[1],ck('data-o="'+f[0]+'"',!L.off[f[0]],'Ver u ocultar'),ck('data-o="'+f[0]+'t"',!L.off[f[0]+'t'],'Ver u ocultar sus porcentajes'))});
+  h+=cab('Histogramas de HH',1);
+  filas.slice(3).forEach(function(f){if(f[4])h+=fila(mues(f[2],f[3]),f[1],ck('data-o="'+f[0]+'"',!L.off[f[0]],'Ver u ocultar'),ck('data-o="'+f[0]+'t"',!L.off[f[0]+'t'],'Ver u ocultar sus porcentajes'))});
+  if((esps||[]).length){h+=cab('Especialidades',0);
+    esps.forEach(function(e,i){h+=fila('<span style="display:inline-block;width:11px;height:11px;background:'+_crColorEsp(e)+';border-radius:2px"></span>',esc(e),
+      ck('data-ei="'+i+'" data-e="'+esc(e)+'"',!L.esp[e],'Ver u ocultar esta especialidad en las barras'),'')})}
+  h+='</div><button class="_crLegMin" onclick="_crLegVer(this,true)" title="Ver la leyenda" style="'+(L.hide?'':'display:none;')+'flex:0 0 auto;align-self:flex-start;background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:6px 9px;font-size:11px;font-weight:800;cursor:pointer">◂ Leyenda</button>';
+  return {cls:cls.join(' '),css:'<style>'+css+'</style>',html:h}}
+function _crLegTog(el){try{var g=el.closest('#_crGraf'),svg=g&&g.querySelector('svg');if(!svg)return;var L=_crLegLee();
+  if(el.hasAttribute('data-ei')){svg.classList.toggle('o-e'+el.getAttribute('data-ei'),!el.checked);L.esp[el.getAttribute('data-e')]=!el.checked}
+  else{var k=el.getAttribute('data-o');svg.classList.toggle('o-'+k,!el.checked);L.off[k]=!el.checked}
+  _crLegGuarda(L);_crBarLay(svg)}catch(e){}}
+function _crLegVer(b,ver){try{var g=b.closest('#_crGraf');if(!g)return;var L=_crLegLee();L.hide=!ver;_crLegGuarda(L);
+  var bx=g.querySelector('._crLegBox'),mn=g.querySelector('._crLegMin');if(bx)bx.style.display=ver?'block':'none';if(mn)mn.style.display=ver?'none':''}catch(e){}}
+/* las barras de cada semana: la programada, la real y la proyectada lado a lado (solo las que se ven), cada
+   una apilada por especialidad sin huecos de las especialidades apagadas; su % encima */
+function _crBarLay(svg){try{if(!svg)return;var cl=svg.classList,base=+svg.getAttribute('data-base')||0;
+  var kinds=['p','r','y'].filter(function(k){return !cl.contains('o-b'+k)&&svg.querySelector('rect[data-k="'+k+'"]')});
+  var G={},tops={};
+  Array.prototype.forEach.call(svg.querySelectorAll('rect[data-k]'),function(r){var key=r.getAttribute('data-w')+'|'+r.getAttribute('data-k');(G[key]=G[key]||[]).push(r)});
+  Object.keys(G).forEach(function(key){var rs=G[key],k=key.split('|')[1],ix=Math.max(0,kinds.indexOf(k)),n=Math.max(1,kinds.length);
+    var cx=+rs[0].getAttribute('data-cx'),bw=+rs[0].getAttribute('data-bw'),sw=bw/n,x0=cx-bw/2+ix*sw,ww=Math.max(1.5,sw-(n>1?1:0)),y=base;
+    rs.forEach(function(r){var m=/\be-(\d+)\b/.exec(r.getAttribute('class')||'');r.setAttribute('x',x0.toFixed(1));r.setAttribute('width',ww.toFixed(1));
+      if(!(m&&cl.contains('o-e'+m[1]))){y-=(+r.getAttribute('data-h')||0);r.setAttribute('y',y.toFixed(1))}});
+    tops[key]={x:x0+ww/2,y:y,sw:sw}});
+  Array.prototype.forEach.call(svg.querySelectorAll('text[data-k]'),function(t){var o=tops[t.getAttribute('data-w')+'|'+t.getAttribute('data-k')];if(!o)return;
+    var tx=o.x.toFixed(1),ty=(o.y-3).toFixed(1);t.setAttribute('x',tx);t.setAttribute('y',ty);
+    if(o.sw<24){t.setAttribute('text-anchor','start');t.setAttribute('transform','rotate(-60 '+tx+' '+ty+')')}
+    else{t.setAttribute('text-anchor','middle');t.removeAttribute('transform')}})}catch(e){}}
 function _crEtqMovibles(ov,cron){
   var svg=ov.querySelector('#_crGraf svg');if(!svg)return;
   /* las rayas, barras, lineas y puntos no atrapan el mouse: la cifra que
@@ -8360,7 +8430,7 @@ function _crEtqMovibles(ov,cron){
   var K='obf4_curetq',all={};try{all=JSON.parse(localStorage.getItem(K)||'{}')||{}}catch(e){all={}}
   var mem=all[cron]||{};
   var textos=Array.prototype.filter.call(svg.querySelectorAll('text'),function(t){
-    var s=String(t.textContent||'');return /%$/.test(s)&&!/^(0|25|50|75|100)%$/.test(s)});
+    var s=String(t.textContent||'');return /%$/.test(s)&&!/^(0|25|50|75|100)%$/.test(s)&&!t.hasAttribute('data-k')});
   var vistos={};
   textos.forEach(function(t){
     var s=String(t.textContent||'');vistos[s]=(vistos[s]||0)+1;
@@ -25653,7 +25723,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c131';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c132';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -39750,7 +39820,7 @@ async function _pgCurvaFlotante(_sil){try{
     var graf=ov.querySelector('#_crGraf');
     Array.prototype.forEach.call(ov.children,function(ch){
       if(ch!==graf)ch.style.display='none'});
-    if(graf){graf.style.display='';graf.style.flex='1';graf.style.minHeight='0';
+    if(graf){graf.style.display='flex';graf.style.flex='1';graf.style.minHeight='0';graf.style.flexWrap='nowrap';
       graf.style.overflow='auto';graf.style.margin='0'}
   }catch(e){}
   /* que el dibujo se estire con la ventana en vez de quedarse fijo */
@@ -39780,7 +39850,7 @@ async function _pgCurvaFlotante(_sil){try{
   bar.querySelector('#_crFlotPip').onclick=async function(e){e.stopPropagation();
     try{
       var graf=ov.querySelector('#_crGraf');if(!graf)return;
-      var cuerpo='<style>body{margin:0;background:#0d1117;overflow:hidden}svg{width:100vw;height:100vh;display:block}</style>'+graf.innerHTML;
+      var _sv9=graf.querySelector('svg');var cuerpo='<style>body{margin:0;background:#0d1117;overflow:hidden}svg{width:100vw;height:100vh;display:block}</style>'+(_sv9?_sv9.outerHTML:graf.innerHTML);
       if(window.documentPictureInPicture&&documentPictureInPicture.requestWindow){
         var pw=await documentPictureInPicture.requestWindow({width:920,height:480});
         pw.document.body.style.cssText='margin:0;background:#0d1117';
@@ -39844,7 +39914,7 @@ function _pgCurvaRefresca(){try{
       /* la copia sacada del navegador recibe el dibujo fresco */
       if(pw){try{
         var g=n.querySelector('#_crGraf');
-        if(g)pw.document.body.innerHTML='<style>body{margin:0;background:#0d1117;overflow:hidden}svg{width:100vw;height:100vh;display:block}</style>'+g.innerHTML;
+        var _sv8=g&&g.querySelector('svg');if(g)pw.document.body.innerHTML='<style>body{margin:0;background:#0d1117;overflow:hidden}svg{width:100vw;height:100vh;display:block}</style>'+(_sv8?_sv8.outerHTML:g.innerHTML);
       }catch(_ep){}}
       if(flot){
         if(geo.left){n.style.left=geo.left;n.style.right='auto'}
