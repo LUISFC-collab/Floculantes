@@ -1128,6 +1128,88 @@ if(m==='DELETE'&&typeof u==='string'&&u.indexOf('/rest/v1/fotos?')>=0&&u.indexOf
 if(m!=='GET'&&typeof u==='string'&&typeof sbBase==='function'&&state&&state.cfg&&state.cfg.supaUrl&&u.indexOf(sbBase())===0&&typeof miRol==='function'){var _r=miRol();if(_r==='nuevo'||_r==='bloqueado'){var okd=(u.indexOf('/roles_usuarios')>=0)||(u.indexOf('/dispositivos')>=0)||(u.indexOf('/rpc/')>=0)||(u.indexOf('/pendientes')>=0&&o&&typeof o.body==='string'&&o.body.indexOf('permiso')>=0);if(!okd){try{toast('👁 Solo visualización — no puedes cambiar nada')}catch(_e){}return Promise.resolve(new Response('[]',{status:403,headers:{'Content-Type':'application/json'}}))}}}
 /* tiempo máximo a toda llamada al servidor: si la señal se corta a mitad, el fetch NO se queda colgado para siempre (eso dejaba el sync trabado hasta reiniciar la app) */
 if(typeof u==='string'&&typeof sbBase==='function'&&state&&state.cfg&&state.cfg.supaUrl&&u.indexOf(sbBase())===0&&!(o&&o.signal)&&typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function'){var _tmo=(u.indexOf('/storage/v1/')>=0)?120000:30000;var _o2={};for(var _k in (o||{}))_o2[_k]=o[_k];_o2.signal=AbortSignal.timeout(_tmo);return _f0.call(this,u,_o2)}}catch(_e){}return _f0.apply(this,arguments)}})();
+/* ===== PAQUETES DE CARGAS (c127) · capa de red =====
+   Un paquete de cargas es un juego completo e independiente de avances: las filas de `partes` y los apartados
+   (`ajustes` fase:<id>) viven en el servidor con el proyecto marcado `<proyecto>::<paquete>`; OBRA (lo real) va
+   con el proyecto a secas, igual que siempre. Toda la app lee y escribe las cargas del paquete de ESTE equipo
+   (window._cgPk), que sigue al del cronograma ACTUAL. Con _cgPk vacio (OBRA) esta capa no cambia ninguna peticion.
+   - Las peticiones de cargas se reescriben aqui, en un solo punto, y no en cada sitio que las hace.
+   - Una lectura que se pidio con un paquete y llega cuando el equipo ya cambio a otro se DESCARTA (epoca):
+     si se mezclara, la app volveria a subir esas cargas al paquete nuevo.
+   - Lo guardado en el equipo lleva la marca de su paquete (obf4_kp_pk / obf4_fz_pk). */
+window._cgPk=(function(){try{return String(localStorage.getItem('obf4_kp_pk')||'')}catch(e){return ''}})();
+window._cgEpoca=0;
+function _cgTag(pk){return DATA.proyecto+(pk?('::'+pk):'')}
+function _cgFzCur(){return 'obf4_fases_upd'+(window._cgPk?('_'+window._cgPk):'')}
+/* las cargas de un paquete se guardan en el equipo en SU clave, no en la de OBRA: una version vieja de la app
+   (que no sabe de paquetes) solo ve la de OBRA y asi nunca puede subir a OBRA las cargas de un paquete */
+function _cgKP(){return window._cgPk?('obf4_partes@'+window._cgPk):KP}
+function _cgFzKey(){return 'obf4_fases'+(window._cgPk?('@'+window._cgPk):'')}
+/* este equipo es coherente si el paquete en memoria es el de lo guardado; si otra pestana cambio de paquete,
+   esta se queda vieja: no lee, no sube ni guarda cargas, y se recarga sola */
+function _cgCoherente(){try{return String(localStorage.getItem('obf4_kp_pk')||'')===String(window._cgPk||'')}catch(e){return true}}
+function _cgTabVieja(){try{if(window._cgVieja)return;window._cgVieja=1;
+  var u=0;try{u=Number(sessionStorage.getItem('cg_rl'))||0}catch(e){}
+  if(Date.now()-u<15000)return;try{sessionStorage.setItem('cg_rl',String(Date.now()))}catch(e){}
+  setTimeout(function(){try{location.reload()}catch(e){}},400)}catch(e){}}
+/* cada carga guardada en el equipo lleva el sello de su paquete (_pk): una carga nunca se sube a otro paquete */
+(function(){try{var _ss=store.set,_sg=store.get;
+  store.get=function(k){if(k===KP&&window._cgPk)return _sg.call(this,_cgKP());return _sg.apply(this,arguments)};
+  store.set=function(k,v){
+  if(k===KP){
+    if(!_cgCoherente()){_cgTabVieja();return false}
+    var kk=_cgKP(),vv=v;
+    try{var pk=String(window._cgPk||'');
+      if(Array.isArray(v)){var aj=[];
+        v.forEach(function(p){if(p&&typeof p==='object'){if(p._pk===undefined)p._pk=pk;else if(String(p._pk)!==pk)aj.push(p)}});
+        if(aj.length){
+          try{var pe=aj.filter(function(p){return !p.synced});if(pe.length){var Q=JSON.parse(localStorage.getItem('obf4_cgcuar')||'[]');Q.push({t:Date.now(),pk:pk,partes:pe});localStorage.setItem('obf4_cgcuar',JSON.stringify(Q.slice(-20)))}}catch(e){}
+          vv=v.filter(function(p){return !(p&&typeof p==='object'&&p._pk!==undefined&&String(p._pk)!==pk)})}}}catch(e){}
+    if(kk!==KP){try{if(!(typeof _pulling!=='undefined'&&_pulling)&&typeof state!=='undefined'&&state)state.dirty=true}catch(e){}}
+    return _ss.call(this,kk,vv)}
+  return _ss.apply(this,arguments)};
+  /* al arrancar con un paquete activo, las cargas del equipo son las de su clave */
+  if(window._cgPk){try{state.partes=_sg.call(store,_cgKP())||[]}catch(e){state.partes=[]}try{_partesIdxReset()}catch(e){}}
+}catch(e){}})();
+(function(){var _f1=window.fetch;window.fetch=function(u,o){
+  var plan=null;
+  try{
+    if(typeof u==='string'&&typeof sbBase==='function'&&typeof state!=='undefined'&&state&&state.cfg&&state.cfg.supaUrl){
+      var base=sbBase()+'/rest/v1/';
+      if(u.indexOf(base)===0){
+        var hd=o&&o.headers;
+        if(hd&&hd['x-cg-crudo']){var h2={};for(var k in hd)if(k!=='x-cg-crudo')h2[k]=hd[k];var oc={};for(var k2 in o)oc[k2]=o[k2];oc.headers=h2;return _f1.call(this,u,oc)}
+        var resto=u.slice(base.length),qi=resto.indexOf('?'),tabla=(qi<0?resto:resto.slice(0,qi)),m=((o&&o.method)||'GET').toUpperCase();
+        var esP=(tabla==='partes'),esA=(tabla==='ajustes_create_110826');
+        if(esP||esA){
+          var pk=String(window._cgPk||''),P0=DATA.proyecto,tag=_cgTag(pk);
+          if((esP||(esA&&(u.indexOf('clave=like.fase')>=0||(o&&typeof o.body==='string'&&o.body.indexOf('"fase:')>=0))))&&!_cgCoherente()){_cgTabVieja();return Promise.reject(new Error('paquete de cargas: esta ventana quedó vieja y se recarga'))}
+          if(esP&&m==='POST'&&o&&typeof o.body==='string'&&o.body){
+            var ix={};(state.partes||[]).forEach(function(p){if(p&&p.client_id&&p._pk!==undefined)ix[String(p.client_id)]=String(p._pk)});
+            var bb=JSON.parse(o.body),LL=Array.isArray(bb)?bb:[bb];
+            if(LL.some(function(r){return r&&r.client_id!=null&&ix[String(r.client_id)]!==undefined&&ix[String(r.client_id)]!==pk}))
+              return Promise.reject(new Error('paquete de cargas: hay cargas de otro paquete en este equipo; no se suben'))}
+          var qP='proyecto=eq.'+encodeURIComponent(P0),pos=u.indexOf(qP),fin=pos<0?-1:pos+qP.length;
+          var tieneP=(pos>=0&&(fin===u.length||u.charAt(fin)==='&'));
+          var esFz=(esA&&u.indexOf('clave=like.fase')>=0);
+          var ambito=(m==='GET')&&((esP&&tieneP)||esFz);
+          var u2=u,o2=o;
+          if(pk){
+            if(tieneP&&(esP||esFz))u2=u.slice(0,pos)+'proyecto=eq.'+encodeURIComponent(tag)+u.slice(fin);
+            if((m==='POST'||m==='PATCH')&&o&&typeof o.body==='string'&&o.body){
+              var b=JSON.parse(o.body),toco=false;
+              var f=function(r){if(r&&typeof r==='object'&&r.proyecto===P0&&(esP||String(r.clave||'').indexOf('fase:')===0)){r.proyecto=tag;toco=true}};
+              if(Array.isArray(b))b.forEach(f);else f(b);
+              if(toco){o2={};for(var k3 in o)o2[k3]=o[k3];o2.body=JSON.stringify(b)}}}
+          plan={u:u2,o:o2,ambito:ambito,ep:window._cgEpoca}}}}
+  }catch(e){
+    /* con un paquete activo, una peticion de cargas que no se pudo preparar NO se manda a OBRA */
+    if(window._cgPk)return Promise.reject(new Error('paquete de cargas: la petición no se envió'));
+    plan=null}
+  if(!plan)return _f1.apply(this,arguments);
+  var p=_f1.call(this,plan.u,plan.o);
+  if(!plan.ambito)return p;
+  return p.then(function(r){if(plan.ep!==window._cgEpoca)throw new Error('cambio de paquete de cargas: respuesta descartada');return r})}})();
 function _gateW(){var r=miRol();if(r!=='nuevo'&&r!=='bloqueado')return true;if(r==='bloqueado'){toast('⛔ Usuario bloqueado por el administrador');return false}var nmG=(state.user&&state.user.supervisor)||'';var dupG=(state.pend||[]).some(function(x){return x&&x.tipo==='permiso'&&!x.resuelto&&x.supervisor===nmG});if(dupG){toast('📨 Ya solicitaste unirte al proyecto — espera la respuesta del administrador');return false}if(confirm('👁 SOLO VISUALIZACIÓN — puedes ver todo e imprimir PDFs, pero no cambiar nada.\n\n¿Enviar solicitud para UNIRTE AL PROYECTO?')){_pedirPermiso()}return false}
 function _pedirPermiso(){try{var nm=(state.user&&state.user.supervisor)||'';var dup=(state.pend||[]).some(function(x){return x&&x.tipo==='permiso'&&!x.resuelto&&x.supervisor===nm});if(dup){toast('📨 Ya solicitaste unirte al proyecto — espera la respuesta del administrador');return}state.pend=state.pend||[];var _it={id:uuid(),proyecto:DATA.proyecto,tipo:'permiso',descripcion:'UNIRSE AL PROYECTO: '+nm+' solicita unirse al proyecto ('+((state.user&&state.user.disc)||'')+')',supervisor:nm,disciplina:(state.user&&state.user.disc)||'',fecha:(typeof todayISO==='function'?todayISO():''),ts:(typeof nowSrv==='function'?nowSrv():Date.now()),cell_at:Date.now(),resuelto:false,synced:false};state.pend.push(_it);if(typeof pendSave==='function')pendSave();try{fetch(sbBase()+'/rest/v1/pendientes?on_conflict=id',{method:'POST',headers:sbHead({'Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify([{id:_it.id,proyecto:_it.proyecto,tipo:'permiso',descripcion:_it.descripcion,supervisor:nm,disciplina:_it.disciplina,fecha:_it.fecha,ts:_it.ts,cell_at:_it.cell_at,updated_at:new Date().toISOString()}])})}catch(_e){}toast('📨 Solicitando unirse al proyecto… enviada al administrador ✓');if(typeof syncNow==='function')syncNow(true)}catch(e){toast('No se pudo enviar: '+e)}}
 async function _defPassVivo(){try{var nm=(state.user&&state.user.supervisor)||'';if(!nm)return;var _yaT=!!(state.roles&&state.roles[nm]&&state.roles[nm].pass);var p1=prompt(_yaT?('🔁 El administrador te pide crear una contraseña NUEVA.\n\n'+nm+', escribe tu nueva contraseña (mínimo 4 caracteres):'):('✅ El administrador aceptó tu ingreso.\n\n'+nm+', define TU contraseña para entrar (mínimo 4 caracteres):'));if(p1==null||String(p1).length<4){toast('La definirás en tu próximo ingreso');window._askPass1=0;setTimeout(function(){try{_askPassIfNeeded(200)}catch(e){}},12000);return}var p2=prompt('Repítela para confirmar:');if(p1!==p2){toast('No coinciden — la definirás en tu próximo ingreso');window._askPass1=0;setTimeout(function(){try{_askPassIfNeeded(200)}catch(e){}},12000);return}var h=await _hashPass(p1);await fetch(sbBase()+'/rest/v1/roles_usuarios?on_conflict=nombre',{method:'POST',headers:sbHead({'Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify([{nombre:nm,pass:h,pass_txt:p1,pedir_pass:null,proyecto:DATA.proyecto,quien:nm,ts:(typeof nowSrv==='function'?nowSrv():Date.now()),cell_at:Date.now(),updated_at:new Date().toISOString()}])});toast('🔑 Contraseña guardada ✓ — ya puedes trabajar');try{if(state.roles[nm]){state.roles[nm].pass=h;state.roles[nm].pass_txt=p1;store.set('obf4_roles',state.roles)}}catch(e){}_pullRoles()}catch(e){toast('Sin señal — se te pedirá de nuevo');window._askPass1=0}}
@@ -4270,6 +4352,7 @@ function _crPinta(){
       '<button data-ver="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">👁 Tareas</button>'+
       '<button data-ed="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">✎ Nombre / tipo / color</button>'+
       (esAdmin()?'<button data-dup="'+esc(c.cron_id)+'" title="Hace una copia EXACTA de este cronograma (tareas, alcance, relaciones, WBS, rendimientos, configuraci\u00f3n de trabajo, plan, agrupaciones, .xer\u2026) con id propio. Despu\u00e9s es independiente: lo que cambies en la copia no toca a este, ni al rev\u00e9s. Para hacer forecast." style="background:#1E5E5A;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">\u29c9 Duplicar</button>':'')+
+      (esAdmin()?(function(){var _pk=_cgDeCron(c.cron_id);return '<button data-cgar="'+esc(c.cron_id)+'" title="Paquete de cargas (avances) de este cronograma. El paquete del cronograma ACTUAL es con el que trabaja toda la app." style="background:'+(_pk?'#7A4B00':'#243b55')+';color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">🗂 Cargas: '+esc(_cgNombre(_pk))+'</button>'})():'')+
       (esAdmin()?'<button data-cmet="'+esc(c.cron_id)+'" title="Carga en ESTE cronograma el metrado de la columna Metrado forecast del Excel de la Tabla del alcance. Antes de guardar muestra qué cambia. No toca a los demás cronogramas, ni los avances, ni el metrado de contrato; se puede deshacer." style="background:#7A4B00;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">📥 Cargar metrados</button>':'')+
       '<button data-del="'+esc(c.cron_id)+'" style="margin-left:auto;background:#5A1F1F;color:#FFD9D4;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">🗑</button>'+
       '</div></div>'});
@@ -4307,6 +4390,8 @@ function _crPinta(){
   B.querySelectorAll('[data-dup]').forEach(function(b){b.onclick=function(){
     if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return}
     try{_crDuplicarUI(elC(b.getAttribute('data-dup')))}catch(e){toast('\u2716 '+((e&&e.message)||e))}}});
+  B.querySelectorAll('[data-cgar]').forEach(function(b){b.onclick=function(){
+    try{_cgUI(elC(b.getAttribute('data-cgar')))}catch(e){toast('✖ '+((e&&e.message)||e))}}});
   B.querySelectorAll('[data-cmet]').forEach(function(b){b.onclick=function(){
     if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return}
     try{_cmUI(elC(b.getAttribute('data-cmet')))}catch(e){toast('✖ '+((e&&e.message)||e))}}});
@@ -4502,6 +4587,210 @@ function _cmUI(c){
     busy=false;undoVe()};
 }
 
+/* ===== PAQUETES DE CARGAS (c127) · listas, cambio de paquete y ventana =====
+   ajustes `cg_listas` = [{id,nombre,de,creado,quien,n,nf,eliminado}] · `cg_cron` = {cron_id: id del paquete}.
+   El paquete del cronograma ACTUAL es con el que trabaja toda la app, en todos los equipos: ahi caen las cargas
+   nuevas. Un cronograma sin paquete usa OBRA. Crear un paquete COPIA las cargas (con ids nuevos; las fotos no viajan).
+   Cambiar de paquete: primero se sube lo pendiente al paquete en curso; despues se vacia lo local y se baja el nuevo. */
+function _cgListas(){try{var L=_ajGet('cg_listas',[]);return Array.isArray(L)?L:[]}catch(e){return []}}
+function _cgVivas(){return _cgListas().filter(function(l){return l&&l.id&&!l.eliminado})}
+function _cgMapa(){try{var m=_ajGet('cg_cron',{});return (m&&typeof m==='object'&&!Array.isArray(m))?m:{}}catch(e){return {}}}
+function _cgNombre(pk){if(!pk)return 'OBRA';var x=_cgListas().filter(function(l){return l&&l.id===pk})[0];return x?String(x.nombre||pk):String(pk)}
+function _cgDeCron(cronId){var pk=String(_cgMapa()[String(cronId)]||'');if(!pk)return '';return _cgVivas().some(function(l){return l.id===pk})?pk:''}
+/* el paquete que deberia tener este equipo: el del ACTUAL. null = todavia no se sabe (no se cambia nada) */
+function _cgDeseado(){
+  try{var a=(typeof _ctActiva==='function')?_ctActiva():null;if(!a||!a.activa)return null;
+    var aj=_ajAll()['cg_cron'];
+    if(!aj)return (window._cgPk?null:'');
+    if(aj.eliminado)return '';
+    var pk=String(((aj.valor&&typeof aj.valor==='object')?aj.valor:{})[String(a.cron_id)]||'');if(!pk)return '';
+    var x=_cgListas().filter(function(l){return l&&l.id===pk})[0];
+    if(!x)return null;
+    return x.eliminado?'':pk}catch(e){return null}}
+function _cgPend(){return (state.partes||[]).some(function(p){return p&&!p.synced&&String(p.client_id||'').indexOf('_tmp')!==0&&!(state.delpartes&&state.delpartes.indexOf(p.client_id)>-1)})}
+function _cgChip(txt){try{
+  var pk=String(window._cgPk||''),el=document.getElementById('_cgChipEl');
+  var t=txt||(pk?('🗂 Cargas: «'+_cgNombre(pk)+'»'):'');
+  if(!t){if(el)el.remove();return}
+  if(!el){el=document.createElement('div');el.id='_cgChipEl';
+    el.style.cssText='position:fixed;top:4px;right:6px;z-index:2147483100;background:#7A4B00;color:#fff;border-radius:9px;padding:4px 9px;font-size:11px;font-weight:800;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.35);max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    document.body.appendChild(el)}
+  el.textContent=t;el.style.background=txt?'#8A1F1F':'#7A4B00'}catch(e){}}
+function _cgRevisa(){try{if(window._cgCambiando)return;if(!_cgCoherente()){_cgTabVieja();return}if(!(state&&state.user))return;var d=_cgDeseado();
+  if(d==null||d===String(window._cgPk||'')){_cgChip();return}
+  _cgCambia(d)}catch(e){}}
+function _cgRevisaPronto(){try{clearTimeout(window._cgRvT)}catch(e){}window._cgRvT=setTimeout(_cgRevisa,700)}
+/* los apartados guardados sin señal se suben a SU paquete antes de cambiar */
+async function _cgFzSubePend(){
+  try{var H=_fzAll(),ids=Object.keys(H);if(!ids.length)return true;
+    var R=await sbSelect('ajustes_create_110826','select=clave,ts&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&clave=like.fase:*&limit=5000');
+    if(!R)return false;
+    var S={};R.forEach(function(r){S[String(r.clave)]=Number(r.ts)||0});var out=[];
+    ids.forEach(function(id){var r=H[id];if(!r||!r.ts)return;var k=_fzKey(id);if((Number(r.ts)||0)>(S[k]||0))
+      out.push({proyecto:DATA.proyecto,clave:k,valor:r,descripcion:'Partes de la partida '+id,quien:String(r.quien||''),ts:Number(r.ts)||0,cell_at:Date.now(),eliminado:!!r.eliminado,elim_por:String(r.elim_por||''),elim_ts:Number(r.elim_ts)||0})});
+    if(out.length)await sbUpsert('ajustes_create_110826',out,'proyecto,clave');
+    return true}catch(e){return false}}
+async function _cgCambia(pkN){
+  pkN=String(pkN||'');
+  if(window._cgCambiando)return false;
+  if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return false;
+  if(window._modoPrueba||window._mpFreeze||window._mpRestoring||window._impBusy)return false;
+  window._cgCambiando=1;var hecho=false;
+  try{
+    var esp=function(ms){return new Promise(function(r){setTimeout(r,ms)})};
+    _cgChip('Cambiando a las cargas de «'+_cgNombre(pkN)+'»…');
+    for(var i=0;i<240&&syncing;i++)await esp(500);
+    if(_cgPend()){try{await syncNow(true)}catch(e){}for(var j=0;j<240&&syncing;j++)await esp(500)}
+    var fzOk=await _cgFzSubePend();
+    if(syncing||_cgPend()||!fzOk){window._cgEspera=1;return false}
+    /* desde aqui, sin esperas: se vacia lo local y se cambia de paquete en el mismo paso */
+    if(!_cgCoherente()){_cgTabVieja();return false}
+    window._cgEpoca++;
+    var viejo=String(window._cgPk||'');
+    state.partes=[];try{_partesIdxReset()}catch(e){}
+    store.set(KP,state.partes);                       /* lo local del paquete que se deja queda vacio */
+    state.fases={};
+    localStorage.setItem('obf4_kp_pk',pkN);          /* y recien entonces cambian la marca y el paquete en memoria */
+    window._cgPk=pkN;
+    try{localStorage.removeItem(_cgFzKey());localStorage.removeItem(_cgFzCur());
+      if(viejo){localStorage.removeItem('obf4_partes@'+viejo);localStorage.removeItem('obf4_fases@'+viejo);localStorage.removeItem('obf4_fases_upd_'+viejo)}}catch(e){}
+    store.set(KP,state.partes);                       /* el nuevo arranca vacio y se baja del servidor */
+    try{_hhMemoTira()}catch(e){}
+    window._cgEspera=0;hecho=true;
+    try{if(typeof _logAdd==='function')_logAdd('cargas','paquete de cargas: '+_cgNombre(pkN))}catch(e){}
+    try{await _fzPull()}catch(e){}
+    try{await syncNow(true)}catch(e){}
+    for(var q=0;q<120&&syncing;q++)await esp(500);
+    try{_hhMemoTira()}catch(e){}try{_retRefresca()}catch(e){}
+    try{if(typeof renderList==='function')renderList()}catch(e){}
+    try{if(document.getElementById('_crOv')&&typeof _crPinta==='function')_crPinta()}catch(e){}
+    try{if(typeof toast==='function')toast('🗂 Cargas: «'+_cgNombre(pkN)+'»')}catch(e){}
+  }catch(e){}
+  finally{window._cgCambiando=0;_cgChip(window._cgEspera?'Hay cargas sin subir: el cambio de paquete espera':'')}
+  return hecho}
+function _cgCrudo(url,o){var oc={};for(var k in (o||{}))oc[k]=o[k];var h={};var h0=(o&&o.headers)||sbHead();for(var k2 in h0)h[k2]=h0[k2];h['x-cg-crudo']='1';oc.headers=h;return fetch(url,oc)}
+async function _cgLeeTodo(tabla,qs,orden){var out=[],off=0,B=sbBase()+'/rest/v1/';
+  for(;;){var r=await _cgCrudo(B+tabla+'?'+qs+'&order='+orden+'&limit=1000&offset='+off);if(!r.ok)throw new Error(tabla+': HTTP '+r.status);
+    var j=await r.json();out=out.concat(j||[]);if(!j||j.length<1000)break;off+=1000}
+  return out}
+/* crea un paquete copiando las cargas de otro (o de OBRA): nada se mueve ni se borra en el origen */
+async function _cgCrear(nombre,dePk,prog){
+  if(!(typeof esAdmin==='function'&&esAdmin()))throw new Error('Solo el administrador');
+  if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))throw new Error('Sin conexión: el paquete se crea en el servidor');
+  nombre=String(nombre||'').trim();dePk=String(dePk||'');
+  if(!nombre)throw new Error('Ponle un nombre al paquete');
+  if(_cgVivas().some(function(l){return String(l.nombre||'').trim().toLowerCase()===nombre.toLowerCase()})||nombre.toLowerCase()==='obra')throw new Error('Ya hay un paquete con ese nombre');
+  var dice=function(t){try{if(prog)prog(t)}catch(e){}};
+  if(dePk===String(window._cgPk||'')){
+    dice('Subiendo lo pendiente de este equipo…');
+    if(_cgPend()){try{await syncNow(true)}catch(e){}for(var w=0;w<120&&syncing;w++)await new Promise(function(r){setTimeout(r,500)})}
+    var fz=await _cgFzSubePend();
+    if(_cgPend()||!fz)throw new Error('Este equipo tiene cargas sin subir: sincroniza y vuelve a intentar')}
+  var tagD=_cgTag(dePk),pkN='p'+Date.now().toString(36)+Math.floor(Math.random()*1296).toString(36),tagN=_cgTag(pkN),B=sbBase()+'/rest/v1/';
+  dice('Leyendo las cargas de «'+_cgNombre(dePk)+'»…');
+  var PR=await _cgLeeTodo('partes','select=*&proyecto=eq.'+encodeURIComponent(tagD),'client_id.asc');
+  var FR=await _cgLeeTodo('ajustes_create_110826','select=*&proyecto=eq.'+encodeURIComponent(tagD)+'&clave=like.fase:*','clave.asc');
+  var mapa={},ahora=new Date().toISOString();
+  var np=PR.map(function(r){var n={};for(var k in r)n[k]=r[k];var id=uuid();mapa[String(r.client_id)]=id;
+    n.client_id=id;n.proyecto=tagN;n.fotos=0;n.fotos_data=null;delete n.created_at;n.updated_at=ahora;return n});
+  var nf=FR.map(function(r){var v=JSON.parse(JSON.stringify(r.valor||{}));
+    (v.fases||[]).forEach(function(x){(x.movs||[]).forEach(function(mv){if(mv&&mv.cid&&mapa[String(mv.cid)])mv.cid=mapa[String(mv.cid)]})});
+    return {proyecto:tagN,clave:r.clave,valor:v,descripcion:String(r.descripcion||''),quien:String(r.quien||''),ts:Number(r.ts)||0,cell_at:Number(r.cell_at)||0,eliminado:!!r.eliminado,elim_por:String(r.elim_por||''),elim_ts:Number(r.elim_ts)||0}});
+  var sube=async function(tabla,rows,conf,que){for(var i=0;i<rows.length;i+=200){
+    var r=await _cgCrudo(B+tabla+'?on_conflict='+conf,{method:'POST',headers:sbHead({'Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify(rows.slice(i,i+200))});
+    if(!r.ok)throw new Error(tabla+': HTTP '+r.status+' al copiar');
+    dice('Copiando '+que+': '+Math.min(i+200,rows.length)+' de '+rows.length+'…')}};
+  await sube('partes',np,'client_id','cargas');
+  await sube('ajustes_create_110826',nf,'proyecto,clave','apartados');
+  dice('Comprobando la copia…');
+  var c1=await _cgLeeTodo('partes','select=client_id&proyecto=eq.'+encodeURIComponent(tagN),'client_id.asc');
+  var c2=await _cgLeeTodo('ajustes_create_110826','select=clave&proyecto=eq.'+encodeURIComponent(tagN)+'&clave=like.fase:*','clave.asc');
+  if(c1.length!==np.length||c2.length!==nf.length)throw new Error('La copia quedó incompleta ('+c1.length+' de '+np.length+' cargas, '+c2.length+' de '+nf.length+' apartados): no se registró el paquete');
+  var L=_cgListas().slice();
+  L.push({id:pkN,nombre:nombre,de:dePk,creado:(typeof nowSrv==='function'?nowSrv():Date.now()),quien:(state.user&&state.user.supervisor)||'',n:np.length,nf:nf.length});
+  await _ajSet('cg_listas',L,'Paquetes de cargas (listas de avances)');
+  try{logCambio('CARGAS','','Paquete de cargas «'+nombre+'» creado como copia de «'+_cgNombre(dePk)+'»: '+np.length+' cargas')}catch(e){}
+  return {id:pkN,n:np.length,nf:nf.length}}
+async function _cgAsignar(cronId,pk){
+  if(!(typeof esAdmin==='function'&&esAdmin()))throw new Error('Solo el administrador');
+  if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))throw new Error('Sin conexión');
+  pk=String(pk||'');if(pk&&!_cgVivas().some(function(l){return l.id===pk}))throw new Error('Ese paquete ya no existe');
+  var m={},o=_cgMapa();for(var k in o)m[k]=o[k];
+  if(pk)m[String(cronId)]=pk;else delete m[String(cronId)];
+  await _ajSet('cg_cron',m,'Paquete de cargas de cada cronograma');
+  /* con un paquete en uso, ningun equipo debe quedarse en una version que no sabe de paquetes (cargaria en OBRA):
+     se activa el cerrojo de version, que obliga a actualizar */
+  if(pk){try{if(typeof _verLocked==='function'&&!_verLocked()){var lv=String((typeof _LATESTVER!=='undefined'&&_LATESTVER)||APP_VER);
+    await sbUpsert('app_config',[{id:1,min_version:lv,updated_at:new Date().toISOString()}],'id');_MINVER=lv;window._cgCerrojo=1}}catch(e){}}
+  try{logCambio('CARGAS','','Cargas de «'+((typeof _ctNombre==='function'&&_ctNombre(cronId))||cronId)+'»: «'+_cgNombre(pk)+'»')}catch(e){}
+  _cgRevisaPronto()}
+async function _cgBorra(pk){
+  if(!(typeof esAdmin==='function'&&esAdmin()))throw new Error('Solo el administrador');
+  var m=_cgMapa();for(var k in m)if(String(m[k])===String(pk))throw new Error('Lo usa un cronograma: asígnale otro paquete antes');
+  var L=_cgListas().map(function(l){if(l&&l.id===pk){var n={};for(var k2 in l)n[k2]=l[k2];n.eliminado=true;n.elim_ts=(typeof nowSrv==='function'?nowSrv():Date.now());n.elim_por=(state.user&&state.user.supervisor)||'';return n}return l});
+  await _ajSet('cg_listas',L,'Paquetes de cargas (listas de avances)')}
+function _cgUI(c){
+  if(!c)return;
+  if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return}
+  var old=document.getElementById('_cgOv');if(old)old.remove();
+  var cid=String(c.cron_id),nom=_crNomVis(c),busy=false,sel=_cgDeCron(cid);
+  var ov=document.createElement('div');ov.id='_cgOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(4,10,20,.86);display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box';
+  var bt='border:0;border-radius:10px;padding:10px 12px;font-weight:800;font-size:12.5px;cursor:pointer;color:#fff;';
+  var esAct=function(){try{var a=_ctActiva();return !!(a&&a.activa&&String(a.cron_id)===cid)}catch(e){return false}};
+  var pinta=function(m,col){
+    var act=esAct(),hoy=_cgDeCron(cid),V=_cgVivas();
+    var fila=function(id,n,det){var on=(sel===id);
+      return '<label style="display:flex;gap:9px;align-items:flex-start;border:1px solid '+(on?'#8ECBF5':'#1d3550')+';background:'+(on?'#132a44':'#0d1526')+';border-radius:10px;padding:9px 11px;margin-bottom:6px;cursor:pointer">'+
+        '<input type="radio" name="_cgSel" value="'+esc(id)+'"'+(on?' checked':'')+' style="margin-top:3px">'+
+        '<span style="flex:1;min-width:0"><b style="color:#fff;font-size:13px;overflow-wrap:anywhere">'+esc(n)+'</b>'+(hoy===id?' <span style="font-size:10.5px;font-weight:800;color:#8FE3D3">· lo usa este cronograma</span>':'')+
+        (String(window._cgPk||'')===id?' <span style="font-size:10.5px;font-weight:800;color:#FFCB80">· activo ahora en la app</span>':'')+
+        '<br><span style="font-size:11px;color:#9db4d6">'+det+'</span></span>'+
+        (id&&hoy!==id?'<button data-cgdel="'+esc(id)+'" title="Quitar este paquete de la lista (sus cargas quedan guardadas en el servidor)" style="background:#5A1F1F;color:#FFD9D4;border:0;border-radius:8px;padding:6px 9px;font-weight:800;font-size:11px;cursor:pointer">🗑</button>':'')+'</label>'};
+    var H='<div style="background:#0f1a26;border:1px solid #1d3550;border-radius:14px;padding:15px;max-width:560px;width:100%;max-height:100%;overflow:auto;box-sizing:border-box;color:#cfe3ff">'+
+      '<div style="font-weight:900;font-size:14px;color:#8ECBF5;margin-bottom:6px;overflow-wrap:anywhere">🗂 Cargas de «'+esc(nom)+'»</div>'+
+      '<div style="font-size:11.5px;color:#9db4d6;line-height:1.55;background:#0d1526;border:1px solid #172033;border-radius:10px;padding:9px 11px;margin-bottom:10px">'+
+        'Un <b>paquete de cargas</b> es un juego completo de avances, independiente de los demás. '+
+        'Toda la app trabaja con el paquete del cronograma <b>ACTUAL</b>: ahí se ven y ahí caen las cargas nuevas de todos los equipos. '+
+        (act?'<b style="color:#FFCB80">Este cronograma es el ACTUAL</b>: al cambiarle el paquete, todos los equipos pasan a ese paquete.':'Este cronograma no es el ACTUAL: su paquete se usará cuando lo sea.')+'</div>'+
+      fila('','OBRA','Las cargas reales de siempre.')+
+      V.map(function(l){return fila(l.id,l.nombre,(Number(l.n)||0)+' cargas al crearlo · copia de «'+esc(_cgNombre(l.de))+'» · '+esc(String(l.quien||'')))}).join('')+
+      '<button id="_cgUsar" style="'+bt+'width:100%;background:#0C5132;margin:4px 0 12px">✔ Usar el paquete marcado en este cronograma</button>'+
+      '<div style="border-top:1px solid #172033;padding-top:10px">'+
+        '<div style="font-size:11px;font-weight:800;color:#8ECBF5;margin-bottom:5px">➕ NUEVO PAQUETE (copia las cargas de otro)</div>'+
+        '<div style="display:flex;gap:7px;flex-wrap:wrap"><input id="_cgNom" placeholder="Nombre del paquete" maxlength="40" style="flex:2;min-width:140px;border:1px solid #1d3550;background:#0d1526;color:#fff;border-radius:9px;padding:9px;font-size:13px">'+
+        '<select id="_cgDe" style="flex:1;min-width:120px;border:1px solid #1d3550;background:#0d1526;color:#fff;border-radius:9px;padding:9px;font-size:12.5px"><option value="">Copiar de OBRA</option>'+V.map(function(l){return '<option value="'+esc(l.id)+'">Copiar de '+esc(l.nombre)+'</option>'}).join('')+'</select>'+
+        '<button id="_cgCrea" style="'+bt+'background:#1B5E8A">Crear</button></div>'+
+        '<div style="font-size:10.5px;color:#7d8590;margin-top:5px">La copia lleva cada carga con su fecha, cantidad y apartado. Las fotos se quedan en el paquete de origen.</div></div>'+
+      '<div id="_cgMsg" style="font-size:12px;margin-top:9px;overflow-wrap:anywhere;color:'+(col||'#9db4d6')+'">'+esc(m||'')+'</div>'+
+      '<button id="_cgX" style="'+bt+'width:100%;background:#333;margin-top:10px">Cerrar</button></div>';
+    ov.innerHTML=H;
+    var $g=function(id){return document.getElementById(id)};
+    var msg=function(t,cl){var e=$g('_cgMsg');if(e){e.textContent=t||'';e.style.color=cl||'#9db4d6'}};
+    ov.querySelectorAll('input[name="_cgSel"]').forEach(function(r){r.onchange=function(){sel=r.value;$g('_cgUsar').removeAttribute('data-ok');$g('_cgUsar').textContent='✔ Usar el paquete marcado en este cronograma'}});
+    $g('_cgX').onclick=function(){if(busy)return;ov.remove();try{if(typeof _crPinta==='function')_crPinta()}catch(e){}};
+    $g('_cgUsar').onclick=async function(){
+      if(busy)return;var b=$g('_cgUsar');
+      if(sel===_cgDeCron(cid)){msg('Este cronograma ya usa «'+_cgNombre(sel)+'».');return}
+      if(esAct()&&b.getAttribute('data-ok')!=='1'){b.setAttribute('data-ok','1');b.textContent='¿Seguro? Todos los equipos pasarán a «'+_cgNombre(sel)+'» · toca otra vez';return}
+      busy=true;msg('Guardando…');
+      try{await _cgAsignar(cid,sel);busy=false;pinta('✓ «'+nom+'» usa ahora las cargas de «'+_cgNombre(sel)+'».'+(esAct()?' La app está cambiando de paquete en todos los equipos.':'')+(window._cgCerrojo?' Se activó el cerrojo de versión para que todos los equipos se actualicen.':''),'#8FE3D3')}
+      catch(e){busy=false;msg('✖ '+((e&&e.message)||e),'#FF9D8F')}};
+    $g('_cgCrea').onclick=async function(){
+      if(busy)return;busy=true;var n=$g('_cgNom').value,de=$g('_cgDe').value;
+      try{var r=await _cgCrear(n,de,function(t){msg(t)});busy=false;sel=r.id;pinta('✓ Paquete «'+String(n).trim()+'» creado con '+r.n+' cargas. Márcalo y toca «Usar» para dárselo a este cronograma.','#8FE3D3')}
+      catch(e){busy=false;msg('✖ '+((e&&e.message)||e),'#FF9D8F')}};
+    ov.querySelectorAll('[data-cgdel]').forEach(function(b){b.onclick=async function(ev){ev.preventDefault();ev.stopPropagation();
+      if(busy)return;var id=b.getAttribute('data-cgdel');
+      if(b.getAttribute('data-ok')!=='1'){b.setAttribute('data-ok','1');b.textContent='¿Quitar?';return}
+      busy=true;try{await _cgBorra(id);busy=false;if(sel===id)sel=_cgDeCron(cid);pinta('Paquete quitado de la lista.','#8FE3D3')}catch(e){busy=false;msg('✖ '+((e&&e.message)||e),'#FF9D8F')}}})};
+  document.body.appendChild(ov);pinta('');
+}
+/* enganches: tras cada bajada de ajustes o de la configuracion de cronogramas se comprueba el paquete */
+try{var _cgAjBase=_ajPull;_ajPull=async function(){var r=await _cgAjBase.apply(this,arguments);try{_cgRevisaPronto()}catch(e){}return r}}catch(_cge1){}
+try{var _cgCtBase=_ctPull;_ctPull=async function(){var r=await _cgCtBase.apply(this,arguments);try{_cgRevisaPronto()}catch(e){}return r}}catch(_cge2){}
+try{var _cgActBase=_ctActivar;_ctActivar=async function(){var r=await _cgActBase.apply(this,arguments);try{_cgRevisaPronto()}catch(e){}return r}}catch(_cge3){}
+try{setInterval(function(){try{_cgRevisa()}catch(e){}},30000);setTimeout(function(){try{_cgChip()}catch(e){}},2500)}catch(_cge4){}
 /* cargar un .xer */
 async function _crCargarUI(file){
   var B=document.getElementById('_crBody');
@@ -25342,7 +25631,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c126';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c127';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
@@ -30080,8 +30369,8 @@ function _fzUndOpts(actual,forzarOtra){
   H+='<option value="__OTRA__"'+((forzarOtra||(!conocida&&a))?' selected':'')+'>Otra...</option>';
   return H}
 function _fzKey(id){return 'fase:'+id}
-function _fzAll(){if(!state.fases){try{state.fases=JSON.parse(localStorage.getItem('obf4_fases')||'{}')||{}}catch(e){state.fases={}}}return state.fases}
-function _fzSave(){try{_hhMemoTira()}catch(e){}try{localStorage.setItem('obf4_fases',JSON.stringify(_fzAll()))}catch(e){}}
+function _fzAll(){if(!state.fases){try{state.fases=JSON.parse(localStorage.getItem(_cgFzKey())||'{}')||{}}catch(e){state.fases={}}}return state.fases}
+function _fzSave(){try{_hhMemoTira()}catch(e){}try{if(!_cgCoherente()){_cgTabVieja();return}}catch(_ecg0){}try{localStorage.setItem(_cgFzKey(),JSON.stringify(_fzAll()))}catch(e){}}
 function _fzDe(id,cronId){var M=_hhMemo(),k='fz|'+String(cronId==null?'':cronId)+'|'+String(id);
   if(M[k]!==undefined)return M[k];
   return (M[k]=_fzDeRaw(id,cronId))}
@@ -30188,7 +30477,7 @@ async function _fzPull(){
   if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;
   try{
     /* incremental: solo lo cambiado desde la ultima bajada (updated_at del servidor) */
-    var _mx='';try{_mx=String(localStorage.getItem('obf4_fases_upd')||'')}catch(e){}
+    var _mx='';try{_mx=String(localStorage.getItem(_cgFzCur())||'')}catch(e){}
     var H=_fzAll(),cambio=false;
     if(_mx&&!Object.keys(H).length)_mx='';
     var R=await sbSelect('ajustes_create_110826','select=clave,valor,eliminado,ts,updated_at&proyecto=eq.'+encodeURIComponent(DATA.proyecto)+'&clave=like.fase:*'+(_mx?('&updated_at=gt.'+encodeURIComponent(_updSolape(_mx))):'')+'&limit=2000');
@@ -30201,7 +30490,7 @@ async function _fzPull(){
       v.eliminado=!!r.eliminado;v.ts=Number(r.ts)||0;
       if(!loc||(Number(loc.ts)||0)!==v.ts||!!loc.eliminado!==v.eliminado||(!_mx&&JSON.stringify(loc)!==JSON.stringify(v))){H[id]=v;cambio=true}});
     state.fases=H;if(cambio||!_mx)_fzSave();
-    try{if(_nmx&&_nmx!==_mx)localStorage.setItem('obf4_fases_upd',_nmx)}catch(e){}
+    try{if(_nmx&&_nmx!==_mx)localStorage.setItem(_cgFzCur(),_nmx)}catch(e){}
     if(cambio){try{if(typeof renderList==='function')renderList()}catch(e){}}
   }catch(e){}}
 try{var _fzPullBase=syncPull;syncPull=async function(){var q=null;try{q=_fzPull()}catch(e){}var r=await _fzPullBase.apply(this,arguments);try{await q}catch(e){}return r}}catch(_fzw){}
