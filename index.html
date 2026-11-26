@@ -4270,6 +4270,7 @@ function _crPinta(){
       '<button data-ver="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">👁 Tareas</button>'+
       '<button data-ed="'+esc(c.cron_id)+'" style="background:#243b55;color:#cfe3ff;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">✎ Nombre / tipo / color</button>'+
       (esAdmin()?'<button data-dup="'+esc(c.cron_id)+'" title="Hace una copia EXACTA de este cronograma (tareas, alcance, relaciones, WBS, rendimientos, configuraci\u00f3n de trabajo, plan, agrupaciones, .xer\u2026) con id propio. Despu\u00e9s es independiente: lo que cambies en la copia no toca a este, ni al rev\u00e9s. Para hacer forecast." style="background:#1E5E5A;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">\u29c9 Duplicar</button>':'')+
+      (esAdmin()?'<button data-cmet="'+esc(c.cron_id)+'" title="Carga en ESTE cronograma el metrado de la columna Metrado forecast del Excel de la Tabla del alcance. Antes de guardar muestra qué cambia. No toca a los demás cronogramas, ni los avances, ni el metrado de contrato; se puede deshacer." style="background:#7A4B00;color:#fff;border:0;border-radius:8px;padding:7px 11px;font-weight:800;font-size:11.5px">📥 Cargar metrados</button>':'')+
       '<button data-del="'+esc(c.cron_id)+'" style="margin-left:auto;background:#5A1F1F;color:#FFD9D4;border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:11.5px">🗑</button>'+
       '</div></div>'});
   B.innerHTML=H;
@@ -4306,10 +4307,199 @@ function _crPinta(){
   B.querySelectorAll('[data-dup]').forEach(function(b){b.onclick=function(){
     if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return}
     try{_crDuplicarUI(elC(b.getAttribute('data-dup')))}catch(e){toast('\u2716 '+((e&&e.message)||e))}}});
+  B.querySelectorAll('[data-cmet]').forEach(function(b){b.onclick=function(){
+    if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return}
+    try{_cmUI(elC(b.getAttribute('data-cmet')))}catch(e){toast('✖ '+((e&&e.message)||e))}}});
   B.querySelectorAll('[data-del]').forEach(function(b){b.onclick=function(){
     var c=elC(b.getAttribute('data-del'));
     _galConfirm('¿Borrar el cronograma '+c.cron_id+'?','Se va con lápida: sus '+(c.n_tareas||0)+' tareas quedan marcadas como eliminadas y se pueden recuperar desde la base.','Sí, borrar','#B42318',function(){
       _crBorrar(c).then(function(){toast('Cronograma borrado');_crPinta()})})}});
+}
+
+/* ===== CARGAR METRADOS A UN CRONOGRAMA desde el Excel de la Tabla del alcance (c126) =====
+   Lee la columna «Metrado forecast» del Excel que exporta la Tabla y la deja como el metrado final de ESE
+   cronograma (retiros y ampliaciones de su fila en cron_trabajo). No toca a los demas cronogramas, ni los
+   avances, ni el metrado de contrato. Solo cambia la linea cuyo forecast en la tabla difiere del Excel Y cuyo
+   calculo coincide con la tabla: asi no se retira nada de una partida que esta fuera, apagada o con lapida.
+   El forecast nunca baja de lo ya hecho. Se guarda una sola vez y se puede deshacer. */
+function _cmNum(v){if(v==null||v==='')return null;if(typeof v==='number')return isFinite(v)?v:null;
+  var t=String(v).trim().split(' ').join('');if(!t)return null;if(t.indexOf(',')>=0&&t.indexOf('.')<0)t=t.replace(',','.');
+  var n=Number(t);return isFinite(n)?n:null}
+function _cmTol(a,b){return 1e-6*Math.max(1,Math.abs(Number(a)||0),Math.abs(Number(b)||0))}
+function _cmIgual(a,b){return Math.abs(a-b)<=_cmTol(a,b)}
+function _cmCab(v){return String(v==null?'':v).trim().toLowerCase().split(' ').filter(function(z){return !!z}).join(' ')}
+/* las filas del Excel: [{fila,id,pert,m,crudo}] o null si no estan las columnas Item y Metrado forecast */
+function _cmLeeFilas(rows){
+  rows=rows||[];
+  for(var i=0;i<Math.min(rows.length,25);i++){var r=rows[i]||[],ci=-1,cp=-1,cm=-1;
+    for(var j=0;j<r.length;j++){var h=_cmCab(r[j]);if(h==='item'&&ci<0)ci=j;else if(h==='pertenece'&&cp<0)cp=j;else if(h==='metrado forecast'&&cm<0)cm=j}
+    if(ci>=0&&cm>=0){var out=[];
+      for(var k=i+1;k<rows.length;k++){var q=rows[k]||[];var it=String(q[ci]==null?'':q[ci]).trim();if(!it)continue;
+        if(it.toLowerCase().slice(-10)===' adicional')it=it.slice(0,-10).trim();
+        out.push({fila:k+1,id:it,pert:(cp>=0?String(q[cp]==null?'':q[cp]).trim():''),m:_cmNum(q[cm]),crudo:(q[cm]==null?'':q[cm])})}
+      return out}}
+  return null}
+async function _cmLeeArchivo(file){
+  var X=await _xlsxLoad();
+  var buf=await new Promise(function(res,rej){var fr=new FileReader();fr.onload=function(){res(fr.result)};fr.onerror=function(){rej(new Error('No se pudo leer el archivo'))};fr.readAsArrayBuffer(file)});
+  var wb=X.read(new Uint8Array(buf),{type:'array'});
+  for(var i=0;i<wb.SheetNames.length;i++){var sh=wb.Sheets[wb.SheetNames[i]];if(!sh)continue;
+    var rows=X.utils.sheet_to_json(sh,{header:1,raw:true,defval:null});var L=_cmLeeFilas(rows);
+    if(L&&L.length)return {hoja:wb.SheetNames[i],filas:L}}
+  throw new Error('No encuentro las columnas «Item» y «Metrado forecast»: usa el Excel que baja la Tabla del alcance')}
+/* que cambiaria: no escribe nada */
+async function _cmPlan(c,filasX){
+  var cid=String(c.cron_id);try{_hhMemoTira()}catch(e){}
+  var D=await _crTablaDatos(c);var L={},F={};
+  ((D&&D.filas)||[]).forEach(function(f){if(!f)return;F[String(f.id)]=f;
+    var ps=(f.partes||[]).filter(function(q){return !!q});
+    /* un apartado sin metrado (o el del APU apagado, que solo es una fila informativa) no lleva metrado que cargar */
+    if(ps.length)ps.forEach(function(q){var sinM=(q.met==null||String(q.pert||'').indexOf('(apartado del APU)')>=0);L[String(f.id)+'|'+_retNk(q.pert)]={f:f,q:q,metF:q.metF,est:q.est,sinM:sinM}});
+    else L[String(f.id)+'|']={f:f,q:null,metF:f.metF,est:f.est}});
+  var P={cron:cid,cambios:[],iguales:0,enHecho:[],noAp:[],vacias:0,leidas:(filasX||[]).length};var vistos={};
+  (filasX||[]).forEach(function(x){
+    if(x.m==null){if(String(x.crudo==null?'':x.crudo).trim()==='')P.vacias++;else P.noAp.push({id:x.id,pert:x.pert,por:'el valor no es un número ('+String(x.crudo)+')'});return}
+    if(x.m<0){P.noAp.push({id:x.id,pert:x.pert,por:'metrado negativo'});return}
+    var key=String(x.id)+'|'+_retNk(x.pert);
+    if(vistos[key]){P.noAp.push({id:x.id,pert:x.pert,por:'repetida en el Excel: se usa la primera'});return}vistos[key]=1;
+    var ln=L[key];
+    if(!ln){P.noAp.push({id:x.id,pert:x.pert,por:(F[String(x.id)]?(x.pert?'ese apartado no existe en la partida':'la partida tiene apartados: va una fila por apartado'):'la partida no está en este cronograma')});return}
+    if(ln.sinM){if(x.m===0)P.iguales++;else P.noAp.push({id:x.id,pert:x.pert,por:'ese apartado no lleva metrado'+(ln.est?(' ('+ln.est+')'):'')});return}
+    var cur=(ln.metF==null)?null:Number(ln.metF);
+    if(cur!=null&&_cmIgual(cur,x.m)){P.iguales++;return}
+    if(cur==null&&x.m===0){P.iguales++;return}
+    var r=null;try{r=_fzDe(x.id,cid)}catch(e){r=null}
+    var pt=null;
+    if(r&&r.fases&&r.fases.length){if(ln.q)pt=r.fases.filter(function(z){return _retNk(z.nombre)===_retNk(x.pert)})[0]||null}
+    else if(!ln.q)pt=_retParteImplicita(x.id);
+    var est=ln.est?(' ('+ln.est+')'):'';
+    if(!pt||!(Number(pt.cantidad)>0)){P.noAp.push({id:x.id,pert:x.pert,por:'no tiene metrado que fijar'+est,excel:x.m,hoy:cur});return}
+    var cq=Number(pt.cantidad)||0,a=Number(pt.avance)||0,e=_retParte(x.id,pt.nombre,cid),q=e?(Number(e.cant)||0):0;
+    var pred=cq-_retCantDe({cantidad:cq,avance:a,_ret:q});
+    if(cur==null||!_cmIgual(pred,cur)){P.noAp.push({id:x.id,pert:x.pert,por:'no se puede fijar en este cronograma'+est,excel:x.m,hoy:cur});return}
+    var obj=Math.max(x.m,a),tope=(x.m<a-_cmTol(a,x.m));
+    if(_cmIgual(obj,pred)){P.enHecho.push({id:x.id,pert:pt.nombre,hecho:a,excel:x.m,und:pt.unidad||''});return}
+    var cant=cq-obj;
+    P.cambios.push({id:String(x.id),nombre:pt.nombre,und:pt.unidad||'',c:cq,a:a,hoy:pred,excel:x.m,queda:obj,tope:tope,cant:cant,antes:q,
+      tipo:(Math.abs(cant)<=_cmTol(cq,obj)?'devolver':(cant<0?'ampliar':'retirar'))})});
+  return P}
+/* guarda el plan en la fila de ESE cronograma (una sola escritura) */
+function _cmAplicar(c,P){
+  if(!(typeof esAdmin==='function'&&esAdmin()))throw new Error('Solo el administrador');
+  var cid=String(c.cron_id);if(!P||String(P.cron)!==cid)throw new Error('El plan es de otro cronograma');
+  var a=_ctDe(cid);if(!a||!_ctConFoto2(a))throw new Error('Este cronograma todavía no tiene configuración propia');
+  var t9=(typeof nowSrv==='function'?nowSrv():Date.now()),yo=(state.user&&state.user.supervisor)||'',hoy=(typeof todayISO==='function')?todayISO():'';
+  var antes={},porId={};
+  P.cambios.forEach(function(x){var k=String(x.id)+'|'+_retNk(x.nombre);
+    antes[k]=(a.retiros[k]!==undefined)?JSON.parse(JSON.stringify(a.retiros[k])):null;
+    if(x.tipo==='devolver')a.retiros[k]={del:1,_ts:t9};
+    else a.retiros[k]={nombre:x.nombre,cant:Number(Number(x.cant).toPrecision(12)),hecho:x.a,total:x.c,unidad:x.und,quien:yo,fecha:hoy,_ts:t9};
+    (porId[x.id]||(porId[x.id]=[])).push(x.nombre+' → '+_apuCant(x.queda)+' '+x.und)});
+  if(!P.cambios.length)return 0;
+  _ctGuardar(a);
+  var nomC=cid;try{nomC=_ctNombre(cid)||cid}catch(e){}
+  Object.keys(porId).forEach(function(id){try{logCambio('RETIRO_SALDO',id,'Metrado cargado desde Excel · '+nomC+': '+porId[id].join(' · '))}catch(e){}});
+  window._cmUndo={cron:cid,t:t9,n:P.cambios.length,antes:antes};
+  try{_retRefresca()}catch(e){}
+  return P.cambios.length}
+/* vuelve cada linea de la ultima carga a como estaba */
+function _cmDeshacer(cronId){
+  if(!(typeof esAdmin==='function'&&esAdmin()))throw new Error('Solo el administrador');
+  var u=window._cmUndo;if(!u||String(u.cron)!==String(cronId))return 0;
+  var a=_ctDe(u.cron);if(!a||!_ctConFoto2(a))return 0;
+  var t9=(typeof nowSrv==='function'?nowSrv():Date.now()),n=0;
+  Object.keys(u.antes).forEach(function(k){var p=u.antes[k];
+    if(p&&!p.del){var o=JSON.parse(JSON.stringify(p));o._ts=t9;a.retiros[k]=o}else a.retiros[k]={del:1,_ts:t9};n++});
+  _ctGuardar(a);window._cmUndo=null;
+  try{logCambio('RETIRO_SALDO','','Deshecha la carga de metrados desde Excel · '+(_ctNombre(u.cron)||u.cron)+' ('+n+' líneas)')}catch(e){}
+  try{_retRefresca()}catch(e){}
+  return n}
+function _cmUI(c){
+  if(!c)return;
+  if(!(typeof esAdmin==='function'&&esAdmin())){toast('Solo el administrador');return}
+  var old=document.getElementById('_cmOv');if(old)old.remove();
+  var nom=_crNomVis(c),cid=String(c.cron_id),plan=null,busy=false;
+  var ov=document.createElement('div');ov.id='_cmOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(4,10,20,.86);display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box';
+  var bt='border:0;border-radius:10px;padding:11px 13px;font-weight:800;font-size:12.5px;cursor:pointer;color:#fff;';
+  ov.innerHTML='<div style="background:#0f1a26;border:1px solid #1d3550;border-radius:14px;padding:15px;max-width:820px;width:100%;max-height:100%;overflow:auto;box-sizing:border-box;color:#cfe3ff">'+
+    '<div style="font-weight:900;font-size:14px;color:#8ECBF5;margin-bottom:6px;overflow-wrap:anywhere">📥 Cargar metrados · «'+esc(nom)+'»</div>'+
+    '<div style="font-size:11.5px;color:#9db4d6;line-height:1.55;background:#0d1526;border:1px solid #172033;border-radius:10px;padding:9px 11px;margin-bottom:10px">'+
+      'Elige el Excel de la <b>Tabla del alcance</b> (el que baja el botón 📊 Tabla). Se lee la columna <b>Metrado forecast</b> y queda como el metrado final de <b>este cronograma</b>. '+
+      'Los demás cronogramas, los avances cargados y el metrado de contrato no cambian. Antes de guardar verás qué cambia.</div>'+
+    '<input type="file" id="_cmFile" accept=".xlsx,.xls" style="display:none">'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button id="_cmPick" style="'+bt+'background:#1B5E8A">📎 Elegir Excel…</button>'+
+      '<button id="_cmUndoB" style="'+bt+'background:#5A3D8A;display:none">⟲ Deshacer la última carga</button></div>'+
+    '<div id="_cmMsg" style="font-size:12px;color:#9db4d6;margin-top:9px;overflow-wrap:anywhere"></div>'+
+    '<div id="_cmRes"></div>'+
+    '<div style="display:flex;gap:8px;margin-top:12px">'+
+      '<button id="_cmNo" style="'+bt+'flex:1;background:#333">Cerrar</button>'+
+      '<button id="_cmOk" disabled style="'+bt+'flex:2;background:#0C5132;opacity:.5">✔ Guardar en este cronograma</button></div></div>';
+  document.body.appendChild(ov);
+  var $c=function(id){return document.getElementById(id)};
+  var bOk=$c('_cmOk'),bU=$c('_cmUndoB'),eMsg=$c('_cmMsg'),eRes=$c('_cmRes'),eFile=$c('_cmFile'),bPick=$c('_cmPick');
+  var msg=function(t,col){eMsg.textContent=t||'';eMsg.style.color=col||'#9db4d6'};
+  var okOn=function(on){bOk.disabled=!on;bOk.style.opacity=on?'1':'.5'};
+  var undoVe=function(){var u=window._cmUndo;var ve=!!(u&&String(u.cron)===cid);bU.style.display=ve?'':'none';bU.textContent='⟲ Deshacer la última carga'+(ve?(' ('+u.n+' líneas)'):'');bU.removeAttribute('data-ok')};
+  var n2=function(v){return (v==null||!isFinite(Number(v)))?'—':_apuCant(Number(v))};
+  var pinta=function(P,hoja,nomF){
+    var t={retirar:0,ampliar:0,devolver:0};P.cambios.forEach(function(x){t[x.tipo]++});
+    var chip=function(tx,bg,fg){return '<span style="display:inline-block;background:'+bg+';color:'+fg+';border-radius:7px;padding:3px 8px;font-size:11px;font-weight:800;margin:0 5px 5px 0">'+tx+'</span>'};
+    var H='<div style="margin-top:10px">'+
+      chip(P.leidas+' filas leídas','#172033','#cfe3ff')+chip(P.iguales+' ya están igual','#172033','#9db4d6')+
+      chip(P.cambios.length+' cambian','#0C5132','#fff')+
+      (t.retirar?chip('⏸ '+t.retirar+' bajan','#5A3A00','#FFE2B0'):'')+(t.ampliar?chip('➕ '+t.ampliar+' suben','#1B3F6E','#D6E6FF'):'')+(t.devolver?chip('▶ '+t.devolver+' vuelven al contrato','#1E5E5A','#D6FFF7'):'')+
+      (P.enHecho.length?chip(P.enHecho.length+' quedan en lo ya hecho','#5A1F1F','#FFD9D4'):'')+
+      (P.noAp.length?chip(P.noAp.length+' no se pueden cargar','#5A1F1F','#FFD9D4'):'')+
+      (P.vacias?chip(P.vacias+' sin dato','#172033','#9db4d6'):'')+'</div>';
+    var th='padding:5px 7px;text-align:right;font-size:10.5px;color:#8ECBF5;position:sticky;top:0;background:#0d1526;white-space:nowrap',td='padding:4px 7px;text-align:right;font-size:11.5px;border-top:1px solid #172033;white-space:nowrap';
+    if(P.cambios.length){
+      H+='<div style="max-height:42vh;overflow:auto;border:1px solid #172033;border-radius:10px;margin-top:4px"><table style="border-collapse:collapse;width:100%"><thead><tr>'+
+        '<th style="'+th+';text-align:left">Item</th><th style="'+th+';text-align:left">Apartado</th><th style="'+th+'">Contrato</th><th style="'+th+'">Hecho</th><th style="'+th+'">Hoy</th><th style="'+th+'">Excel</th><th style="'+th+'">Quedará</th><th style="'+th+';text-align:left">Und</th></tr></thead><tbody>';
+      P.cambios.forEach(function(x){var col=(x.tipo==='ampliar')?'#9CC4FF':(x.tipo==='devolver'?'#8FE3D3':'#FFCB80');
+        H+='<tr><td style="'+td+';text-align:left;font-weight:800">'+esc(x.id)+'</td><td style="'+td+';text-align:left;white-space:normal">'+esc(x.nombre)+'</td>'+
+          '<td style="'+td+'">'+n2(x.c)+'</td><td style="'+td+'">'+n2(x.a)+'</td><td style="'+td+'">'+n2(x.hoy)+'</td>'+
+          '<td style="'+td+(x.tope?';color:#FF9D8F':'')+'">'+n2(x.excel)+'</td><td style="'+td+';font-weight:900;color:'+col+'">'+n2(x.queda)+(x.tope?' ⚠':'')+'</td><td style="'+td+';text-align:left">'+esc(x.und)+'</td></tr>'});
+      H+='</tbody></table></div>';
+      if(P.cambios.some(function(x){return x.tope}))H+='<div style="font-size:11px;color:#FF9D8F;margin-top:5px">⚠ El Excel pide menos de lo ya hecho: esa línea queda en lo hecho.</div>'}
+    if(P.enHecho.length){H+='<details style="margin-top:8px;font-size:11.5px;color:#FFD9D4"><summary style="cursor:pointer;font-weight:800">'+P.enHecho.length+' líneas quedan como están: el Excel pide menos de lo ya hecho</summary><div style="padding:6px 2px;line-height:1.6;color:#cfe3ff">'+
+      P.enHecho.map(function(x){return esc(x.id)+(x.pert&&_retNk(x.pert)!=='partida completa'?(' · '+esc(x.pert)):'')+': hecho '+n2(x.hecho)+' '+esc(x.und)+', el Excel pide '+n2(x.excel)}).join('<br>')+'</div></details>'}
+    if(P.noAp.length){H+='<details style="margin-top:8px;font-size:11.5px;color:#FFD9D4"><summary style="cursor:pointer;font-weight:800">'+P.noAp.length+' filas del Excel no se pueden cargar</summary><div style="padding:6px 2px;line-height:1.6;color:#cfe3ff">'+
+      P.noAp.map(function(x){return esc(x.id)+(x.pert?(' · '+esc(x.pert)):'')+': '+esc(x.por)+(x.excel!=null?(' — Excel '+n2(x.excel)+', hoy '+n2(x.hoy)):'')}).join('<br>')+'</div></details>'}
+    eRes.innerHTML=H;
+    msg('«'+nomF+'» · hoja «'+hoja+'»'+(P.cambios.length?'':' · no hay nada que cambiar en este cronograma'),P.cambios.length?'#9db4d6':'#8FE3D3');
+    okOn(P.cambios.length>0)};
+  var fila=_ctDe(cid);
+  if(!fila||!_ctConFoto2(fila)){msg('Este cronograma todavía no tiene configuración propia (sigue al ACTUAL): no se le pueden cargar metrados aparte.','#FF9D8F');bPick.disabled=true;bPick.style.opacity='.5'}
+  undoVe();
+  $c('_cmNo').onclick=function(){if(busy)return;ov.remove()};
+  bPick.onclick=function(){if(busy||bPick.disabled)return;eFile.value='';eFile.click()};
+  var lee=async function(f){
+    if(busy||!f)return;busy=true;plan=null;okOn(false);eRes.innerHTML='';msg('Leyendo «'+f.name+'»…');
+    try{var R=await _cmLeeArchivo(f);msg('Comparando '+R.filas.length+' filas con la tabla de «'+nom+'»…');
+      var P=await _cmPlan(c,R.filas);plan=P;pinta(P,R.hoja,f.name)}
+    catch(e){plan=null;eRes.innerHTML='';msg('✖ '+((e&&e.message)||e),'#FF9D8F')}
+    busy=false};
+  eFile.onchange=function(){var f=this.files&&this.files[0];lee(f)};
+  ov._cmLee=lee;
+  bOk.onclick=function(){
+    if(busy||!plan||!plan.cambios.length)return;busy=true;okOn(false);
+    try{var n=_cmAplicar(c,plan);plan=null;eRes.innerHTML='';
+      msg('✓ Guardado: '+n+' líneas en «'+nom+'». Los demás cronogramas no se tocaron.','#8FE3D3');
+      toast('✓ Metrados cargados en '+nom+': '+n+' líneas');undoVe();
+      try{if(typeof window._crTablaRepinta==='function')window._crTablaRepinta()}catch(_e){}}
+    catch(e){msg('✖ '+((e&&e.message)||e),'#FF9D8F')}
+    busy=false};
+  bU.onclick=function(){
+    if(busy)return;
+    if(bU.getAttribute('data-ok')!=='1'){bU.setAttribute('data-ok','1');bU.textContent='¿Seguro? Toca otra vez para deshacer';return}
+    busy=true;
+    try{var n=_cmDeshacer(cid);plan=null;eRes.innerHTML='';okOn(false);
+      msg(n?('⟲ Deshecho: '+n+' líneas volvieron a como estaban.'):'No hay nada que deshacer.','#8FE3D3');
+      try{if(typeof window._crTablaRepinta==='function')window._crTablaRepinta()}catch(_e){}}
+    catch(e){msg('✖ '+((e&&e.message)||e),'#FF9D8F')}
+    busy=false;undoVe()};
 }
 
 /* cargar un .xer */
@@ -25152,7 +25342,7 @@ var _srvMs=null;
 function _srvPing(){try{if(!(typeof sbReady==='function'&&sbReady()&&navigator.onLine))return;var t0=Date.now();fetch(sbBase()+'/rest/v1/dispositivos?select=device_id&limit=1',{headers:{apikey:state.cfg.supaKey,Authorization:'Bearer '+state.cfg.supaKey}}).then(function(){_srvMs=Date.now()-t0;_updSumSync();}).catch(function(){_srvMs=null;_updSumSync();});}catch(e){}}
 function _updSumSync(){try{var _ts=document.getElementById('topSync');if(_ts)_ts.style.setProperty('display','none','important');var pend=(typeof pendingCount==='function')?pendingCount():0;var on=(typeof navigator!=='undefined')?navigator.onLine:true;var sets=[['sumSyncMain','sumSyncMs','sumSyncUp','sumUpNum','sumSyncDiv'],['dSyncMain','dSyncMs','dSyncUp','dUpNum','dSyncDiv']];for(var i=0;i<sets.length;i++){var s=sets[i];var m=document.getElementById(s[0]),ms=document.getElementById(s[1]),up=document.getElementById(s[2]),num=document.getElementById(s[3]),div=document.getElementById(s[4]);if(!m)continue;if(!on){m.textContent='⚠';m.style.color='#FFD27A';}else{m.textContent='✓';m.style.color='#FFFFFF';}if(ms)ms.textContent=on?((_srvMs!=null)?(_srvMs+' ms'):'… ms'):'offline';if(pend>0){if(num)num.textContent=pend;if(up){up.style.display='inline-flex';up.classList.add('sumUpBlink');}if(div)div.style.display='block';}else{if(up){up.style.display='none';up.classList.remove('sumUpBlink');}if(div)div.style.display='none';}}}catch(e){}}
 /* === FIX anti-pérdida: subir solo lo cambiado + pausar sync al editar === */
-var APP_VER='v20260920c125';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
+var APP_VER='v20260920c126';try{['appVer','appVer2'].forEach(function(_ai){var _av=document.getElementById(_ai);if(_av)_av.textContent='versión '+APP_VER})}catch(_e){}try{setTimeout(function(){try{_botBar()}catch(e){}},300)}catch(_e){}
 var _SCRKEY='obf4_lastscr';var _scrSaverOn=false;
 function _visScr(){var ids=['scrList','scrPend','scrProg','scrBita','scrInvDay','scrRestot','scrAdmList','scrDiario'];for(var i=0;i<ids.length;i++){var el=document.getElementById(ids[i]);if(el&&!el.classList.contains('hidden'))return ids[i]}return null}
 function _scrSave(){try{if(!(state&&state.user))return;if(document.hidden||window._tabBloqueada)return;   /* solo la pestana visible y activa */var v=_visScr();if(!v)return;var _j=JSON.stringify({id:v,date:(typeof activeDate!=='undefined'&&activeDate)||null});if(_j===window._scrLast)return;window._scrLast=_j;localStorage.setItem(_SCRKEY,_j)}catch(e){}}
